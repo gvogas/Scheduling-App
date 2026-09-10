@@ -26,12 +26,13 @@ const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {WAVE_FULL_ACCESS_TOKEN} = require("./auth");
 const {
   enqueueCustomerUpsert,
+  cancelCustomerUpsert,
   drainQueue,
   listOutstandingClientIds,
   shouldEnqueueClientWrite,
 } = require("./worker");
 const {mappedFieldsHash} = require("./mappers");
-const {problemsPatch} = require("./customer_contract");
+const {statePatch, isBlocked} = require("./customer_contract");
 const {classifyWaveError} = require("./errors");
 const {isImportDue} = require("./import_schedule");
 const {
@@ -126,12 +127,26 @@ const waveUpsertCustomer = onDocumentWritten(
       // explicit hash computed at the enqueue site.
       const hash = mappedFieldsHash(after);
 
+      // The contract decides BEFORE anything is queued. A payload Wave would
+      // refuse must never become a job: the push dead-letters permanently and
+      // "Retry failed" re-sends the identical payload into the identical
+      // refusal, so the client is stranded with a counter and no reason.
+      const verdict = statePatch(after);
+      if (isBlocked(after)) {
+        await db.doc("clients/" + clientId).update(verdict);
+        // An earlier edit may have left a job queued, and the worker re-reads
+        // the LIVE doc — so that job would push what was just refused.
+        await cancelCustomerUpsert(clientId);
+        logger.debug("waveUpsertCustomer: blocked by contract", {clientId});
+        return;
+      }
+
       // Mark-pending + enqueue land in ONE WriteBatch so a crash between the
       // two can't leave the doc stuck at 'pending' with no queued job (or a
       // queued job with no visible pending state).
       const batch = db.batch();
       // `wave.problems` rides the batch that was already updating this doc, so
-      // report-only costs no extra write. It is NOT a mapped field, so the
+      // recording it costs no extra write. It is NOT a mapped field, so the
       // hash is unchanged and `shouldEnqueueClientWrite` returns false when
       // the trigger re-fires on this write — the same protection the
       // mark-pending update above already relies on, and the reason this
@@ -139,7 +154,7 @@ const waveUpsertCustomer = onDocumentWritten(
       batch.update(db.doc("clients/" + clientId), {
         "wave.syncState": "pending",
         "wave.syncError": null,
-        ...problemsPatch(after),
+        ...verdict,
       });
       // payloadHash is diagnostic only — the worker re-reads the live doc
       // and recomputes the hash before writing, since the doc is the real
@@ -155,6 +170,15 @@ const waveUpsertCustomer = onDocumentWritten(
         logger.warn("waveUpsertCustomer: batched mark-pending failed; " +
             "enqueueing without it", {clientId, err: e.message});
         await enqueueCustomerUpsert(clientId, {payloadHash: hash});
+        // Best-effort: the doc changed, so the record of what is wrong with it
+        // has to change too. The batch above failed atomically, which takes
+        // the verdict with it.
+        try {
+          await db.doc("clients/" + clientId).update(verdict);
+        } catch (patchErr) {
+          logger.warn("waveUpsertCustomer: verdict patch failed",
+              {clientId, err: patchErr.message});
+        }
       }
       logger.debug("waveUpsertCustomer: enqueued", {clientId});
 

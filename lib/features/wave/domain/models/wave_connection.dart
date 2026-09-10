@@ -93,6 +93,7 @@ class WaveRetryResult {
     required this.scanned,
     required this.pushed,
     required this.failed,
+    this.blocked = 0,
   });
 
   factory WaveRetryResult.fromMap(Map<String, dynamic> map) => WaveRetryResult(
@@ -100,6 +101,7 @@ class WaveRetryResult {
     scanned: (map['scanned'] as num?)?.toInt() ?? 0,
     pushed: (map['pushed'] as num?)?.toInt(),
     failed: (map['failed'] as num?)?.toInt(),
+    blocked: (map['blocked'] as num?)?.toInt() ?? 0,
   );
 
   /// Jobs returned to the queue. This is the durable part of the action.
@@ -123,6 +125,14 @@ class WaveRetryResult {
   /// count is unchanged, and without this the app announces a success over a
   /// row that still reads "1 client failed to sync".
   final int? failed;
+
+  /// Dead jobs DROPPED because the contract refuses their client.
+  ///
+  /// Not a failure and not a recovery: requeuing them would dead-letter them
+  /// again inside the same call, so the job goes and the reason moves onto the
+  /// client, where it is fixable. Without reporting it, a press that cleared
+  /// the whole queue this way reads as "nothing could be recovered".
+  final int blocked;
 
   /// Whether any requeued job died again on the push that followed. Null reads
   /// as "not known", never as "nothing failed".

@@ -76,6 +76,7 @@ class ClientDetailViewBody extends ConsumerWidget {
             child: WaveSyncBadge(
               syncState: client.waveSyncState,
               syncError: client.waveSyncError,
+              problems: client.waveProblems,
             ),
           ),
         ],

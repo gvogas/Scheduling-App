@@ -52,7 +52,10 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   after a transient Wave error is invisible to the drain and still live
   milliseconds later. Every caller of `importCustomers` therefore passes
   `skipClientIds` from **`listOutstandingClientIds`** (`worker.js`, covers
-  `queued` AND `inflight`); the param is injected rather than read inside
+  `queued`, `inflight` AND `dead` — the prose here said "queued AND inflight"
+  until 2026-09-10, which is not what the query says; a dead job's client has
+  an un-pushed edit too, so protecting it is correct);
+  the param is injected rather than read inside
   `customers_import.js` because `worker.js` already requires that module and
   reaching back would close a cycle. Both callers need it — the daily
   the daily `runWaveDaily` most of all, since it runs unattended.
@@ -338,13 +341,68 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   `value.length <= rule.cap`, which is false for an undefined cap, so a field
   renamed in `mappers.js` would not leave one field unchecked — it would report
   EVERY client `TOO_LONG`, and in Phase 2 that is every client refused.
-  **PHASE 1 IS REPORT-ONLY.** `problemsPatch` rides the trigger's existing
-  mark-pending batch and records `wave.problems`; nothing is blocked and the
-  enqueue decision is untouched. `wave.problems` is not a mapped field, so the
-  hash is unchanged and `shouldEnqueueClientWrite` stops the re-fire — the same
-  protection mark-pending relies on. The contract becomes the ONLY payload
-  producer in Phase 2; until then `wave/customers.js` still builds its own.
-  `functions/scripts/audit-wave-contract.js` replays it over production,
-  read-only. Run it after any change to the contract, the mappers, or
-  `ClientNamePolicy`. Design:
-  `docs/plans/2026-08-30-wave-validated-contract-design.md`.
+  **PHASE 2 ENFORCES IT** (2026-09-10; Phase 1 was report-only). `statePatch`
+  replaces `problemsPatch` and writes `wave.problems` plus, when something
+  BLOCKS, `wave.syncState: 'blocked'` — the fourth state, separate from
+  `error` because the remedy differs: an `error` may retry, a `blocked` client
+  never will until its data is edited. Every key it writes is DOTTED, and that
+  is load-bearing (below). `wave.problems` is not a mapped field, so the hash
+  is unchanged and `shouldEnqueueClientWrite` stops the re-fire — the same
+  protection mark-pending relies on.
+  **Three enforcement points, one implementation.** At ENQUEUE
+  (`waveUpsertCustomer`) a refused client never becomes a job, and
+  `cancelCustomerUpsert` removes one an EARLIER edit left queued — the worker
+  re-reads the LIVE doc, so that job would push what was just refused. It
+  deletes only while the job is still `queued`; an `inflight` job is claimed by
+  a live dispatcher and deleting it would break `commitOutcome`'s claim
+  invariant, so it is left for the second point. At DISPATCH `upsertCustomer`
+  returns `{status: 'blocked'}` and writes the state rather than throwing
+  `WaveValidationError`, because throwing is what dead-letters permanently. At
+  IMPORT the same contract decides, so the pull cannot write a client the push
+  could never send back.
+  **The IMPORT must never clobber the verdict.** `importOneCustomer` wrote the
+  whole `wave` sub-map as a nested object, and a nested map under `merge: true`
+  REPLACES the stored one — so an import erased `wave.problems` and reset a
+  blocked client to `synced`, silently re-arming the permanent dead-letter.
+  The update branch writes DOTTED keys and re-runs the contract over the fields
+  being written (the import has just put Wave's values on the doc, so stored
+  problems describe the OLD one). The create branch may nest: there is no
+  prior state to preserve.
+  **"Retry failed" no longer lies.** `requeueDeadJobs` asks the contract about
+  each dead job's client: a refused one is DELETED and the reason written onto
+  the client, counted as `blocked` rather than `requeued`. Requeuing it would
+  dead-letter it again inside the drain behind that same call, which is exactly
+  why the press appeared to do nothing while reporting success. A MISSING
+  client doc is requeued, never treated as refused — the dispatcher already
+  treats one as a clean skip, and blocking would put a reason on a client that
+  does not exist. `blocked` rides the callable response and the notice; it is
+  additive and is NOT a failure.
+  **`toWaveCustomerInput` stays EXPORTED, and a test is what holds the
+  boundary.** The design proposed making it private to the contract; ~50
+  `wave_mappers.test.js` cases drive it directly, including `null`/`undefined`
+  inputs the contract refuses outright and which cannot be expressed through
+  `buildCustomerPayload`, so re-pointing them would couple the mapping layer's
+  tests to the contract's verdicts and delete coverage doing it.
+  `__tests__/wave_contract_is_sole_producer.test.js` reads the source back
+  instead — a new production call site outside `mappers.js` and
+  `customer_contract.js` is a test failure. It also pins that the enqueue gate
+  runs BEFORE the enqueue. Verified to fail on a planted violation, not just to
+  pass.
+  **Surfaces.** `WaveSyncBadge` renders `blocked` and the reasons as visible
+  TEXT (they were a `Semantics` label only), `WaveProblemList` owns the
+  sentences so the badge and the Settings list cannot word one failure two
+  ways, and `WaveBlockedList` lists refused clients from
+  `watchBlockedClients()` — a `clients` query on `wave.syncState`, admin-only
+  by the existing read rule, needing the `wave.syncState` + `name` composite
+  index. A refused client is absent from BOTH outbox counters, so that list is
+  the only place it appears.
+  **SHIP THE APP BUILD BEFORE DEPLOYING ENFORCEMENT**, which inverts the usual
+  order. `_badgeConfig` renders nothing for a state it does not know, so the
+  moment the backend writes `blocked` every shipped build shows those clients
+  no badge at all — strictly less signal than the `error` they show today.
+  Index first, then the app, then the backend.
+  `functions/scripts/audit-wave-contract.js` replays the contract over
+  production, read-only. Run it after any change to the contract, the mappers,
+  or `ClientNamePolicy`. Design:
+  `docs/plans/2026-08-30-wave-validated-contract-design.md`; Phases 2-4 plan:
+  `docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`.

@@ -17,7 +17,8 @@
  * @module wave/customers
  */
 
-const {toWaveCustomerInput, mappedFieldsHash} = require("./mappers");
+const {mappedFieldsHash} = require("./mappers");
+const {buildCustomerPayload, statePatch} = require("./customer_contract");
 const {adminFirestore} = require("../admin_firestore");
 // Safe at module scope: `client.js` requires only `./auth`, lazily, so this
 // closes no cycle. `retry_policy.js` and `errors.js` both already require this
@@ -260,8 +261,21 @@ async function upsertCustomer(clientId, deps = {}) {
   }
 
   const data = snap.data() || {};
-  const mappedFields = toWaveCustomerInput(data);
-  const hash = mappedFieldsHash(data);
+  // The contract is the ONLY payload producer. Nothing here may build one that
+  // skipped validation — that is enforced by which module owns
+  // `toWaveCustomerInput`, not by discipline.
+  const built = buildCustomerPayload(data);
+  if (!built.ok) {
+    // The enqueue gate refuses first, but a job queued by an earlier edit — or
+    // one already `inflight` when the edit landed — still arrives holding a
+    // client Wave would refuse. Dead-lettering it here would be permanent and
+    // unrecoverable; blocking it keeps the client editable and the reason
+    // readable.
+    await writeSyncBlocked(db, ref, data);
+    return {status: "blocked", problems: built.problems};
+  }
+  const mappedFields = built.payload;
+  const hash = built.hash;
   const waveCustomerId =
     typeof data.waveCustomerId === "string" ? data.waveCustomerId : "";
   const wave = (data.wave && typeof data.wave === "object") ? data.wave : {};
@@ -562,6 +576,26 @@ async function healSyncState(db, ref) {
     if (!wave.lastSyncedHash) return;
     if (mappedFieldsHash(cur) !== wave.lastSyncedHash) return;
     tx.update(ref, {"wave.syncState": "synced", "wave.syncError": null});
+  });
+}
+
+/**
+ * Flags the client doc as REFUSED by the contract.
+ *
+ * Separate from `writeSyncError` because the remedy differs and the admin has
+ * to be able to tell which they are looking at: an `error` may retry, a
+ * `blocked` client never will until its data is edited. It writes no
+ * `lastSyncedAt` — nothing reached Wave.
+ * @param {!Object} db Firestore instance.
+ * @param {!Object} ref Client document reference.
+ * @param {!Object} data The client fields the contract refused.
+ * @return {!Promise<void>}
+ */
+async function writeSyncBlocked(db, ref, data) {
+  await db.runTransaction(async (tx) => {
+    const fresh = await tx.get(ref);
+    if (!fresh || !fresh.exists) return;
+    tx.update(ref, statePatch(data));
   });
 }
 

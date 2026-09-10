@@ -25,6 +25,15 @@ abstract class ClientsRepository {
   /// the badge is trying to show. See the sync-badge invariant in CLAUDE.md.
   Stream<ClientRecord?> watchClient(String id);
 
+  /// Live stream of the clients the Wave customer contract REFUSED, so
+  /// Settings can list them instead of showing a bare failure count.
+  ///
+  /// `blocked` is a server-owned state on `wave.syncState`: the client never
+  /// became a queued job, so it is not a dead outbox job and does not appear
+  /// in the outbox counters. Bounded — this is a list an admin acts on, not a
+  /// report.
+  Stream<List<ClientRecord>> watchBlockedClients({int limit});
+
   /// Persists a new client and returns it with the generated Firestore doc id, so the
   /// caller can link to it right away.
   Future<ClientRecord> addClient(ClientRecord client);

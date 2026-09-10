@@ -94,6 +94,41 @@ void main() {
       );
     });
 
+    test('a press that only DROPPED refused jobs does not say nothing happened',
+        () {
+      // The queue was cleared and the reasons moved onto the clients, where
+      // they are fixable. "Nothing to retry" would be the same silence the
+      // failed count was added to end.
+      final notice = waveRetryNotice(
+        en,
+        const WaveRetryResult(
+          requeued: 0,
+          scanned: 2,
+          pushed: 0,
+          failed: 0,
+          blocked: 2,
+        ),
+      );
+
+      expect(notice, isNot(en.wave_retryNoneRecovered));
+      expect(notice, contains('2 clients need fixing'));
+    });
+
+    test('reports refused jobs alongside a real requeue', () {
+      final notice = waveRetryNotice(
+        en,
+        const WaveRetryResult(
+          requeued: 1,
+          scanned: 3,
+          pushed: 1,
+          failed: 0,
+          blocked: 1,
+        ),
+      );
+
+      expect(notice, contains('1 client needs fixing'));
+    });
+
     test('composes in French too', () {
       expect(
         waveSyncNotice(fr, _summary(pushedCreated: 2, updated: 1)),

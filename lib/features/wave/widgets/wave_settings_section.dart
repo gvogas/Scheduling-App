@@ -13,6 +13,7 @@ import 'package:scheduling/features/wave/domain/models/wave_connection.dart';
 import 'package:scheduling/features/wave/domain/models/wave_import_schedule.dart';
 import 'package:scheduling/features/wave/domain/wave_failure.dart';
 import 'package:scheduling/features/wave/domain/wave_sync_notice.dart';
+import 'package:scheduling/features/wave/widgets/wave_blocked_list.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
 /// Localized label for an automatic-import cadence — used by the picker row and
@@ -371,6 +372,9 @@ class _ConnectedStatus extends StatelessWidget {
                     child: Text(context.l10n.wave_retryFailedButton),
                   ),
           ),
+        // A refused client is NOT a failed outbox job — it never became one —
+        // so it is absent from both counters above and needs its own surface.
+        const WaveBlockedList(),
       ],
     );
   }

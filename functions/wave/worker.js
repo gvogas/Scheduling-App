@@ -56,6 +56,7 @@
  */
 
 const {WaveValidationError, upsertCustomer} = require("./customers");
+const {isBlocked, statePatch} = require("./customer_contract");
 const {adminFirestore} = require("../admin_firestore");
 const {WaveApiError} = require("./client");
 const {mappedFieldsHash} = require("./mappers");
@@ -269,6 +270,38 @@ async function enqueueCustomerUpsert(clientId, deps = {}) {
   }
 
   return jobId;
+}
+
+/**
+ * Removes a client's queued upsert job, if one is still waiting.
+ *
+ * The enqueue gate refuses a client the contract blocks, but a job enqueued by
+ * an EARLIER edit can still be sitting in the outbox — and the worker re-reads
+ * the LIVE document, so that job would push the now-invalid one.
+ *
+ * Transactional, and it deletes ONLY while the job is still `queued`. An
+ * `inflight` job is claimed by a live dispatcher; deleting it out from under
+ * `commitOutcome` would break the claim invariant that keeps a re-enqueue
+ * mid-dispatch from being clobbered. Such a job is left alone and refused at
+ * dispatch instead, one moment later.
+ * @param {string} clientId Firestore `clients` document id.
+ * @param {Object=} deps Injectable `db`.
+ * @return {!Promise<boolean>} Whether a queued job was removed.
+ */
+async function cancelCustomerUpsert(clientId, deps = {}) {
+  const db = deps.db || adminFirestore().getFirestore();
+  const ref = db
+      .collection(QUEUE_COLLECTION)
+      .doc(`customerUpsert__${clientId}`);
+
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap || !snap.exists) return false;
+    const data = snap.data() || {};
+    if (data.status !== "queued") return false;
+    tx.delete(ref);
+    return true;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -606,6 +639,12 @@ function tallyUpsert(summary, status) {
     summary.created += 1;
   } else if (status === "patched" || status === "linked") {
     summary.updated += 1;
+  } else if (status === "blocked") {
+    // Its own counter, not `dead` and not silence. The job IS resolved — it
+    // will never push and nothing should retry it — but a drain that removed
+    // a job without sending anything to Wave must be able to say so, or a
+    // blocked roster and an idle one report identical zeros.
+    summary.blocked += 1;
   }
 }
 
@@ -672,7 +711,7 @@ async function drainQueue(deps = {}) {
   // other counters describe the queue itself.
   const summary = {
     processed: 0, done: 0, retried: 0, dead: 0, skipped: 0, reclaimed: 0,
-    created: 0, updated: 0,
+    created: 0, updated: 0, blocked: 0,
   };
 
   const ctx = {
@@ -717,10 +756,18 @@ const REQUEUE_CHUNK = 25;
 
 /**
  * Returns dead-lettered jobs to the queue for another try.
+ *
+ * A job whose client the CONTRACT now refuses is dropped instead, and the
+ * reason is written onto the client. Requeuing it would dead-letter it again
+ * inside the drain behind this very call — which is what made "Retry failed"
+ * appear to do nothing: the press reported success over a count that had not
+ * moved. Only a transient failure is retryable; a refusal is fixable, and it
+ * is fixed on the client, not in the queue.
  * @param {Object=} deps Injectable dependencies — `db`, `limit`, `now`,
  * `logger`.
- * @return {!Promise<{requeued: number, scanned: number}>} How many were
- * returned to the queue, and how many dead jobs were examined.
+ * @return {!Promise<{requeued: number, scanned: number, blocked: number}>} How
+ * many were returned to the queue, how many dead jobs were examined, and how
+ * many were dropped as refused.
  */
 async function requeueDeadJobs(deps = {}) {
   const db = deps.db || adminFirestore().getFirestore();
@@ -741,34 +788,55 @@ async function requeueDeadJobs(deps = {}) {
         const fresh = await tx.get(doc.ref);
         // Re-enqueued by a client edit in the meantime: that job is newer and
         // carries the current payload hash.
-        if (!fresh.exists) return false;
+        if (!fresh.exists) return "skipped";
         const data = fresh.data() || {};
-        if (data.status !== "dead") return false;
+        if (data.status !== "dead") return "skipped";
+
+        // Ask the contract before spending a retry on it.
+        const refPath = typeof data.refPath === "string" ? data.refPath : "";
+        if (refPath) {
+          const clientRef = db.doc(refPath);
+          const clientSnap = await tx.get(clientRef);
+          // A MISSING doc is not a refusal — the dispatcher already treats one
+          // as a clean skip, and blocking would put a reason on a client that
+          // no longer exists.
+          if (clientSnap && clientSnap.exists) {
+            const clientData = clientSnap.data() || {};
+            if (isBlocked(clientData)) {
+              tx.update(clientRef, statePatch(clientData));
+              tx.delete(doc.ref);
+              return "blocked";
+            }
+          }
+        }
+
         tx.update(doc.ref, {
           status: "queued",
           attempts: 0,
           nextAttemptAt: nowValue,
           lastError: null,
         });
-        return true;
+        return "requeued";
       });
     } catch (e) {
       // One stubborn job must not abort the rest of the recovery.
       logger.warn("WAVE-WORKER requeue failed", {
         jobId: doc.id, error: String(e),
       });
-      return false;
+      return "skipped";
     }
   };
 
   // Chunked rather than one-at-a-time.
   let requeued = 0;
+  let blocked = 0;
   for (let i = 0; i < docs.length; i += REQUEUE_CHUNK) {
     const chunk = docs.slice(i, i + REQUEUE_CHUNK);
-    const applied = await Promise.all(chunk.map(requeueOne));
-    requeued += applied.filter(Boolean).length;
+    const outcomes = await Promise.all(chunk.map(requeueOne));
+    requeued += outcomes.filter((o) => o === "requeued").length;
+    blocked += outcomes.filter((o) => o === "blocked").length;
   }
-  return {requeued, scanned: docs.length};
+  return {requeued, scanned: docs.length, blocked};
 }
 
 /**
@@ -804,6 +872,7 @@ async function listOutstandingClientIds(deps = {}) {
 
 module.exports = {
   enqueueCustomerUpsert,
+  cancelCustomerUpsert,
   drainQueue,
   countQueuedJobs,
   countDeadJobs,

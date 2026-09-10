@@ -11,6 +11,7 @@ jest.mock("firebase-functions/logger", () => ({
 }));
 jest.mock("../wave/worker", () => ({
   enqueueCustomerUpsert: jest.fn(),
+  cancelCustomerUpsert: jest.fn(),
   drainQueue: jest.fn(),
   listOutstandingClientIds: jest.fn(),
   shouldEnqueueClientWrite: jest.fn(),
@@ -25,7 +26,7 @@ const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
 const worker = require("../wave/worker");
 const syncRun = require("../wave/sync_run");
-const {problemsPatch} = require("../wave/customer_contract");
+const {statePatch} = require("../wave/customer_contract");
 const {waveUpsertCustomer, runWaveDaily} = require("../wave/triggers");
 
 const snapOf = (data) => ({exists: data !== null, data: () => data});
@@ -44,6 +45,7 @@ const makeEvent = (clientId, before, after) => ({
 function makeDb(opts = {}) {
   const batchUpdates = [];
   const commits = [];
+  const docUpdates = [];
   const db = {
     batch: () => ({
       update: (ref, patch) => batchUpdates.push({ref, patch}),
@@ -52,7 +54,12 @@ function makeDb(opts = {}) {
         if (opts.commitError) throw opts.commitError;
       },
     }),
-    doc: (p) => ({__path: p}),
+    doc: (p) => ({
+      __path: p,
+      update: async (patch) => {
+        docUpdates.push({path: p, patch});
+      },
+    }),
     collection: () => ({
       doc: () => ({
         get: async () => {
@@ -63,7 +70,7 @@ function makeDb(opts = {}) {
       }),
     }),
   };
-  return {db, batchUpdates, commits};
+  return {db, batchUpdates, commits, docUpdates};
 }
 
 const IDLE_DRAIN = {
@@ -75,6 +82,7 @@ beforeEach(() => {
   FieldValue.serverTimestamp = jest.fn(() => "TS");
   worker.shouldEnqueueClientWrite.mockReturnValue(true);
   worker.enqueueCustomerUpsert.mockResolvedValue(undefined);
+  worker.cancelCustomerUpsert.mockResolvedValue(false);
   worker.drainQueue.mockResolvedValue(IDLE_DRAIN);
   worker.listOutstandingClientIds.mockResolvedValue([]);
   syncRun.readWaveBusinessIdCached.mockResolvedValue("");
@@ -106,7 +114,7 @@ describe("waveUpsertCustomer mark-pending batch", () => {
     email: "shop@example.com",
   };
 
-  test("carries the report-only wave.problems patch, not just syncState",
+  test("carries the contract's wave.problems patch, not just syncState",
       async () => {
         const {db, batchUpdates} = makeDb();
         getFirestore.mockReturnValue(db);
@@ -118,8 +126,7 @@ describe("waveUpsertCustomer mark-pending batch", () => {
         expect(patch["wave.syncState"]).toBe("pending");
         expect(patch["wave.syncError"]).toBeNull();
 
-        // Phase 1 reads nothing else.
-        const expected = problemsPatch(CLIENT);
+        const expected = statePatch(CLIENT);
         expect(Object.keys(expected).length).toBeGreaterThan(0);
         for (const [k, v] of Object.entries(expected)) {
           expect(patch[k]).toEqual(v);
@@ -138,6 +145,95 @@ describe("waveUpsertCustomer mark-pending batch", () => {
             expect.objectContaining({batch: expect.anything()}),
         );
         expect(commits).toEqual([1]);
+      });
+
+  test("a REFUSED client is never enqueued and never drained", async () => {
+    // The whole point of enforcement: a payload Wave would refuse must not
+    // become a queued job, because the push dead-letters permanently and
+    // "Retry failed" re-sends the identical payload into the identical
+    // refusal.
+    const {db, batchUpdates, docUpdates} = makeDb();
+    getFirestore.mockReturnValue(db);
+
+    await waveUpsertCustomer.run(makeEvent("c1", null, {...CLIENT, name: ""}));
+
+    // A refused client never enters the mark-pending batch — that batch exists
+    // to pair the pending state with an enqueue, and there is no enqueue.
+    expect(batchUpdates).toHaveLength(0);
+    expect(docUpdates).toHaveLength(1);
+    const {patch} = docUpdates[0];
+    expect(patch["wave.syncState"]).toBe("blocked");
+    expect(patch["wave.problems"]).toEqual([
+      {field: "name", code: "EMPTY", severity: "blocking", detail: null},
+    ]);
+    expect(worker.enqueueCustomerUpsert).not.toHaveBeenCalled();
+    expect(worker.drainQueue).not.toHaveBeenCalled();
+  });
+
+  test("a refused client cancels a job an earlier edit left queued",
+      async () => {
+        // The worker re-reads the LIVE doc, so a job queued before the edit
+        // would push the now-invalid document.
+        const {db} = makeDb();
+        getFirestore.mockReturnValue(db);
+
+        await waveUpsertCustomer.run(
+            makeEvent("c1", CLIENT, {...CLIENT, name: ""}));
+
+        expect(worker.cancelCustomerUpsert).toHaveBeenCalledWith("c1");
+      });
+
+  test("an ADVISORY problem still enqueues", async () => {
+    // Wave accepts it. Blocking here would strand a client that syncs fine —
+    // the failure the severity split exists to prevent.
+    const {db, batchUpdates} = makeDb();
+    getFirestore.mockReturnValue(db);
+
+    await waveUpsertCustomer.run(
+        makeEvent("c1", null, {...CLIENT, phone: "Contact Person"}));
+
+    const {patch} = batchUpdates[0];
+    expect(patch["wave.syncState"]).toBe("pending");
+    expect(patch["wave.problems"]).toEqual([
+      {field: "phone", code: "NOT_DIALABLE", severity: "advisory",
+        detail: null},
+    ]);
+    expect(worker.enqueueCustomerUpsert).toHaveBeenCalled();
+  });
+
+  test("a client edited OUT of a blocking state re-enqueues by itself",
+      async () => {
+        // Auto-heal, with no button press: every blocking problem is on a
+        // MAPPED field, so the fix changes the hash and the trigger fires.
+        const {db, batchUpdates} = makeDb();
+        getFirestore.mockReturnValue(db);
+
+        await waveUpsertCustomer.run(
+            makeEvent("c1", {...CLIENT, name: ""}, CLIENT));
+
+        const {patch} = batchUpdates[0];
+        expect(patch["wave.syncState"]).toBe("pending");
+        expect(patch["wave.problems"]).toBeNull();
+        expect(worker.enqueueCustomerUpsert).toHaveBeenCalled();
+      });
+
+  test("the batch-commit fallback still records the contract verdict",
+      async () => {
+        // The fallback used to re-enqueue with NO problems patch, so the doc
+        // changed and the record of what is wrong with it did not.
+        const {db, docUpdates} = makeDb(
+            {commitError: new Error("doc deleted")});
+        getFirestore.mockReturnValue(db);
+
+        await waveUpsertCustomer.run(makeEvent("c1", null, CLIENT));
+
+        expect(worker.enqueueCustomerUpsert).toHaveBeenCalledTimes(2);
+        expect(worker.enqueueCustomerUpsert).toHaveBeenLastCalledWith(
+            "c1", expect.objectContaining({payloadHash: expect.any(String)}));
+        expect(docUpdates).toHaveLength(1);
+        // Bracketed: Jest reads a dotted string as a PATH, and this key
+        // literally contains a dot.
+        expect(docUpdates[0].patch).toHaveProperty(["wave.problems"]);
       });
 
   test("a deleted client enqueues nothing", async () => {

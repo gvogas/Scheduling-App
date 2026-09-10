@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
+import 'package:scheduling/features/wave/domain/models/wave_problem.dart';
 
 void main() {
   group('ClientRecord', () {
@@ -157,6 +158,45 @@ void main() {
       });
       expect(errored.waveSyncState, 'error');
       expect(errored.waveSyncError, 'boom');
+    });
+
+    test('fromMap reads the contract problems the server records', () {
+      final r = ClientRecord.fromMap('c1', const {
+        'name': 'Jane',
+        'wave': {
+          'syncState': 'blocked',
+          'problems': [
+            {
+              'field': 'name',
+              'code': 'TOO_LONG',
+              'severity': 'blocking',
+              'detail': {'length': 218, 'cap': 200},
+            },
+            {
+              'field': 'phone',
+              'code': 'NOT_DIALABLE',
+              'severity': 'advisory',
+              'detail': null,
+            },
+          ],
+        },
+      });
+
+      expect(r.waveProblems, hasLength(2));
+      expect(r.waveProblems.first.code, WaveProblemCode.tooLong);
+      expect(r.waveProblems.first.cap, 200);
+      expect(r.waveProblems.hasBlocking, isTrue);
+    });
+
+    test('fromMap defaults problems to empty when the server wrote null', () {
+      // `problemsPatch` writes null rather than [] on a clean client.
+      final r = ClientRecord.fromMap('c1', const {
+        'name': 'Jane',
+        'wave': {'syncState': 'synced', 'problems': null},
+      });
+      expect(r.waveProblems, isEmpty);
+
+      expect(ClientRecord.fromMap('c2', const {}).waveProblems, isEmpty);
     });
 
     test('fromMap falls back to legacy businessName when name is empty', () {
