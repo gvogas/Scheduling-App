@@ -56,8 +56,15 @@ Root context: `../../CLAUDE.md`.
   `importCustomers` (`functions/wave/customers_import.js`). **The Wave UPDATE
   branch must never write it**, or every scheduled import un-archives
   everything; a test pins that half. Existing docs were backfilled by
-  `functions/scripts/backfill-clients-archived.js` (idempotent, `--dry-run`),
-  which must run against prod BEFORE the filtered query deploys.
+  `functions/scripts/backfill-clients-archived.js` (idempotent, `--dry-run`,
+  and `--verbose` to print the id and name of each doc it would patch), which
+  must run against prod BEFORE the filtered query deploys. **Re-run it when a
+  client goes missing from the list but is still findable in search** — that
+  asymmetry is this field's signature, and `--verbose` exists because such a
+  doc is by definition invisible on the screen where you would notice it. One
+  turned up on 2026-09-10 (see the deploy log); both create paths stamp the
+  field, so a doc without it is an anomaly worth naming, not a legacy
+  straggler to count.
   The filter is server-side **specifically so `fetchClientsPage` keeps returning
   a plain `List`**: the server still fills a whole page, so `items.last` stays
   the true cursor and the list's `pages.last.length < pageSize` end-of-list test

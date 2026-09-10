@@ -24,7 +24,8 @@
 //     $env:GCLOUD_PROJECT = "schedulingapp-88727"
 //     node functions/scripts/backfill-clients-archived.js
 //
-// Pass --dry-run to report what it would do without writing.
+// Pass --dry-run to report what it would do without writing, and --verbose to
+// print the id and name of every doc it would patch.
 //
 // AN UNKNOWN ARGUMENT IS A HARD ERROR — see `_flags.js`. `--dryrun` or
 // `--dry_run` would otherwise silently read as false and take this LIVE
@@ -40,7 +41,7 @@ const {commitInBatches} = require("./_batch");
 const {scanByName} = require("./_scan");
 
 /** Bare switches, matched EXACTLY — see `_flags.js`. */
-const EXACT_FLAGS = ["--dry-run"];
+const EXACT_FLAGS = ["--dry-run", "--verbose"];
 
 /**
  * Rejects any argument that is not a flag this script knows. The rejection
@@ -78,6 +79,10 @@ function needsArchivedField(data) {
 async function main() {
   const argv = process.argv.slice(2);
   const {db, dryRun} = bootstrapScript(argv, {assertFlags: assertKnownFlags});
+  // Both create paths stamp the field, so a doc without it is an anomaly worth
+  // naming rather than counting — it is invisible in the clients list, which
+  // is precisely why nobody reports it.
+  const verbose = argv.includes("--verbose");
 
   let patched = 0;
   let skipped = 0;
@@ -93,6 +98,9 @@ async function main() {
       continue;
     }
     patched += 1;
+    if (verbose) {
+      console.log(`  ${doc.id}  name=${doc.data().name || "(none)"}`);
+    }
     await writer.stage(doc.ref, {archived: false});
   }
   await writer.flush();
@@ -100,6 +108,9 @@ async function main() {
   console.log(
       `${dryRun ? "[dry-run] " : ""}clients: ${patched} patched, ` +
       `${skipped} already had the field`);
+  if (patched > 0 && !verbose) {
+    console.log("Re-run with --verbose to list them.");
+  }
 }
 
 // Only run when invoked directly, so `assertKnownFlags` is requirable by
