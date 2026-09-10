@@ -401,7 +401,7 @@ code between P4b (`5f33ca63`) and P4c (`b0e0fe4e`).
 **`redeemSignupCode` was the last unauthenticated callable in the
 codebase**; every remaining one requires auth. All four callables
 below share `APP_CHECK = {enforceAppCheck: true}`. Full design:
-`docs/plans/redesign-subdocs/2026-08-02-p4c-HANDOFF.md`.
+`docs/archive/redesign-subdocs/2026-08-02-p4c-HANDOFF.md`.
 
 The shape: the admin creates the account and hands over an email + a generated
 starting password; the employee signs in, replaces the password, and activates

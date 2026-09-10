@@ -7,7 +7,7 @@
 // the list under Name and silently gone under the other two sorts.
 //
 // PREREQUISITE for the search-first clients release, not a follow-up — see
-// docs/plans/2026-09-04-clients-page-search-first-implementation.md.
+// docs/archive/2026-09-04-clients-page-search-first-implementation.md.
 //
 // Usage:
 //   For prod:

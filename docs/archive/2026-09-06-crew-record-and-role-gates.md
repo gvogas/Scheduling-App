@@ -1,7 +1,22 @@
 # Crew record and role gates
 
-**Status:** design agreed. Implementation in progress on `redesgin` from
-2026-09-06 — see `2026-09-06-crew-record-and-role-gates-implementation.md`.
+**Status: SHIPPED AND DEPLOYED — ARCHIVED 2026-09-09.** All eight changes are
+in the code and the rules half is live. Built 2026-09-06/07 across thirteen
+commits — the live admin gate (`b3ca82a2`), the Day Route selector
+(`240102b6`), History made admin-only (`c9e5812e`), Recent removed
+(`d3440af1`), the job-address toggle (`261efdd6`), the filter back control
+(`47b52e2d`), the photo gate (`c17fda1f`, `916e27ab`), the `FieldNote` model
+and store (`5697408e`), the subcollection grant (`7a43a7bb`), repository and
+provider (`ea3fb808`), the notes UI (`93fde0c7`), the attached client dropdown
+(`7159fd26`) and the read/identity failure hardening (`051a6b6d`).
+**`firestore.rules` carrying the `appointments/{id}/fieldNotes` grant was
+deployed 2026-09-07 at `462a1907`** — until that deploy the feature was inert
+in prod regardless of the app build; the note cap is 250, not 200, because
+`composeEmployeeName` legitimately reaches 201. See that row in
+`docs/DEPLOYMENT.md`, which is the only authority on what production runs. The
+implementation plan is
+`2026-09-06-crew-record-and-role-gates-implementation.md`; shipping the app
+build is tracked in `docs/plans/README.md`, not here.
 **Date:** 2026-09-06
 **Branch:** `redesgin`
 **Mockup:** https://claude.ai/code/artifact/b12a97dd-0058-4d1c-be3c-3e766b0626d3

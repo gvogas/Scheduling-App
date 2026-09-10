@@ -453,17 +453,31 @@ Switch to dark (Settings, or system) and re-check:
 > behind any individual box, so treat a future contradiction as "re-run that
 > check", not as a regression with a known-good baseline.
 >
-> **This does NOT cover the P5 block below**, which is still `none run` — but it
-> is no longer blocked: the deploy landed **2026-08-11** at `258cc91a`
-> (functions, rules, storage), so those 18 checks are now runnable and a
-> `permission-denied` among them is a real finding rather than the expected
-> symptom of a missing deploy. Nor does it retire the loose end from the P4 pass: the
-> `RawScrollbar` "attached to more than one ScrollPosition" assertion is still
-> unattributed to a screen.
+> **The P5 block below is CLOSED TOO — all 18 checks reported PASSING by the
+> owner on 2026-09-09**, run on hardware as a technician (which is the only role
+> that proves anything there — the admin branch of `allow update` masks a broken
+> self clause completely). Recorded on the same terms as §0–§10: the owner's
+> word, no console capture behind any individual box, so a later contradiction
+> means "re-run that check", not "a regression against a known-good baseline".
+>
+> **The surfaces with no runbook were swept the same day** and reported passing
+> as a group — the P3/P4/P4c screens, the drawer icons and the 43 tour steps, the
+> closed-jobs agenda, the photo cue, the restyled History and the P7 dashboard.
+> That is a general sweep, not per-check evidence: nothing here enumerates those
+> screens, so treat a finding on one as new rather than as a regression.
+>
+> **Two things this does NOT cover.** The **Siri on-device pass is still
+> unrun** — the six read intents in `ios/SiriIntents/` have never been exercised
+> by voice, and that remains the only thing between Siri Phases 1–3 and done
+> (`../2026-07-19-siri-app-intents-implementation.md`). And the loose end from
+> the P4 pass is not retired: the `RawScrollbar` "attached to more than one
+> ScrollPosition" assertion is still unattributed to a screen.
 
 | # | Check | Pass? | Notes |
 |---|---|---|---|
 | §0–§10 | All | Pass | Owner-reported 2026-08-11; see the banner above |
+| P5 | All 18 | Pass | Owner-reported 2026-09-09, run as a technician |
+| — | The unrunbooked surfaces (P3/P4/P4c, tours, agenda, History, dashboard) | Pass | Owner-reported 2026-09-09, swept as a group |
 
 Record anything that differs from **Expect** here, with the check number. For a
 visual issue a screenshot is worth more than a description. For a crash or a
@@ -474,7 +488,7 @@ place, overflow errors will actually print.
 
 ---
 
-## P5 — My details (added 2026-08-10, none run)
+## P5 — My details (added 2026-08-10; **all 18 PASSED 2026-09-09**, owner-reported)
 
 **Sign in as a TECHNICIAN, not an admin.** The admin branch of `allow update`
 masks a broken self clause completely, so an admin pass proves nothing here.

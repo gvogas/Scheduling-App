@@ -2,9 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** IMPLEMENTED 2026-09-05, released as 1.58.0+87 (`101d0c0a`); boxes
-ticked in `394d67af`. Blocked from being usable in production only by the
-undeployed 1.57/1.58 backend that owns `searchClients`. Design doc:
+**Status: SHIPPED AND DEPLOYED — ARCHIVED 2026-09-09.** Implemented
+2026-09-05, released as 1.58.0+87 (`101d0c0a`); boxes ticked in `394d67af`.
+The backend that owns `searchClients` went live 2026-09-06 (25 → 29 functions,
+composite `READY`, tokens backfilled) — see `docs/DEPLOYMENT.md`. Design doc:
 `docs/plans/2026-09-05-add-job-client-picker.md`.
 
 **Goal:** Rebuild the add-job client step for an admin who is on the phone with the client and types a full ten-digit number: the match list narrows live above the OS phone pad on one network round trip, a tap attaches the client as a confirmation card, and the job address moves next to that card.

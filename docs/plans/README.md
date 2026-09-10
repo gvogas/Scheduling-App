@@ -1,15 +1,22 @@
 # Active plans — index and outstanding work
 
-Swept 2026-08-11, re-swept 2026-08-15, **re-swept 2026-09-06** against what the
-code, `git log` and the deploy log actually say. The 2026-09-06 pass moved
-fourteen documents to `docs/archive/` (the simplified-auth pair, four August
-calendar/day-off designs, the per-day appointments pair, client-building
-grouping, calendar holidays, the superseded clients address filter, the
-feature-tour 1.57 pair and the 2026-09-03 mobile audit) and rebuilt the index
-below, which had gone **21 files behind** — every plan written after 2026-08-15
-was missing from it. Everything left in this directory is either **live work**
-or a reference a live plan depends on. Dated audit snapshots live in
-`docs/audits/` until they are superseded, then they move to the archive too.
+Swept 2026-08-11, re-swept 2026-08-15 and 2026-09-06, **re-swept 2026-09-09**
+against what the code, `git log` and the deploy log actually say. The 2026-09-06
+pass moved fourteen documents to `docs/archive/` and rebuilt an index that had
+gone 21 files behind. The **2026-09-09 pass moved six plans plus the whole
+redesign program** — the search-first clients pair, the add-job client-picker
+pair and the crew-record / role-gates pair, because **the deploy gate all six
+banners still cited as open had closed** (the backend went live 2026-09-06/09-07
+at 29 functions, all 19 composites `READY`, both prod backfills run, the
+crew-notes rules grant deployed); then the redesign program spec and its 15
+sub-documents, because the device runbook was that folder's last live item and
+it passed the same day.
+
+**Everything left in this directory is live work.** The closed sections of this
+file were retired with them — see
+[`docs/archive/2026-09-09-plans-index-retired-sections.md`](../archive/2026-09-09-plans-index-retired-sections.md).
+Dated audit snapshots live in `docs/audits/` until superseded, then they move to
+the archive too.
 
 **Current state of the code is `CLAUDE.md`, `docs/ARCHITECTURE.md` and
 `docs/CLOUD_FUNCTIONS.md` — never a plan doc.** A plan records how something was
@@ -23,295 +30,155 @@ at the top of each file, not its boxes.
 
 | Doc | State |
 |---|---|
-| `2026-07-29-redesign-program.md` | **COMPLETE.** P1–P5 and P7 shipped; **P6 and P7b CANCELLED by owner call 2026-09-06.** Owes nothing further — kept as the program record. |
-| `redesign-subdocs/` | The build record for P1 through P7 — see the README in there. P4b is **withdrawn**; P6 and P7b are **cancelled**. |
-| `redesign-subdocs/2026-07-30-p1-p2-DEVICE-TEST.md` | **§0–§10 closed 2026-08-11**, owner-reported passing. The **P5 block (18 checks) is still unrun** — no longer blocked (the deploy landed 2026-08-11), but it needs a technician account. |
 | `2026-09-07-analytics-followups.md` | **Code COMPLETE and verified** (analyzer clean, 3547 tests). Every open item is off-repo: Google Analytics must be ENABLED on the project or the SDK reports nothing silently; custom dimensions must be registered or `user_role` and `source` are uncollectable in reports; App Store Connect privacy labels and the `FIREBASE_ANALYTICS_WITHOUT_ADID=true` release build are submission-gating. |
 | `2026-07-10-siri-app-intents-design.md` | Design, 6 phases. Phases 5–6 unscoped. |
-| `2026-07-19-siri-app-intents-implementation.md` | Phases 1–3 built; **no device pass ever run**. |
+| `2026-07-19-siri-app-intents-implementation.md` | Phases 1–3 built; **no device pass ever run — and this is now the ONLY device-gated item left in the repo** (the 2026-09-09 sweep closed every other one). Six read intents in `ios/SiriIntents/`, never exercised by voice. |
 | `2026-07-20-siri-phase4-write-actions.md` | **NOT STARTED.** Mac + Apple-portal session. |
-| `2026-08-28-address-street-locality-split.md` | **Shipped and deployed; the prod backfill's LIVE run is the one thing open.** `backfill-client-address-street.js` has only dry-run against prod (2026-08-28: 714 scanned, 114 reduced). Cleanup, not a defect — the app renders both stored shapes. |
-| `2026-08-30-wave-validated-contract-design.md` | **Phase 1 built and deployed 2026-08-30** (`fe9edc51`, report-only). Phases 2–4 deliberately unwritten until the prod replay lands. |
-| `2026-08-30-wave-validated-contract-implementation.md` | Phase 1's task list. Its last step — `functions/scripts/audit-wave-contract.js` against prod — **has never run**; this box has no ADC. |
-| `2026-09-04-carplay-driving-task.md` | **PLAN, not started.** Written 2026-09-04, awaiting owner review. |
-| `2026-09-04-clients-page-search-first.md` | **Implemented 2026-09-05** (`767ec99e` + `b2adc705`), released 1.58.0+87. **Backend undeployed** — two `clients` composites must be READY and `backfill-client-sort-fields.js` must run before the sorts work. Supersedes the archived address-filter doc. |
-| `2026-09-04-clients-page-search-first-implementation.md` | Its task list. Same deploy gate. |
-| `2026-09-05-add-job-client-picker.md` | **Built and released the same day** as 1.58.0+87 (`101d0c0a`). Its banner claimed "no code written" until this sweep. **Not usable in prod** until `searchClients` deploys. |
-| `2026-09-05-add-job-client-picker-implementation.md` | Its task list, boxes ticked in `394d67af`. Same deploy gate. |
-| `APP_STORE_SUBMISSION.md` | **The live release runbook**, now for updates rather than a launch — the app shipped. Its unticked boxes have never been reconciled against four shipped submissions, so read one as *unknown*, not *outstanding* (§7). |
+| `2026-08-28-address-street-locality-split.md` | **COMPLETE 2026-09-09 — nothing outstanding.** The prod dry run came back **724 scanned, 0 reduced**, so the live run is withdrawn rather than pending; the 2026-08-28 count of 114 was inflated by the pre-guard re-spacing bug. Don't run it. |
+| `2026-08-30-wave-validated-contract-design.md` | **Phase 1 COMPLETE** — built and deployed 2026-08-30 (`fe9edc51`, report-only), and the prod replay **ran 2026-09-09: 724 clients, 0 blocking, 1 advisory.** The report is clean, so **Phase 2 (enforce) is unblocked** — read §3 before writing it. |
+| `2026-08-30-wave-validated-contract-implementation.md` | Phase 1's task list — every step now done, the replay included. |
+| `2026-09-04-carplay-driving-task.md` | **PLAN, NOT STARTED.** Written 2026-09-04; **UI design finalised 2026-09-09** (Today / Week tab bar, Today ranked Now / Next / Later, mark-complete hand-off alert, refresh on every connect, business-wide admin view — decisions 9–16). Verified 2026-09-09 that no `CarPlay` symbol or entitlement exists anywhere. |
+| `APP_STORE_SUBMISSION.md` | **The live release runbook**, now for updates rather than a launch — the app shipped. Its unticked boxes have never been reconciled against four shipped submissions, so read one as *unknown*, not *outstanding*. |
+
+**Moved to `docs/archive/` on 2026-09-09.** Six shipped-and-deployed plans:
+`2026-09-04-clients-page-search-first.md` + its implementation plan,
+`2026-09-05-add-job-client-picker.md` + its implementation plan (1.58.0+87), and
+`2026-09-06-crew-record-and-role-gates.md` + its implementation plan (crew notes,
+the live admin gate, History made admin-only). Their one shared outstanding item
+— shipping the app build — is §1 below, not six open plans. Plus the **redesign
+program**: `2026-07-29-redesign-program.md` and `redesign-subdocs/` (P1–P7's
+build record, the device runbook included), complete and owing nothing.
 
 ---
 
-## What has not been done
+## What is outstanding
 
-### 1. The backend deploy — CLOSED 2026-09-06
+Everything below is open. This file is a work list; it is not where the history
+goes.
 
-The P5/multi-day deploy this section was written for landed 2026-08-11 at
-`258cc91a` (release 1.45.0+72), which unblocked the P5 device block in §4 and
-shipping an app build carrying the P5 UI — the ordering hazard was that the
-rules clause had to be live first, or every self save fails `permission-denied`.
+### 1. The app build — the only release item left
 
-**CLOSED 2026-09-06.** The debt described below is paid: indexes deployed and
-all four composites `READY`, both prod backfills run (720 clients / 84
-appointments tokenized; 658 clients given sort fields), and
-`functions` + `firestore:rules` deployed, taking the live export set 25 → 29.
-**Only the app build is outstanding.** The paragraphs below are kept as the
-record of what was owed and in what order; read `docs/DEPLOYMENT.md`'s log
-for what production runs, never this file.
+The three-release backend debt (1.56/1.57/1.58) is **PAID**: indexes deployed and
+all 19 `READY`, both prod backfills run, `functions` + `firestore:rules` live at
+**29 exports** (2026-09-06), and the crew-notes `fieldNotes` rules grant deployed
+2026-09-07 (`462a1907`). Read `docs/DEPLOYMENT.md`'s log for what production
+runs — never this file.
 
-**Nothing about deploy state should be read from this file** —
-**`docs/DEPLOYMENT.md` is the only reliable record of what production runs**;
-read its log rather than any paragraph here. As of the 2026-09-06 sweep that
-log's last row is **2026-09-03**, and prod is running **25 functions while the
-repo declares 29**. So the debt spans 1.56/1.57/1.58, and its ordering matters:
+What is left:
 
-- The three `indexed_search.js` callables (`searchClients`, `searchHistory`,
-  `findAppointmentConflicts`) plus `restoreAppointmentStatus` are undeployed.
-- Their composite indexes must be READY **and**
-  `functions/scripts/backfill-search-tokens.js` must have run before the app
-  build that calls them ships — an unbackfilled document is invisible to the
+- **Cut the build.** `462a1907` sits ~22 commits above the 1.58.0+87 release
+  commit with no `CHANGELOG.md` entry, so it needs a version bump first.
+  Everything shipped since — the crew record, the role gates, the analytics —
+  reaches users only through it. `/release` owns the sequence.
+- **Re-run `backfill-search-tokens.js` immediately before it ships.** It is
+  idempotent, and currently-shipped builds write no `searchTokens`, so any client
+  edited from a phone since 2026-09-06 has stale tokens and is invisible to the
   search that replaced the client-side scan.
-- The search-first clients work adds two more `clients` composites and
-  `backfill-client-sort-fields.js` on top of that.
-- Until this deploys, Wave clients keep arriving with an empty phone field, and
-  the 1.58 phone-first client picker cannot work at all.
+- **Rollback direction flips when it ships.** The backend was safe to roll back
+  only until then; afterwards roll back the APP, never the backend, because the
+  old client-side scan path is unreachable in a shipped build
+  (`firebaseFunctionsProvider` is non-nullable).
 
-`docs/DEPLOYMENT.md` §"TODO 1.57.0+86" holds the ordering runbook.
+### 2. Siri — the one device-gated item in the repo
 
-### 2. Redesign — COMPLETE. P6 and P7b were CANCELLED 2026-09-06
+Phases 1–3 are code-complete and have **never been run on a device**; that pass
+is the whole of what stands between them and done. `ios/SiriIntents/` holds
+exactly the six read intents, verified 2026-09-09. It is also the single unticked
+box in `APP_STORE_SUBMISSION.md` Part 6.
 
-- **P5 — SHIPPED AND DEPLOYED 2026-08-11**
-  (`redesign-subdocs/2026-08-10-p5-my-details.md`). All three phases built and
-  live: the rules clause is called and `updateSelfDetails` exists (A); an
-  employee moves their own sign-in email through `changeEmployeeEmail`'s new
-  `self` branch, with re-auth, confirm-twice and an active-admins fan-out (B);
-  and the P4-parked time-to-leave toggle is live end to end (C). **Still not
-  device-verified** — the whole self-service path is unreachable as an admin, so
-  it needs a **technician** pass, and that is now the only thing outstanding on
-  it. Deliberate deviations from the spec, all recorded in the
-  plan's decisions section: no duplicate NOTIFICATIONS block (Settings already
-  owns it), no duplicate profile card, SCHEDULING scoped to `maxJobsPerDay`, and
-  the identity fields explicitly saved behind a Save/Discard bar (owner call)
-  while availability keeps apply-immediately.
-- **P6 Time off — CANCELLED (owner call 2026-09-06).** It had been deferred
-  since 2026-08-10; this closes it and it will not be built. Nothing was ever
-  built for it — no `timeOff` collection, no rules, no surfaces — and the last
-  trace in the code, a comment reserving the `PushedDestination.timeOff` slot in
-  `drawer_catalog.dart`, was deleted with the cancellation. **What stands in its
-  place is permanent, not a stopgap:** a personal block / day off makes someone
-  read as unavailable because `findBusyEmployees` deliberately does not filter
-  it. There is no request/approve flow, no allowance, and there will not be one.
-  The design is kept intact in the program spec as the record of what was
-  decided.
-- **P7b Wave invoice read path — CANCELLED (owner call 2026-09-06).** Never
-  started, and will not be. Two consequences are now permanent rather than
-  pending, and are documented at their sites: P7's **six money sections** stay
-  omitted (empty-omitted rule, not stubbed), and the dashboard's **Year** period
-  stays absent — P7b was the aggregate read path that would have served it. Do
-  not "add Year back" by widening `fetchInRange`; a year is ~1,825 jobs even at
-  5/day against a 1000-doc cap, so it would report a prefix as a total. See
-  `lib/features/dashboard/domain/dashboard_period.dart`.
+**Phase 4 (voice write actions) is specified end to end and nothing is landed.**
+It needs one Mac session doing, in this order: the Apple-portal keychain-sharing
+capability, a second Firebase app for the extension's App Attest, then the
+entitlement XML — landing the XML first breaks signed builds with a provisioning
+mismatch. Phases 5–6 are unscoped.
 
-### 3. Siri
+### 3. Wave — Phases 2–4, unblocked but deliberately unwritten
 
-Phases 1–3 are code-complete and have **never been run on a device** — that is
-the whole of what stands between them and done. Phase 4 (voice write actions)
-is specified end to end but nothing is landed: it needs one Mac session doing
-the Apple-portal keychain-sharing capability, a second Firebase app for the
-extension's App Attest, and the entitlement XML, in that order — landing the
-XML first breaks signed builds.
+Phase 1 is complete: deployed 2026-08-30 (`fe9edc51`, report-only) and the prod
+replay ran **2026-09-09 — 724 clients, 0 blocking, 1 known advisory** (a person's
+name typed into the `phone` box on `2wcEiCNztsWYUYNXYBEm`, which Wave has synced
+and which is advisory by design).
 
-### 4. Device verification — §0–§10 closed, the rest still open
+**Zero refusals is a question, not a green light.** The design's gate says
+enforce once the report is clean, and it is — but all three founding incidents
+(the `CA-NY` province, the stale `waveCustomerId`, the blank name) were fixed or
+repaired *before* the replay ran, so a clean report is equally what a repaired
+backlog looks like. What the replay cannot tell us is whether the contract would
+catch a NEW failure shape. So Phase 2 opens with *"what would this contract have
+caught that Wave caught for us, and what would it still miss?"* — enforcement's
+value here is prospective, not a backlog to clean. Phases 3–4 (backfill, then the
+`worker.js` split and cadence removal) follow it.
 
-`redesign-subdocs/2026-07-30-p1-p2-DEVICE-TEST.md` is the runbook. **Its §0–§10
-were closed 2026-08-11 on the owner's report** that he had run them on hardware
-— recorded on his word, with no console capture or screenshot behind any
-individual box, so a later contradiction means "re-run that check", not "a
-regression against a known-good baseline". Read the banner in its Results
-section before relying on a specific box.
+### 4. CarPlay — awaiting the build decision
 
-**Still unrun:** the **P5 block (18 checks)**, which is now **unblocked** — the
-deploy in §1 landed 2026-08-11, so a `permission-denied` there is no longer the
-expected symptom of a missing deploy and should be read as a real finding. It
-needs a **technician** account; the path is unreachable as an admin. Also never
-exercised on a device:
-every P3/P4/P4c surface, the drawer icons + the 43 tour steps, the closed-jobs
-agenda, the photo cue, the restyled History, and the P7 dashboard — none of
-those has a runbook at all, which is now the real gap here. The Swift halves of
-the multi-day mirrors (widget decoder + Siri snapshot v3) are likewise
-Xcode/device-unverified; Swift has no test harness.
+Written 2026-09-04 with its UI design finalised 2026-09-09; nothing is built
+(verified: no `CarPlay`/`CPTemplate` symbol or entitlement anywhere).
 
-If a pass is ever driven from the repo, read §0.7 first: `main()` routes
-`FlutterError.onError` to Crashlytics, so overflows never reach `flutter run`
-stdout and about a third of the checks are meaningless without the temporary
-`dumpErrorToConsole` patch.
+### 5. Analytics — every open item is off-repo
 
-One loose end from the P4 device pass is still undiagnosed: a `RawScrollbar`
-assertion ("provided ScrollController is attached to more than one
-ScrollPosition") seen in the console, with no screen attributed to it.
+Code is complete and verified. What is left is a Firebase Console setting, an App
+Store Connect action or a device pass — and three of them gate something real:
+**Google Analytics must be ENABLED on the project** or the SDK reports nothing,
+silently; **custom dimensions must be registered** or `user_role` and `source`
+are uncollectable in reports; and the ASC privacy labels plus the
+`FIREBASE_ANALYTICS_WITHOUT_ADID=true` release build are submission-gating.
 
-### 5. One deferred design question — Live Activities for a multi-day job
+### 6. Off-repo and console items
 
-Carried forward from the multi-day design doc (now
-`docs/archive/2026-08-02-multi-day-appointments.md` §10) so it isn't lost with
-it. A card counting down to an end four days out would sit on the Lock Screen
-for the entire job, so **`resolveReminderForAssignee` skips multi-day jobs
-outright** (`dayCountOf(c) > 1`, built 2026-08-11) — the `leaveNow` push still
-goes out on day 1, which is the only day with a departure time. That skip is the
-containment, not the answer: what a multi-day card should actually be (a per-day
-card? a countdown to today's window end?) is an unanswered design question.
-
-### 6. Data and ops
-
-**The backfills in the bullet list below have all RUN against prod; each is
-listed so nobody re-runs one. THREE OTHERS HAVE NOT RUN and are real work
-items** (corrected 2026-09-06 — this heading said "every backfill named here"
-and read as though nothing was outstanding):
-
-- `backfill-search-tokens.js` — **a prerequisite for the 1.57/1.58 release, not
-  a follow-up.** Until it runs, `searchClients` / `searchHistory` return nothing
-  for every client and closed job written before 2026-09-04.
-- `backfill-client-sort-fields.js` — gates the search-first clients screen's
-  Most jobs / Recently added sorts.
-- `backfill-client-address-street.js` — the live run. Only ever dry-run against
-  prod (2026-08-28: 714 scanned, 114 reduced, 600 left alone). Optional cleanup:
-  the app renders both stored address shapes correctly.
-
-- **The client name/phone rewrite — ran, reversed, re-ran, and destroyed data on
-  the way through.** `backfill-client-phone-from-name.js` ran 2026-08-08: it
-  lifted the phone number out of `clients/{id}.name` and renamed `name` to
-  "First Last". Correct for the app, wrong for Wave — `name` is synced VERBATIM
-  as the Wave customer name (`toWaveCustomerInput`) and the invoicing workflow
-  identifies customers by number, so it renamed those customers on real Wave
-  invoices. **Never run it again.** Owner call 2026-08-14 reversed the rule: the
-  number goes back in the stored `name` and the APP strips it for display
-  (`ClientNamePolicy.displayName`). `backfill-client-name-with-phone.js` ran
-  against prod the same day (**504 renamed**), and
-  `backfill-client-phone-formatting.js` with it (**142 reformatted**).
-- **That 2026-08-14 run predated the first/last split and DESTROYED the stored
-  name on docs that had no `firstName`/`lastName`** — those clients render as a
-  bare number. The only surviving copy is `clientName` on the client's SETTLED
-  appointments. `restore-client-name-halves.js` writes those back into the two
-  halves and never touches `name` (Wave's identity);
-  `docs/audits/audit-renamed-client-names.js` is its read-only twin, and the two
-  are kept deliberately in step — reading one rule's report and running another
-  rule's repair is the failure mode. `restore-business-client-names.js` covers
-  the businesses the heuristic caught. The read-only damage audit for the
-  2026-08-08 run is `docs/audits/audit-client-phone-backfill-damage.js`.
-- **The appointment-images migration is COMPLETE — all four steps, verified
-  2026-09-06.** This bullet claimed two were outstanding; both were already
-  done and one of them can never do anything again.
-  Step 2, the backfill, ran and was re-run at the CONTRACT step 2026-08-22:
-  `copied 14 photos across 11 appointments` (not the superseded `13 / 10` from
-  2026-08-15). Copy-only and idempotent.
-  **Step 3 shipped in 1.49.0+78 on 2026-08-22** (`db6686f4` “retire the
-  pictures array”, released as `647660a5` “photos live only in the
-  subcollection”). The gate was never “ship the NEXT build” — it was the fleet
-  ageing off builds that touch the array, and that is settled on the SAME
-  evidence that retired `#compat-1.47.0`: the owner confirmed the whole fleet
-  on **1.53** by 2026-08-29, four releases past 1.49.
-  **Step 4 has nothing left to clear.** A prod dry run on 2026-09-06 reported
-  `0 array entries across 0 appointments (0 still carried an array, 84
-  scanned)`, no refusals and no `pictureCount` re-stamp. Verified independently
-  by reading all 84 docs through the Firestore MCP under a field mask: **not
-  one holds a non-empty `pictures` array.** Every doc is one of two shapes —
-  about 45 carry an empty `pictures: []` and no `pictureCount`, the rest carry
-  `pictureCount` (0/1/2) and no array at all.
-  **The empty-array residue is PERMANENT and that is not a defect.** The clear
-  script early-returns on `pictures.length === 0` before it reaches the delete,
-  so it will never remove those fields no matter how often it runs. They are
-  inert — empty, accepted by the rules, never emitted by `toMap()`. Don't file
-  the residue as outstanding work, and don't re-run the clear script expecting
-  it to go: removing it would take a different one-line script nobody needs.
-  **Step 4 already RAN, on 2026-08-27** — dry run and live run agreed exactly:
-  `cleared 14 array entries across 11 appointments, 67 scanned`, no refusals,
-  no identity-less entries. That is why today's dry run finds nothing, and it
-  is why the ~39 `pictureCount`-only docs have no `pictures` field at all: the
-  script issues `FieldValue.delete()` on the ones it clears. The ~45 empty
-  arrays are the docs that never held a photo, which it never touches. Every
-  number reconciles.
-  The fleet gate for that run was read off re-running the idempotent COPY
-  backfill the same day and getting the SAME 14 photos / 11 appointments —
-  identical counts five days on means no build still writing the array had
-  added an entry. **That technique is the reusable part**: it checks the gate
-  without being able to see fleet versions at all. See the deploy log in
-  `docs/DEPLOYMENT.md`; the full audit history is in `docs/archive/`.
-- **The three "orphaned Cloud Scheduler jobs" NEVER EXISTED — RESOLVED
-  2026-08-23.** Checking found exactly the 3 expected scheduled jobs and no
-  orphans; this bullet claimed otherwise for nine days. What the check DID turn
-  up is worth keeping: `purgeExpiredHistory` was sitting **PAUSED** with no
-  record why (resumed 2026-08-23). Only the Cloud **Scheduler** page shows a
-  job's STATE — `functions:list` and Cloud Run both render a paused job
-  identically to a healthy one — so check it there after any deploy that
-  touches a scheduled function.
-- **The `signupCodes` collection and its TTL policy remain in prod**,
-  deliberately — the collection was verified empty and rules now deny all
-  access. Never `--force` the policy away.
-- **One accepted risk is live in the rules:** the 500-char cap added to
-  `clients.addressLine2` on 2026-08-15 sits over docs the already-deployed Wave
-  import wrote uncapped, and prod could not be inspected (this box's clock skew
-  breaks the Firebase MCP's Firestore reads). If an opaque `permission-denied`
-  ever appears on an ordinary client save, check that field first.
 - **A hard budget cap for Google Maps Platform is still unset** —
-  `docs/audits/AUDIT_FOLLOWUPS.md`, the one item in that file still open. It
-  needs GCP billing access, so it cannot be done from here.
+  `docs/audits/AUDIT_FOLLOWUPS.md`, the one item there still open. Needs GCP
+  billing access.
+- **The Time Sensitive Notifications capability** on the App ID in the Apple
+  Developer portal. The entitlement itself is in the repo (`af92e7fe`).
+- **ASC App Privacy needs Precise Location added.**
+- **The `liveActivityCards` TTL policy** cannot be created yet — blocked by
+  Firestore itself.
 
-### 7. App Store — SHIPPED. The runbook is now a release checklist, not a launch one
+### 7. Prod scripts — what must never be re-run, and what is closed
 
-**ES Pro was accepted by Apple and is live**; 1.45.0+72 was the **4th update**
-(owner-reported 2026-08-11). The repo has moved on twice since — 1.46.0+73
-(2026-08-14) and 1.46.1+74 (2026-08-15) are cut in `CHANGELOG.md`, and nothing
-here records whether either has been submitted; the photo migration's step 3 is
-waiting on an app build either way. `APP_STORE_SUBMISSION.md` still reads in places
-like a pre-launch document and **its unticked boxes have never been reconciled
-against four shipped submissions** — the app record, pricing, the FR
-localization, screenshots and "attach the build and submit" were evidently done
-during the first release and simply never ticked. Treat an unticked box there as
-*unknown*, not *outstanding*; the count is not a work list.
+**Nothing here is outstanding.** The list exists so nobody runs one again.
 
-What is genuinely still open, as far as the repo can tell: the **on-device Part 6
-checks** (iPad pass, live map + Routes API, push deep link, home-screen widget,
-wake-on-push refresh, Live Activity card, Siri phrases), the **Time Sensitive
-Notifications entitlement**, and ASC App Privacy needing **Precise Location**
-added. One is blocked by Firestore itself: the `liveActivityCards` TTL policy
-cannot be created yet. **A reconciliation pass over Part 13 is worth doing
-once** — it is the difference between a checklist and a list of ghosts.
+- **`backfill-client-phone-from-name.js` — NEVER RUN IT AGAIN.** It ran
+  2026-08-08, lifting the phone out of `clients/{id}.name` and renaming `name` to
+  "First Last". Correct for the app, wrong for Wave — `name` syncs VERBATIM as
+  the Wave customer name, so it renamed those customers on real invoices. The
+  rule was reversed by owner call 2026-08-14.
+- **`backfill-client-name-with-phone.js`** ran 2026-08-14 (504 renamed) and
+  **destroyed the stored name on docs with no `firstName`/`lastName`** — it
+  predated the first/last split. `restore-client-name-halves.js` repairs those
+  from `clientName` on the client's SETTLED appointments and never touches
+  `name`; `docs/audits/audit-renamed-client-names.js` is its read-only twin, and
+  the two are kept deliberately in step — reading one rule's report and running
+  another rule's repair is the failure mode.
+- **Run: `backfill-search-tokens.js`** (2026-09-06, 720 clients / 84
+  appointments) — **re-run once more before the app build ships**, see §1.
+- **Run: `backfill-client-sort-fields.js`** (2026-09-06, 720 scanned / 658
+  patched).
+- **Closed with nothing to do: `backfill-client-address-street.js`.** The
+  2026-09-09 dry run returned 724 scanned, **0 reduced**; the 2026-08-28 figure
+  of 114 predated the segment-removal guard and was the pure-re-spacing class it
+  refuses. A live run would write nothing.
+- **Closed: the appointment-images migration**, all four steps, verified in prod
+  2026-09-06. The empty-array residue is PERMANENT and is not a defect — the
+  clear script early-returns on a zero-length array, so no number of runs removes
+  those fields.
+- **`purgeExpiredHistory` was found PAUSED once** (resumed 2026-08-23) with no
+  record why. Only the Cloud **Scheduler** page shows a job's STATE —
+  `functions:list` and Cloud Run render a paused job identically to a healthy one
+  — so check it there after any deploy touching a scheduled function.
+- **The `signupCodes` collection and its TTL policy stay in prod**, deliberately:
+  verified empty, rules deny all access. Never `--force` the policy away.
+- **One accepted risk is live in the rules:** the 500-char cap on
+  `clients.addressLine2` (2026-08-15) sits over docs the already-deployed Wave
+  import wrote uncapped. If an opaque `permission-denied` ever appears on an
+  ordinary client save, check that field first.
 
-**The legal pages are NOT on that list — they are published and correct.** All
-four (`terms-of-service`, `accessibility`, `support`, and the privacy policy
-served as the repo's `index`) return HTTP 200 from `gvogas.github.io/es-pro-legal`
-and were verified **byte-identical** to `docs/legal/` on 2026-08-11. Keep it that
-way: republishing is part of any edit to those files, not a follow-up task, or
-the consent checkbox stamps `termsAcceptedAt` against text nobody has read.
+### 8. One parked design question — Live Activities on a multi-day job
 
-### 8. Function SDK downgrade — found and FIXED 2026-08-10, keep it from recurring
-
-`functions/package.json` had been **downgraded** on 2026-08-08 (commit
-`0b57e02c`, "updating") from `firebase-admin ^13.6.0` / `firebase-functions
-^7.3.2` to `^10.3.0` / `^4.9.0`, with `node_modules` and the lockfile to match.
-Production was unaffected — it runs the tree that declared 13.6/7.3.2 — but the
-next `firebase deploy` would have installed from that file, and under those
-versions `Query.prototype.count` **does not exist** (`@google-cloud/firestore`
-4.15.1). Three production paths call `.count()`: `deleteClient`'s
-client-has-history gate (`clients.js`), `recountClientJobs`
-(`client_job_count.js`) and the Wave outbox depth (`wave/worker.js`) — so a
-deploy would have silently broken the one guarantee stopping a client with job
-history from being deleted.
-
-`package.json` + `package-lock.json` were restored from the deployed tree
-(`b398294d`) and reinstalled: firebase-functions 7.3.2, firebase-admin 13.10.0,
-`@google-cloud/firestore` 7.11.6, `Query.prototype.count` present. `npm run
-lint` clean.
-
-**The jest suite cannot catch this class of regression** — it mocks
-firebase-admin, so it passed on the broken versions too. After any dependency
-change here, check the installed versions directly rather than trusting green
-tests.
-
-**The "do not bump to `firebase-admin ^14`" warning this section used to carry
-is RETIRED (corrected 2026-09-06).** It is in, and has been since the 2026-09-04
-maintenance pass: `functions/package.json` declares `^14.3.0` against
-`firebase-functions ^7.3.2`, and that is what is installed. The blocker was
-never the SDK pairing — it was jest/ESM, and a CommonJS `jose` mock unblocked
-it. `npm audit` is clean. See the archived
-`docs/archive/MOBILE_APP_AUDIT_2026-09-03.md` for the upgrade record.
+A card counting down to an end four days out would sit on the Lock Screen for the
+whole job, so `resolveReminderForAssignee` **skips multi-day jobs outright**
+(`dayCountOf(c) > 1`, built 2026-08-11); the `leaveNow` push still goes out on
+day 1, the only day with a departure time. **That skip is the containment, not
+the answer** — what a multi-day card should actually be (a per-day card? a
+countdown to today's window end?) is unanswered. Carried forward from the
+archived multi-day design doc so it is not lost with it.

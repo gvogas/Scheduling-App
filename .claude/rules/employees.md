@@ -180,7 +180,7 @@ self-service settings. Root context: `../../CLAUDE.md`.
   `redeemSignupCode` callables, the `signupCodes` collection's rules block and
   TTL entry, and the two `allow delete` grants. There is no code-based invite
   anywhere in the stack and none should be reintroduced. Design:
-  `docs/plans/redesign-subdocs/2026-08-02-p4c-HANDOFF.md`.
+  `docs/archive/redesign-subdocs/2026-08-02-p4c-HANDOFF.md`.
 - **An employee's email is their SIGN-IN identity, so an edit to it moves BOTH
   stores or neither** (2026-08-04, which re-enabled a field that had been
   read-only since P4c). The joining callable is `changeEmployeeEmail`

@@ -283,7 +283,7 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   exactly how someone is made to read as unavailable, which was the most
   valuable thing the P6 stopgap bought. **It is now the PERMANENT answer, not a
   stopgap: P6 was CANCELLED by owner call 2026-09-06** (see
-  `docs/plans/2026-07-29-redesign-program.md`), so there will never be a
+  `docs/archive/2026-07-29-redesign-program.md`), so there will never be a
   `timeOff` collection, a request/approve flow or an allowance. This flag closes
   the old stopgap's "counts as a job in the dashboard" limitation. No rules change was needed: the appointment validator is a per-key
   bounded check, not a `hasOnly` allowlist, and it type-checks neither

@@ -2,11 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** IMPLEMENTED 2026-09-05 — commits `767ec99e` + `b2adc705` on
-`redesgin`, released in 1.58.0+87. **NOT deployed:** the two new `clients`
-composite indexes must be READY and
-`functions/scripts/backfill-client-sort-fields.js` must have run before the
-Most jobs / Recently added sorts work in production. Design doc:
+**Status: SHIPPED AND DEPLOYED — ARCHIVED 2026-09-09.** Implemented
+2026-09-05 (commits `767ec99e` + `b2adc705`), released in 1.58.0+87. The deploy
+gate this banner carried is **CLOSED**: both new `clients` composite indexes are
+`READY` and `functions/scripts/backfill-client-sort-fields.js` ran live against
+prod on 2026-09-06 (720 scanned / 658 patched, the 62 untouched being clients
+that already had `jobCount`) — see the 2026-09-06 rows in `docs/DEPLOYMENT.md`.
+Unticked boxes below are **not** outstanding work; this plan was executed
+without ticking. Design doc:
 `docs/plans/2026-09-04-clients-page-search-first.md`.
 
 **Goal:** Replace the clients tab's five-control scrolling chip row with one search field, one pinned Filter button and a filter sheet, add a sort control, and stop the tab open from paying the ~700-doc building scan.

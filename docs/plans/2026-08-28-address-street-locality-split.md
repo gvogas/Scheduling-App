@@ -1,13 +1,36 @@
 # Address street/locality split
 
 **Date:** 2026-08-28
-**Status:** IMPLEMENTED 2026-08-28 — app, backend and backfill script, all
-shipped and deployed. **The one thing still open is the backfill's LIVE run:**
-`functions/scripts/backfill-client-address-street.js` has only ever run against
-prod as `--dry-run` (2026-08-28: 714 scanned, 114 reduced, 600 left alone — see
-"What the first prod dry run caught" below). Until it runs for real, the 114
-duplicated addresses stay duplicated; the app renders both stored shapes
-correctly, so this is cleanup, not a defect.
+**Status: COMPLETE 2026-09-09 — and the backfill turned out to have NOTHING TO
+DO.** App, backend and script all shipped and deployed 2026-08-28. The live run
+this banner asked for is **withdrawn, not pending**: a fresh prod dry run on
+2026-09-09 returned
+
+```
+[dry-run] clients: 724 scanned, 0 reduced, 724 left alone
+[dry-run] 40 have an address but NO city/province/postal/country ... skipped
+```
+
+**Zero docs to reduce, so a live run would write nothing.** Don't run it.
+
+**Why the count went 114 -> 0, and it is not a mystery.** The 2026-08-28 figure
+was taken **before** the segment-removal guard existed. For the guard to skip a
+doc today the segment count must be UNCHANGED — i.e. no locality tail came off —
+which is exactly the class described under "What the first prod dry run caught"
+below: `streetFromAddress` rejoins with `", "`, so a doc whose tail does not
+match its own locality fields still read as "changed" through pure re-spacing.
+Two examples of that were spotted in the 114 and read as outliers; on this
+evidence they were the whole population, and there was never a meaningful body
+of duplicated addresses to clean. The script's decision logic has not changed
+since that guard landed — `a808fe03` was the `bootstrapScript` refactor and
+`462a1907` only added `scanByName` paging, both verified by diff.
+**Two alternatives cannot be fully excluded from the Windows box** — an
+unrecorded live run, or the Wave import having rewritten those docs — but each
+needs an event nothing recorded, and the import gates on `lastSyncedHash`, which
+both address shapes hash identically, so it would have SKIPPED them.
+The 40 skipped are the documented rule-2 class (an address with no locality
+fields to identify a tail with); they render correctly, because every read
+composes.
 **Mockup:** https://claude.ai/code/artifact/af063304-88e8-4ab5-818c-0568a67e172c
 **Chosen option:** A — one composed line on the detail view
 

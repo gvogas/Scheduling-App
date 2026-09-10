@@ -1,14 +1,19 @@
 # Add-job client picker — phone-first, taken on a call
 
 **Date:** 2026-09-05
-**Status:** DESIGN APPROVED (owner, 2026-09-05), with the four open questions
-answered the same day (see **Owner decisions** below). **BUILT AND RELEASED the
-same day** as 1.58.0+87 (`101d0c0a`); the implementation plan's boxes were
-ticked in `394d67af`. In the code: `PhoneQueryPolicy`
+**Status: SHIPPED AND DEPLOYED — ARCHIVED 2026-09-09.** Design approved
+(owner, 2026-09-05) with the four open questions answered the same day (see
+**Owner decisions** below), and **built and released the same day** as
+1.58.0+87 (`101d0c0a`); the implementation plan's boxes were ticked in
+`394d67af`. In the code: `PhoneQueryPolicy`
 (`lib/features/clients/domain/policies/phone_query_policy.dart`), `ClientPicker`
-and `SelectedClientCard`. **NOT usable in production yet** — the picker calls
-the `searchClients` callable, which is part of the undeployed 1.57/1.58 backend
-(prod still runs 25 functions; see the deploy log in `docs/DEPLOYMENT.md`).
+and `SelectedClientCard`. The gate this banner carried is **CLOSED** — the
+`searchClients` callable went live 2026-09-06 in the 25 → 29 deploy, with its
+composite `READY` and the token backfill run (720 clients / 84 appointments);
+see the 2026-09-06 rows in `docs/DEPLOYMENT.md`, the only authority on what
+production runs. One release prerequisite outlives this doc and is tracked in
+`docs/plans/README.md`: `backfill-search-tokens.js` wants a re-run just before
+the app build ships, because currently-shipped builds write no `searchTokens`.
 **Implementation plan:** `docs/plans/2026-09-05-add-job-client-picker-implementation.md`
 **Mockup:** https://claude.ai/code/artifact/aeedb5fe-92a8-455e-9c22-6741a4252b50
 (narrowing list + compact keypad, the confirmation card, the address switch off,

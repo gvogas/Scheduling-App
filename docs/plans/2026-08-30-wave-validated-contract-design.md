@@ -1,12 +1,35 @@
 # Wave sync: the validated contract
 
-**State: PHASE 1 BUILT AND DEPLOYED 2026-08-30 (`fe9edc51`, report-only);
-Phases 2-4 not started and deliberately unwritten.** Owner-approved through
-three review sections. Phase 1 is `functions/wave/customer_contract.js`,
-recording `wave.problems` without changing what enqueues; the next phase waits
-on the production replay (`functions/scripts/audit-wave-contract.js`), which
-has never been run — this box has no ADC, so it needs a machine that does. The
-implementation plan is a separate document.
+**State: PHASE 1 COMPLETE — BUILT, DEPLOYED AND CONFORMANCE-REPLAYED.
+PHASE 2 IS NOW UNBLOCKED and is the next thing to write.** Owner-approved
+through three review sections. Phase 1 is
+`functions/wave/customer_contract.js`, recording `wave.problems` without
+changing what enqueues; deployed 2026-08-30 (`fe9edc51`, report-only).
+
+**The production replay RAN 2026-09-09** — the last open step of Phase 1, and
+the input §7 step 2 was waiting on. `functions/scripts/audit-wave-contract.js
+--verbose` against prod (`schedulingapp-88727`):
+
+```
+Scanned 724 clients.
+0 would be REFUSED by Wave (blocking).
+1 sync fine but carry advisory problems.
+  advisory  phone:NOT_DIALABLE: 1
+```
+
+**The report is CLEAN: not one client on file would dead-letter.** 724 tracks
+the 714 the address dry run saw on 2026-08-28 and the 720 the token backfills
+saw on 2026-09-06, so the scan reached the whole collection. The single advisory
+is the already-analyzed `2wcEiCNztsWYUYNXYBEm` — a person's NAME typed into the
+`phone` box, which Wave has synced as that customer's phone number, and which is
+advisory for exactly that reason (blocking it would strand a customer Wave
+accepts). It is documented at the rule itself in `customer_contract.js`;
+nothing about it is new and nothing needs fixing.
+
+So §7's gate — *"enforce, once the report is clean and the contract has earned
+trust against real data"* — is **met**. Phases 2-4 are still unwritten, which
+is now a choice rather than a dependency. The implementation plan for Phase 1
+is a separate document.
 
 Rearchitects the Wave customer sync around a single module that owns *"what
 Wave will accept"*. Motivated by two owner complaints — **it keeps breaking**

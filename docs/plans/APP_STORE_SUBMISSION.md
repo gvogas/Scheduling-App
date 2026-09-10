@@ -248,6 +248,14 @@ Open `ios/Runner.xcworkspace`.
 
 ## Part 6. Verify on real hardware — App Attest does NOT work on the Simulator
 
+> **Re-confirmed passing 2026-09-09 (owner-reported), with ONE exception: the
+> Siri phrases box below is still unrun.** Every other check here was already
+> ticked and was reported passing again on hardware that day. Recorded on the
+> owner's word, with no console capture behind any individual box, so a later
+> contradiction means "re-run that check" rather than "a regression against a
+> known-good baseline". Siri Phases 1–3 are code-complete and have never been
+> exercised by voice — see `2026-07-19-siri-app-intents-implementation.md`.
+
 - [x] `flutter run --release` on a physical iPhone.
 - [x] Sign in, then **exercise a callable end-to-end** to prove attestation —
   type an address in the appointment form (`placesAutocomplete`) or open
@@ -977,7 +985,10 @@ Export Compliance needs no action: `ITSAppUsesNonExemptEncryption = false` is in
   if a Play release is ever revisited.
 - **Series bulk edits** write N appointment docs → N pushes. Accepted for v1
   (each is a real change).
-- The remaining audit work lives in `docs/audits/CODEBASE_AUDIT.md`. Nothing
+- The remaining audit work lives in `docs/audits/` — the latest snapshot is
+  `CODEBASE_AUDIT_2026-09-07.md`, with the rolling owner-only list in
+  `AUDIT_FOLLOWUPS.md`. (The single rolling `CODEBASE_AUDIT.md` this line used
+  to name is gone; snapshots are written to dated filenames now.) Nothing
   there blocks the steps above.
 
 ## Part 15. Assumptions the owner must verify

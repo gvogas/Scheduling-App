@@ -7,6 +7,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status: SHIPPED AND DEPLOYED — ARCHIVED 2026-09-09.** All thirteen tasks
+were executed 2026-09-06/07 (commits `b3ca82a2` through `051a6b6d`), and the
+Task 9 rules half went live 2026-09-07 at `462a1907` — see `docs/DEPLOYMENT.md`.
+**Unticked boxes below are not outstanding work**: this plan was executed
+without ticking, and each task's artifacts are present in the tree. Current
+behaviour is `CLAUDE.md` and `.claude/rules/appointments.md`, never this file.
+
 **Goal:** Ship the eight agreed changes to the appointment flow, the employee interface and the crew field record — culminating in author-stamped crew notes an admin can read.
 
 **Architecture:** Four independent UI edits (Recent removal, job-address visibility, filter back button, photo refresh), one new shared role gate used by two surfaces (Day Route, History), one new Firestore subcollection with rules + store + provider + UI (crew notes), and one render change to the client picker.

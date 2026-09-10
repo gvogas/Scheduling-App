@@ -25,7 +25,13 @@ Phase 2 `TomorrowScheduleIntent` + `DayScheduleIntent`, Phase 3
 `NthAppointmentIntent`. All six intents build clean and pass the App Intents
 metadata compiler; all three phases await the same on-device Siri pass.
 **Reviewed 2026-07-19 against the code; corrections applied inline.** Phases 1–3
-are built; Phase 4 is the next unbuilt milestone. **Phase 4 is blocked** on two paper decisions flagged in
+are built; Phase 4 is the next unbuilt milestone.
+**Re-verified 2026-09-09:** `ios/SiriIntents/` holds exactly the six read
+intents (`AppointmentCount`, `TodaySchedule`, `NextAppointment`,
+`TomorrowSchedule`, `DaySchedule`, `NthAppointment`) and no write intent, no
+`keychain-access-groups` entitlement and no second Firebase app — so Phase 4 is
+still entirely unlanded, and the only thing standing between Phases 1-3 and
+done remains the on-device Siri pass. **Phase 4 is blocked** on two paper decisions flagged in
 its Mac steps (App Attest's bundle-ID binding; the not-yet-existing
 `keychain-access-groups` entitlement).
 

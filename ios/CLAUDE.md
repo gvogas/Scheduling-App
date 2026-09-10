@@ -95,7 +95,7 @@ iOS notes (Phase 0 of clean-architecture restructure):
   `AppDelegate` has no `open url` override), so dropping the param silently
   turns taps into plain app launches (fixed 2026-07-29). Retire the param only
   together with the `home_widget` tap channel, when the P4b `app_links`
-  dispatcher lands (docs/plans/2026-07-29-redesign-program.md). Swift-side, so
+  dispatcher lands (docs/archive/2026-07-29-redesign-program.md). Swift-side, so
   Mac-only verification: widget row / Live Activity tap → appointment sheet.
 
 App Check simulator setup: debug builds use `AppleDebugProvider` (App Attest is

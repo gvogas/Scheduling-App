@@ -137,6 +137,63 @@ this one".
   `docs/plans/redesign-subdocs/2026-08-11-p7-dashboard-history.md`, which stays
   active-adjacent with the rest of the redesign sub-docs.
 
+### Added by the 2026-09-09 sweep
+
+- `2026-07-29-redesign-program.md` and `redesign-subdocs/` (15 files) — the
+  navigation redesign program spec and the per-project build record for P1
+  through P7, moved together so every relative link between them still resolves.
+  **The program is COMPLETE and owes nothing:** P1-P5 and P7 shipped, P4b was
+  withdrawn and replaced by P4c, and **P6 Time off and P7b Wave invoices were
+  CANCELLED by owner call 2026-09-06** — which makes two consequences permanent
+  rather than deferred, both documented at their sites: the dashboard's **Year**
+  period and its six money sections stay absent (don't "add Year back" by
+  widening `fetchInRange`), and a personal block / day off IS the time-off
+  answer, because `findBusyEmployees` deliberately does not filter it. The
+  folder's last live item was the device runbook
+  (`2026-07-30-p1-p2-DEVICE-TEST.md`), closed 2026-09-09 when the P5 block's 18
+  checks passed as a technician and the unrunbooked surfaces were swept — all
+  owner-reported, no console capture, so read a later contradiction as "re-run
+  that check" rather than a regression. Four files outside the folder were
+  repointed at these paths: `docs/CLOUD_FUNCTIONS.md`,
+  `.claude/rules/employees.md`, `.claude/rules/appointments.md`, `ios/CLAUDE.md`.
+- `2026-09-09-plans-index-retired-sections.md` — the sections trimmed out of
+  `docs/plans/README.md` the same day, verbatim, when that index was cut down to
+  live work only: the redesign roll-up, device verification, the parked
+  multi-day Live Activity design question, the App Store history, and the
+  function-SDK-downgrade lesson (**the jest suite mocks firebase-admin, so it
+  passed on the broken versions too** — check installed versions directly after
+  any dependency change there).
+
+### Added by the 2026-09-09 sweep
+
+All six shipped **and** deployed; the deploy gate each banner still cited was
+closed by the 2026-09-06/09-07 backend deploys (25 -> 29 functions, all 19
+composites `READY`, both prod backfills run, the crew-notes rules grant live).
+
+- `2026-09-04-clients-page-search-first.md` / `-implementation.md` — the clients
+  tab's five-control chip row replaced by one search field, a pinned Filter
+  button and a filter sheet, plus a sort control, and the ~700-doc building scan
+  taken off the tab open. Implemented 2026-09-05 (`767ec99e` + `b2adc705`),
+  released 1.58.0+87; its two `clients` composites reached `READY` and
+  `backfill-client-sort-fields.js` ran live 2026-09-06 (720 scanned / 658
+  patched). Supersedes `2026-08-29-clients-address-filter.md`.
+- `2026-09-05-add-job-client-picker.md` / `-implementation.md` — the phone-first
+  add-job client picker, built for an admin typing a full ten-digit number while
+  on the call: `PhoneQueryPolicy`, `ClientSearchWindow`, `ClientPicker` and
+  `SelectedClientCard`. Built and released the same day as 1.58.0+87
+  (`101d0c0a`), boxes ticked in `394d67af`; the `searchClients` callable it
+  depends on went live 2026-09-06.
+- `2026-09-06-crew-record-and-role-gates.md` / `-implementation.md` — eight
+  changes to the appointment flow, the employee interface and the crew field
+  record: Recent removed from the add sheet, the job address following the
+  toggle, a back control on the filter sheet, the Day Route selector and History
+  gated on the LIVE Firestore role (`isActiveAdminProvider`), employee photos
+  staying visible, the attached client-search dropdown, and author-stamped crew
+  notes in the new `appointments/{id}/fieldNotes` subcollection. Built
+  2026-09-06/07 across thirteen commits (`b3ca82a2`..`051a6b6d`); its rules
+  grant deployed 2026-09-07 (`462a1907`), without which the notes were inert in
+  prod.
+
 ### Added by the 2026-09-06 sweep
 
 - `2026-08-21-simplified-auth-design.md` / `-implementation.md` — removed the

@@ -2,11 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** BUILT AND DEPLOYED 2026-08-30 (`fe9edc51`, functions + rules +
-storage) in report-only mode. **One step of Phase 1 is still open:** the
-production replay `functions/scripts/audit-wave-contract.js` has never been run
-— it needs application-default credentials this box does not have — and its
-report is what Phase 2 was to be written from. Design doc:
+**Status: PHASE 1 COMPLETE — every step including the replay.** Built and
+deployed 2026-08-30 (`fe9edc51`, functions + rules + storage) in report-only
+mode, and the production replay — the one step that stayed open for ten days for
+want of credentials — **RAN 2026-09-09**:
+`audit-wave-contract.js --verbose` against `schedulingapp-88727` scanned **724
+clients, 0 blocking, 1 advisory** (`phone:NOT_DIALABLE` on the already-analyzed
+`2wcEiCNztsWYUYNXYBEm`). The report is clean, so Phase 2 (enforce) is unblocked
+and writable. Design doc:
 `docs/plans/2026-08-30-wave-validated-contract-design.md`.
 
 **Goal:** Build the Wave customer contract and run it in report-only mode, so

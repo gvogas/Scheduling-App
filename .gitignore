@@ -207,3 +207,4 @@ docs/superpowers/
 **/.DS_Store
 
 
+dev/settings.local.json
