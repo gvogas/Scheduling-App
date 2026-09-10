@@ -67,10 +67,11 @@ runs — never this file.
 
 What is left:
 
-- **Cut the build.** `462a1907` sits ~22 commits above the 1.58.0+87 release
-  commit with no `CHANGELOG.md` entry, so it needs a version bump first.
-  Everything shipped since — the crew record, the role gates, the analytics —
-  reaches users only through it. `/release` owns the sequence.
+- **Cut the build.** The version bump is DONE — `47d7abc4` took `pubspec.yaml`
+  to **1.59.0+88** and wrote the `## [1.59.0+88] - 2026-09-07` `CHANGELOG.md`
+  entry, and it sits above the deployed `462a1907`. What is left is the upload
+  itself. Everything shipped since — the crew record, the role gates, the
+  analytics — reaches users only through it. `/release` owns the sequence.
 - **Re-run `backfill-search-tokens.js` immediately before it ships.** It is
   idempotent, and currently-shipped builds write no `searchTokens`, so any client
   edited from a phone since 2026-09-06 has stale tokens and is invisible to the
