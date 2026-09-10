@@ -59,7 +59,39 @@ iOS notes (Phase 0 of clean-architecture restructure):
   unchanged — `main()` still awaits the send before `runApp`.
   `ios/Flutter/AppFrameworkInfo.plist` no longer pins `MinimumOSVersion`; the
   18.0 floor lives on the Xcode targets, which is the only place it was ever
-  enforced.
+  enforced. The same method captures the messenger into `FlutterMessengers`
+  and registers `CarPlayBridge` on it, beside the native-config channel — see
+  below.
+- **CarPlay (`ios/Runner/CarPlay/`, Runner target, not a new extension) is a
+  native scene, not a Flutter surface.** `Info.plist`'s
+  `UIApplicationSceneManifest` adds `CPTemplateApplicationSceneSessionRoleApplication`
+  as a SIBLING array inside `UISceneConfigurations`, alongside the existing
+  `UIWindowSceneSessionRoleApplication` entry — that Flutter/`FlutterSceneDelegate`
+  entry is byte-for-byte untouched, and `UIApplicationSupportsMultipleScenes`
+  stays `false` (it governs iPad multi-window, not CarPlay; committed plists
+  from shipping CarPlay apps back this over Apple's own prose, which is
+  ambiguous on whether the one-scene-per-role limit applies across roles).
+  The new array's `UISceneDelegateClassName` MUST carry the
+  `$(PRODUCT_MODULE_NAME).` prefix (`$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate`)
+  — a bare Swift class name doesn't resolve from a plist, and the failure is
+  silent: the scene simply never connects, with nothing logged.
+  - **The Apple grant is not the signing gate — the provisioning profile is.**
+    Apple granted `com.apple.developer.carplay-driving-task` for
+    `net.vogas.scheduling` on 2026-09-09, but `ios/Runner/RunnerCarPlay.entitlements`
+    still exists as a separate file and all three Runner build configs still
+    sign with `Runner/Runner.entitlements` (no CarPlay key in it). The trigger
+    for collapsing that scheme was never the grant itself: enable the
+    capability on the App ID in the Developer portal, refresh the provisioning
+    profiles, confirm a normal Release build still signs — only THEN move the
+    key into `Runner.entitlements` and delete `RunnerCarPlay.entitlements`.
+    Doing it in the other order breaks every App Store build's code signing.
+  - **CarPlay reads the App Group `schedule_snapshot`, never the Flutter
+    engine.** It must render with no engine, no Firestore and no network —
+    that absence of a live dependency is what makes it safe to add to a
+    shipping app; the method channel it also holds is a freshness
+    optimisation on top, not a requirement to render. See
+    `.claude/rules/notifications.md` for the shared payload (now schema v4)
+    and `docs/ARCHITECTURE.md` for the two-path design.
 - `Info.plist` already declares `NSCameraUsageDescription`,
   `NSPhotoLibraryUsageDescription`, and `LSApplicationQueriesSchemes`.
 - **`NSLocationAlwaysAndWhenInUseUsageDescription` is declared on purpose even

@@ -34,6 +34,14 @@
 		DA57DA1E5C4EDF0000000B02 /* TomorrowScheduleIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA57DA1E5C4EDF0000000D02 /* TomorrowScheduleIntent.swift */; };
 		DA57DA1E5C4EDF0000000C01 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DA57DA1E5C4EDF0000000E01 /* PrivacyInfo.xcprivacy */; };
 		DA57DA1E5C4EDF0000000B03 /* NthAppointmentIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA57DA1E5C4EDF0000000D03 /* NthAppointmentIntent.swift */; };
+		CA9F1000000000000000C001 /* CarPlayBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B001 /* CarPlayBridge.swift */; };
+		CA9F1000000000000000C002 /* CarPlayImages.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B002 /* CarPlayImages.swift */; };
+		CA9F1000000000000000C003 /* CarPlayScheduleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B003 /* CarPlayScheduleStore.swift */; };
+		CA9F1000000000000000C004 /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B004 /* CarPlaySceneDelegate.swift */; };
+		CA9F1000000000000000C005 /* CarPlayStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B005 /* CarPlayStrings.swift */; };
+		CA9F1000000000000000C006 /* CarPlayTemplateBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B006 /* CarPlayTemplateBuilder.swift */; };
+		CA9F1000000000000000C007 /* ScheduleSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ECD0A6DE641D05902F08E54 /* ScheduleSnapshot.swift */; };
+		CA9F1000000000000000C008 /* CarPlayTemplateBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B007 /* CarPlayTemplateBuilderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -134,6 +142,14 @@
 		DA57DA1E5C4EDF0000000E01 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		DD98B59A07DBABDD271F184D /* SiriIntentsExtension.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriIntentsExtension.swift; sourceTree = "<group>"; };
 		E1B3C4064AE19F11DBF0ABD0 /* SiriStrings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SiriStrings.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B001 /* CarPlayBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlayBridge.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B002 /* CarPlayImages.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlayImages.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B003 /* CarPlayScheduleStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlayScheduleStore.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B004 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B005 /* CarPlayStrings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlayStrings.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B006 /* CarPlayTemplateBuilder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlayTemplateBuilder.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B007 /* CarPlayTemplateBuilderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlayTemplateBuilderTests.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B008 /* RunnerCarPlay.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RunnerCarPlay.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -200,6 +216,7 @@
 			isa = PBXGroup;
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
+				CA9F1000000000000000B007 /* CarPlayTemplateBuilderTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -260,10 +277,25 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
+		CA9F1000000000000000A001 /* CarPlay */ = {
+			isa = PBXGroup;
+			children = (
+				CA9F1000000000000000B001 /* CarPlayBridge.swift */,
+				CA9F1000000000000000B002 /* CarPlayImages.swift */,
+				CA9F1000000000000000B003 /* CarPlayScheduleStore.swift */,
+				CA9F1000000000000000B004 /* CarPlaySceneDelegate.swift */,
+				CA9F1000000000000000B005 /* CarPlayStrings.swift */,
+				CA9F1000000000000000B006 /* CarPlayTemplateBuilder.swift */,
+			);
+			path = CarPlay;
+			sourceTree = "<group>";
+		};
 		97C146F01CF9000F007C117D /* Runner */ = {
 			isa = PBXGroup;
 			children = (
 				25AC829F2FFEAB0A00DD3CDD /* Runner.entitlements */,
+				CA9F1000000000000000B008 /* RunnerCarPlay.entitlements */,
+				CA9F1000000000000000A001 /* CarPlay */,
 				97C146FA1CF9000F007C117D /* Main.storyboard */,
 				97C146FD1CF9000F007C117D /* Assets.xcassets */,
 				97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */,
@@ -583,6 +615,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
+				CA9F1000000000000000C008 /* CarPlayTemplateBuilderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -591,6 +624,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
+				CA9F1000000000000000C001 /* CarPlayBridge.swift in Sources */,
+				CA9F1000000000000000C002 /* CarPlayImages.swift in Sources */,
+				CA9F1000000000000000C003 /* CarPlayScheduleStore.swift in Sources */,
+				CA9F1000000000000000C004 /* CarPlaySceneDelegate.swift in Sources */,
+				CA9F1000000000000000C005 /* CarPlayStrings.swift in Sources */,
+				CA9F1000000000000000C006 /* CarPlayTemplateBuilder.swift in Sources */,
+				CA9F1000000000000000C007 /* ScheduleSnapshot.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -1,9 +1,16 @@
 # Apple CarPlay for ES Pro — driving-task job list
 
-Status: **PLAN — NOT STARTED.** Written 2026-09-04; **UI design finalised
-2026-09-09** (decisions 9–14 below). **Verified 2026-09-09:** no
-`CarPlay`/`CPTemplate` symbol anywhere in `ios/` or `lib/`, and no CarPlay
-entitlement — nothing has been built from this document.
+Status: **BUILT.** Written 2026-09-04; UI design finalised 2026-09-09
+(decisions 9–14 below); implementation followed the same day. **Dart is
+verified**: `flutter analyze` clean, full suite 3585 passed (including
+`test/core/app/carplay_bridge_test.dart` and the schema-v4 coverage in
+`schedule_snapshot_test.dart`). **Swift is written but never compiled** —
+`ios/Runner/CarPlay/*.swift` and `ios/RunnerTests/CarPlayTemplateBuilderTests.swift`
+exist and were reviewed against this plan, but this is a Windows box with no
+Xcode toolchain. What remains is entirely the *Verification* and *Remaining
+Mac checks* sections at the bottom of this document: build `RunnerTests`,
+open the CarPlay Simulator, and work through both checklists on a Mac before
+this ships.
 
 Mockups — **the final design (revision 3, 2026-09-09):**
 <https://claude.ai/code/artifact/27425c62-bc6d-42ac-9f48-9d5bd8b3e65b>
@@ -173,7 +180,14 @@ outrank prose guides, and every setup blog asserting `true` cites no source. One
 placement gotcha: the key is a **sibling of** `UISceneConfigurations`, not nested
 inside it.
 
-### Approval gate — the single biggest risk
+### Approval gate — GRANTED 2026-09-09
+
+**Apple has granted `com.apple.developer.carplay-driving-task` for
+`net.vogas.scheduling`** (owner, 2026-09-09). This closes what this plan called
+its single biggest risk. The table below is kept because the *signing* gate did
+not close with it — see the note under it.
+
+### Approval gate — the original risk analysis
 
 | Stage | Needs Apple's grant? |
 |---|---|
@@ -187,20 +201,19 @@ and refusal is possible. **Nothing about the phone app changes if the request is
 refused** — the CarPlay code simply never activates.
 
 > **Do not commit `com.apple.developer.carplay-driving-task` into
-> `ios/Runner/Runner.entitlements` before Apple grants it.** An entitlement the
-> provisioning profile lacks fails code signing, which would break every normal
-> App Store build of ES Pro. See the gating scheme in Step 3.
+> `ios/Runner/Runner.entitlements` until the PROVISIONING PROFILE carries it.**
+> The grant is not the gate — the profile is. An entitlement the profile lacks
+> fails code signing, which would break every normal App Store build of ES Pro.
+> Apple granting it (2026-09-09) does not by itself put it in the profile: the
+> capability has to be enabled on the App ID in the Developer portal and the
+> profiles regenerated first. Order is: portal capability → refresh profiles →
+> move the key. See the gating scheme in Step 3.
 
-### Manual step for the owner — the entitlement request
+### Manual step for the owner — DONE
 
-Submit at `developer.apple.com/contact/carplay` (signed in as the account
-holder), category **Driving Task**, app **ES Pro** / `net.vogas.scheduling`.
-The justification is drafted as part of the work; the argument is that ES Pro's
-users are plumbing technicians who drive between assigned job sites all day,
-that the CarPlay interface shows only the current and next jobs on that route
-with a hand-off to navigation, and that it contains no account setup, no
-settings, no text entry, and nothing unrelated to the drive — matching Apple's
-own "communicating with fleet systems" example.
+The entitlement request was submitted and **granted (2026-09-09)**. Nothing
+remains here. What remains is the portal/profile step recorded under the
+approval gate above, which the owner had not done at the time of writing.
 
 ---
 
@@ -645,7 +658,7 @@ as the status button), the client has no number on file, and a personal block
 | `ios/Runner/Info.plist` | Add a `CPTemplateApplicationSceneSessionRoleApplication` array **beside** the existing `UIWindowSceneSessionRoleApplication` entry — leave the `flutter` / `FlutterSceneDelegate` entry byte-for-byte untouched (see below). |
 | `ios/Runner/AppDelegate.swift` | Capture the messenger in `didInitializeImplicitFlutterEngine(_:)` into a shared holder and register both channels from there. This also **fixes an existing latent bug**: `registerNativeConfigChannel()` currently resolves the messenger through `window?.rootViewController`, which under scene lifecycle can silently `NSLog("Native config channel unavailable")` and leave the live map blank. |
 | `ios/Runner.xcodeproj/project.pbxproj` | `ios/Runner/` is a plain `PBXGroup`, so each of the 6 new Swift files needs hand-adding in **four** sections (`PBXFileReference`, `PBXBuildFile`, group children, `PBXSourcesBuildPhase`). Plus one `PBXBuildFile` + Sources entry giving `ios/SiriIntents/ScheduleSnapshot.swift` **Runner target membership** — the file does not move, so the SiriIntents wiring is untouched. |
-| `lib/core/app/app_sync_listeners.dart` | Add `_carPlaySync()` to `registerAll()`, following the `_widgetSync` shape exactly: iOS-gated, `isUnsettled` guard, `_fireAndForget('APP-SYNC carplay ping failed', …)`. |
+| `lib/core/app/app_sync_listeners.dart` | **Built differently, deliberately.** A separate `_carPlaySync()` listener was written first and then REMOVED: two `_fireAndForget` listeners on the same emission fire in the same synchronous turn, so the ping raced ahead of `writeSnapshot`'s App Group write and the car re-read the OLD file every time — deterministically, with sign-out leaving the ex-user's client names on the car screen. The rewrite and the ping are now ONE chain inside `_snapshotSync`, so "landed" is structural rather than hoped for. Write and clear take the same path. Don't re-split them. |
 | `lib/main.dart` | Construct/`start()` `CarPlayBridge` in `initState` beside `AppointmentLinkOpener`; `dispose()` it. |
 | `ios/CLAUDE.md` | Record the scene-manifest change, the entitlement gate, and why CarPlay reads the App Group rather than the engine. |
 | `.claude/rules/notifications.md` | CarPlay is a fourth off-app surface; document it beside the widget and Siri snapshot. |
@@ -703,9 +716,14 @@ written before the admin-visibility question and is wrong.
 `Runner.entitlements`. Instead the repo carries
 `ios/Runner/RunnerCarPlay.entitlements` (the current file plus the CarPlay key),
 and the developer points `CODE_SIGN_ENTITLEMENTS` at it only for local CarPlay
-Simulator work. Once Apple grants the entitlement, the key moves into
-`Runner.entitlements` and the extra file is deleted. Until then every normal
-build signs exactly as it does today.
+Simulator work. Every normal build signs exactly as it does today.
+
+**Still in force after the 2026-09-09 grant.** The trigger for collapsing this
+scheme was never the grant itself but the provisioning profile: enable the
+capability on the App ID in the Developer portal, refresh the profiles, confirm
+a normal Release build still signs, and only then move the key into
+`Runner.entitlements` and delete the extra file. Doing it in the other order
+breaks every App Store build of ES Pro.
 
 ---
 
@@ -717,7 +735,8 @@ Implementation order (each step leaves the tree building and shippable):
    wiring — nothing runs yet.
 2. Scene delegate + `Info.plist` scene role + pbxproj wiring. CarPlay renders in
    the Simulator from whatever snapshot is on disk.
-3. `CarPlayBridge` (both directions) + `AppSyncListeners._carPlaySync` + Dart
+3. `CarPlayBridge` (both directions) + the snapshot-write→ping chain in
+   `AppSyncListeners._snapshotSync` + Dart
    tests. Live refresh, and the two engine-dependent buttons appear.
 4. Self-review pass (CarPlay/Flutter/iOS lifecycle, retain cycles between the
    scene delegate and the interface controller, threading — every CarPlay
@@ -763,7 +782,8 @@ Implementation order (each step leaves the tree building and shippable):
      prompt, and (b) more importantly, backgrounding the phone while CarPlay is
      connected still engages the lock — a second scene keeping the app "active"
      would be a real security regression, not a cosmetic one.
-- Physical head unit: only after Apple grants the entitlement.
+- Physical head unit: unblocked by the 2026-09-09 grant, but still needs the
+  App ID capability enabled and the provisioning profiles regenerated first.
 
 ---
 
@@ -786,8 +806,9 @@ Implementation order (each step leaves the tree building and shippable):
   while the phone is locked, and the existing snapshot privacy rule excludes
   notes, phone numbers and photos. The brief's "notes if appropriate and
   permitted" resolves to *not permitted here*.
-- **Apple approval is still required** for any device, TestFlight, or App Store
-  use. That is outside this repo's control.
+- **Apple approval was granted 2026-09-09**, so device, TestFlight and App
+  Store use are no longer blocked on review. They are still blocked on the
+  portal/profile step, which is outside this repo's control.
 
 ## Remaining Mac checks
 
