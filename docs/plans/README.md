@@ -37,7 +37,8 @@ at the top of each file, not its boxes.
 | `2026-08-28-address-street-locality-split.md` | **COMPLETE 2026-09-09 — nothing outstanding.** The prod dry run came back **724 scanned, 0 reduced**, so the live run is withdrawn rather than pending; the 2026-08-28 count of 114 was inflated by the pre-guard re-spacing bug. Don't run it. |
 | `2026-08-30-wave-validated-contract-design.md` | **Phase 1 COMPLETE** — built and deployed 2026-08-30 (`fe9edc51`, report-only), and the prod replay **ran 2026-09-09: 724 clients, 0 blocking, 1 advisory.** The report is clean, so **Phase 2 (enforce) is unblocked** — read §3 before writing it. |
 | `2026-08-30-wave-validated-contract-implementation.md` | Phase 1's task list — every step now done, the replay included. |
-| `2026-09-04-carplay-driving-task.md` | **PLAN, NOT STARTED.** Written 2026-09-04; **UI design finalised 2026-09-09** (Today / Week tab bar, Today ranked Now / Next / Later, mark-complete hand-off alert, refresh on every connect, business-wide admin view — decisions 9–16). Verified 2026-09-09 that no `CarPlay` symbol or entitlement exists anywhere. |
+| `2026-09-10-wave-validated-contract-phases-2-4.md` | **PHASE 2 BUILT — committed `e0460805` on branch `wave-contract-enforce`, pushed, NOT deployed.** Phases 3–4 planned, not started. Verified at build time: analyzer clean, **1872 jest**, eslint clean, **139 Dart Wave tests**. **The deploy order is INVERTED and the plan's ordering section is the authority** — index (READY) → **app build** → backend → Phase 3 backfill, because `WaveSyncBadge._badgeConfig` renders `SizedBox.shrink()` for an unknown state, so a backend that writes `blocked` first leaves every shipped build showing those clients no badge at all. The `clients` composite `wave.syncState, name` it declares is **not yet in prod**. |
+| `2026-09-04-carplay-driving-task.md` | **BUILT — committed `0e9cd905` on branch `carplay`, pushed.** Written 2026-09-04, UI design finalised 2026-09-09 (Today / Week tab bar, Today ranked Now / Next / Later, mark-complete hand-off alert, refresh on every connect, business-wide admin view — decisions 9–16), implemented the same day. **Dart is verified; the Swift has NEVER been compiled** — seven files under `ios/Runner/CarPlay/`, `RunnerCarPlay.entitlements` and `ios/RunnerTests/CarPlayTemplateBuilderTests.swift` exist and were reviewed, but this is a Windows box with no Xcode. What is left is the Mac pass: build `RunnerTests`, the CarPlay Simulator, and both checklists at the foot of the plan. **Check `CPTabBarTemplate` is permitted for a Driving Task grant BEFORE the first Simulator run** — an unsupported root template raises an uncatchable `NSInternalInconsistencyException`, i.e. a crash on every plug-in. Entitlement granted 2026-09-09; the provisioning profile does not carry it yet. |
 | `APP_STORE_SUBMISSION.md` | **The live release runbook**, now for updates rather than a launch — the app shipped. Its unticked boxes have never been reconciled against four shipped submissions, so read one as *unknown*, not *outstanding*. |
 
 **Moved to `docs/archive/` on 2026-09-09.** Six shipped-and-deployed plans:
@@ -92,7 +93,7 @@ capability, a second Firebase app for the extension's App Attest, then the
 entitlement XML — landing the XML first breaks signed builds with a provisioning
 mismatch. Phases 5–6 are unscoped.
 
-### 3. Wave — Phases 2–4, unblocked but deliberately unwritten
+### 3. Wave — Phase 2 BUILT and unshipped, Phases 3–4 unwritten
 
 Phase 1 is complete: deployed 2026-08-30 (`fe9edc51`, report-only) and the prod
 replay ran **2026-09-09 — 724 clients, 0 blocking, 1 known advisory** (a person's
@@ -109,10 +110,33 @@ caught that Wave caught for us, and what would it still miss?"* — enforcement'
 value here is prospective, not a backlog to clean. Phases 3–4 (backfill, then the
 `worker.js` split and cadence removal) follow it.
 
-### 4. CarPlay — awaiting the build decision
+**Phase 2 was written and built 2026-09-10** — `e0460805` on branch
+`wave-contract-enforce`, pushed, **nothing deployed and no app build shipped**.
+`docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md` is the task list
+and its deploy-ordering section is binding: this phase **inverts** the repo's
+backend-first rule. Phase 4's `waveSetImportSchedule` removal is a callable
+deletion and needs its own deploy under `docs/DEPLOYMENT.md` §4a, not a
+ride-along.
 
-Written 2026-09-04 with its UI design finalised 2026-09-09; nothing is built
-(verified: no `CarPlay`/`CPTemplate` symbol or entitlement anywhere).
+### 4. CarPlay — BUILT, awaiting a Mac
+
+Written 2026-09-04, UI design finalised 2026-09-09, built the same day and
+committed as `0e9cd905` on branch `carplay` (pushed; **not merged to `main`**).
+The Dart half is verified. **The Swift half has never been compiled** — no Xcode
+on this box — so a first Xcode build with errors is the expected next step, not
+a regression. Nothing here touches `functions/`, the rules or the indexes.
+
+**The single biggest unverified risk:** `CPTabBarTemplate` may not be permitted
+for a Driving Task grant, and `setRootTemplate` with an unsupported template
+raises an UNCATCHABLE `NSInternalInconsistencyException` — the app would crash
+every time the phone is plugged in. The whole root design rests on it, so check
+Apple's template table before the first Simulator run. The fallback is a single
+`CPListTemplate` root with day sections (the plan's superseded decision 2).
+
+Apple granted `com.apple.developer.carplay-driving-task` on 2026-09-09, but the
+grant is not the signing gate — the provisioning profile is, and it does not
+carry the entitlement yet. Order when picking this up: portal capability →
+refresh profiles → move the key. The other order breaks every App Store build.
 
 ### 5. Analytics — every open item is off-repo
 
