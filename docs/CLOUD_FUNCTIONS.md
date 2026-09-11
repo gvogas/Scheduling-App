@@ -356,14 +356,30 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
 `waveUpsertCustomer` also records **`wave.problems`** on the client doc —
 the customer contract's verdict on whether Wave would accept it
 (`wave/customer_contract.js`, added 2026-08-30). Structured
-`[{field, code, detail}]`, naming the CLIENT DOC field an admin edits.
-**Report-only in Phase 1**: nothing is blocked by it, the job is still
-enqueued and `wave.syncState` is untouched. It rides the existing
-mark-pending batch, so it costs no extra write, and it is not a mapped
-field — the hash is unchanged, so `shouldEnqueueClientWrite` stops the
-re-fire and this cannot loop. Replay it over production read-only with
+`[{field, code, severity, detail}]`, naming the CLIENT DOC field an admin
+edits. It rides the existing mark-pending batch, so it costs no extra write,
+and it is not a mapped field — the hash is unchanged, so
+`shouldEnqueueClientWrite` stops the re-fire and this cannot loop.
+
+**ENFORCING since 2026-09-10** (it was report-only through Phase 1). A client
+carrying a `blocking` problem gets `wave.syncState: 'blocked'` — a fourth
+state beside `synced`/`pending`/`error` — and **never becomes a queued job**;
+`cancelCustomerUpsert` also removes one an earlier edit left `queued`. An
+`advisory` problem is recorded and the push proceeds. `upsertCustomer`
+returns `{status: 'blocked'}` rather than throwing `WaveValidationError`,
+because throwing is what dead-letters permanently, and the drain summary
+carries a `blocked` counter beside `created`/`updated`.
+`requeueDeadJobs` drops a dead job whose client the contract now refuses
+instead of requeuing it into the same refusal, so `waveRetryFailedJobs`
+returns **`blocked`** alongside `requeued`/`scanned`/`pushed`/`failed`
+(additive; not a failure).
+The import re-runs the contract over what it writes and uses DOTTED `wave.*`
+keys, because a nested map under `merge: true` replaced the whole sub-map and
+silently un-blocked a client.
+Replay the contract over production read-only with
 `functions/scripts/audit-wave-contract.js`. Design:
-`docs/plans/2026-08-30-wave-validated-contract-design.md`.
+`docs/plans/2026-08-30-wave-validated-contract-design.md`; Phases 2-4 plan:
+`docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`.
 
 **Exactly three Cloud Scheduler jobs, and that is deliberate** — only 3 are free
 per billing account. `sendOverdueJobPrompts` (was `every 15 minutes`) is merged

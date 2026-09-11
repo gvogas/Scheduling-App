@@ -277,7 +277,7 @@ describe("drainQueue happy path", () => {
         // is counted as an update to an existing customer, not a create.
         expect(summary).toEqual({
           processed: 1, done: 1, retried: 0, dead: 0, skipped: 0, reclaimed: 0,
-          created: 0, updated: 1,
+          created: 0, updated: 1, blocked: 0,
         });
 
         expect(logger.error).not.toHaveBeenCalled();
@@ -534,7 +534,7 @@ describe("drainQueue outcome guard", () => {
         expect(doneWrite).toBeUndefined();
         expect(summary).toEqual({
           processed: 1, done: 0, retried: 0, dead: 0, skipped: 0, reclaimed: 0,
-          created: 0, updated: 0,
+          created: 0, updated: 0, blocked: 0,
         });
         expect(logger.error).not.toHaveBeenCalled();
       });
@@ -579,7 +579,7 @@ describe("drainQueue retryable errors", () => {
 
         expect(summary).toEqual({
           processed: 1, done: 0, retried: 1, dead: 0, skipped: 0, reclaimed: 0,
-          created: 0, updated: 0,
+          created: 0, updated: 0, blocked: 0,
         });
 
         const finalUpdate = refs[0].updates[refs[0].updates.length - 1];
@@ -669,7 +669,7 @@ describe("drainQueue retryable errors", () => {
 
     expect(summary).toEqual({
       processed: 1, done: 0, retried: 0, dead: 1, skipped: 0, reclaimed: 0,
-      created: 0, updated: 0,
+      created: 0, updated: 0, blocked: 0,
     });
 
     const finalUpdate = refs[0].updates[refs[0].updates.length - 1];
@@ -756,7 +756,7 @@ describe("drainQueue non-retryable errors", () => {
 
         expect(summary).toEqual({
           processed: 1, done: 0, retried: 0, dead: 1, skipped: 0,
-          reclaimed: 0, created: 0, updated: 0,
+          reclaimed: 0, created: 0, updated: 0, blocked: 0,
         });
         const finalUpdate = refs[0].updates[refs[0].updates.length - 1];
         expect(finalUpdate.status).toBe("dead");
@@ -798,7 +798,7 @@ describe("drainQueue non-retryable errors", () => {
 
         expect(summary).toEqual({
           processed: 1, done: 0, retried: 0, dead: 1, skipped: 0,
-          reclaimed: 0, created: 0, updated: 0,
+          reclaimed: 0, created: 0, updated: 0, blocked: 0,
         });
 
         const finalUpdate = refs[0].updates[refs[0].updates.length - 1];
@@ -1391,7 +1391,7 @@ describe("drainQueue non-retryable errors (additional)", () => {
 
     expect(summary).toEqual({
       processed: 1, done: 0, retried: 0, dead: 1, skipped: 0, reclaimed: 0,
-      created: 0, updated: 0,
+      created: 0, updated: 0, blocked: 0,
     });
 
     const finalUpdate = refs[0].updates[refs[0].updates.length - 1];
@@ -2039,18 +2039,31 @@ describe("requeueDeadJobs", () => {
   /**
    * A Firestore double holding a fixed set of dead-lettered jobs.
    * @param {!Array<!Object>} jobs `{id, data}` fixtures.
-   * @return {!Object} `{db, refs}`.
+   * @param {!Object=} clientDocs Client docs keyed by `refPath`, for the
+   * contract check. An absent path reads as a missing document.
+   * @return {!Object} `{db, refs, clientRefs, deletes}`.
    */
-  function deadDb(jobs) {
+  function deadDb(jobs, clientDocs = {}) {
     const refs = jobs.map((j) => fakeRef(j.id, {...j.data}));
     const snapshots = refs.map((ref, i) => snap(jobs[i].id,
         {...jobs[i].data}, ref));
+    // Client docs the requeue reads to ask the contract about each job.
+    // Absent means "no such client", which must not be mistaken for refused.
+    const clientRefs = {};
+    for (const [path, data] of Object.entries(clientDocs)) {
+      clientRefs[path] = fakeRef(path, {...data});
+    }
+    const deletes = [];
     const db = {
       collection: jest.fn(() => ({
         where: jest.fn().mockReturnThis(),
         limit: jest.fn().mockReturnThis(),
         get: jest.fn(() => Promise.resolve({docs: snapshots})),
       })),
+      doc: jest.fn((path) => {
+        if (!clientRefs[path]) clientRefs[path] = fakeRef(path, null);
+        return clientRefs[path];
+      }),
       runTransaction: jest.fn(async (fn) => fn({
         get: jest.fn((ref) => Promise.resolve(
             snap(ref.id, ref._data, ref))),
@@ -2058,9 +2071,10 @@ describe("requeueDeadJobs", () => {
           ref.updates.push(fields);
           Object.assign(ref._data, fields);
         }),
+        delete: jest.fn((ref) => deletes.push(ref.id)),
       })),
     };
-    return {db, refs};
+    return {db, refs, clientRefs, deletes};
   }
 
   /**
@@ -2088,7 +2102,7 @@ describe("requeueDeadJobs", () => {
 
     const out = await requeueDeadJobs({db, now: () => nowDate});
 
-    expect(out).toEqual({requeued: 2, scanned: 2});
+    expect(out).toEqual({requeued: 2, scanned: 2, blocked: 0});
     for (const ref of refs) {
       const patch = ref.updates[ref.updates.length - 1];
       expect(patch.status).toBe("queued");
@@ -2109,7 +2123,7 @@ describe("requeueDeadJobs", () => {
 
     const out = await requeueDeadJobs({db, now: () => new Date()});
 
-    expect(out).toEqual({requeued: 0, scanned: 1});
+    expect(out).toEqual({requeued: 0, scanned: 1, blocked: 0});
     expect(refs[0].updates).toHaveLength(0);
   });
 
@@ -2127,15 +2141,64 @@ describe("requeueDeadJobs", () => {
 
         const out = await requeueDeadJobs({db, logger, now: () => new Date()});
 
-        expect(out).toEqual({requeued: 1, scanned: 2});
+        expect(out).toEqual({requeued: 1, scanned: 2, blocked: 0});
         expect(logger.warn).toHaveBeenCalledTimes(1);
         expect(refs[1].updates[0].status).toBe("queued");
+      });
+
+  test("a dead job whose client the contract REFUSES is dropped, not requeued",
+      async () => {
+        // "Retry failed" used to requeue everything, and the drain behind it
+        // dead-lettered the validation failures again inside the same call —
+        // so the count never moved and the button appeared to do nothing.
+        const {db, refs, clientRefs, deletes} = deadDb(
+            [deadJob("c1")],
+            {"clients/c1": {type: "business", name: "", phone: "5145554321"}},
+        );
+
+        const out = await requeueDeadJobs({db, now: () => new Date()});
+
+        expect(out).toEqual({requeued: 0, scanned: 1, blocked: 1});
+        expect(deletes).toEqual(["customerUpsert__c1"]);
+        expect(refs[0].updates).toHaveLength(0);
+        // The reason moves onto the client, where it is fixable.
+        const patch = clientRefs["clients/c1"].updates[0];
+        expect(patch["wave.syncState"]).toBe("blocked");
+        expect(patch["wave.problems"]).toEqual([
+          {field: "name", code: "EMPTY", severity: "blocking", detail: null},
+        ]);
+      });
+
+  test("a dead job whose client is fine still requeues", async () => {
+    const {db, refs, deletes} = deadDb(
+        [deadJob("c1")],
+        {"clients/c1": {type: "business", name: "Acme", phone: "5145554321"}},
+    );
+
+    const out = await requeueDeadJobs({db, now: () => new Date()});
+
+    expect(out).toEqual({requeued: 1, scanned: 1, blocked: 0});
+    expect(deletes).toEqual([]);
+    expect(refs[0].updates[0].status).toBe("queued");
+  });
+
+  test("a MISSING client doc is requeued, never treated as refused",
+      async () => {
+        // An absent doc is not a contract refusal — the worker already treats
+        // a missing doc as a clean skip, and blocking it would put a reason on
+        // a client that does not exist.
+        const {db, refs} = deadDb([deadJob("c1")]);
+
+        const out = await requeueDeadJobs({db, now: () => new Date()});
+
+        expect(out).toEqual({requeued: 1, scanned: 1, blocked: 0});
+        expect(refs[0].updates[0].status).toBe("queued");
       });
 
   test("an empty dead set is a clean no-op", async () => {
     const {db} = deadDb([]);
     expect(await requeueDeadJobs({db, now: () => new Date()}))
-        .toEqual({requeued: 0, scanned: 0});
+        .toEqual({requeued: 0, scanned: 0, blocked: 0});
   });
 });
 

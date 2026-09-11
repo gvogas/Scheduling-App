@@ -272,6 +272,46 @@ describe("upsertCustomer no-op", () => {
 // upsertCustomer — patch
 // ---------------------------------------------------------------------------
 
+describe("upsertCustomer contract refusal", () => {
+  test("a refused client is BLOCKED, never sent, and never dead-lettered",
+      async () => {
+        // Last line of defence. The enqueue gate refuses first, but a job
+        // queued before the edit — or claimed `inflight` when the edit landed
+        // — still arrives here holding a client Wave would refuse. Throwing
+        // WaveValidationError would dead-letter it permanently, which is the
+        // outcome this whole project exists to remove.
+        const ref = clientRef({...CLIENT, name: "", firstName: "",
+          lastName: "", type: "business"});
+        const graphql = jest.fn();
+
+        const result = await upsertCustomer("c1", {
+          db: upsertDb(ref), graphql, businessId: "biz-1", now,
+        });
+
+        expect(result.status).toBe("blocked");
+        expect(result.problems).toEqual([
+          {field: "name", code: "EMPTY", severity: "blocking", detail: null},
+        ]);
+        expect(graphql).not.toHaveBeenCalled();
+        expect(ref.updates).toHaveLength(1);
+        expect(ref.updates[0]["wave.syncState"]).toBe("blocked");
+      });
+
+  test("an ADVISORY problem still reaches Wave", async () => {
+    // Wave accepts it; refusing here would strand a client that syncs fine.
+    const ref = clientRef({...CLIENT, phone: "Contact Person"});
+    const graphql = graphqlSeq(createOk("wave-9"));
+
+    const result = await upsertCustomer("c1", {
+      db: upsertDb(ref), graphql, businessId: "biz-1", now,
+    });
+
+    expect(result.status).toBe("created");
+    expect(graphql).toHaveBeenCalled();
+    expect(ref.updates[0]["wave.syncState"]).toBe("synced");
+  });
+});
+
 describe("upsertCustomer patch", () => {
   test("linked + changed field → patch with id, no businessId", async () => {
     const data = {

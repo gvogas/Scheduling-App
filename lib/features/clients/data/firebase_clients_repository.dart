@@ -14,6 +14,7 @@ import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 import 'package:scheduling/features/clients/domain/policies/client_building.dart';
 import 'package:scheduling/features/clients/domain/policies/client_search_policy.dart';
+import 'package:scheduling/features/wave/domain/models/wave_sync_state.dart';
 
 class FirebaseClientsRepository implements ClientsRepository {
   FirebaseClientsRepository(
@@ -161,6 +162,21 @@ class FirebaseClientsRepository implements ClientsRepository {
         (doc) =>
             doc.exists ? ClientRecord.fromMap(doc.id, doc.data() ?? {}) : null,
       );
+
+  @override
+  Stream<List<ClientRecord>> watchBlockedClients({int limit = 50}) => _clients
+      .where('wave.syncState', isEqualTo: kWaveSyncStateBlocked)
+      .orderBy('name')
+      .limit(limit)
+      .snapshots()
+      .map(
+        (snap) => snap.docs
+            .map((doc) => ClientRecord.fromMap(doc.id, doc.data()))
+            .toList(growable: false),
+      )
+      .handleError((Object e, StackTrace st) {
+        _logger.warn('WAVE-BLOCKED watch blocked clients failed', e, st);
+      });
 
   @override
   Future<List<ClientRecord>> fetchClientsCreatedSince(DateTime since) async {

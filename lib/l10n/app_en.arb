@@ -2289,6 +2289,53 @@
   "@wave_syncError": {
     "description": "Badge label shown on a client whose Wave sync has failed"
   },
+  "wave_syncBlocked": "Can't sync to Wave",
+  "@wave_syncBlocked": {
+    "description": "Badge label on a client the Wave customer contract refused, so it was never queued for sync"
+  },
+  "wave_problemNameEmpty": "The client needs a name",
+  "@wave_problemNameEmpty": {
+    "description": "Wave contract problem: the composed customer name is blank, which Wave refuses"
+  },
+  "wave_problemTooLong": "{field} is too long ({length} / {cap})",
+  "@wave_problemTooLong": {
+    "description": "Wave contract problem: a field exceeds the length Wave accepts",
+    "placeholders": {
+      "field": { "type": "String" },
+      "length": { "type": "int" },
+      "cap": { "type": "int" }
+    }
+  },
+  "wave_problemInvalidEmail": "The email address isn't valid",
+  "@wave_problemInvalidEmail": {
+    "description": "Wave contract problem: the email address is malformed, which Wave refuses"
+  },
+  "wave_problemNotDialable": "{field} has no digits to dial",
+  "@wave_problemNotDialable": {
+    "description": "Wave contract problem (advisory): the stored number contains no digits, so nobody can call it",
+    "placeholders": {
+      "field": { "type": "String" }
+    }
+  },
+  "wave_problemUnknown": "Wave won't accept {field}",
+  "@wave_problemUnknown": {
+    "description": "Wave contract problem whose code this app build does not recognize; the vocabulary is server-owned",
+    "placeholders": {
+      "field": { "type": "String" }
+    }
+  },
+  "common_name": "Name",
+  "@common_name": {
+    "description": "Generic field label for a name"
+  },
+  "common_mobile": "Mobile",
+  "@common_mobile": {
+    "description": "Generic field label for a mobile phone number"
+  },
+  "common_addressLine2": "Address line 2",
+  "@common_addressLine2": {
+    "description": "Generic field label for the second street line of an address"
+  },
   "common_copied": "Copied",
   "@common_copied": {
     "description": "Inline confirmation shown after copying text to the clipboard"
@@ -3531,6 +3578,13 @@
     "description": "Settings > Wave: button that returns failed client edits to the sync queue."
   },
   "wave_retryNoneRecovered": "Nothing to retry — those clients were already back in the queue.",
+  "wave_retryBlocked": "{count, plural, =1{1 client needs fixing before it can sync} other{{count} clients need fixing before they can sync}}",
+  "@wave_retryBlocked": {
+    "description": "Part of the Retry failed notice: dead jobs dropped because the Wave contract refuses their client, so the reason now sits on the client",
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
   "@wave_retryNoneRecovered": {
     "description": "Settings > Wave: notice when Retry failed found nothing left to requeue."
   },

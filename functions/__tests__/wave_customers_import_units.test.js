@@ -148,6 +148,60 @@ describe("importOneCustomer", () => {
     expect(ctx.batch.sets).toHaveLength(0);
   });
 
+  test("the update branch never writes a nested wave map", () => {
+    // A nested object under `merge: true` REPLACES the whole map, which is how
+    // the import erased `wave.problems` and reset a blocked client to synced.
+    // Dotted keys leave sibling keys alone.
+    const ctx = ctxFor({
+      existingByWaveId: new Map([
+        ["wave-1", {ref: {id: "c1"}, hasCreatedAt: true, lastSyncedHash: "x"}],
+      ]),
+    });
+    expect(importOneCustomer(node(), ctx)).toBe(true);
+    const written = ctx.batch.sets[0].data;
+    expect(written.wave).toBeUndefined();
+    expect(written["wave.syncState"]).toBe("synced");
+    expect(written["wave.syncError"]).toBeNull();
+    expect(typeof written["wave.lastSyncedHash"]).toBe("string");
+  });
+
+  test("the update branch re-runs the contract over the merged fields", () => {
+    // The import has just written Wave's values over the doc, so the stored
+    // problems may no longer describe it — and a client Wave sends back with
+    // a blank name must not come out reading `synced`.
+    const ctx = ctxFor({
+      existingByWaveId: new Map([
+        ["wave-1", {ref: {id: "c1"}, hasCreatedAt: true, lastSyncedHash: "x"}],
+      ]),
+    });
+    expect(importOneCustomer(node({name: ""}), ctx)).toBe(true);
+    const written = ctx.batch.sets[0].data;
+    expect(written["wave.syncState"]).toBe("blocked");
+    expect(written["wave.problems"]).toEqual([
+      {field: "name", code: "EMPTY", severity: "blocking", detail: null},
+    ]);
+  });
+
+  test("a clean update clears any stale problems", () => {
+    const ctx = ctxFor({
+      existingByWaveId: new Map([
+        ["wave-1", {ref: {id: "c1"}, hasCreatedAt: true, lastSyncedHash: "x"}],
+      ]),
+    });
+    importOneCustomer(node(), ctx);
+    expect(ctx.batch.sets[0].data["wave.problems"]).toBeNull();
+  });
+
+  test("the create branch records the contract verdict too", () => {
+    const ctx = ctxFor();
+    importOneCustomer(node({name: ""}), ctx);
+    const written = ctx.batch.sets[0].data;
+    expect(written.wave.syncState).toBe("blocked");
+    expect(written.wave.problems).toEqual([
+      {field: "name", code: "EMPTY", severity: "blocking", detail: null},
+    ]);
+  });
+
   test("an unchanged customer is skipped, not counted as updated", () => {
     // `updated` used to count every existing customer written, so a sync over
     // an untouched roster told the admin "650 clients updated".

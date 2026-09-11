@@ -12,6 +12,15 @@ code; it increments by one on every store upload regardless of the semver part.
 
 ## [Unreleased]
 
+### Changed
+- **Wave sync now says which client can't sync, and why.** A customer Wave
+  would refuse is caught before it is ever queued, so instead of failing over
+  and over with nothing but a number in Settings, it shows up as a named
+  client with the field to fix — on the client's own page and in a list under
+  the Wave section. Fixing the field puts it back in the queue by itself, with
+  no button to press. "Retry failed" no longer offers to retry the ones that
+  can only fail again; it clears them out and tells you how many need
+  attention.
 ### Added
 - **CarPlay.** ES Pro now has a native CarPlay screen: the day's jobs
   ranked around the one you're driving to, a week view, and directions

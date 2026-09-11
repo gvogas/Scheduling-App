@@ -14,9 +14,9 @@
  * fault, so a failure becomes something an admin can fix rather than a counter
  * in Settings.
  *
- * Pure and synchronous — no Firebase, no network. In PHASE 1 it is additive:
- * `wave/customers.js` still builds its own payload and nothing is blocked. It
- * becomes the only producer in Phase 2.
+ * Pure and synchronous — no Firebase, no network. Since Phase 2 it is the ONLY
+ * producer of a Wave customer payload, and a client it refuses never becomes a
+ * queued job.
  *
  * Design: `docs/plans/2026-08-30-wave-validated-contract-design.md`.
  * @module wave/customer_contract
@@ -246,28 +246,66 @@ function buildCustomerPayload(clientFields) {
 }
 
 /**
- * The Firestore patch recording a client's contract problems.
+ * The blocking subset of a problem list.
  *
- * PHASE 1 IS REPORT-ONLY: this records what the contract WOULD refuse and
- * changes nothing else. The job is still enqueued, the push still runs, and
- * `wave.syncState` is untouched. The point is to learn what the contract
- * flags across every real client before it is able to block one.
- *
- * Always returns the key, `null` when there is nothing wrong — a client
- * repaired since the last write must not keep stale problems on its doc.
- * @param {!Object} clientFields Firestore `clients` document fields.
- * @return {!Object} A patch to merge into a client-doc update.
+ * One owner for the `severity === "blocking"` test. `buildCustomerPayload`
+ * spells it inline to decide `ok`, and the enqueue gate, the dispatcher and
+ * the import each need the same question answered — four spellings of one
+ * predicate is how a severity stops meaning the same thing everywhere.
+ * @param {?Array<WaveProblem>=} problems Problems, or nothing.
+ * @return {!Array<WaveProblem>} Only the blocking ones.
  */
-function problemsPatch(clientFields) {
+function blockingProblems(problems) {
+  if (!Array.isArray(problems)) return [];
+  return problems.filter((p) => p.severity === "blocking");
+}
+
+/**
+ * The Firestore patch recording a client's contract verdict.
+ *
+ * Records BOTH severities. An advisory problem does not stop the push, but the
+ * admin still has to be able to see it — a client nobody can ring is worth
+ * showing even though Wave took it happily.
+ *
+ * Always returns `wave.problems`, `null` when there is nothing wrong — a
+ * client repaired since the last write must not keep stale problems on its
+ * doc. `syncState` is only touched when the contract REFUSES: a clean client's
+ * state is owned by the push (`pending` → `synced` / `error`), and stamping it
+ * here would fight the worker for it.
+ * @param {!Object} clientFields Firestore `clients` document fields.
+ * @param {{clearedState: string}=} opts State to write when nothing blocks;
+ *   omit to leave `syncState` alone.
+ * @return {!Object} A patch of DOTTED keys, safe to merge into a client-doc
+ *   update without replacing sibling `wave` keys.
+ */
+function statePatch(clientFields, opts) {
   const {problems} = buildCustomerPayload(clientFields);
-  // Records BOTH severities. An advisory problem does not stop the push, but
-  // the admin still has to be able to see it — a client nobody can ring is
-  // worth showing even though Wave took it happily.
   const found = Array.isArray(problems) ? problems : [];
-  return {"wave.problems": found.length > 0 ? found : null};
+  const patch = {"wave.problems": found.length > 0 ? found : null};
+  if (blockingProblems(found).length > 0) {
+    patch["wave.syncState"] = "blocked";
+    // A refused client never reaches Wave, so any error left from an earlier
+    // push describes a push that will not be retried.
+    patch["wave.syncError"] = null;
+  } else if (opts && opts.clearedState) {
+    patch["wave.syncState"] = opts.clearedState;
+    patch["wave.syncError"] = null;
+  }
+  return patch;
+}
+
+/**
+ * Whether the contract refuses this client outright.
+ * @param {!Object} clientFields Firestore `clients` document fields.
+ * @return {boolean} True when Wave would refuse it.
+ */
+function isBlocked(clientFields) {
+  return buildCustomerPayload(clientFields).ok === false;
 }
 
 module.exports = {
   buildCustomerPayload,
-  problemsPatch,
+  blockingProblems,
+  statePatch,
+  isBlocked,
 };

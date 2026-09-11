@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
+import 'package:scheduling/features/wave/domain/models/wave_problem.dart';
+import 'package:scheduling/features/wave/domain/models/wave_sync_state.dart';
+import 'package:scheduling/features/wave/widgets/wave_problem_list.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
 /// Sync states already reported, so an unrecognized one is filed ONCE per
@@ -10,12 +13,17 @@ import 'package:scheduling/l10n/l10n.dart';
 final Set<String> _reportedUnknownStates = <String>{};
 final AppLogger _waveBadgeLogger = AppLogger();
 
-/// Small chip reflecting Wave sync state; renders nothing when empty/unknown.
+/// Small chip reflecting Wave sync state, plus the contract's reasons.
+///
+/// A reason is visible TEXT, not just a `Semantics` label: an admin looking at
+/// a red chip could previously see a colour and nothing else, which is what
+/// made a refused client indistinguishable from a slow one.
 class WaveSyncBadge extends StatelessWidget {
   const WaveSyncBadge({
     required this.syncState,
     super.key,
     this.syncError,
+    this.problems = const <WaveProblem>[],
   });
 
   final String syncState;
@@ -24,41 +32,55 @@ class WaveSyncBadge extends StatelessWidget {
   /// the state is 'error'.
   final String? syncError;
 
+  /// Contract problems recorded on the client doc. Rendered whatever the
+  /// state: an ADVISORY rides along on a perfectly synced client, and it is
+  /// still the only place that problem is visible.
+  final List<WaveProblem> problems;
+
   @override
   Widget build(BuildContext context) {
     final config = _badgeConfig(context);
     if (config == null) return const SizedBox.shrink();
 
     final theme = Theme.of(context);
-    final semanticsLabel = syncState == 'error' && syncError != null
+    final semanticsLabel = syncState == kWaveSyncStateError && syncError != null
         ? '${config.label}: $syncError'
         : config.label;
 
     return Semantics(
       label: semanticsLabel,
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sp8,
-          vertical: AppSpacing.sp4,
-        ),
-        decoration: BoxDecoration(
-          color: config.background,
-          borderRadius: BorderRadius.circular(AppRadius.rFull),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(config.icon, size: 12, color: config.foreground),
-            const SizedBox(width: AppSpacing.sp4),
-            Text(
-              config.label,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: config.foreground,
-                fontWeight: FontWeight.w600,
-              ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.sp8,
+              vertical: AppSpacing.sp4,
             ),
-          ],
-        ),
+            decoration: BoxDecoration(
+              color: config.background,
+              borderRadius: BorderRadius.circular(AppRadius.rFull),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(config.icon, size: 12, color: config.foreground),
+                const SizedBox(width: AppSpacing.sp4),
+                Flexible(
+                  child: Text(
+                    config.label,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: config.foreground,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          WaveProblemList(problems: problems),
+        ],
       ),
     );
   }
@@ -68,21 +90,28 @@ class WaveSyncBadge extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
 
     switch (syncState) {
-      case 'synced':
+      case kWaveSyncStateSynced:
         return _BadgeConfig(
           label: context.l10n.wave_syncedWithWave,
           icon: Icons.check_circle_outline_rounded,
           background: sc.successContainer,
           foreground: sc.onSuccessContainer,
         );
-      case 'pending':
+      case kWaveSyncStatePending:
         return _BadgeConfig(
           label: context.l10n.wave_syncPending,
           icon: Icons.sync_rounded,
           background: scheme.surfaceContainerHighest,
           foreground: scheme.onSurfaceVariant,
         );
-      case 'error':
+      case kWaveSyncStateBlocked:
+        return _BadgeConfig(
+          label: context.l10n.wave_syncBlocked,
+          icon: Icons.block_rounded,
+          background: scheme.errorContainer,
+          foreground: scheme.onErrorContainer,
+        );
+      case kWaveSyncStateError:
         return _BadgeConfig(
           label: context.l10n.wave_syncError,
           icon: Icons.error_outline_rounded,

@@ -197,4 +197,10 @@ describe("backfill-clients-archived", () => {
     expect(() => assertKnownFlags(["--dryrun"])).toThrow();
     expect(() => assertKnownFlags(["--dry_run"])).toThrow();
   });
+
+  test("--verbose is accepted, alone and beside --dry-run", () => {
+    expect(() => assertKnownFlags(["--verbose"])).not.toThrow();
+    expect(() => assertKnownFlags(["--dry-run", "--verbose"])).not.toThrow();
+    expect(() => assertKnownFlags(["--verbos"])).toThrow();
+  });
 });

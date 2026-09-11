@@ -255,9 +255,9 @@ const waveRetryFailedJobs = onCall(
         throw new HttpsError("failed-precondition", "wave/not-bootstrapped");
       }
 
-      const {requeued, scanned} = await requeueDeadJobs();
+      const {requeued, scanned, blocked} = await requeueDeadJobs();
       logger.info("WAVE-RETRY requeued dead jobs",
-          {uidHash: shortHash(uid), requeued, scanned});
+          {uidHash: shortHash(uid), requeued, scanned, blocked});
 
       // Push them now so the admin sees the result of the press rather than
       // waiting for their next client edit or the daily sweep. Best-effort:
@@ -289,7 +289,12 @@ const waveRetryFailedJobs = onCall(
         }
       }
 
-      return {requeued, scanned, pushed, failed};
+      // `blocked` is additive and NOT a failure: those jobs were dropped
+      // because the contract refuses their client, and the reason now sits on
+      // the client where it can be fixed. Reporting them as `failed` would put
+      // them back in a counter with no remedy, which is the experience this
+      // whole phase removes.
+      return {requeued, scanned, pushed, failed, blocked};
     },
 );
 
