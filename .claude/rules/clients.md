@@ -160,7 +160,7 @@ Root context: `../../CLAUDE.md`.
   and wrong in a row, and it is what broke the first version of this bar.
 - **Grouping is OPT-IN: `ClientsListView(grouped:)`, default false**
   (2026-09-11). Grouped, the rows arrive in white cards under letter headings
-  (`clientGroupsOf` in `domain/client_grouping.dart`, rendered by
+  (`letterGroupsOf` / `singleGroupOf` in `domain/client_grouping.dart`, rendered by
   `ClientsSliverList`); ungrouped it is today's flat list, which is what a host
   that wants rows and no chrome gets without passing anything. Only
   `clients_screen.dart` passes `grouped: true`.
