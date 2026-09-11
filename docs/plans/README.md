@@ -30,6 +30,7 @@ at the top of each file, not its boxes.
 
 | Doc | State |
 |---|---|
+| `2026-09-11-four-bug-fixes.md` | **PLAN ONLY — nothing built, nothing deployed.** Four fixes: one search bar in the Add Appointment client picker, cancelled jobs excluded from `clients.jobCount`, the agenda's collapsed Done row restored to ~90 px, and the Clients filter path finally honouring the sort. Issues 1/3/4 are Dart-only. **Issue 2 needs a new `appointments` composite READY before the function deploys, and a `recount-client-jobs` backfill as a release prerequisite.** Owner scope decisions are recorded in §6; deploy not authorized. |
 | `2026-09-07-analytics-followups.md` | **Code COMPLETE and verified** (analyzer clean, 3547 tests). Every open item is off-repo: Google Analytics must be ENABLED on the project or the SDK reports nothing silently; custom dimensions must be registered or `user_role` and `source` are uncollectable in reports; App Store Connect privacy labels and the `FIREBASE_ANALYTICS_WITHOUT_ADID=true` release build are submission-gating. |
 | `2026-07-10-siri-app-intents-design.md` | Design, 6 phases. Phases 5–6 unscoped. |
 | `2026-07-19-siri-app-intents-implementation.md` | Phases 1–3 built; **no device pass ever run — and this is now the ONLY device-gated item left in the repo** (the 2026-09-09 sweep closed every other one). Six read intents in `ios/SiriIntents/`, never exercised by voice. |
@@ -38,6 +39,7 @@ at the top of each file, not its boxes.
 | `2026-08-30-wave-validated-contract-design.md` | **Phase 1 COMPLETE** — built and deployed 2026-08-30 (`fe9edc51`, report-only), and the prod replay **ran 2026-09-09: 724 clients, 0 blocking, 1 advisory.** The report is clean, so **Phase 2 (enforce) is unblocked** — read §3 before writing it. |
 | `2026-08-30-wave-validated-contract-implementation.md` | Phase 1's task list — every step now done, the replay included. |
 | `2026-09-10-wave-validated-contract-phases-2-4.md` | **PHASE 2 BUILT — committed `e0460805` on branch `wave-contract-enforce`, pushed, NOT deployed.** Phases 3–4 planned, not started. Verified at build time: analyzer clean, **1872 jest**, eslint clean, **139 Dart Wave tests**. **The deploy order is INVERTED and the plan's ordering section is the authority** — index (READY) → **app build** → backend → Phase 3 backfill, because `WaveSyncBadge._badgeConfig` renders `SizedBox.shrink()` for an unknown state, so a backend that writes `blocked` first leaves every shipped build showing those clients no badge at all. The `clients` composite `wave.syncState, name` it declares is **not yet in prod**. |
+| `2026-09-11-wave-validated-contract-phase-3.md` | **NOT STARTED, written 2026-09-11.** The Phase 3 backfill, superseding Task 9 of the phases-2-4 plan (a three-step stub). One operator script, `functions/scripts/backfill-wave-blocked.js`, replaying the existing contract over every client. **Tasks 1-3 can be built now; Task 4 is the live run and is gated on the enforcement backend being deployed.** It corrects the stub on two points: it will NOT write nothing (the one advisory client is a write, and a patched count of 0 is a red flag), and it must carry no scan cap. |
 | `2026-09-04-carplay-driving-task.md` | **BUILT — committed `0e9cd905` on branch `carplay`, pushed.** Written 2026-09-04, UI design finalised 2026-09-09 (Today / Week tab bar, Today ranked Now / Next / Later, mark-complete hand-off alert, refresh on every connect, business-wide admin view — decisions 9–16), implemented the same day. **Dart is verified; the Swift has NEVER been compiled** — seven files under `ios/Runner/CarPlay/`, `RunnerCarPlay.entitlements` and `ios/RunnerTests/CarPlayTemplateBuilderTests.swift` exist and were reviewed, but this is a Windows box with no Xcode. What is left is the Mac pass: build `RunnerTests`, the CarPlay Simulator, and both checklists at the foot of the plan. **Check `CPTabBarTemplate` is permitted for a Driving Task grant BEFORE the first Simulator run** — an unsupported root template raises an uncatchable `NSInternalInconsistencyException`, i.e. a crash on every plug-in. Entitlement granted 2026-09-09; the provisioning profile does not carry it yet. |
 | `APP_STORE_SUBMISSION.md` | **The live release runbook**, now for updates rather than a launch — the app shipped. Its unticked boxes have never been reconciled against four shipped submissions, so read one as *unknown*, not *outstanding*. |
 
@@ -118,6 +120,14 @@ and its deploy-ordering section is binding: this phase **inverts** the repo's
 backend-first rule. Phase 4's `waveSetImportSchedule` removal is a callable
 deletion and needs its own deploy under `docs/DEPLOYMENT.md` §4a, not a
 ride-along.
+
+**Phase 3 now has its own plan**, written 2026-09-11:
+`docs/plans/2026-09-11-wave-validated-contract-phase-3.md`. It supersedes
+Task 9 of the phases-2-4 doc, whose three-step stub was wrong on two counts —
+the backfill does NOT write nothing (`verdictPatch` records advisory problems
+too, and there is one advisory client on file), and it must carry no scan cap.
+Its Tasks 1-3 are buildable today; Task 4 is the live run and waits on the
+enforcement deploy.
 
 ### 4. CarPlay — BUILT, awaiting a Mac
 

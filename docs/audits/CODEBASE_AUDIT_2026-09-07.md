@@ -51,10 +51,11 @@ Verification after the pass (observed, not carried forward):
 anti-pattern) · I27 (readability only) · I10's guard-order sub-claim.
 **Note only, deliberately unchanged: 2.** D4 D5.
 **Open by design: 1.** I25 — do not fix until observed in the wild.
-**Still open, needs YOU: 1 here + 4 carried over.** B5 is in the tree but inert
-until `firebase deploy --only firestore:rules` runs; plus the Maps billing cap,
-the Crashlytics re-check (needs a shipped build), the Wave "Retry failed" press
-and the Xcode `InfoPlist.strings` confirmation.
+**Still open, needs YOU: 4 carried over.** The Maps billing cap, the
+Crashlytics re-check (needs a shipped build), the Wave "Retry failed" press and
+the Xcode `InfoPlist.strings` confirmation. **B5 is CLOSED** — it rode the same
+day's `firestore:rules` deploy (`462a1907`, `docs/DEPLOYMENT.md` log), and
+`firestore.rules` has been byte-identical to that commit since.
 
 ### Twelve deviations, and three findings that were WRONG as written
 
@@ -259,7 +260,7 @@ holds.
 - **Fix:** Keep the section mounted while a load is in flight, or hold
   `pendingCount` until the refreshed list is adopted.
 
-### B5 — `fieldNotes.authorName` is capped tighter than the write path can produce · severity: low · confidence: high  · **DONE in the tree — OPEN: needs a rules deploy**
+### B5 — `fieldNotes.authorName` is capped tighter than the write path can produce · severity: low · confidence: high  · **DONE — deployed 2026-09-07 (`462a1907`)**
 
 - **Where:** `firestore.rules:520` (cap 200) written from
   `details_field_record_view.dart:56` (`currentUserNameProvider`)
