@@ -16,6 +16,24 @@ Widget _wrap(Widget child) => MaterialApp(
   home: Scaffold(body: Column(children: [child])),
 );
 
+/// The small-phone worst case: 260 logical px with 2x text.
+Widget _harness(Widget child) => MaterialApp(
+  localizationsDelegates: const [
+    AppLocalizations.delegate,
+    GlobalMaterialLocalizations.delegate,
+    GlobalWidgetsLocalizations.delegate,
+  ],
+  supportedLocales: AppLocalizations.supportedLocales,
+  theme: lightTheme(),
+  builder: (context, child) => MediaQuery(
+    data: MediaQuery.of(
+      context,
+    ).copyWith(textScaler: const TextScaler.linear(2)),
+    child: child ?? const SizedBox.shrink(),
+  ),
+  home: Scaffold(body: Column(children: [child])),
+);
+
 void main() {
   testWidgets('lays out Cancel · centred title · verb', (tester) async {
     await tester.pumpWidget(
@@ -110,9 +128,7 @@ void main() {
 
   testWidgets('a null onPrimary renders the verb disabled', (tester) async {
     await tester.pumpWidget(
-      _wrap(
-        const SheetHeaderBar(title: 'New job', primaryLabel: 'Save'),
-      ),
+      _wrap(const SheetHeaderBar(title: 'New job', primaryLabel: 'Save')),
     );
     await tester.pumpAndSettle();
 
@@ -128,31 +144,36 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
-      MaterialApp(
-        localizationsDelegates: const [
-          AppLocalizations.delegate,
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-        ],
-        supportedLocales: AppLocalizations.supportedLocales,
-        theme: lightTheme(),
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context).copyWith(
-            textScaler: const TextScaler.linear(2),
-          ),
-          child: child ?? const SizedBox.shrink(),
+      _harness(
+        SheetHeaderBar(
+          title: 'Invite person',
+          primaryLabel: 'Send invite',
+          onPrimary: () {},
+          onCancel: () {},
         ),
-        home: Scaffold(
-          body: Column(
-            children: [
-              SheetHeaderBar(
-                title: 'Invite person',
-                primaryLabel: 'Send invite',
-                onPrimary: () {},
-                onCancel: () {},
-              ),
-            ],
-          ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+  });
+
+  // Both ghost controls carry their own painted width now, so a title long
+  // enough to want the whole bar is what proves the three slots still yield.
+  testWidgets('a long title beside both actions survives 260px at 2x text', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(260, 640);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(
+        SheetHeaderBar(
+          title: 'Edit recurring appointment details',
+          primaryLabel: 'Save changes',
+          onPrimary: () {},
+          onCancel: () {},
         ),
       ),
     );

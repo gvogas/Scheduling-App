@@ -120,6 +120,11 @@ Root context: `../../CLAUDE.md`.
   reads as a bug and is not one; it is the constraint the chip row hid.
   Reopening multi-select means changing the sealed model, how the type and
   address queries compose, and the `firestore.rules` read clauses.
+  Its rows are the CHIP ROW's vocabulary at row width (2026-09-11): a ghost
+  `rFull` pill — `scheme.surface` fill, `outlineVariant` border — that fills
+  with `scheme.onSurface` and flips its label to the page colour when picked.
+  **The radio glyph stays**, because fill and label colour alone would make
+  colour the only cue for which of a one-of group is on.
   **`ClientsFilterSheet` is the ONLY watcher of `clientBuildingsProvider`.**
   `ClientsListView` used to watch it and `clientBuildingKeysProvider` before
   the filter switch, so opening the tab paid the paged `orderBy('name')` scan
