@@ -239,25 +239,12 @@ function buildCustomerPayload(clientFields) {
   // ONLY a blocking problem withholds the payload. An advisory one rides along
   // on a perfectly good result — the push proceeds and the problem is still
   // reported, which is the whole reason the severities are split.
+  //
+  // This is the ONE spelling of the blocking test. Everything else asks `ok`.
   if (problems.some((p) => p.severity === "blocking")) {
     return {ok: false, problems};
   }
   return {ok: true, payload, hash: mappedFieldsHash(clientFields), problems};
-}
-
-/**
- * The blocking subset of a problem list.
- *
- * One owner for the `severity === "blocking"` test. `buildCustomerPayload`
- * spells it inline to decide `ok`, and the enqueue gate, the dispatcher and
- * the import each need the same question answered — four spellings of one
- * predicate is how a severity stops meaning the same thing everywhere.
- * @param {?Array<WaveProblem>=} problems Problems, or nothing.
- * @return {!Array<WaveProblem>} Only the blocking ones.
- */
-function blockingProblems(problems) {
-  if (!Array.isArray(problems)) return [];
-  return problems.filter((p) => p.severity === "blocking");
 }
 
 /**
@@ -279,10 +266,28 @@ function blockingProblems(problems) {
  *   update without replacing sibling `wave` keys.
  */
 function statePatch(clientFields, opts) {
-  const {problems} = buildCustomerPayload(clientFields);
+  return verdictPatch(buildCustomerPayload(clientFields), opts);
+}
+
+/**
+ * [statePatch] over a verdict the caller ALREADY built.
+ *
+ * The dispatcher holds one by the time it decides to block, and re-deriving it
+ * meant running the whole contract a second time INSIDE a Firestore
+ * transaction — where a retry runs it again. A verdict and the patch that
+ * records it must describe the same evaluation; taking the verdict as the
+ * argument is what makes that structural rather than remembered.
+ * @param {{ok: boolean, problems: (!Array<WaveProblem>|undefined)}} verdict
+ *   A [buildCustomerPayload] result.
+ * @param {{clearedState: string}=} opts State to write when nothing blocks;
+ *   omit to leave `syncState` alone.
+ * @return {!Object} A patch of DOTTED keys.
+ */
+function verdictPatch(verdict, opts) {
+  const {ok, problems} = verdict;
   const found = Array.isArray(problems) ? problems : [];
   const patch = {"wave.problems": found.length > 0 ? found : null};
-  if (blockingProblems(found).length > 0) {
+  if (!ok) {
     patch["wave.syncState"] = "blocked";
     // A refused client never reaches Wave, so any error left from an earlier
     // push describes a push that will not be retried.
@@ -292,6 +297,29 @@ function statePatch(clientFields, opts) {
     patch["wave.syncError"] = null;
   }
   return patch;
+}
+
+/**
+ * A [statePatch] verdict as the NESTED `wave` map a document CREATE writes.
+ *
+ * A create has no stored `wave` map to preserve, so it may nest — but it must
+ * nest the same verdict the update branch merges, or the two paths disagree
+ * about a client for no reason a reader could predict. Derived from the patch
+ * rather than re-spelled: a key added to [statePatch] reaches both shapes, and
+ * the import's create branch cannot silently omit it.
+ * @param {!Object} patch A patch of dotted `wave.*` keys, from [statePatch].
+ * @return {!Object} The same state as a nested `wave` map.
+ */
+function waveStateFields(patch) {
+  const fields = {syncError: null};
+  // A verdict that neither blocks nor was given a `clearedState` leaves
+  // `syncState` alone — and the admin SDK REFUSES an undefined value, so the
+  // key has to be absent rather than present-and-undefined.
+  if (patch["wave.syncState"] !== undefined) {
+    fields.syncState = patch["wave.syncState"];
+  }
+  if ("wave.problems" in patch) fields.problems = patch["wave.problems"];
+  return fields;
 }
 
 /**
@@ -305,7 +333,8 @@ function isBlocked(clientFields) {
 
 module.exports = {
   buildCustomerPayload,
-  blockingProblems,
   statePatch,
+  verdictPatch,
+  waveStateFields,
   isBlocked,
 };

@@ -21,7 +21,7 @@
 
 const {mappedFieldsHash, fromWaveCustomer} = require("./mappers");
 const {clientSearchTokens} = require("../search_tokens");
-const {statePatch} = require("./customer_contract");
+const {statePatch, waveStateFields} = require("./customer_contract");
 const {adminFirestore} = require("../admin_firestore");
 const {
   readBusinessId, LIST_CUSTOMERS, LIST_CUSTOMERS_SINCE,
@@ -55,35 +55,43 @@ function importOneCustomer(node, ctx) {
   }
   const fields = fromWaveCustomer(node);
   const hash = mappedFieldsHash(fields);
-  // Re-run the contract over the fields being written. The import has just put
-  // Wave's values on the doc, so any stored problems describe the OLD one —
-  // and a customer Wave hands back with a blank name must not land reading
-  // `synced`.
-  const verdict = statePatch(fields, {clearedState: "synced"});
-  const docFields = {
-    ...fields,
-    // The search index is normally written by the app on save, so a
-    // server-created client would be absent from `searchClients` entirely and
-    // a server-updated one would keep tokens built from its OLD name and
-    // phone. Either way the admin searches for a client they can see in the
-    // list and gets nothing back, with nothing logged.
-    searchTokens: clientSearchTokens(fields),
-  };
-  // DOTTED keys, never a nested `wave` object: under `merge: true` a nested
-  // map REPLACES the stored one, which is how the import erased
-  // `wave.problems` and reset a blocked client to `synced` with nothing
-  // logged. The create branch has no prior state, so it nests.
-  const waveUpdate = {
-    ...verdict,
-    "wave.lastSyncedHash": hash,
-    "wave.lastSyncedAt": now(),
-  };
-  const waveCreate = {
-    syncState: verdict["wave.syncState"] || "synced",
-    syncError: null,
-    problems: verdict["wave.problems"],
-    lastSyncedHash: hash,
-    lastSyncedAt: now(),
+
+  // Everything below the skip gates is deliberately built LATE. Re-running the
+  // contract and rebuilding the search index costs a field mapping, a
+  // canonicalization and a sha256 each, and a steady-state import skips almost
+  // every node it reads — that work was being spent on all of them.
+  //
+  // A NESTED `wave` map, never dotted keys: BOTH writes below go through
+  // `set(..., {merge: true})`, and `set` merge does NOT parse a dot as a path
+  // — `DocumentMask.fromObject` builds `new FieldPath(key)` from the whole
+  // key. A dotted key there creates a literal top-level field named
+  // "wave.syncState" and leaves the real one untouched. A nested map is
+  // masked at its LEAVES (`wave.syncState`, `wave.problems`, ...), so it
+  // merges per-key and cannot erase a sibling — dots are for `update()`.
+  const stageWrite = () => {
+    // Re-run the contract over the fields being written. The import has just
+    // put Wave's values on the doc, so any stored problems describe the OLD
+    // one — and a customer Wave hands back with a blank name must not land
+    // reading `synced`.
+    const verdict = statePatch(fields, {clearedState: "synced"});
+    return {
+      docFields: {
+        ...fields,
+        // The search index is normally written by the app on save, so a
+        // server-created client would be absent from `searchClients` entirely
+        // and a server-updated one would keep tokens built from its OLD name
+        // and phone. Either way the admin searches for a client they can see
+        // in the list and gets nothing back, with nothing logged.
+        searchTokens: clientSearchTokens(fields),
+      },
+      // One shape for both branches, read back off the same verdict, so a key
+      // added to the contract cannot reach one and miss the other.
+      wave: {
+        ...waveStateFields(verdict),
+        lastSyncedHash: hash,
+        lastSyncedAt: now(),
+      },
+    };
   };
 
   const waveId = fields.waveCustomerId;
@@ -115,13 +123,15 @@ function importOneCustomer(node, ctx) {
     // Preserve the original createdAt. Only backfill it when the
     // existing doc lacks one (e.g. a doc from an earlier import that
     // omitted it).
-    const update = {...docFields, ...waveUpdate, updatedAt: now()};
+    const {docFields, wave} = stageWrite();
+    const update = {...docFields, wave, updatedAt: now()};
     if (!existing.hasCreatedAt) update.createdAt = now();
     batch.set(existing.ref, update, {merge: true});
     summary.updated += 1;
     return true;
   }
 
+  const {docFields, wave} = stageWrite();
   const newRef = db.collection("clients").doc();
   // createdAt/updatedAt are required: the clients list orders by
   // createdAt, and Firestore excludes docs missing that field. `archived`
@@ -131,7 +141,7 @@ function importOneCustomer(node, ctx) {
   // would un-archive every archived client on every scheduled import.
   batch.set(newRef, {
     ...docFields,
-    wave: waveCreate,
+    wave,
     archived: false,
     createdAt: now(),
     updatedAt: now(),

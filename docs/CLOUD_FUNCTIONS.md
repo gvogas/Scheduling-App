@@ -2,7 +2,18 @@
 
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
-refreshed 2026-09-07 (release 1.59.0+88 — **the export list is unchanged at 29**,
+refreshed 2026-09-10 (release 1.60.0+89 — **the export list is unchanged at 29**
+and NOT yet deployed; this release inverts the usual order and must ship the APP
+BUILD FIRST, because an older build renders no badge at all for the `blocked`
+state the backend starts writing. The Wave customer contract stops recording and
+starts REFUSING: `waveUpsertCustomer` gates the enqueue and cancels a job an
+earlier edit left queued, `upsertCustomer` returns `blocked` rather than
+throwing `WaveValidationError` (throwing is what dead-letters permanently),
+`requeueDeadJobs` drops jobs that can only fail again and reports them, and
+`importOneCustomer` re-runs the contract over the fields it writes, so a pull
+can no longer leave a stale verdict on the doc. One new composite index — `clients` on `wave.syncState` + `name` —
+must be READY before the app build ships. No signature, allowlist or guard
+moved. Previously refreshed 2026-09-07 (release 1.59.0+88 — **the export list was unchanged at 29**,
 and all 29 are now DEPLOYED. This pass changed no signature: the five Wave
 callables opened with a hand-spelled auth/`assertAdmin`/payload preamble and now
 open with the composed `assertAdminCall`, which changes the opening and not one
@@ -373,9 +384,12 @@ carries a `blocked` counter beside `created`/`updated`.
 instead of requeuing it into the same refusal, so `waveRetryFailedJobs`
 returns **`blocked`** alongside `requeued`/`scanned`/`pushed`/`failed`
 (additive; not a failure).
-The import re-runs the contract over what it writes and uses DOTTED `wave.*`
-keys, because a nested map under `merge: true` replaced the whole sub-map and
-silently un-blocked a client.
+The import re-runs the contract over what it writes, because the values it has
+just copied from Wave are not the ones the stored problems describe. It writes
+a NESTED `wave` map: `set(..., {merge: true})` masks a nested object at its
+leaves — so it merges per key and cannot erase a sibling — and does not parse a
+dot as a field path, so a dotted key there would create a literal
+`wave.syncState` field and leave the real one untouched.
 Replay the contract over production read-only with
 `functions/scripts/audit-wave-contract.js`. Design:
 `docs/plans/2026-08-30-wave-validated-contract-design.md`; Phases 2-4 plan:

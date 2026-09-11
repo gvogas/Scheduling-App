@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 
 import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/analytics/analytics_privacy.dart';
+import 'package:scheduling/core/analytics/analytics_screens.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 
 /// The ONE place this app talks to Firebase Analytics.
@@ -111,8 +112,10 @@ class AnalyticsService {
   /// any timing code of ours.
   void logScreenView(String screenName) {
     assert(
-      AnalyticsNames.isValidParam(screenName),
-      'Malformed analytics screen name "$screenName".',
+      AnalyticsScreens.allScreens.contains(screenName) &&
+          AnalyticsNames.isValidParam(screenName),
+      'Analytics screen "$screenName" is not declared in '
+      'AnalyticsScreens.allScreens.',
     );
     _guard(
       'logScreenView($screenName)',
@@ -305,16 +308,6 @@ class AnalyticsService {
   void logDashboardPeriodChanged({required String period}) => _log(
     AnalyticsEvents.dashboardPeriodChanged,
     {AnalyticsParams.period: period},
-  );
-
-  /// Generic bucket for a feature with no event of its own.
-  ///
-  /// Deliberately coarse — the console groups these by [feature], which is what
-  /// answers "which features are rarely used?" without one event name per
-  /// button.
-  void logFeatureUsed(String feature, {String? source}) => _log(
-    AnalyticsEvents.featureUsed,
-    {AnalyticsParams.feature: feature, AnalyticsParams.source: source},
   );
 
   // ---------------------------------------------------------------------------

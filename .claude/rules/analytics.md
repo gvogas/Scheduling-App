@@ -31,6 +31,20 @@ invariants that have to be visible from every feature.
   survive, and anything else is DROPPED rather than `toString()`-ed, because
   `toString()` on a domain model is exactly how a whole client record reaches a
   wire.
+- **A parameter VALUE has an owner too, not just the parameter NAME.**
+  `AnalyticsSources`, `AnalyticsSurfaces`, `AnalyticsScopes`,
+  `AnalyticsContactActions`, `AnalyticsFilters`, `AnalyticsSettings`,
+  `AnalyticsDirections` and `AnalyticsArchiveActions` are the closed value
+  sets, all in `analytics_events.dart`. The last four were added 2026-09-10,
+  when ~22 `direction`/`filter_name`/`setting_name`/`action` values were still
+  bare literals across eight files while the module header claimed to own
+  "every event name, parameter name and parameter value". Nothing REJECTS an
+  undeclared value — the sanitizer gates keys, not values — so `'app_lock'` vs
+  `'applock'` silently becomes a second console row that nobody notices until
+  a report is wrong. A value spelled at a call site is the whole failure. The
+  employee-status value is the exception that proves the shape: it goes out as
+  `UserStatus.active.name`, because that vocabulary already had an owner and a
+  second copy here would drift from what the doc actually stores.
 - **Counts are BUCKETED and a query is never sent.** `bucketCount` collapses
   the long tail (an exact `result_count` of 4173 describes one business on one
   day) and `bucketQueryLength` reports a query's shape only — a client search
@@ -111,6 +125,15 @@ invariants that have to be visible from every feature.
 - **The plugin is SPM-safe** (`ios/firebase_analytics/Package.swift`), which is
   a precondition here — there is no Podfile and never will be. Vet any future
   analytics dependency the same way.
+- **Every send checks MEMBERSHIP, not merely shape.** `_log` asserts
+  `isKnownEvent`, `_setUserProperty` asserts `isKnownUserProperty`, and
+  `logScreenView` asserts `AnalyticsScreens.allScreens.contains(...)`. That
+  last one checked only that the name was well-formed until 2026-09-10, so
+  `allScreens` was a 20-entry list with no production reader — a new sheet
+  passing an undeclared name compiled, passed, and shipped an orphan screen
+  row with the suite still green, because the test walks the SET rather than
+  the call sites. A declared set that nothing asserts against is the drift the
+  module says it exists to prevent.
 - **`analytics_events.dart` names are pinned by tests, because Firebase drops a
   malformed name SILENTLY** — the event simply never appears in the console,
   which is discovered weeks into a reporting window. `analytics_events_test.dart`

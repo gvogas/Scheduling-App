@@ -316,7 +316,12 @@ class _PersonalBlockClashDialogState
           onSwap: () => _openRow(group.employeeId, job),
           onPick: (person) => _swap(group.employeeId, job, person),
           onUndo: () => _undo(group, job),
-          onOpenJob: () => showEventDetails(context, job, analyticsSource: AnalyticsSources.calendar, showActions: true),
+          onOpenJob: () => showEventDetails(
+            context,
+            job,
+            analyticsSource: AnalyticsSources.calendar,
+            showActions: true,
+          ),
         ),
       );
     }

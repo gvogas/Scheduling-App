@@ -132,9 +132,17 @@ class _DetailsFieldRecordViewState
     final notices = ref.read(noticeServiceProvider);
     final l10n = context.l10n;
     final uploader = ref.read(appointmentImageUploadProvider);
+    final analytics = ref.read(analyticsServiceProvider);
     try {
       final files = await pickAppointmentImages(context, ref);
       if (files.isEmpty) return;
+      // The pick is the longest await in the app, so the sheet can be gone by
+      // the time it returns — and the cap below MUST read live state, so it
+      // cannot be hoisted the way the services above were. Under Riverpod 3
+      // `ref.read` on an unmounted consumer throws, which this method's own
+      // `catch` would file as "photo pick failed" while the crew's photos went
+      // unqueued.
+      if (!mounted) return;
       // Measured AFTER the pick — that await is the longest in the app, and a
       // background upload landing inside it would otherwise go uncounted and
       // let the job overshoot.
@@ -148,15 +156,15 @@ class _DetailsFieldRecordViewState
         );
       }
       if (accepted.isEmpty) return;
+      // Queued FIRST: nothing after this line may be what stops the crew's
+      // photos reaching the job.
+      uploader.uploadInBackground(appointmentId: id, newImages: accepted);
       // Counted at ACCEPT, not at upload: the queue drains on reconnect, so a
       // send-time event would report the crew's offline photos as never taken.
-      ref
-          .read(analyticsServiceProvider)
-          .logPhotoAdded(
-            surface: AnalyticsSurfaces.fieldRecord,
-            count: accepted.length,
-          );
-      uploader.uploadInBackground(appointmentId: id, newImages: accepted);
+      analytics.logPhotoAdded(
+        surface: AnalyticsSurfaces.fieldRecord,
+        count: accepted.length,
+      );
     } catch (e, st) {
       logger.warn('APPT-FIELDNOTE photo pick failed', e, st);
     }

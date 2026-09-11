@@ -176,8 +176,12 @@ class _HistorySliverListState extends State<HistorySliverList> {
               // Carries the caller's role rather than a hardcoded false: an
               // admin needs to reach a finished job's Edit button from here,
               // which is where finished jobs actually live.
-              onTap: () =>
-                  showEventDetails(context, app, analyticsSource: AnalyticsSources.history, showActions: widget.isAdmin),
+              onTap: () => showEventDetails(
+                context,
+                app,
+                analyticsSource: AnalyticsSources.history,
+                showActions: widget.isAdmin,
+              ),
             ),
           ),
         ],

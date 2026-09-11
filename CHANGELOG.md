@@ -10,7 +10,19 @@ All notable changes to this project are documented here.
 The `+N` build number after the version (e.g. `1.1.0+5`) is the store version
 code; it increments by one on every store upload regardless of the semver part.
 
-## [Unreleased]
+## [1.60.0+89] - 2026-09-10
+
+A client Wave will not accept is now something you can fix, instead of a
+number in Settings that never goes down. The app also starts reporting how it
+is used — in buckets and counts, never names, numbers or addresses.
+
+### Added
+- **The app reports how it is used, and deliberately reports nothing about
+  anyone.** Which screens get opened, which filters get used, whether a job or
+  a client was saved — counted in rounded buckets. No client name, phone
+  number, address or job note is ever sent, and searches are reported as a
+  length rather than as what was typed. Nothing identifies a person: the only
+  thing attached is whether the account is an admin or a technician.
 
 ### Changed
 - **Wave sync now says which client can't sync, and why.** A customer Wave
@@ -21,6 +33,12 @@ code; it increments by one on every store upload regardless of the semver part.
   no button to press. "Retry failed" no longer offers to retry the ones that
   can only fail again; it clears them out and tells you how many need
   attention.
+
+### Fixed
+- **"Time to leave" alerts now break through Focus and Do Not Disturb.** They
+  were always sent as time-sensitive, but the app had never been granted the
+  permission that lets iOS honour it, so a departure alert could sit silently
+  behind a Focus mode until the crew looked at their phone.
 
 ## [1.59.0+88] - 2026-09-07
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/app/photo_upload_failure_listener.dart';
 import 'package:scheduling/core/app/role_upgrade_listener.dart';
@@ -142,7 +143,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
   }
 
   void _goToToday(DateTime today) {
-    _logDateChange('today');
+    _logDateChange(AnalyticsDirections.today);
     setState(() {
       _focusedDay = today;
       _selectedDay = today;
@@ -188,12 +189,19 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
   /// A tap on a week bar: that day, in day mode.
   void _onWeekDaySelected(DateTime day) {
     setState(() => _agendaMode = _AgendaMode.day);
-    _onDaySelected(day, direction: 'week_strip');
+    _onDaySelected(day, direction: AnalyticsDirections.weekStrip);
   }
 
   /// Moves focus and selection to the given month/day.
-  void _setFocusedDay(DateTime day) {
-    _logDateChange('picked');
+  ///
+  /// The direction is a parameter because the two callers are different
+  /// gestures — the date-picker dialog and a month swipe — and reporting both
+  /// as `picked` made them indistinguishable in the console.
+  void _setFocusedDay(
+    DateTime day, {
+    String direction = AnalyticsDirections.picked,
+  }) {
+    _logDateChange(direction);
     final newRange = _rangeFor(day, day);
     setState(() {
       _focusedDay = day;
@@ -210,7 +218,9 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
     final target = DateTime(from.year, from.month, from.day + 7 * direction);
     _onDaySelected(
       weekOf(target, weekStart: weekStart).first,
-      direction: direction > 0 ? 'next' : 'previous',
+      direction: direction > 0
+          ? AnalyticsDirections.next
+          : AnalyticsDirections.previous,
     );
   }
 
@@ -586,7 +596,8 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
           selectedDay: _selectedDay ?? _focusedDay,
           today: today,
           onDaySelected: _onDaySelected,
-          onMonthChanged: _setFocusedDay,
+          onMonthChanged: (day) =>
+              _setFocusedDay(day, direction: AnalyticsDirections.month),
           dotColorsFor: (day) =>
               dayJobDotColors(_appointmentsOn(day), colorMap),
           // Semantics count the same jobs as the dots.

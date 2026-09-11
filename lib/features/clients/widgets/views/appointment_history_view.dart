@@ -81,7 +81,7 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
     ref
         .read(analyticsServiceProvider)
         .logFilterUsed(
-          surface: AnalyticsSurfaces.history,
+          surface: analyticsSurface,
           filterName: name,
           filterValue: value,
         );
@@ -244,18 +244,18 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
         // Never the chosen year, employee id or client — only WHICH control
         // was used, and for status the fixed enum value.
         onYearChanged: (v) {
-          _logFilter('year');
+          _logFilter(AnalyticsFilters.year);
           setState(() => _year = v);
         },
         employees: employees,
         selectedEmployeeId: _employeeId,
         onEmployeeChanged: (v) {
-          _logFilter('employee');
+          _logFilter(AnalyticsFilters.employee);
           setState(() => _employeeId = v);
         },
         selectedStatus: _status,
         onStatusChanged: (v) {
-          _logFilter('status', value: v?.name);
+          _logFilter(AnalyticsFilters.status, value: v?.name);
           setState(() => _status = v);
         },
       ),
