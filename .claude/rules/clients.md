@@ -91,8 +91,14 @@ Root context: `../../CLAUDE.md`.
   refuse, and treats a null `jobCount` as unknown, which withholds. The Admin
   SDK bypasses rules, so console/support cleanup is unaffected.
   UI: `flutter_slidable` in `ClientsListView`'s item builder — **never inside
-  `ClientTile`**, which the booking-flow client picker reuses and must not gain
-  destructive actions. A full swipe commits **Archive only**; delete is never
+  `ClientTile`**, so a row stays a row and only the list decides it is
+  destructible. **The stated reason used to be that the booking-flow client
+  picker reuses `ClientTile`; it does NOT, and has not since the recents
+  removal** (verified 2026-09-11: `ClientTile` has exactly one caller,
+  `ClientsListView._slidableTile`, and `ClientPicker` builds its own
+  `_DropdownRow` inside an `AttachedDropdown`). The constraint is kept anyway
+  — a tile that cannot delete itself is the safer default for whatever reuses
+  it next — but don't defend it with a caller that isn't there. A full swipe commits **Archive only**; delete is never
   gesture-committed. Both surfaces route through the one `ClientActionsHost`
   mixin (`clients/widgets/views/client_actions_host.dart`) so the notices, the
   CLI-ARCH/CLI-DEL tags and the confirm copy can't drift; its two hooks are
@@ -115,9 +121,13 @@ Root context: `../../CLAUDE.md`.
   scan, which still needs the server-maintained `buildings` aggregate. Don't
   watch either provider from a list row or from `ClientsListView` again.
   **`ClientsListView` carries no chrome.** The Filter button, the active chip
-  and the list header live in `clients_screen.dart`, because that view is ALSO
-  the booking flow's client picker — keeping the chrome in the screen is what
-  makes it suppressible for free rather than by a flag. The header's count
+  and the list header live in `clients_screen.dart`. **The reason given here
+  was that the view is ALSO the booking flow's client picker — it is not**
+  (verified 2026-09-11: its only caller in `lib/` is `clients_screen.dart`).
+  Keep the split anyway, because chrome in the screen is what lets the list be
+  dropped into a second host without carrying a filter bar it cannot wire —
+  but that is now a design margin, not a live constraint, so don't cite a
+  second caller to justify contorting the list. The header's count
   arrives through `onCountChanged`, the same shape as `onFirstPageSettled`.
   **The bar renders under BOTH bounded and UNBOUNDED width** — the feature tour
   wraps it in a showcase that hands its child unbounded constraints, where any
