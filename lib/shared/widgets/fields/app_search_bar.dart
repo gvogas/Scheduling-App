@@ -36,7 +36,13 @@ class AppSearchBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final tertiary = theme.palette.textTertiary;
+    final pill = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(AppRadius.rFull),
+      borderSide: BorderSide(color: scheme.outlineVariant),
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sp16,
@@ -46,29 +52,42 @@ class AppSearchBar extends StatelessWidget implements PreferredSizeWidget {
         controller: controller,
         focusNode: focusNode,
         onChanged: onChanged ?? (_) {},
-        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: scheme.onSurface,
-        ),
+        style: theme.textTheme.bodyMedium?.copyWith(color: scheme.onSurface),
         decoration: InputDecoration(
           hintText: hintText ?? context.l10n.common_search,
-          prefixIcon: Icon(
-            Icons.search,
-            size: 18,
-            color: scheme.onSurfaceVariant,
+          hintStyle: theme.textTheme.bodyMedium?.copyWith(color: tertiary),
+          prefixIcon: Icon(Icons.search, size: 18, color: tertiary),
+          // 14px each side of the glyph, and no 48px floor to grow the pill.
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 46,
+            maxWidth: 46,
           ),
+          // Non-dense carries a 48px floor, which is taller than the pill.
+          isDense: true,
+          constraints: const BoxConstraints(minHeight: _fieldHeight),
           filled: true,
-          fillColor: scheme.surfaceContainerHighest,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(AppRadius.r12),
-            borderSide: BorderSide.none,
+          fillColor: scheme.surface,
+          border: pill,
+          enabledBorder: pill,
+          focusedBorder: pill.copyWith(
+            borderSide: BorderSide(color: scheme.primary),
           ),
-          contentPadding: const EdgeInsets.symmetric(vertical: AppSpacing.sp12),
+          contentPadding: const EdgeInsets.fromLTRB(
+            0,
+            AppSpacing.sp12,
+            14,
+            AppSpacing.sp12,
+          ),
           suffixIcon: controller != null
               ? ClearTextButton(
                   controller: controller!,
                   onCleared: () => onChanged?.call(''),
                 )
               : null,
+          suffixIconConstraints: const BoxConstraints(
+            minWidth: 44,
+            maxHeight: 40,
+          ),
         ),
       ),
     );

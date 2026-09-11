@@ -22,7 +22,12 @@ class AppHeaderPair extends StatelessWidget {
   Widget build(BuildContext context) => Row(
     mainAxisSize: MainAxisSize.min,
     children: [
-      if (showCalendarPill) ...const [_CalendarPill(), SizedBox(width: 6)],
+      // Flexible so the pill's label ellipsises rather than overflowing the
+      // row on a narrow viewport at large text.
+      if (showCalendarPill) ...const [
+        Flexible(child: _CalendarPill()),
+        SizedBox(width: 6),
+      ],
       const _MenuButton(),
     ],
   );
@@ -42,8 +47,11 @@ class _CalendarPill extends StatelessWidget {
         constraints: const BoxConstraints(minHeight: _kTapTarget),
         child: Center(
           child: Material(
-            color: scheme.primaryContainer,
-            borderRadius: BorderRadius.circular(AppRadius.rFull),
+            color: scheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.rFull),
+              side: BorderSide(color: scheme.outlineVariant),
+            ),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               onTap: () => goHomeToCalendar(context),
@@ -58,7 +66,7 @@ class _CalendarPill extends StatelessWidget {
                       Icon(
                         Icons.calendar_today_rounded,
                         size: 15,
-                        color: scheme.onPrimaryContainer,
+                        color: scheme.primary,
                       ),
                       const SizedBox(width: AppSpacing.sp8),
                       Flexible(
@@ -70,7 +78,7 @@ class _CalendarPill extends StatelessWidget {
                             fontFamily: kFontSans,
                             fontSize: 12.5,
                             fontWeight: FontWeight.w600,
-                            color: scheme.onPrimaryContainer,
+                            color: scheme.onSurface,
                           ),
                         ),
                       ),
@@ -100,8 +108,11 @@ class _MenuButton extends StatelessWidget {
         height: _kTapTarget,
         child: Center(
           child: Material(
-            color: scheme.primaryContainer,
-            borderRadius: BorderRadius.circular(AppRadius.rIcon),
+            color: scheme.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppRadius.rFull),
+              side: BorderSide(color: scheme.outlineVariant),
+            ),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
               // Scaffold.of resolves from the enclosing screen's Scaffold, so
@@ -114,7 +125,7 @@ class _MenuButton extends StatelessWidget {
                 child: Icon(
                   Icons.menu_rounded,
                   size: 19,
-                  color: scheme.onPrimaryContainer,
+                  color: scheme.onSurface,
                 ),
               ),
             ),
