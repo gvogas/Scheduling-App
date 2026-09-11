@@ -107,8 +107,7 @@ void main() {
                 materialsHint: 'Materials',
                 photosSection: const SizedBox.shrink(),
                 callbacks: AppointmentFormCallbacks(
-                  onSearchClients: (_) {},
-                  onClientQueryModeChanged: (_) {},
+                  onSearchClients: (_) {},
                   onRetryClientSearch: () {},
                   onSelectClient: onSelectClient ?? (_) {},
                   onClearClient: () {},

@@ -37,7 +37,6 @@ void main() {
           status: status,
           isSearching: isSearching,
           onChanged: (_) {},
-          onModeChanged: (_) {},
           onSelect: onSelect ?? (_) {},
           onRetry: onRetry ?? () {},
           onAddNew: onAddNew,
@@ -46,13 +45,28 @@ void main() {
     ),
   );
 
-  testWidgets('at rest both mode segments are shown and neither is selected', (
+  testWidgets('there is ONE bar and no mode switch', (tester) async {
+    await tester.pumpWidget(harness(controller: TextEditingController()));
+    expect(find.text('Search by name or phone'), findsOneWidget);
+    expect(find.byType(TextFormField), findsOneWidget);
+    expect(find.text('Phone'), findsNothing);
+    expect(find.text('Name or address'), findsNothing);
+  });
+
+  testWidgets('a query carrying letters AND digits returns rows', (
     tester,
   ) async {
-    await tester.pumpWidget(harness(controller: TextEditingController()));
-    expect(find.text('Phone'), findsOneWidget);
-    expect(find.text('Name or address'), findsOneWidget);
-    expect(find.text('Tap Phone to start'), findsOneWidget);
+    // The formatter the mode switch installed discarded the letters, so this
+    // query was untypeable without first finding the other segment.
+    await tester.pumpWidget(
+      harness(
+        controller: TextEditingController(text: 'marc 514'),
+        results: [marie, jp],
+        status: const ClientSearchStatus(mode: ClientQueryMode.text),
+      ),
+    );
+    expect(find.text('Marie Tremblay'), findsOneWidget);
+    expect(find.text('J-P Gagnon'), findsOneWidget);
   });
 
   testWidgets('holding shows the digit tally and no rows', (tester) async {

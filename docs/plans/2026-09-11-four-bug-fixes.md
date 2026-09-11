@@ -1,18 +1,57 @@
 # Four bug fixes — client search, cancelled job counts, Done row badge, filter re-apply
 
-**State: PLAN ONLY — nothing built, nothing deployed.** Written 2026-09-11 from
-four parallel read-only investigations plus one follow-up pass. Owner approved
-the scope decisions in §6; **implementation approval not yet given.** Issue 3
-needs one more owner decision — see §3.
+**State: ALL FOUR BUILT 2026-09-11. Nothing deployed, no prod script run.**
+Written 2026-09-11 from four parallel read-only investigations plus one
+follow-up pass; implemented the same day.
 
-Branch at time of writing: `dev` (clean), last commit `ae72ce83`.
+**Verified at build time:** `flutter analyze` **No issues found!** ·
+`flutter test` **3626 passed** (from a 3616 baseline read off HEAD first) ·
+`functions` eslint clean · `functions` jest **1896 passed / 88 suites** (from
+1876 / 87). Steps 1–4 of §6 are done; **step 5, the Issue 2 deploy, is NOT**
+and still needs explicit owner authorization.
 
-| Issue | Layer | Deploy needed? | Ready to build |
+**The one open decision in §3 was answered 2026-09-11: cancelled collapsed rows
+get the restoration too**, rather than gating it on `isDone` — all closed rows
+are treated alike, so cancelled does not become the visibly-shorter odd row
+inside the same block.
+
+| Issue | Layer | Deploy needed? | State |
 |---|---|---|---|
-| 1 — one search bar in Add Appointment | Dart UI only | **No** | Yes |
-| 2 — cancelled jobs counted as jobs | Cloud Function + index + backfill | **Yes** | Yes (deploy gated separately) |
-| 3 — Done row shape in the agenda | Dart UI only | No | Yes |
-| 4 — filters don't re-apply | Dart UI only | No | Yes |
+| 1 — one search bar in Add Appointment | Dart UI only | **No** | **BUILT** |
+| 2 — cancelled jobs counted as jobs | Cloud Function + index + backfill | **Yes** | **BUILT, NOT DEPLOYED** |
+| 3 — Done row shape in the agenda | Dart UI only | No | **BUILT** |
+| 4 — filters don't re-apply | Dart UI only | No | **BUILT** |
+
+**What Issue 2 still needs, in this order** (§2 and §6 step 5 are the
+authority): deploy `firestore:indexes` ALONE and wait for
+`appointments (clientId ASC, status ASC, dayIndex ASC)` to reach `READY` — the
+trigger is `retry: true` and rethrows, so a missing index is a
+`FAILED_PRECONDITION` redelivery loop, not a silent no-op — then `functions`,
+then `recount-client-jobs.js --dry-run`, then the live run. **One thing was
+NOT verified and must be checked before deploying:** whether `clientId ==` +
+`status ==` alone is served by index merge. Equality-only filters normally are,
+which is why no second composite was added; confirm against the emulator or
+the console's index suggestion, and add
+`appointments (clientId ASC, status ASC)` if not.
+
+**Two deviations from the plan as written**, both recorded because the plan is
+what a later session trusts:
+
+- **§3's un-ellipsised assertion could not be written as specified.** The plan
+  said to assert the full `"… · Day 3 of 5"` string is un-ellipsised. It is
+  not, at 375px — the test font is far wider per glyph than the shipped one, so
+  that string overflows either way and `didExceedMaxLines` stays true. What
+  changed, and what the test pins instead, is that the time line's width now
+  EXCEEDS half the row: the defect was `RenderFlex` splitting the row evenly
+  between the time and the client name, and the width comparison states that
+  directly and is font-independent.
+- **The four-aggregate arithmetic was extracted rather than re-spelled.**
+  `recountOne` was split into `countJobsFor` (the count) and `recountOne` (the
+  write), and `scripts/recount-client-jobs.js` imports the former. The plan
+  described the script as "recomputing every client through the same four
+  aggregates", which a second spelling would satisfy on paper — but a backfill
+  that disagrees with the trigger reads as the trigger being broken, on
+  whichever clients the script touched last.
 
 ---
 

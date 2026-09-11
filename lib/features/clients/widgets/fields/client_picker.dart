@@ -21,7 +21,6 @@ class ClientPicker extends StatelessWidget {
     required this.status,
     required this.isSearching,
     required this.onChanged,
-    required this.onModeChanged,
     required this.onSelect,
     required this.onRetry,
     super.key,
@@ -34,7 +33,6 @@ class ClientPicker extends StatelessWidget {
   final ClientSearchStatus status;
   final bool isSearching;
   final ValueChanged<String> onChanged;
-  final ValueChanged<ClientQueryMode> onModeChanged;
   final ValueChanged<ClientRecord> onSelect;
   final VoidCallback onRetry;
   final String? errorText;
@@ -48,19 +46,19 @@ class ClientPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final isPhone = status.mode == ClientQueryMode.phone;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _ModeSwitch(mode: status.mode, onChanged: onModeChanged),
-        const SizedBox(height: AppSpacing.sp8),
         TextFormField(
           controller: controller,
-          keyboardType: isPhone ? TextInputType.phone : TextInputType.text,
-          inputFormatters: isPhone ? const [PhoneInputFormatter()] : null,
+          // A phone formatter here would discard the letters of a name.
+          keyboardType: TextInputType.text,
           textInputAction: TextInputAction.search,
-          decoration: formInputDecoration(context, l10n.clients_tapPhoneToStart)
-              .copyWith(
+          decoration:
+              formInputDecoration(
+                context,
+                l10n.clients_searchNameOrPhone,
+              ).copyWith(
                 errorText: errorText,
                 // The spinner rides the FIELD, not the list: replacing the
                 // results with a centred indicator made the list jump on
@@ -155,87 +153,6 @@ class ClientPicker extends StatelessWidget {
   void _attach(BuildContext context, ClientRecord client) {
     FocusScope.of(context).unfocus();
     onSelect(client);
-  }
-}
-
-/// Phone / Name-or-address, rendered whether or not the field has focus so
-/// choosing a name search never opens a phone pad first.
-class _ModeSwitch extends StatelessWidget {
-  const _ModeSwitch({required this.mode, required this.onChanged});
-
-  final ClientQueryMode mode;
-  final ValueChanged<ClientQueryMode> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final l10n = context.l10n;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(AppRadius.r12),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _Segment(
-              label: l10n.clients_modePhone,
-              selected: mode == ClientQueryMode.phone,
-              onTap: () => onChanged(ClientQueryMode.phone),
-            ),
-          ),
-          Expanded(
-            child: _Segment(
-              label: l10n.clients_modeNameOrAddress,
-              selected: mode == ClientQueryMode.text,
-              onTap: () => onChanged(ClientQueryMode.text),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Segment extends StatelessWidget {
-  const _Segment({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.r12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sp8,
-          vertical: AppSpacing.sp8,
-        ),
-        decoration: BoxDecoration(
-          color: selected ? scheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.r12),
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-          ),
-        ),
-      ),
-    );
   }
 }
 

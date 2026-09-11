@@ -190,6 +190,56 @@ void main() {
     verify(() => repo.fetchClientsByType(ClientType.commercial)).called(1);
   });
 
+  // The repro: with a filter active, picking a sort rebuilt the view but
+  // nothing downstream consumed the new value, so the rows never moved.
+  testWidgets('a sort change RE-ORDERS the filtered list, with no refetch', (
+    tester,
+  ) async {
+    when(() => repo.fetchClientsByType(ClientType.commercial)).thenAnswer(
+      (_) async => const [
+        ClientRecord(
+          id: 'v1',
+          name: 'Alpha Co',
+          type: ClientType.commercial,
+          jobCount: 1,
+        ),
+        ClientRecord(
+          id: 'v2',
+          name: 'Zulu Co',
+          type: ClientType.commercial,
+          jobCount: 9,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _wrap(repo, filter: const ClientsFilterType(ClientType.commercial)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.text('Alpha Co')).dy,
+      lessThan(tester.getTopLeft(find.text('Zulu Co')).dy),
+      reason: 'name order puts Alpha first',
+    );
+
+    await tester.pumpWidget(
+      _wrap(
+        repo,
+        filter: const ClientsFilterType(ClientType.commercial),
+        sort: ClientsSort.mostJobs,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.text('Zulu Co')).dy,
+      lessThan(tester.getTopLeft(find.text('Alpha Co')).dy),
+      reason: 'most jobs floats Zulu, which name order buried',
+    );
+
+    // Ordering is a view concern: re-sorting must not cost a second read.
+    verify(() => repo.fetchClientsByType(ClientType.commercial)).called(1);
+  });
+
   testWidgets('the archived filter reads its own bounded query', (
     tester,
   ) async {

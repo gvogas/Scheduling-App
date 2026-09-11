@@ -23,8 +23,7 @@ import 'package:scheduling/features/calendar/widgets/fields/employee_picker.dart
 import 'package:scheduling/features/calendar/widgets/sections/appointment_form_fields.dart';
 import 'package:scheduling/features/calendar/widgets/sections/photo_picker_section.dart';
 import 'package:scheduling/features/calendar/widgets/sheets/image_source_picker.dart';
-import 'package:scheduling/features/calendar/widgets/sheets/inline_add_client_host.dart';
-import 'package:scheduling/features/clients/domain/models/client_search_status.dart';
+import 'package:scheduling/features/calendar/widgets/sheets/inline_add_client_host.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
@@ -129,15 +128,6 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
       return;
     }
     _clientSearchDebounce.run(() => _notifier.searchClients(query));
-  }
-
-  void _onClientQueryModeChanged(ClientQueryMode mode) {
-    // Swapping keyboardType on a focused field does not reliably swap the
-    // software keyboard, so drop focus and let the rebuilt field take it back.
-    FocusScope.of(context).unfocus();
-    _clientSearchDebounce.cancel();
-    _controllers.clientSearch.clear();
-    _notifier.setClientQueryMode(mode);
   }
 
   void _onRetryClientSearch() =>
@@ -369,8 +359,7 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
             isOvernight: _isOvernight(state),
             spanLength: spanLength,
             callbacks: AppointmentFormCallbacks(
-              onSearchClients: _onClientSearchChanged,
-              onClientQueryModeChanged: _onClientQueryModeChanged,
+              onSearchClients: _onClientSearchChanged,
               onRetryClientSearch: _onRetryClientSearch,
               onSelectClient: _notifier.selectClient,
               onClearClient: _notifier.clearClient,

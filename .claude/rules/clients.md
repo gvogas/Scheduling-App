@@ -264,12 +264,45 @@ Root context: `../../CLAUDE.md`.
 - **`jobCount` is recomputed absolutely, never incremented.** `recountClientJobs`
   (`functions/client_job_count.js`) runs `retry: true`, so a retried event would
   double-count a `FieldValue.increment`; it runs a `count()` aggregate and SETS
-  the value. It fires only when `clientId` actually changes (create, delete,
-  reassignment) — an ordinary title or time edit costs zero reads — and writes
+  the value, and writes
   with `update()`, not `set({merge: true})`, so a client removed out-of-band is
   never resurrected as a count-only stub. Backfill is lazy: a client's count
   self-heals on its next appointment write, and a row renders nothing (never
   `0`) until the field exists.
+  **A CANCELLED visit is not a job** (2026-09-11), and it took both halves —
+  either alone changes nothing. The aggregate is four `count()`s by
+  inclusion–exclusion:
+  `total − laterRunDays(dayIndex > 1) − cancelled + cancelledLaterRunDays`.
+  **The fourth term is the correction, not a guard**: one live 5-day run plus
+  one cancelled 5-day run is `10 − 8 − 5 = −3` without it and the right answer
+  is 1, so clamping at 0 would be wrong too. It SUBTRACTS cancelled rather than
+  filtering to an allowlist of live statuses, which is what keeps a legacy
+  `confirmed` or a status-less doc counted — failing in the safe direction, the
+  trap already documented for `countFutureAssignments`. Accepted limitation: a
+  Firestore `where` cannot lowercase, so a console-written `"Cancelled"` still
+  counts; `isValidAppointmentStatus` holds every CLIENT write to the lowercase
+  set. Needs the `(clientId ASC, status ASC, dayIndex ASC)` composite.
+  **And `clientsToRecount` fires on a cancelled-ness FLIP, not only a
+  `clientId` change** — cancelling leaves `clientId` alone, so the trigger
+  returned `[]` and the corrected aggregate was unreachable on the one write
+  that makes it true. The gate is cancelled-ness and NOT "the status changed",
+  so an ordinary `pending → done` edit keeps its zero-read property; otherwise
+  it still fires only on create, delete and reassignment.
+  **`countJobsFor` is the ONE owner of that arithmetic**, shared with
+  `functions/scripts/recount-client-jobs.js` — a backfill spelling it a second
+  time would disagree with the trigger on whichever clients it touched last,
+  which reads as the trigger being broken. That script is a **release
+  prerequisite, not a follow-up**: the count is lazily maintained, so every
+  client with an existing cancelled visit keeps an inflated one indefinitely,
+  including its position under Most jobs.
+  **`canDeleteClient` and `deleteClient` now disagree reproducibly, and the
+  gate stays as it is** (owner default). `canDeleteClient` is `jobCount == 0`
+  while the callable's gate is a live `count()` with no status filter, so a
+  client whose only visits were cancelled reads 0, the UI offers Delete, and
+  the callable refuses `client-has-history`. The gate asks "do documents point
+  at this client", which is the right question for protecting orphanable
+  history — change the message if this ever becomes a complaint, never the
+  gate.
 - **Stored phone fields are NORMALIZED on the way in, and validated on the
   form** (2026-09-04). `_normalizedMap` runs every `phone`/`mobile` — the
   client's and each additional contact's — through `normalizePhoneForStorage`

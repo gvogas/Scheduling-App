@@ -3186,7 +3186,7 @@
   },
   "clients_jobsCountLabel": "JOBS",
   "@clients_jobsCountLabel": {
-    "description": "Mono micro-label under the job count on a client row"
+    "description": "Mono micro-label under the job count on a client row. The count EXCLUDES cancelled visits and counts a multi-day run once."
   },
   "clients_onSiteManager": "On-site manager",
   "@clients_onSiteManager": {
@@ -4008,17 +4008,9 @@
   "@clients_sortRecentlyAdded": {
     "description": "Sort the clients list by creation date, newest first."
   },
-  "clients_modePhone": "Phone",
-  "@clients_modePhone": {
-    "description": "Segment of the client picker's mode switch that opens the phone keypad."
-  },
-  "clients_modeNameOrAddress": "Name or address",
-  "@clients_modeNameOrAddress": {
-    "description": "Segment of the client picker's mode switch that opens the text keyboard and searches names, addresses, emails and contacts."
-  },
-  "clients_tapPhoneToStart": "Tap Phone to start",
-  "@clients_tapPhoneToStart": {
-    "description": "Placeholder in the add-job client field before it has focus."
+  "clients_searchNameOrPhone": "Search by name or phone",
+  "@clients_searchNameOrPhone": {
+    "description": "Placeholder in the add-job client field, which matches a name and a phone number from one input."
   },
   "clients_digitsTyped": "{typed} of {total}",
   "@clients_digitsTyped": {
@@ -4062,7 +4054,7 @@
   },
   "clients_jobsAndLastVisit": "{jobs, plural, =1{1 job} other{{jobs} jobs}} · last {date}",
   "@clients_jobsAndLastVisit": {
-    "description": "Second line of the attached-client card: how many jobs this client has had and when the last one was.",
+    "description": "Second line of the attached-client card: how many jobs this client has had and when the last one was. The count EXCLUDES cancelled visits and counts a multi-day run once.",
     "placeholders": {
       "jobs": { "type": "int", "example": "12" },
       "date": { "type": "String", "example": "14 Aug" }

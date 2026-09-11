@@ -53,8 +53,9 @@ class ClientsListView extends ConsumerStatefulWidget {
   /// appear on its own.
   final VoidCallback? onFirstPageSettled;
 
-  /// Order for the unfiltered paginated list. Ignored by the filter and search
-  /// paths, which are bounded in-memory lists ordered by the query behind them.
+  /// Order for the paginated list AND for the filtered paths, which apply it in
+  /// Dart over their bounded window. The SEARCH path still ignores it: those
+  /// results are relevance-ranked, and re-sorting them destroys that ranking.
   final ClientsSort sort;
 
   /// Fires with however many rows are currently rendered, so the screen's
@@ -347,6 +348,39 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
     return _filterIndex;
   }
 
+  // The filtered slice as rendered: narrowed by the query, then ordered by the
+  // sort. Memoized on its inputs — the list by identity, the query and the sort
+  // by value — so a keystroke rebuild re-sorts nothing.
+  List<ClientRecord>? _visibleSource;
+  String? _visibleQuery;
+  ClientsSort? _visibleSort;
+  List<ClientRecord> _visibleItems = const [];
+
+  List<ClientRecord> _filteredAndSorted(List<ClientRecord> all, String query) {
+    if (identical(all, _visibleSource) &&
+        query == _visibleQuery &&
+        widget.sort == _visibleSort) {
+      return _visibleItems;
+    }
+    final q = ClientSearchPolicy.normalize(query);
+    final qDigits = ClientSearchPolicy.digitsOnly(query);
+    final matched = query.isEmpty
+        ? all
+        : [
+            for (final entry in _filterSearchIndex(all))
+              if (ClientSearchPolicy.entryMatches(
+                entry,
+                queryText: q,
+                queryDigits: qDigits,
+              ))
+                entry.client,
+          ];
+    _visibleSource = all;
+    _visibleQuery = query;
+    _visibleSort = widget.sort;
+    return _visibleItems = sortClients(matched, widget.sort);
+  }
+
   // Every non-All filter is a bounded, already-in-memory list, so searching
   // within it is the shared local matcher rather than a second server query.
   Widget _buildFromAsync(
@@ -357,19 +391,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
     final query = widget.searchQuery.trim();
     return async.when(
       data: (all) {
-        final q = ClientSearchPolicy.normalize(query);
-        final qDigits = ClientSearchPolicy.digitsOnly(query);
-        final items = query.isEmpty
-            ? all
-            : [
-                for (final entry in _filterSearchIndex(all))
-                  if (ClientSearchPolicy.entryMatches(
-                    entry,
-                    queryText: q,
-                    queryDigits: qDigits,
-                  ))
-                    entry.client,
-              ];
+        final items = _filteredAndSorted(all, query);
         return items.isEmpty ? emptyState(query) : _resultsList(items);
       },
       loading: _fittedSkeleton,

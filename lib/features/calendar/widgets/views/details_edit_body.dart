@@ -29,8 +29,7 @@ import 'package:scheduling/features/calendar/widgets/fields/repeat_interval_pick
 import 'package:scheduling/features/calendar/widgets/sections/appointment_form_fields.dart';
 import 'package:scheduling/features/calendar/widgets/sections/photo_picker_section.dart';
 import 'package:scheduling/features/calendar/widgets/sheets/image_source_picker.dart';
-import 'package:scheduling/features/calendar/widgets/sheets/inline_add_client_host.dart';
-import 'package:scheduling/features/clients/domain/models/client_search_status.dart';
+import 'package:scheduling/features/calendar/widgets/sheets/inline_add_client_host.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/maps/domain/address_parser.dart';
 import 'package:scheduling/l10n/l10n.dart';
@@ -94,15 +93,6 @@ class _DetailsEditBodyState extends ConsumerState<DetailsEditBody>
       EventDetailsKey(widget.appointment),
     ).notifier,
   );
-
-  void _onClientQueryModeChanged(ClientQueryMode mode) {
-    // Swapping keyboardType on a focused field does not reliably swap the
-    // software keyboard, so drop focus and let the rebuilt field take it back.
-    FocusScope.of(context).unfocus();
-    _clientSearchDebounce.cancel();
-    widget.controllers.clientSearch.clear();
-    _notifier.setClientQueryMode(mode);
-  }
 
   void _onRetryClientSearch() =>
       unawaited(_notifier.searchClients(widget.controllers.clientSearch.text));
@@ -222,8 +212,7 @@ class _DetailsEditBodyState extends ConsumerState<DetailsEditBody>
     EventDetailsState state,
     EventDetailsController notifier,
   ) => AppointmentFormCallbacks(
-    onSearchClients: _onClientSearchChanged,
-    onClientQueryModeChanged: _onClientQueryModeChanged,
+    onSearchClients: _onClientSearchChanged,
     onRetryClientSearch: _onRetryClientSearch,
     onSelectClient: notifier.selectClient,
     onClearClient: notifier.clearClient,

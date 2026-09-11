@@ -53,6 +53,43 @@ describe("clientsToRecount", () => {
     expect(ids).toEqual([]);
   });
 
+  test("a CANCEL recounts, though the clientId never moved", () => {
+    // Without this the aggregate's cancelled exclusion is unreachable on the
+    // one write that makes it true: the count stays inflated until some later
+    // edit happens to move the clientId.
+    const ids = clientsToRecount(
+        {clientId: "c1", status: "pending"},
+        {clientId: "c1", status: "cancelled"},
+    );
+    expect(ids).toEqual(["c1"]);
+  });
+
+  test("an UN-cancel recounts too", () => {
+    const ids = clientsToRecount(
+        {clientId: "c1", status: "cancelled"},
+        {clientId: "c1", status: "pending"},
+    );
+    expect(ids).toEqual(["c1"]);
+  });
+
+  test("pending -> done recounts NOTHING, so reads stay free", () => {
+    // The gate is cancelled-ness, not "the status changed" — an ordinary
+    // lifecycle edit must stay free.
+    const ids = clientsToRecount(
+        {clientId: "c1", status: "pending"},
+        {clientId: "c1", status: "done"},
+    );
+    expect(ids).toEqual([]);
+  });
+
+  test("a cancelled job edited in some other way recounts nothing", () => {
+    const ids = clientsToRecount(
+        {clientId: "c1", status: "cancelled", title: "Old"},
+        {clientId: "c1", status: "cancelled", title: "New"},
+    );
+    expect(ids).toEqual([]);
+  });
+
   test("a personal job has no clientId and recounts nothing", () => {
     const personal = {isPersonal: true, clientId: ""};
     expect(clientsToRecount(null, personal)).toEqual([]);
@@ -94,37 +131,63 @@ describe("clientsToRecount", () => {
  * Fake Firestore recording the aggregate queries it was asked for and the
  * write it received.
  *
- * `recountOne` issues TWO aggregates off one base query — every document for
- * the client, then the later days of its multi-day runs — so the chained
- * `where` has to be modelled or the second one reads as the first.
- * `laterRunDays` is what the `dayIndex > 1` leg answers.
- * @param {{count: number, laterRunDays: number, updateError: ?Object}} opts
+ * `countJobsFor` issues FOUR aggregates off one base query, differing only in
+ * their chained filters, so the chain has to be modelled or they all read as
+ * the first. `count`/`laterRunDays` synthesize plain rows for the tests that
+ * predate the cancelled legs; `docs` states them outright.
+ * @param {!Object=} opts Seed: `count`, `laterRunDays`, `docs`, `updateError`.
  * @return {!Object} `{db, calls}`
  */
-function fakeDb({count = 0, laterRunDays = 0, updateError = null} = {}) {
-  const calls = {where: null, wheres: [], doc: null, update: [], set: []};
+function fakeDb({
+  count = 0,
+  laterRunDays = 0,
+  docs = null,
+  updateError = null,
+} = {}) {
+  // The four aggregates differ ONLY in their chained filters, so a fake that
+  // stubs a number per call position cannot tell them apart — it models
+  // documents and actually applies the filters instead. That is what makes the
+  // inclusion-exclusion arithmetic genuinely under test.
+  const rows =
+    docs ||
+    [
+      ...Array.from({length: count - laterRunDays}, () => ({
+        clientId: "c1",
+        status: "done",
+      })),
+      ...Array.from({length: laterRunDays}, () => ({
+        clientId: "c1",
+        status: "done",
+        dayIndex: 2,
+      })),
+    ];
+  const calls = {where: null, chains: [], doc: null, update: [], set: []};
+  const matches = (row, filters) =>
+    filters.every(({field, op, value}) => {
+      const actual = row[field];
+      if (op === "==") return actual === value;
+      if (op === ">") return typeof actual === "number" && actual > value;
+      throw new Error(`unmodelled operator ${op}`);
+    });
+  const node = (filters) => ({
+    where(field, op, value) {
+      if (filters.length === 0) calls.where = {field, op, value};
+      return node([...filters, {field, op, value}]);
+    },
+    count: () => ({
+      get: async () => {
+        calls.chains.push(
+            filters.map((f) => `${f.field}${f.op}${f.value}`).join("&"),
+        );
+        return {
+          data: () => ({count: rows.filter((r) => matches(r, filters)).length}),
+        };
+      },
+    }),
+  });
   const db = {
     collection(name) {
-      if (name === "appointments") {
-        return {
-          where(field, op, value) {
-            calls.where = {field, op, value};
-            calls.wheres.push({field, op, value});
-            const base = {
-              count: () => ({get: async () => ({data: () => ({count})})}),
-              where(f2, o2, v2) {
-                calls.wheres.push({field: f2, op: o2, value: v2});
-                return {
-                  count: () => ({
-                    get: async () => ({data: () => ({count: laterRunDays})}),
-                  }),
-                };
-              },
-            };
-            return base;
-          },
-        };
-      }
+      if (name === "appointments") return node([]);
       return {
         doc(id) {
           calls.doc = id;
@@ -143,6 +206,22 @@ function fakeDb({count = 0, laterRunDays = 0, updateError = null} = {}) {
   };
   return {db, calls};
 }
+
+/**
+ * One appointment document for this client.
+ * @param {!Object=} extra Fields overriding the live single-day default.
+ * @return {!Object}
+ */
+const job = (extra = {}) => ({clientId: "c1", status: "done", ...extra});
+
+/**
+ * The day-documents of one multi-day run.
+ * @param {number} days How many work days the run spans.
+ * @param {!Object=} extra Fields applied to every day-document.
+ * @return {!Array<!Object>}
+ */
+const run = (days, extra = {}) =>
+  Array.from({length: days}, (_, i) => job({dayIndex: i + 1, ...extra}));
 
 describe("recountOne", () => {
   test("writes the aggregate count with update(), not set(merge)", async () => {
@@ -178,13 +257,61 @@ describe("recountOne", () => {
 
         await recountOne(db, "c1");
 
-        // One base query, reused for both aggregates.
-        expect(calls.wheres).toEqual([
-          {field: "clientId", op: "==", value: "c1"},
-          {field: "dayIndex", op: ">", value: 1},
-        ]);
+        // One base query, reused for all four aggregates.
+        expect(calls.chains.sort()).toEqual(
+            [
+              "clientId==c1",
+              "clientId==c1&dayIndex>1",
+              "clientId==c1&status==cancelled",
+              "clientId==c1&status==cancelled&dayIndex>1",
+            ].sort(),
+        );
         expect(calls.update).toEqual([{jobCount: 5}]);
       });
+
+  test("a cancelled single-day visit is not a job", async () => {
+    const {db, calls} = fakeDb({
+      docs: [job(), job({status: "cancelled"}), job()],
+    });
+
+    await recountOne(db, "c1");
+
+    expect(calls.update).toEqual([{jobCount: 2}]);
+  });
+
+  test("a cancelled 5-day run subtracts ONCE, not five times", async () => {
+    const {db, calls} = fakeDb({docs: run(5, {status: "cancelled"})});
+
+    await recountOne(db, "c1");
+
+    // 5 - 4 - 5 + 4 = 0. Without the fourth aggregate this is -3, and
+    // clamping at 0 would be right here only by accident.
+    expect(calls.update).toEqual([{jobCount: 0}]);
+  });
+
+  test("one live run plus one cancelled run counts 1", async () => {
+    // The case that proves the fourth aggregate is a correction rather than a
+    // guard: 10 - 8 - 5 + 4 = 1, where the naive form gives -3.
+    const {db, calls} = fakeDb({
+      docs: [...run(5), ...run(5, {status: "cancelled"})],
+    });
+
+    await recountOne(db, "c1");
+
+    expect(calls.update).toEqual([{jobCount: 1}]);
+  });
+
+  test("a legacy or unknown status still counts as a job", async () => {
+    // Subtracting cancelled rather than filtering to an allowlist of live
+    // statuses is what keeps these counted — failing in the safe direction.
+    const {db, calls} = fakeDb({
+      docs: [job({status: "confirmed"}), job({status: undefined}), job()],
+    });
+
+    await recountOne(db, "c1");
+
+    expect(calls.update).toEqual([{jobCount: 3}]);
+  });
 
   test("writes an absolute count, not an increment", async () => {
     // The trigger runs with `retry: true` and a redelivered event would
