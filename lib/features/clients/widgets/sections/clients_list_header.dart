@@ -72,7 +72,7 @@ class ClientsListHeader extends StatelessWidget {
             child: Text(
               _countSentence(l10n),
               style: theme.textTheme.bodySmall?.copyWith(
-                color: theme.palette.textTertiary,
+                color: theme.colorScheme.onSurfaceVariant,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
