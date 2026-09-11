@@ -1,5 +1,6 @@
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/widgets.dart';
 
 import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/analytics/analytics_privacy.dart';
@@ -53,10 +54,16 @@ class AnalyticsService {
     return FirebaseAnalytics.instance;
   }
 
-  /// Exposed only so `main()` can hand the same instance to
-  /// `FirebaseAnalyticsObserver`, which takes the plugin type directly.
-  FirebaseAnalytics get rawAnalytics =>
-      _override ?? FirebaseAnalytics.instance;
+  /// Builds the navigation observer, typed as the framework supertype so the
+  /// caller never needs to import `firebase_analytics` itself.
+  NavigatorObserver navigationObserver({
+    required String? Function(RouteSettings settings) nameExtractor,
+    required void Function(Object error) onError,
+  }) => FirebaseAnalyticsObserver(
+    analytics: _override ?? FirebaseAnalytics.instance,
+    nameExtractor: nameExtractor,
+    onError: onError,
+  );
 
   // ---------------------------------------------------------------------------
   // Collection control and user properties
@@ -172,8 +179,10 @@ class AnalyticsService {
   /// No `hasNotes`: the parent `fieldNotes` string is the LEGACY write path
   /// (crew notes live in a subcollection), so reading it would under-report to
   /// near zero. `note_added` already answers how often notes are written.
-  void logJobCompleted({required bool hasPhotos}) =>
-      _log(AnalyticsEvents.jobCompleted, {AnalyticsParams.hasPhotos: hasPhotos});
+  void logJobCompleted({required bool hasPhotos}) => _log(
+    AnalyticsEvents.jobCompleted,
+    {AnalyticsParams.hasPhotos: hasPhotos},
+  );
 
   void logAppointmentCancelled() =>
       _log(AnalyticsEvents.appointmentCancelled, const {});
@@ -215,28 +224,23 @@ class AnalyticsService {
   void logClientViewed({required String source}) =>
       _log(AnalyticsEvents.clientViewed, {AnalyticsParams.source: source});
 
-  void logClientEdited() =>
-      _log(AnalyticsEvents.clientEdited, const {});
+  void logClientEdited() => _log(AnalyticsEvents.clientEdited, const {});
 
   /// [action] is `archive` / `unarchive` — one toggle, one event.
   void logClientArchived({required String action}) =>
       _log(AnalyticsEvents.clientArchived, {AnalyticsParams.action: action});
 
-  void logClientDeleted() =>
-      _log(AnalyticsEvents.clientDeleted, const {});
+  void logClientDeleted() => _log(AnalyticsEvents.clientDeleted, const {});
 
   // ---------------------------------------------------------------------------
   // Employees
   // ---------------------------------------------------------------------------
 
-  void logEmployeeInvited() =>
-      _log(AnalyticsEvents.employeeInvited, const {});
+  void logEmployeeInvited() => _log(AnalyticsEvents.employeeInvited, const {});
 
-  void logEmployeeViewed() =>
-      _log(AnalyticsEvents.employeeViewed, const {});
+  void logEmployeeViewed() => _log(AnalyticsEvents.employeeViewed, const {});
 
-  void logEmployeeEdited() =>
-      _log(AnalyticsEvents.employeeEdited, const {});
+  void logEmployeeEdited() => _log(AnalyticsEvents.employeeEdited, const {});
 
   /// [status] is the new account status (`active` / `disabled`), never a name.
   void logEmployeeStatusChanged({required String status}) => _log(

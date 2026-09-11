@@ -64,6 +64,18 @@ invariants that have to be visible from every feature.
   busier than they are by an amount that depends on the user's back stack. The
   two halves move together; changing one alone silently double- or
   under-counts.
+- **iOS reports a screen view of its OWN, and it is turned OFF in `Info.plist`**
+  (`FirebaseAutomaticScreenReportingEnabled=false`, 2026-09-10). Firebase's
+  native automatic reporting fires on `UIViewController` appearance, which in a
+  Flutter app means one anonymous `screen_view` per launch carrying
+  `ga_screen_class=FlutterViewController` and NO `ga_screen` at all — a third
+  source of screen views, below Flutter, that the split above cannot see or
+  guard. It inflated `screen_view` by one per session and put a nameless row in
+  the Screens report, describing the one "screen" that is not one. It hid on
+  the first debug run because the automatic event fires BEFORE
+  `setCollectionEnabled` settles and was dropped as "Analytics is disabled.
+  Event not logged"; it appeared on the very next launch. Don't remove the key
+  to restore the iOS default.
 - **A sheet reports itself.** A `showModalBottomSheet` route carries no name,
   so the observer skips it — the add-appointment, appointment-details,
   add/edit-client and invite/edit-person sheets each call `logScreenView` from

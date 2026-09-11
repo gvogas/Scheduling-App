@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/core/app/app_sync_listeners.dart';
+import 'package:scheduling/core/app/carplay_bridge.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/utils/current_day_provider.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
@@ -13,6 +15,8 @@ import 'package:scheduling/features/auth/application/active_user_identity_provid
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
+import 'package:scheduling/features/employees/application/employees_providers.dart';
+import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/features/home_widget/application/widget_sync_service.dart';
 import 'package:scheduling/features/live_activity/application/live_activity_registration_controller.dart';
 import 'package:scheduling/features/notifications/application/push_registration_controller.dart';
@@ -32,6 +36,8 @@ class _FakeUploads extends Mock implements AppointmentImageUploadService {}
 class _FakeWidgetSync extends Mock implements WidgetSyncService {}
 
 class _FakeSnapshotSync extends Mock implements ScheduleSnapshotService {}
+
+class _FakeCarPlay extends Mock implements CarPlayBridge {}
 
 /// Drives `isOfflineProvider` from the test so the offline→online flip can be
 /// replayed as a real transition (a plain Provider can't change value).
@@ -77,6 +83,7 @@ void main() {
   late _FakeUploads uploads;
   late _FakeWidgetSync widgetSync;
   late _FakeSnapshotSync snapshotSync;
+  late _FakeCarPlay carPlay;
   late StreamController<Map<String, dynamic>> accountDocs;
   late StreamController<Map<String, dynamic>?> widgetPayloads;
   late StreamController<Map<String, dynamic>?> snapshotPayloads;
@@ -88,6 +95,7 @@ void main() {
     uploads = _FakeUploads();
     widgetSync = _FakeWidgetSync();
     snapshotSync = _FakeSnapshotSync();
+    carPlay = _FakeCarPlay();
     accountDocs = StreamController<Map<String, dynamic>>.broadcast();
     widgetPayloads = StreamController<Map<String, dynamic>?>.broadcast();
     snapshotPayloads = StreamController<Map<String, dynamic>?>.broadcast();
@@ -99,6 +107,7 @@ void main() {
     when(() => widgetSync.clear()).thenAnswer((_) async {});
     when(() => snapshotSync.writeSnapshot(any())).thenAnswer((_) async {});
     when(() => snapshotSync.clearSnapshot()).thenAnswer((_) async {});
+    when(() => carPlay.notifySnapshotChanged()).thenAnswer((_) async {});
   });
 
   setUpAll(() => registerFallbackValue(<String, dynamic>{}));
@@ -136,6 +145,7 @@ void main() {
           ),
           widgetSyncServiceProvider.overrideWithValue(widgetSync),
           scheduleSnapshotServiceProvider.overrideWithValue(snapshotSync),
+          carPlayBridgeProvider.overrideWithValue(carPlay),
         ],
         child: Consumer(
           builder: (context, ref, _) {
@@ -428,6 +438,122 @@ void main() {
     });
   });
 
+  group('CarPlay ping', () {
+    testWidgets('a settled payload pokes the car to re-read', (tester) async {
+      await pump(tester);
+
+      snapshotPayloads.add(_payload);
+      await tester.pumpAndSettle();
+
+      verify(() => carPlay.notifySnapshotChanged()).called(1);
+    });
+
+    testWidgets('the ping waits for the App Group WRITE to land', (
+      tester,
+    ) async {
+      // The ping tells the car to re-read the file. Sent while the rewrite is
+      // still in flight it reaches the store first, which re-reads the OLD
+      // bytes, sees no change and never re-renders. Nothing recovers it: the
+      // scene's 60s timer re-ranks, it does not reload.
+      final writeLanded = Completer<void>();
+      when(
+        () => snapshotSync.writeSnapshot(any()),
+      ).thenAnswer((_) => writeLanded.future);
+      await pump(tester);
+
+      snapshotPayloads.add(_payload);
+      await tester.pumpAndSettle();
+
+      verify(() => snapshotSync.writeSnapshot(_payload)).called(1);
+      verifyNever(() => carPlay.notifySnapshotChanged());
+
+      writeLanded.complete();
+      await tester.pumpAndSettle();
+
+      verify(() => carPlay.notifySnapshotChanged()).called(1);
+    });
+
+    testWidgets('the ping waits for the sign-out CLEAR to land', (
+      tester,
+    ) async {
+      // The worst case: pinging first has the car re-read a still-populated
+      // file and keep rendering the ex-user's clients and addresses.
+      final clearLanded = Completer<void>();
+      when(
+        () => snapshotSync.clearSnapshot(),
+      ).thenAnswer((_) => clearLanded.future);
+      await pump(tester);
+
+      snapshotPayloads.add(null);
+      await tester.pumpAndSettle();
+
+      verify(() => snapshotSync.clearSnapshot()).called(1);
+      verifyNever(() => carPlay.notifySnapshotChanged());
+
+      clearLanded.complete();
+      await tester.pumpAndSettle();
+
+      verify(() => carPlay.notifySnapshotChanged()).called(1);
+    });
+
+    testWidgets('a rewrite failure still pings, and is caught', (tester) async {
+      // The chain is what orders them; a throw must not strand the car on a
+      // stale render or escape to the zone handler.
+      when(
+        () => snapshotSync.writeSnapshot(any()),
+      ).thenThrow(StateError('app group locked'));
+      await pump(tester);
+
+      snapshotPayloads.add(_payload);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      verify(() => carPlay.notifySnapshotChanged()).called(1);
+    });
+
+    testWidgets('a sign-out pokes it too', (tester) async {
+      // The car must drop to its signed-out empty view, not keep rendering the
+      // snapshot that was just wiped.
+      await pump(tester);
+
+      snapshotPayloads.add(null);
+      await tester.pumpAndSettle();
+
+      verify(() => carPlay.notifySnapshotChanged()).called(1);
+    });
+
+    testWidgets('a failed read pokes nothing', (tester) async {
+      await pump(tester);
+
+      snapshotPayloads.addError(StateError('permission-denied'));
+      await tester.pumpAndSettle();
+
+      verifyNever(() => carPlay.notifySnapshotChanged());
+    });
+
+    testWidgets('a ping failure is caught instead of escaping', (tester) async {
+      // The channel is absent whenever the CarPlay scene has never connected.
+      when(
+        () => carPlay.notifySnapshotChanged(),
+      ).thenThrow(MissingPluginException('no carplay'));
+      await pump(tester);
+
+      snapshotPayloads.add(_payload);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the listener never registers off iOS', (tester) async {
+      await pump(tester, isIos: false);
+
+      snapshotPayloads.add(_payload);
+      await tester.pumpAndSettle();
+
+      verifyNever(() => carPlay.notifySnapshotChanged());
+    });
+  });
+
   group('which stream each mirror opens', () {
     // An ADMIN already holds a business-wide listener on this exact range for
     // the Siri snapshot, so the widget must read it too rather than opening a
@@ -452,6 +578,11 @@ void main() {
         overrides: [
           currentDayProvider.overrideWithValue(today),
           activeUserIdentityProvider.overrideWith((ref) => identity),
+          // The admin branch joins the roster for crew colour; without this it
+          // would reach FirebaseFirestore.instance.
+          allUsersStreamProvider.overrideWith(
+            (ref) => Stream.value(const <EmployeeRecord>[]),
+          ),
           appointmentsInRangeProvider.overrideWith((ref, range) {
             opened.add('range');
             return Stream.value([job]);

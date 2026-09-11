@@ -1,9 +1,59 @@
 # Apple CarPlay for ES Pro — driving-task job list
 
-Status: **PLAN — NOT STARTED.** Written 2026-09-04; **UI design finalised
-2026-09-09** (decisions 9–14 below). **Verified 2026-09-09:** no
-`CarPlay`/`CPTemplate` symbol anywhere in `ios/` or `lib/`, and no CarPlay
-entitlement — nothing has been built from this document.
+Status: **BUILT AND COMPILED.** Written 2026-09-04; UI design finalised
+2026-09-09 (decisions 9-14 below); implementation followed the same day.
+**Dart is verified**: `flutter analyze` clean, full suite 3590 passed
+(including `test/core/app/carplay_bridge_test.dart` and the schema-v4 coverage
+in `schedule_snapshot_test.dart`).
+
+**The Swift compiled on 2026-09-10** — the first time it met a compiler, on a
+Mac with Xcode 26.6, and it built clean with no edits. `RunnerTests` runs
+green (`** TEST SUCCEEDED **`), so `CarPlayTemplateBuilderTests.swift` now
+pins the builder for real rather than on paper. The Dart-to-Swift channel
+contract was also checked by hand: `net.vogas.scheduling/carplay` and all four
+method names match on both sides.
+
+**The signing gate is CLOSED** (2026-09-10). The CarPlay capability was
+enabled on the `net.vogas.scheduling` App ID, Xcode regenerated the profiles
+under automatic signing, and `com.apple.developer.carplay-driving-task` now
+lives in `ios/Runner/Runner.entitlements`; `RunnerCarPlay.entitlements` was
+deleted with the gating scheme it existed for. A device build signs against
+"iOS Team Provisioning Profile: net.vogas.scheduling", which carries the
+entitlement. **Note the order inverts under AUTOMATIC signing**: Xcode cannot
+request CarPlay in a profile until the entitlement is already in the file, so
+"regenerate profiles, then move the key" is a MANUAL-signing instruction and
+following it literally deadlocks. Still unproven: **distribution** signing,
+because this Mac holds only an Apple Development certificate — archive once
+before shipping.
+
+**Simulator entitlement behaviour — what is and is not established.** The
+CarPlay scene connects in the Simulator with the key present in
+`Runner.entitlements`, and the runtime logs `Application declares driving task
+entitlement`, even though `codesign -d --entitlements` on the installed app
+prints nothing (simulator builds carry entitlements via the linker's
+`-Simulated.xcent` section, not the signature). Two things ARE proven: the app
+icon registers on the CarPlay dashboard with no CarPlay key in the entitlements
+file at all, and **hand-signing the entitlement in afterwards with
+`codesign --entitlements` makes SpringBoard refuse to launch the app outright**
+(`SBMainWorkspace` denial) — so do not try to add it that way. What was NEVER
+tested is whether the SCENE would connect with the key absent; only the icon
+was observed in that state. Treat "the Simulator needs no entitlement" as
+unproven, and just keep the key in `Runner.entitlements`, which is where it
+now lives anyway.
+
+**It has now been DRIVEN in the CarPlay Simulator** (2026-09-10), signed in
+against production data. Confirmed working: the scene connects with
+`FlutterSceneDelegate` already owning a window scene (the plan's one genuine
+unknown), the tab bar installs as the root, rows and headers render, and the
+signed-out empty state is correct. Five UI decisions came out of that session
+— see *Decisions taken (owner, 2026-09-10)* below; they outrank the design
+sections above wherever the two disagree.
+
+Still behavioural and still open: the three ACTIONS (Directions, Start,
+Complete, Call) have not been exercised, the App Lock question is unanswered,
+and distribution signing wants one archive. **The TECHNICIAN view has never
+been on a screen at all** — every drive was an admin snapshot — and decisions
+22-23 changed it structurally, so it is the least-verified surface here.
 
 Mockups — **the final design (revision 3, 2026-09-09):**
 <https://claude.ai/code/artifact/27425c62-bc6d-42ac-9f48-9d5bd8b3e65b>
@@ -146,7 +196,7 @@ no coordinates**, so the address is geocoded on demand or passed as a query.
 | `CPTabBarTemplate` | The root. Apple's template table lists the tab bar for Driving Task apps — **re-check that table once more before building**, since the whole root rests on it. Its child lists are root-level, so the detail push is still depth 2 |
 | `CPListSection` header subtitle | iOS 15+ (`headerSubtitle:`), so it is free on the iOS 18 floor. It is what carries the countdown and the counts without spending a row |
 | `CPListItem` | Exactly `text` + `detailText` + `image` + an accessory. **There is no leading time column** — the time is either in `text` or drawn into `image` (below) |
-| `CPAlertTemplate` | Modal, does **not** count toward template depth. Used once, for the mark-complete hand-off |
+| `CPAlertTemplate` | Modal, does **not** count toward template depth. Used only for a failed write ("Couldn't update that job") |
 | The three actions | **All permitted.** Jobber, a field-service app holding this same entitlement, ships Directions, a status write and a phone call today |
 | `UIApplicationSupportsMultipleScenes` | **Keep it `false`** |
 
@@ -173,7 +223,14 @@ outrank prose guides, and every setup blog asserting `true` cites no source. One
 placement gotcha: the key is a **sibling of** `UISceneConfigurations`, not nested
 inside it.
 
-### Approval gate — the single biggest risk
+### Approval gate — GRANTED 2026-09-09
+
+**Apple has granted `com.apple.developer.carplay-driving-task` for
+`net.vogas.scheduling`** (owner, 2026-09-09). This closes what this plan called
+its single biggest risk. The table below is kept because the *signing* gate did
+not close with it — see the note under it.
+
+### Approval gate — the original risk analysis
 
 | Stage | Needs Apple's grant? |
 |---|---|
@@ -187,20 +244,19 @@ and refusal is possible. **Nothing about the phone app changes if the request is
 refused** — the CarPlay code simply never activates.
 
 > **Do not commit `com.apple.developer.carplay-driving-task` into
-> `ios/Runner/Runner.entitlements` before Apple grants it.** An entitlement the
-> provisioning profile lacks fails code signing, which would break every normal
-> App Store build of ES Pro. See the gating scheme in Step 3.
+> `ios/Runner/Runner.entitlements` until the PROVISIONING PROFILE carries it.**
+> The grant is not the gate — the profile is. An entitlement the profile lacks
+> fails code signing, which would break every normal App Store build of ES Pro.
+> Apple granting it (2026-09-09) does not by itself put it in the profile: the
+> capability has to be enabled on the App ID in the Developer portal and the
+> profiles regenerated first. Order is: portal capability → refresh profiles →
+> move the key. See the gating scheme in Step 3.
 
-### Manual step for the owner — the entitlement request
+### Manual step for the owner — DONE
 
-Submit at `developer.apple.com/contact/carplay` (signed in as the account
-holder), category **Driving Task**, app **ES Pro** / `net.vogas.scheduling`.
-The justification is drafted as part of the work; the argument is that ES Pro's
-users are plumbing technicians who drive between assigned job sites all day,
-that the CarPlay interface shows only the current and next jobs on that route
-with a hand-off to navigation, and that it contains no account setup, no
-settings, no text entry, and nothing unrelated to the drive — matching Apple's
-own "communicating with fleet systems" example.
+The entitlement request was submitted and **granted (2026-09-09)**. Nothing
+remains here. What remains is the portal/profile step recorded under the
+approval gate above, which the owner had not done at the time of writing.
 
 ---
 
@@ -241,18 +297,21 @@ own "communicating with fleet systems" example.
     in the subtitle. The Week tab is the next 7 days, one section per day,
     today excluded.
 11. **Section headers carry a subtitle** — "Starts in 18 min", "Overdue by
-    57 min", "Started 10:04", "4 more jobs · 1 done", "Friday 11 September ·
+    57 min", "Started 10:04 AM", "4 more jobs · 1 done", "Friday 11 September ·
     3 jobs". Because two of those are wall-clock text, the visible template is
     rebuilt on a 60 s main-queue timer while the scene is connected, on top of
-    the snapshot-change rebuild.
+    the snapshot-change rebuild. **Superseded in FORM by decision 19** — the
+    subtitle is now appended to the header on one line, not a second line.
 12. **Both roles see job state on the row** — *Overdue* (amber) and *In
     progress* (green) — as the trailing accessory image. The technician's
     time tile is tinted the same colour; the admin's avatar is not, because the
-    avatar owns that slot.
+    avatar owns that slot. **Half-superseded by decision 22** — the tile is
+    gone, so the accessory is the technician's only state marker.
 13. **Mark complete hands the driver the next job.** The job leaves the list
     the moment it is done, so the detail is popped to the root and a
     `CPAlertTemplate` names the next job with a *Directions* action and a
     *Done* action. *Start job* needs no confirmation.
+    **REVERSED by decision 18 (2026-09-10) — the alert is gone.**
 14. **Empty states use the template's own empty view**, and the Today one
     names the next job ("No jobs today" / "Next: Monday 8:00, Lachance").
     Decision 2's non-selectable "No jobs" row is gone with it.
@@ -267,6 +326,59 @@ own "communicating with fleet systems" example.
     business-wide** — the earliest job nobody has started, whoever it is
     assigned to. Confirms decision 4 for the ranking: the admin's CarPlay is
     the dispatcher's view, not the driver's.
+
+### Decisions taken (owner, 2026-09-10 — after the first drive on the Simulator)
+
+These came out of looking at the running CarPlay screen, so they outrank the
+design above wherever the two disagree.
+
+17. **Times are 12-hour, in both locales.** `CarPlayStrings.time` is the single
+    formatter, so this moved every surface at once. The AM/PM symbols are
+    **pinned** to `AM`/`PM`: `en_CA` otherwise renders `a.m.` with periods,
+    which is wrong on a car display. Reverses the 24-hour choice the original
+    plan made to keep the ~44 pt time tile legible. That tension is moot now:
+    decision 22 deleted the tile and moved the time into the row text, where
+    it renders at full size.
+18. **No confirmation screen after Mark complete.** The write pops straight to
+    the root list. The cost is real and was accepted: the hand-off alert was
+    also how a driver got *Directions to the next job* in one tap, and that is
+    now a manual pick from the list.
+19. **Section headers use the PLAIN `CPListSection` initializer.** The rich one
+    (`headerSubtitle:`/`headerImage:`/`headerButton:`) renders a **floating**
+    header that a scrolling row card slides under and shows through — legible
+    as a bug on the Week tab, where the day heading sat on top of the first
+    row. Subtitle is appended to the header instead: "Tomorrow · Friday 11
+    September · 4 jobs". Applies to Today's headers too, since one helper
+    builds both.
+20. **The detail screen is three rows, not five.** When / Where / Crew.
+    *Status* went because the row accessory already carries it, and *Job*
+    because the job title now rides in the template TITLE beside the client
+    ("Tremblay · Réparation de fuite"). `.twoColumn` was tried first and is
+    **worse** — it does not remove anything, it halves the width of the same
+    rows on a 400x240 display. `CPInformationTemplate` offers only `.leading`
+    and `.twoColumn`, so row COUNT is the only real lever.
+21. **The When row never restates a time its own range shows.** A job an hour
+    or more out read "Tomorrow, 7:00 AM – 8:00 AM · Starts at 7:00 AM". The
+    absolute-time tail is dropped when a range is displayed; "Starts in 18
+    min", "Due now" and "Overdue by 57 min" all stay, and an all-day block
+    keeps its tail because it has no range. Pinned by
+    `testWhenRowDropsAStartTimeTheRangeAlreadyShows`.
+
+22. **The technician row is the admin row without the avatar.** Both roles
+    lead line one with the time; the technician's image slot is now EMPTY.
+    The time tile is deleted (`CarPlayImages.timeTile`, and the `"24 h"`
+    `allDayTile` label with it). It existed to put the time somewhere, and
+    12-hour time made it cramped at ~44 pt — moving the time into the text
+    fixes the legibility and the duplication at once. Cost: a technician loses
+    the tinted tile, so the accessory glyph is their only state marker.
+    **Unverified — the technician view has never been on a screen.**
+23. **Nothing shows a clock time for an all-day block.** Its start is
+    midnight, so a time there is noise at best and wrong at worst. Three
+    surfaces were audited and two were leaking: the detail's When row said
+    "Tuesday, all day · Starts at 12:00 AM", and the Now header said "Started
+    12:00 AM" for one in progress. `startedAt` takes the appointment and
+    returns `String?` now, so the call site cannot forget. The row title and
+    the Today empty state were already correct.
 
 ### The row, precisely (corrected 2026-09-09)
 
@@ -287,14 +399,13 @@ with state   [9:15] Roy                          Overdue  (⏱)
 
 - **Image slot.** Admin: the crew avatar (initials on the employee's stored
   colour, dark-lifted in dark appearance, a white ring on the viewer's own
-  jobs, `+N` for a multi-crew job) — A1, unchanged. Technician: a **time
-  tile**, the start time drawn into a rounded square; tinted amber when
-  overdue, green when in progress. Both are `UIImage`s rendered in Swift
-  (`UIGraphicsImageRenderer`), which the builder was going to do for the
-  avatar anyway.
-- **Line one.** Admin: the time then the client, in one string with a
-  two-space gap (`"8:00  Tremblay"`) — the time cannot be styled separately.
-  Technician: the client alone, since the tile already says when.
+  jobs, `+N` for a multi-crew job) — A1, unchanged. Technician: **empty**
+  (decision 22). It used to hold a time tile; the time moved into line one,
+  and a tile repeating it would be the duplication decision 21 removed.
+- **Line one, BOTH roles.** The time then the client, in one string with a
+  two-space gap (`"8:00 AM  Tremblay"`) — the time cannot be styled
+  separately. **An all-day block omits the time** and leads with the client,
+  since its start is midnight (decision 23).
 - **Line two.** Job title first, then ` · ` and the address, which truncates
   from the right — losing "Québec" costs nothing. Title is optional in ES Pro
   (filled from a job template, often empty on an ordinary visit), so an empty
@@ -304,10 +415,10 @@ with state   [9:15] Roy                          Overdue  (⏱)
   `"In progress"` + play). If a head unit renders the accessory too small for
   the word, fall back to the glyph alone; the tinted tile and the section it
   sits in still say the same thing. State comes from `displayStatusAt(now)`,
-  the single owner of the ladder.
-- **Two things to check on hardware**: the image slot is ~44 pt on some units,
-  fine for `13:30` in a 24 h clock (which ES Pro's users already use) but
-  tight if it ever had to say `10:00 AM`; and where the text truncates.
+  the single owner of the ladder. **It is now the ONLY state marker a
+  technician gets**, since decision 22 removed the tinted tile.
+- **One thing to check on hardware**: where the row text truncates. The tile's
+  ~44 pt fitting problem is gone with the tile.
 
 ### The snapshot MUST gain a crew field — correcting this plan
 
@@ -426,37 +537,34 @@ not start, not the expected morning.
 ```
 ROOT  CPTabBarTemplate
  ├─ TODAY  CPListTemplate                       (technician, 10:12)
- │    Now · Started 10:04
- │      [10:00] Gagnon                            In progress (▶)
- │              Chauffe-eau · 8 Avenue des Pins
+ │    Now · Started 10:04 AM
+ │      10:00 AM  Gagnon                          In progress (▶)
+ │                Chauffe-eau · 8 Avenue des Pins
  │    Next · Overdue by 57 min
- │      [9:15]  Roy                               Overdue (⏱)
- │              Inspection annuelle · 3100 Boulevard Laurier
+ │      9:15 AM  Roy                              Overdue (⏱)
+ │               Inspection annuelle · 3100 Boulevard Laurier
  │    Later today · 2 more jobs · 1 done
- │      [13:30] Pelletier                                      ›
- │              1290 Rue Saint-Jean
- │      [16:30] Côté                                           ›
- │              Chauffe-eau · 77 Rue Saint-Paul
+ │      1:30 PM  Pelletier                                     ›
+ │               1290 Rue Saint-Jean
+ │      Côté                                                   ›   (all day)
+ │               Chauffe-eau · 77 Rue Saint-Paul
  └─ WEEK   CPListTemplate
       Tomorrow · Friday 11 September · 1 job
-        [13:00] Bélanger  …
+        1:00 PM  Bélanger  …
       Monday · 14 September · 2 jobs
         …
+
+(An ADMIN sees the same rows with a crew avatar in the leading image slot.)
                               │  tap a row
                               ▼
-PUSH  CPInformationTemplate  "Tremblay"
-      When     Today, 8:00 – 9:00 · starts in 18 min
+PUSH  CPInformationTemplate  "Tremblay · Réparation de fuite"
+      When     Today, 8:00 AM – 9:00 AM · Starts in 18 min
       Where    142 Rue Principale, Québec
-      Job      Réparation de fuite
       Crew     [LB] Luc Bergeron                 (admin only)
-      Status   Scheduled
       [ Directions ]  [ Start job ]  [ Call ]
                               │  Mark complete
                               ▼
-ALERT CPAlertTemplate  (not counted toward depth)
-      Gagnon marked complete
-      Next: Pelletier at 13:30 — 1290 Rue Saint-Jean
-      [ Directions ]  [ Done ]
+      writes, then pops to the root list. No confirmation screen.
 ```
 
 **Today tab — the ranking.** Three sections, each present only when
@@ -464,7 +572,7 @@ non-empty:
 
 | Section | Contents | Header subtitle |
 |---|---|---|
-| **Now** | every job whose stored `status` is `in_progress`, by start time. One row for a technician; one per technician on site for an admin | "Started 10:04" (one row) or "2 on site" |
+| **Now** | every job whose stored `status` is `in_progress`, by start time. One row for a technician; one per technician on site for an admin | "Started 10:04 AM" (one row) or "2 on site" |
 | **Next** | the single earliest open job nobody has started (`displayStatusAt` scheduled **or** overdue). For an admin that is business-wide, whoever it is assigned to (decision 16) | "Starts in 18 min" or "Overdue by 57 min" |
 | **Later today** | the remaining open jobs today, by start time | "4 more jobs · 1 done" |
 
@@ -476,10 +584,12 @@ the main queue while the scene is connected, as well as on every snapshot
 change.
 
 **Week tab.** Days 1–7 of the snapshot, one `CPListSection` per day, header
-"Tomorrow" / weekday name, subtitle date + job count. Today is never on it.
+"Tomorrow" / weekday name **followed by** the date and job count on ONE line
+("Tomorrow · Friday 11 September · 4 jobs"). Today is never on it.
 
-**Rows** are the anatomy in *The row, precisely* above — avatar or time tile,
-title before address, state as the accessory. Sorted strictly by start time
+**Rows** are the anatomy in *The row, precisely* above — time then client,
+avatar for an admin and no image for a technician, title before address,
+state as the accessory. Sorted strictly by start time
 inside each section.
 
 - **Empty views** use `emptyViewTitleVariants` / `emptyViewSubtitleVariants`
@@ -487,12 +597,11 @@ inside each section.
   8:00, Lachance". Week: "Nothing scheduled this week". Signed out / no
   snapshot, both tabs: "Sign in on your iPhone to see your schedule."
 - **Detail rows** in the order a driver asks: When (with the countdown), Where,
-  Job, Crew (admin only), Status. Five of the ten the template allows;
-  nothing is padded. Directions is the `.confirm`-style (tinted) button.
-- **The chain.** A successful `done` write pops to the root and presents the
-  alert above; its *Directions* action is the same `openInMaps` hand-off for
-  the next job, *Done* dismisses. Nothing is presented after `in_progress`. If
-  there is no next job today the alert says so and offers only *Done*.
+  Crew (admin only). Three of the ten the template allows; nothing is padded.
+  The job title rides in the template TITLE beside the client rather than a
+  row of its own. Directions is the `.confirm`-style (tinted) button.
+- **The chain.** A successful write of either status pops to the root list and
+  presents nothing. There is no confirmation or hand-off screen.
 - A job with no address omits the Where row **and** the Directions button.
 - A job with no client name falls back to `title`, then to a generic label.
 - **Role behaviour is inherited from the snapshot, not re-decided in Swift.** An
@@ -503,8 +612,8 @@ inside each section.
   address of *other* people's personal blocks for an admin, so those rows land
   on the no-address path and correctly show neither a Where row nor a
   Directions button — no extra Swift logic. The builder does have to know the
-  role for one thing: avatar vs time tile in the image slot, and the snapshot
-  already says which role it was built for.
+  role for one thing: whether the image slot carries a crew avatar at all, and
+  the snapshot already says which role it was built for.
 - **No "Open on iPhone" button** — asking a driver to pick up the phone is the
   anti-pattern CarPlay exists to prevent.
 - **No stale-schedule treatment, by decision 15.** Every connect refreshes,
@@ -541,10 +650,10 @@ both fits the budget and is the single-decision shape driving demands. The
 condition mirrors the rules exactly, so CarPlay can never offer a tap Firestore
 will reject.
 
-The Status *row* reads `displayStatusAt(now)`, the single owner of the ladder
-(so a late job reads "Overdue"), while the *button* keys off the stored
-`status`, since `overdue` is display-only and reading `.raw` on it throws by
-design.
+The *button* keys off the stored `status`, never the display ladder, since
+`overdue` is display-only and reading `.raw` on it throws by design. (A Status
+*row* on the detail used to show the ladder's word; decision 20 removed it —
+the row's own accessory already carries that state.)
 
 Writes require the Flutter engine, so the button renders only when the bridge
 reports connected.
@@ -580,8 +689,8 @@ scenes must live in the app, which also avoids a new `PrivacyInfo.xcprivacy`):
 |---|---|
 | `CarPlaySceneDelegate.swift` | `CPTemplateApplicationSceneDelegate`. Connect / disconnect / reconnect, root template install, teardown. Holds no strong reference that outlives the scene. |
 | `CarPlayScheduleStore.swift` | Loads `ScheduleSnapshot`, exposes today + upcoming days, caches the decode, re-reads on connect / foreground / refresh ping. Owns the **60 s main-queue timer** that re-ranks Today while the scene is connected (invalidated on disconnect). |
-| `CarPlayTemplateBuilder.swift` | **Pure** functions taking `now` as a parameter: snapshot → the two `CPListTemplate`s for the tab bar (the Now / Next / Later ranking, the Week day sections, every header subtitle); appointment → `CPInformationTemplate`; (done job, snapshot) → the hand-off `CPAlertTemplate`. Pure so `RunnerTests` can cover ranking, grouping, ordering, the subtitles and every omit-the-empty-field rule without a car. |
-| `CarPlayImages.swift` | The three rendered images: crew avatar (initials on the stored colour, dark lift, own-job ring, `+N`), technician time tile (plain / amber / green), and the state accessory (word + glyph). `UIGraphicsImageRenderer`, sized for the CarPlay image slot. |
+| `CarPlayTemplateBuilder.swift` | **Pure** functions taking `now` as a parameter: snapshot → the two `CPListTemplate`s for the tab bar (the Now / Next / Later ranking, the Week day sections, every header subtitle); appointment → `CPInformationTemplate`. Pure so `RunnerTests` can cover ranking, grouping, ordering, the subtitles and every omit-the-empty-field rule without a car. |
+| `CarPlayImages.swift` | The two rendered images: crew avatar (initials on the stored colour, dark lift, own-job ring, `+N`) and the state accessory (word + glyph). `UIGraphicsImageRenderer`, sized for the CarPlay image slot. The technician time tile was deleted by decision 22. |
 | `CarPlayStrings.swift` | EN/FR display strings + date/time formatters, mirroring `ios/SiriIntents/SiriStrings.swift` (same `Locale`-prefix idiom, same "both localizations side by side" rationale). |
 | `CarPlayBridge.swift` | Registers the `net.vogas.scheduling/carplay` channel on the implicit engine's messenger; tracks whether Dart is reachable (which gates the two engine-dependent buttons); posts a `NotificationCenter` refresh in-process. |
 
@@ -636,7 +745,7 @@ as the status button), the client has no number on file, and a personal block
 | File | Purpose |
 |---|---|
 | `test/core/app/carplay_bridge_test.dart` | Mocks the channel via `TestDefaultBinaryMessengerBinding` — the idiom already used in `test/core/launchers/external_uri_launcher_test.dart`. Covers: each of the three inbound methods, an unknown method returning `notImplemented` rather than throwing, a repository throw surfacing as a handled failure and a logged `CARPLAY` warn (not an escape to the zone handler), `clientPhoneFor` returning `null` for a job with no number, non-iOS no-op, and `dispose()` clearing the handler. |
-| `ios/RunnerTests/CarPlayTemplateBuilderTests.swift` | Pure builder tests (Mac-gated): the Today ranking (Now holds every `in_progress` job; Next is exactly one job and is the overdue one when there is one; Later is the rest; a section is absent when empty), the header subtitles at a fixed `now` ("Starts in 18 min", "Overdue by 57 min", the done count), Week day grouping and ordering with today excluded, terminal jobs omitted, address-less job omits both the Where row and the Directions button, client-name → title → generic fallback, empty and signed-out variants on both tabs, the connected/not-connected action sets, the hand-off alert naming the next job (and its no-next-job variant), and avatar-vs-tile chosen by the snapshot's role. |
+| `ios/RunnerTests/CarPlayTemplateBuilderTests.swift` | Pure builder tests (Mac-gated): the Today ranking (Now holds every `in_progress` job; Next is exactly one job and is the overdue one when there is one; Later is the rest; a section is absent when empty), the header subtitles at a fixed `now` ("Starts in 18 min", "Overdue by 57 min", the done count), Week day grouping and ordering with today excluded, terminal jobs omitted, address-less job omits both the Where row and the Directions button, client-name → title → generic fallback, empty and signed-out variants on both tabs, the connected/not-connected action sets, the When row dropping a start time its own range already shows, every all-day surface omitting a midnight time, and the avatar drawn only for an admin. |
 
 ### Files to MODIFY
 
@@ -645,7 +754,7 @@ as the status button), the client has no number on file, and a personal block
 | `ios/Runner/Info.plist` | Add a `CPTemplateApplicationSceneSessionRoleApplication` array **beside** the existing `UIWindowSceneSessionRoleApplication` entry — leave the `flutter` / `FlutterSceneDelegate` entry byte-for-byte untouched (see below). |
 | `ios/Runner/AppDelegate.swift` | Capture the messenger in `didInitializeImplicitFlutterEngine(_:)` into a shared holder and register both channels from there. This also **fixes an existing latent bug**: `registerNativeConfigChannel()` currently resolves the messenger through `window?.rootViewController`, which under scene lifecycle can silently `NSLog("Native config channel unavailable")` and leave the live map blank. |
 | `ios/Runner.xcodeproj/project.pbxproj` | `ios/Runner/` is a plain `PBXGroup`, so each of the 6 new Swift files needs hand-adding in **four** sections (`PBXFileReference`, `PBXBuildFile`, group children, `PBXSourcesBuildPhase`). Plus one `PBXBuildFile` + Sources entry giving `ios/SiriIntents/ScheduleSnapshot.swift` **Runner target membership** — the file does not move, so the SiriIntents wiring is untouched. |
-| `lib/core/app/app_sync_listeners.dart` | Add `_carPlaySync()` to `registerAll()`, following the `_widgetSync` shape exactly: iOS-gated, `isUnsettled` guard, `_fireAndForget('APP-SYNC carplay ping failed', …)`. |
+| `lib/core/app/app_sync_listeners.dart` | **Built differently, deliberately.** A separate `_carPlaySync()` listener was written first and then REMOVED: two `_fireAndForget` listeners on the same emission fire in the same synchronous turn, so the ping raced ahead of `writeSnapshot`'s App Group write and the car re-read the OLD file every time — deterministically, with sign-out leaving the ex-user's client names on the car screen. The rewrite and the ping are now ONE chain inside `_snapshotSync`, so "landed" is structural rather than hoped for. Write and clear take the same path. Don't re-split them. |
 | `lib/main.dart` | Construct/`start()` `CarPlayBridge` in `initState` beside `AppointmentLinkOpener`; `dispose()` it. |
 | `ios/CLAUDE.md` | Record the scene-manifest change, the entitlement gate, and why CarPlay reads the App Group rather than the engine. |
 | `.claude/rules/notifications.md` | CarPlay is a fourth off-app surface; document it beside the widget and Siri snapshot. |
@@ -697,15 +806,39 @@ precedent); `UIBackgroundModes`; any permission string; `functions/` entirely �
 above. An earlier draft of this plan listed it here as unchanged; that was
 written before the admin-visibility question and is wrong.
 
-### Entitlement gating (protects shipping releases)
+### Entitlement gating — RETIRED 2026-09-10, scheme collapsed
 
-`com.apple.developer.carplay-driving-task` is **not** committed to
-`Runner.entitlements`. Instead the repo carries
-`ios/Runner/RunnerCarPlay.entitlements` (the current file plus the CarPlay key),
-and the developer points `CODE_SIGN_ENTITLEMENTS` at it only for local CarPlay
-Simulator work. Once Apple grants the entitlement, the key moves into
-`Runner.entitlements` and the extra file is deleted. Until then every normal
-build signs exactly as it does today.
+This slot used to describe a two-file scheme: `com.apple.developer.carplay-driving-task`
+was kept OUT of `Runner.entitlements`, and `ios/Runner/RunnerCarPlay.entitlements`
+carried it for local work only, so a normal build signed exactly as it did before.
+
+**That scheme is gone and the extra file is deleted.** The trigger it was
+waiting on happened: the capability was enabled on the App ID, Xcode
+regenerated the profiles, a device build signed against a profile carrying the
+entitlement, and the key moved into `Runner.entitlements`. All three Runner
+build configurations point at that one file again.
+
+Two corrections this leaves behind, both worth keeping because following the
+old text now would waste an afternoon:
+
+- **Under AUTOMATIC signing the prescribed order cannot be followed.** This
+  document said portal capability -> refresh profiles -> move the key. Xcode
+  only requests an entitlement it can already see in the entitlements file, so
+  the profile cannot carry CarPlay before the key moves. The working order is:
+  enable the capability on the App ID, move the key, then build to a device
+  with `-allowProvisioningUpdates` and let Xcode mint the profile.
+- **Do NOT hand-sign the entitlement for Simulator work.** Running
+  `codesign --force --sign - --entitlements ...` over a built simulator app to
+  add the CarPlay key makes SpringBoard refuse the launch outright
+  (`SBMainWorkspace` denial); this was isolated to that one key, with
+  app-groups and get-task-allow launching fine on their own, and a real Apple
+  Development identity denied too. The supported path is the entitlements FILE
+  the target builds against — see the simulator note in the status header for
+  exactly what that does and does not prove.
+
+Still open: **distribution** signing is unproven — the Mac this ran on holds
+only an Apple Development certificate, so the App Store profile has never been
+minted with the entitlement. Archive once before shipping.
 
 ---
 
@@ -717,7 +850,8 @@ Implementation order (each step leaves the tree building and shippable):
    wiring — nothing runs yet.
 2. Scene delegate + `Info.plist` scene role + pbxproj wiring. CarPlay renders in
    the Simulator from whatever snapshot is on disk.
-3. `CarPlayBridge` (both directions) + `AppSyncListeners._carPlaySync` + Dart
+3. `CarPlayBridge` (both directions) + the snapshot-write→ping chain in
+   `AppSyncListeners._snapshotSync` + Dart
    tests. Live refresh, and the two engine-dependent buttons appear.
 4. Self-review pass (CarPlay/Flutter/iOS lifecycle, retain cycles between the
    scene delegate and the interface controller, threading — every CarPlay
@@ -742,12 +876,12 @@ Implementation order (each step leaves the tree building and shippable):
   succeeds** (the depth assumption) · **Today re-ranks on its own**: leave the
   Simulator open across a job's start time and watch it move from Later today
   to Next, and the countdown tick down at the 60 s cadence · avatar rows on an
-  admin snapshot, time tiles on a technician one · an overdue job's amber
-  tile and accessory, an in-progress job's green ones.
+  admin snapshot, no image on a technician one · an overdue job's accessory,
+  an in-progress job's accessory.
 - Action-specific: Directions opens the nav app **on the car display**, not the
   phone · "Start job" writes and the row moves into Now with no alert · "Mark
-  complete" writes, pops to the root, and the alert names the next job — its
-  Directions action opens the nav app for *that* job · Call places the call ·
+  complete" writes and pops to the root with NO confirmation screen
+  (decision 18) · Call places the call ·
   **launch from CarPlay with the phone app never opened and confirm the list
   still renders while Start/Call are correctly absent**, then open the phone
   app and confirm both appear · a job whose client has no number shows no Call
@@ -763,7 +897,8 @@ Implementation order (each step leaves the tree building and shippable):
      prompt, and (b) more importantly, backgrounding the phone while CarPlay is
      connected still engages the lock — a second scene keeping the app "active"
      would be a real security regression, not a cosmetic one.
-- Physical head unit: only after Apple grants the entitlement.
+- Physical head unit: unblocked by the 2026-09-09 grant, but still needs the
+  App ID capability enabled and the provisioning profiles regenerated first.
 
 ---
 
@@ -786,8 +921,9 @@ Implementation order (each step leaves the tree building and shippable):
   while the phone is locked, and the existing snapshot privacy rule excludes
   notes, phone numbers and photos. The brief's "notes if appropriate and
   permitted" resolves to *not permitted here*.
-- **Apple approval is still required** for any device, TestFlight, or App Store
-  use. That is outside this repo's control.
+- **Apple approval was granted 2026-09-09**, so device, TestFlight and App
+  Store use are no longer blocked on review. They are still blocked on the
+  portal/profile step, which is outside this repo's control.
 
 ## Remaining Mac checks
 
@@ -798,7 +934,7 @@ documentation and are on-device checks, not blockers on starting:
 |---|---|
 | Runtime section and row counts on a real head unit | The 12-row cap is vehicle-specific; only a car (or a specific simulator profile) shows where it truncates — and with the tab bar it is the Week tab, not Today, that meets it first |
 | Where row text truncates | Depends on the head unit's width and the system font |
-| The time tile and the state accessory at the unit's real image size | The image slot is ~44 pt on some units; `13:30` fits, the word in the accessory may not — the glyph-only fallback exists for this |
+| The state accessory at the unit's real image size | The slot is ~44 pt on some units and the word may not fit — the glyph-only fallback exists for this. **The whole TECHNICIAN view is untested: every drive so far was an ADMIN snapshot, and decisions 22-23 changed that view structurally (no image, time in the row text)** |
 | The tab bar on a Driving Task grant | Apple's template table lists it; confirm in the guide before Step 1 and again on the first Simulator run, since the root rests on it |
 | `openInMaps(launchOptions:from:)` landing on the **car** display, not the phone | Jobber ships it, so low risk — but worth seeing once |
 | **`FlutterSceneDelegate` coexisting with a second scene role** | Could not be settled from any source. This is the one genuine unknown in the plan, and the first Simulator run answers it |

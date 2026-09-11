@@ -1,0 +1,41 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Scheduling",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": ["--dart-define-from-file=dev/firebase.local.json"]
+    },
+    {
+      // DebugView also needs -FIRDebugEnabled, which only an Xcode/simctl launch can pass.
+      "name": "Scheduling (analytics on)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--dart-define-from-file=dev/firebase.local.json",
+        "--dart-define=ANALYTICS_DEBUG=true"
+      ]
+    },
+    {
+      "name": "Scheduling (emulator)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "toolArgs": [
+        "--dart-define-from-file=dev/firebase.local.json",
+        "--dart-define=USE_FIREBASE_EMULATOR=true"
+      ]
+    },
+    {
+      "name": "Scheduling (profile)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "profile",
+      "toolArgs": ["--dart-define-from-file=dev/firebase.local.json"]
+    }
+  ]
+}

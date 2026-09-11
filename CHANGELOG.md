@@ -10,6 +10,20 @@ All notable changes to this project are documented here.
 The `+N` build number after the version (e.g. `1.1.0+5`) is the store version
 code; it increments by one on every store upload regardless of the semver part.
 
+## [Unreleased]
+
+### Added
+- **CarPlay.** ES Pro now has a native CarPlay screen: the day's jobs
+  ranked around the one you're driving to, a week view, and directions
+  handed off to the car's own navigation app. It reads from the same
+  on-device schedule the Siri shortcuts already use, so it still shows
+  your jobs with no signal; marking a job started or complete, and
+  calling the client, work from the car too once the phone app is
+  reachable. Times read in 12-hour form, finishing a job returns straight
+  to the list, and the job screen shows only when, where and the crew.
+  Not yet visible on any device — Apple's CarPlay entitlement reaches the
+  development profile but has not been proved on an App Store one.
+
 ## [1.59.0+88] - 2026-09-07
 
 What happened on a job is now something the office can read. The crew's notes
