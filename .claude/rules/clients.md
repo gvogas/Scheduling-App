@@ -208,9 +208,16 @@ Root context: `../../CLAUDE.md`.
   DETAIL; the detail row went too, along with `clientBuildingCountsProvider`
   and the `clients_sharedAddressCount` key. The count answered a question
   nobody was asking on a screen about ONE client — the FILTER SHEET is where
-  "who else is at this address" belongs, and it still has it. The row now
-  carries ONE badge, Archived: it previously showed archived, type, Building
-  and the job count all competing under one name. Grouping itself is
+  "who else is at this address" belongs, and it still has it. **The TYPE badge
+  came BACK on 2026-09-11** (owner call, asked and answered), REVERSING the
+  half of the 2026-09-07 call that took it off the row. What made it
+  unsurvivable then was the shape, not the badge: the row was a flat
+  `ListTile` where archived, type, Building and the job count all competed on
+  one line under one name. The fresh row is a three-line card row — name +
+  type badge, address, then phone and job count — so the badge has its own
+  corner instead of a share of the subtitle. The rest of the 2026-09-07 call
+  STANDS: the Building pill and the shared-address count are still gone, and
+  nothing is to re-derive a count per row. Grouping itself is
   untouched — `buildingKeyFor`/`buildingsIn`, `clientBuildingsProvider` and
   `fetchClientsByBuilding` all still back the sheet's address section.
   **`fetchClientsByBuilding` / `fetchBuildings` read the SAME bounded cached
