@@ -202,7 +202,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('shows the pinned Filter button, not the old chip row', (
+  testWidgets('pins the Filter button beside the scrolling chips', (
     tester,
   ) async {
     when(
@@ -216,10 +216,11 @@ void main() {
     await tester.pumpWidget(_wrap(repo));
     await tester.pumpAndSettle();
 
-    expect(find.text('Filter'), findsOneWidget);
-    // The type chips are gone from the screen — they live in the sheet now.
-    expect(find.text('Residential'), findsNothing);
-    expect(find.text('Commercial'), findsNothing);
+    // The button reaches the sheet, which is where the addresses live; the
+    // fixed vocabulary is on the chips beside it.
+    expect(find.byIcon(Icons.tune), findsOneWidget);
+    expect(find.text('Residential'), findsOneWidget);
+    expect(find.text('Commercial'), findsOneWidget);
   });
 
   testWidgets('the search hint names every matched field', (tester) async {
@@ -237,7 +238,7 @@ void main() {
     expect(find.text('Name, phone, address, email…'), findsOneWidget);
   });
 
-  testWidgets('picking a type in the sheet shows one dismissible chip', (
+  testWidgets('picking a type in the sheet narrows the list to it', (
     tester,
   ) async {
     when(
@@ -254,13 +255,38 @@ void main() {
     await tester.pumpWidget(_wrap(repo));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Filter'));
+    await tester.tap(find.byIcon(Icons.tune));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Residential'));
+    // The sheet's own option, scoped past the chip of the same name behind it.
+    await tester.tap(find.text('Residential').last);
     await tester.pumpAndSettle();
 
-    // Back on the list: exactly one chip, naming the active filter.
-    expect(find.byType(InputChip), findsOneWidget);
-    expect(find.text('Residential'), findsOneWidget);
+    verify(() => repo.fetchClientsByType(ClientType.residential)).called(1);
+  });
+
+  testWidgets('tapping a chip narrows the list without opening the sheet', (
+    tester,
+  ) async {
+    when(
+      () => repo.fetchClientsPage(
+        after: any(named: 'after'),
+        limit: any(named: 'limit'),
+        sort: any(named: 'sort'),
+      ),
+    ).thenAnswer((_) async => const []);
+    when(
+      () => repo.fetchClientsByType(any()),
+    ).thenAnswer((_) async => const []);
+
+    await tester.pumpWidget(_wrap(repo));
+    await tester.pumpAndSettle();
+
+    final chip = find.text('Commercial');
+    await tester.ensureVisible(chip);
+    await tester.pumpAndSettle();
+    await tester.tap(chip);
+    await tester.pumpAndSettle();
+
+    verify(() => repo.fetchClientsByType(ClientType.commercial)).called(1);
   });
 }

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scheduling/core/theme/themes.dart';
+import 'package:scheduling/features/clients/domain/models/client_type.dart';
+import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 import 'package:scheduling/features/clients/widgets/sections/clients_list_header.dart';
 import 'package:scheduling/l10n/l10n.dart';
@@ -10,6 +12,7 @@ AppLocalizations _l10n(WidgetTester tester) =>
 
 Widget _harness({
   int? count,
+  ClientsFilter filter = const ClientsFilterAll(),
   ClientsSort sort = ClientsSort.name,
   ValueChanged<ClientsSort>? onSortChanged,
   double textScale = 1,
@@ -22,6 +25,7 @@ Widget _harness({
     child: Scaffold(
       body: ClientsListHeader(
         count: count,
+        filter: filter,
         sort: sort,
         onSortChanged: onSortChanged ?? (_) {},
       ),
@@ -30,11 +34,45 @@ Widget _harness({
 );
 
 void main() {
-  testWidgets('renders the pluralized count', (tester) async {
+  testWidgets('names the whole roster when nothing is filtered', (
+    tester,
+  ) async {
     await tester.pumpWidget(_harness(count: 3));
     await tester.pumpAndSettle();
 
-    expect(find.text(_l10n(tester).clients_countLabel(3)), findsOneWidget);
+    expect(find.text(_l10n(tester).clients_showingAll(3)), findsOneWidget);
+  });
+
+  testWidgets('names the type when a type filter is on', (tester) async {
+    await tester.pumpWidget(
+      _harness(
+        count: 3,
+        filter: const ClientsFilterType(ClientType.commercial),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final l10n = _l10n(tester);
+    expect(
+      find.text(
+        l10n.clients_showingType(
+          3,
+          clientTypeLabel(l10n, ClientType.commercial),
+        ),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('names the building when an address filter is on', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _harness(count: 4, filter: const ClientsFilterBuilding('k1')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text(_l10n(tester).clients_inThisBuilding(4)), findsOneWidget);
   });
 
   // Null is "not counted yet", which must not render as zero — the same rule
@@ -45,7 +83,7 @@ void main() {
     await tester.pumpWidget(_harness());
     await tester.pumpAndSettle();
 
-    expect(find.text(_l10n(tester).clients_countLabel(0)), findsNothing);
+    expect(find.text(_l10n(tester).clients_showingAll(0)), findsNothing);
   });
 
   testWidgets('names the active sort', (tester) async {

@@ -13,6 +13,7 @@ Widget _harness({
   required ClientsFilter selected,
   VoidCallback? onOpen,
   VoidCallback? onClear,
+  ValueChanged<ClientsFilter>? onSelect,
   String? buildingLabel,
   double textScale = 1,
   // The tour wraps this bar in a showcase, which hands its child UNBOUNDED
@@ -23,6 +24,7 @@ Widget _harness({
     selected: selected,
     onOpen: onOpen ?? () {},
     onClear: onClear ?? () {},
+    onSelect: onSelect ?? (_) {},
     activeBuildingLabel: buildingLabel,
   );
   return MaterialApp(
@@ -41,46 +43,79 @@ Widget _harness({
 }
 
 void main() {
-  testWidgets('shows no active chip when the filter is All', (tester) async {
+  testWidgets('offers All, every pickable type and Archived as chips', (
+    tester,
+  ) async {
     await tester.pumpWidget(_harness(selected: const ClientsFilterAll()));
     await tester.pumpAndSettle();
 
-    expect(find.text(_l10n(tester).clients_filter), findsOneWidget);
-    expect(find.byType(InputChip), findsNothing);
+    final l10n = _l10n(tester);
+    expect(find.text(l10n.clients_filterAll), findsOneWidget);
+    for (final type in ClientType.pickable) {
+      expect(find.text(clientTypeLabel(l10n, type)), findsOneWidget);
+    }
+    expect(find.text(l10n.clients_filterArchived), findsOneWidget);
   });
 
-  testWidgets('shows one dismissible chip naming the active type', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _harness(selected: const ClientsFilterType(ClientType.commercial)),
-    );
-    await tester.pumpAndSettle();
-
-    expect(
-      find.text(clientTypeLabel(_l10n(tester), ClientType.commercial)),
-      findsOneWidget,
-    );
-    expect(find.byType(InputChip), findsOneWidget);
-  });
-
-  testWidgets('dismissing the chip clears back to All', (tester) async {
-    var cleared = false;
+  testWidgets('tapping a type chip selects that type', (tester) async {
+    ClientsFilter? picked;
     await tester.pumpWidget(
       _harness(
-        selected: const ClientsFilterArchived(),
-        onClear: () => cleared = true,
+        selected: const ClientsFilterAll(),
+        onSelect: (filter) => picked = filter,
       ),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byIcon(Icons.close));
+    await tester.tap(
+      find.text(clientTypeLabel(_l10n(tester), ClientType.commercial)),
+    );
     await tester.pumpAndSettle();
 
-    expect(cleared, isTrue);
+    expect(picked, const ClientsFilterType(ClientType.commercial));
   });
 
-  testWidgets('an active building chip uses the label it is given', (
+  testWidgets('tapping the Archived chip selects the archived filter', (
+    tester,
+  ) async {
+    ClientsFilter? picked;
+    await tester.pumpWidget(
+      _harness(
+        selected: const ClientsFilterAll(),
+        onSelect: (filter) => picked = filter,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Last in the row, so it is the one that needs the scroller.
+    final archived = find.text(_l10n(tester).clients_filterArchived);
+    await tester.ensureVisible(archived);
+    await tester.pumpAndSettle();
+    await tester.tap(archived);
+    await tester.pumpAndSettle();
+
+    expect(picked, const ClientsFilterArchived());
+  });
+
+  testWidgets('tapping All clears back to the whole roster', (tester) async {
+    ClientsFilter? picked;
+    await tester.pumpWidget(
+      _harness(
+        selected: const ClientsFilterArchived(),
+        onSelect: (filter) => picked = filter,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(_l10n(tester).clients_filterAll));
+    await tester.pumpAndSettle();
+
+    expect(picked, const ClientsFilterAll());
+  });
+
+  // An address is discovered from the data and there can be dozens, so it gets
+  // a removable chip rather than a chip of its own in the row.
+  testWidgets('an active building shows a removable chip with its label', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -94,14 +129,31 @@ void main() {
     expect(find.text('1200 Rue Sherbrooke'), findsOneWidget);
   });
 
-  testWidgets('tapping Filter calls onOpen', (tester) async {
+  testWidgets('dismissing the building chip clears the filter', (tester) async {
+    var cleared = false;
+    await tester.pumpWidget(
+      _harness(
+        selected: const ClientsFilterBuilding('k1'),
+        buildingLabel: '1200 Rue Sherbrooke',
+        onClear: () => cleared = true,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+
+    expect(cleared, isTrue);
+  });
+
+  testWidgets('tapping the Filter button calls onOpen', (tester) async {
     var opened = 0;
     await tester.pumpWidget(
       _harness(selected: const ClientsFilterAll(), onOpen: () => opened++),
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text(_l10n(tester).clients_filter));
+    await tester.tap(find.byIcon(Icons.tune));
     await tester.pumpAndSettle();
 
     expect(opened, 1);
@@ -120,10 +172,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(find.byType(InputChip), findsOneWidget);
+    expect(find.text('1200 Rue Sherbrooke Ouest, Montreal'), findsOneWidget);
   });
 
-  testWidgets('the Filter button survives a 260px phone at 2x text', (
+  testWidgets('the chips scroll rather than overflow at 260px with 2x text', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(260, 640);
@@ -138,7 +190,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text(_l10n(tester).clients_filter), findsOneWidget);
+    // The button is the one control that must never be pushed off the row.
+    expect(find.byIcon(Icons.tune), findsOneWidget);
+    expect(find.byType(SingleChildScrollView), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

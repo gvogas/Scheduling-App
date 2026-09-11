@@ -36,6 +36,8 @@ Widget _wrap(
   ClientsSort sort = ClientsSort.name,
   void Function(int count)? onCountChanged,
   List<Override> extraOverrides = const [],
+  bool grouped = false,
+  String? buildingLabel,
 }) {
   final view = ClientsListView(
     searchQuery: searchQuery,
@@ -43,6 +45,8 @@ Widget _wrap(
     filter: filter,
     sort: sort,
     onCountChanged: onCountChanged,
+    grouped: grouped,
+    buildingLabel: buildingLabel,
   );
   return ProviderScope(
     overrides: [
@@ -384,6 +388,86 @@ void main() {
         sort: ClientsSort.mostJobs,
       ),
     ).called(greaterThan(0));
+  });
+
+  // Grouping is opt-in so a host that only wants rows — a picker dropped into
+  // a sheet — keeps the flat list without passing anything.
+  testWidgets('groups by initial under Name sort only when asked', (
+    tester,
+  ) async {
+    when(
+      () => repo.fetchClientsPage(
+        after: any(named: 'after'),
+        limit: any(named: 'limit'),
+        sort: any(named: 'sort'),
+      ),
+    ).thenAnswer(
+      (_) async => const [
+        ClientRecord(id: 'c1', name: 'Alice Brown'),
+        ClientRecord(id: 'c2', name: 'Bob Carter'),
+      ],
+    );
+
+    await tester.pumpWidget(_wrap(repo));
+    await tester.pumpAndSettle();
+    expect(find.text('A'), findsNothing);
+
+    await tester.pumpWidget(_wrap(repo, grouped: true));
+    await tester.pumpAndSettle();
+
+    expect(find.text('A'), findsOneWidget);
+    expect(find.text('B'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('drops the letter headings under a sort that is not Name', (
+    tester,
+  ) async {
+    when(
+      () => repo.fetchClientsPage(
+        after: any(named: 'after'),
+        limit: any(named: 'limit'),
+        sort: any(named: 'sort'),
+      ),
+    ).thenAnswer(
+      (_) async => const [
+        ClientRecord(id: 'c1', name: 'Alice Brown', jobCount: 9),
+        ClientRecord(id: 'c2', name: 'Bob Carter', jobCount: 2),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _wrap(repo, grouped: true, sort: ClientsSort.mostJobs),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('A'), findsNothing);
+    expect(find.text('B'), findsNothing);
+    expect(find.text('Alice Brown'), findsOneWidget);
+  });
+
+  testWidgets('a building filter heads its one group with the street', (
+    tester,
+  ) async {
+    when(() => repo.fetchClientsByBuilding('k1')).thenAnswer(
+      (_) async => const [
+        ClientRecord(id: 'c1', name: 'Alice Brown'),
+        ClientRecord(id: 'c2', name: 'Bob Carter'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _wrap(
+        repo,
+        grouped: true,
+        filter: const ClientsFilterBuilding('k1'),
+        buildingLabel: '4450 Prom. Paton',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('4450 PROM. PATON'), findsOneWidget);
+    expect(find.text('A'), findsNothing);
   });
 
   testWidgets('reports the loaded row count to its host', (tester) async {

@@ -104,9 +104,17 @@ Root context: `../../CLAUDE.md`.
   CLI-ARCH/CLI-DEL tags and the confirm copy can't drift; its two hooks are
   separate because the detail view must STAY OPEN after archiving (to offer
   Unarchive) and dismiss after deleting.
-- **The clients filter is ONE SHEET, and the Filter button is pinned outside
-  any scroller** (2026-09-04). The five-control 48px horizontal chip row it
-  replaced put something off-screen on arrival at large text scale.
+- **The Filter button is pinned outside the scroller, and the chips came BACK
+  beside it** (2026-09-11, the fresh redesign, narrowing the 2026-09-04 call).
+  What was unsurvivable in the five-control 48px row that went on 2026-09-04
+  was that the BUTTON scrolled with everything else, so at large text scale the
+  one control that reaches the addresses and the full sheet was off-screen on
+  arrival. That half stands: the button is pinned FIRST and outside any
+  scroller. The chips beside it are the fixed vocabulary only —
+  `ClientType.pickable` plus All and Archived — and they scroll, because an
+  address is discovered from the data and there can be dozens, so a
+  `ClientsFilterBuilding` still shows as ONE removable tinted chip rather than
+  earning a chip of its own.
   `ClientsFilter` stays a sealed one-of, so the sheet is a SINGLE radio group
   across its two labelled sections — picking an address clears a type. That
   reads as a bug and is not one; it is the constraint the chip row hid.
@@ -128,14 +136,49 @@ Root context: `../../CLAUDE.md`.
   dropped into a second host without carrying a filter bar it cannot wire —
   but that is now a design margin, not a live constraint, so don't cite a
   second caller to justify contorting the list. The header's count
-  arrives through `onCountChanged`, the same shape as `onFirstPageSettled`.
+  arrives through `onCountChanged`, the same shape as `onFirstPageSettled`, and
+  it takes the `ClientsFilter` too — the sentence names the slice
+  (`clients_showingAll` / `clients_showingType` / `clients_inThisBuilding`), so
+  the old filter-blind `clients_countLabel` is RETIRED from both ARBs. A null
+  count still renders nothing rather than a zero.
   **The bar renders under BOTH bounded and UNBOUNDED width** — the feature tour
   wraps it in a showcase that hands its child unbounded constraints, where any
-  non-zero flex throws — so it branches on `constraints.maxWidth.isFinite`.
-  Its Filter button also overrides the app theme's
-  `minimumSize: Size(infinity, 48)`, which is right for a stacked action bar
-  and makes a button in a Row infinitely wide. A widget test for anything in a
-  Row must use `lightTheme()`, not the Material default, or it misses this.
+  non-zero flex throws AND a horizontal viewport cannot measure itself. It no
+  longer BRANCHES on that: when `constraints.maxWidth` is infinite it falls
+  back to `MediaQuery.sizeOf(context).width` minus the gutters and lays out at
+  that, so there is ONE layout and the scroller always sits inside a finite
+  width. The branch that shipped first dropped the scroller under unbounded
+  width and laid the chips out inline instead — which overflows the row by
+  however much the vocabulary grew, and did. A widget test for anything in a
+  Row must use `lightTheme()`, not the Material default: the app theme makes
+  every `OutlinedButton` full-width, which is right for a stacked action bar
+  and wrong in a row, and it is what broke the first version of this bar.
+- **Grouping is OPT-IN: `ClientsListView(grouped:)`, default false**
+  (2026-09-11). Grouped, the rows arrive in white cards under letter headings
+  (`clientGroupsOf` in `domain/client_grouping.dart`, rendered by
+  `ClientsSliverList`); ungrouped it is today's flat list, which is what a host
+  that wants rows and no chrome gets without passing anything. Only
+  `clients_screen.dart` passes `grouped: true`.
+  **Letters only under the Name sort.** Most jobs and Recently added are one
+  card with no headings, a building filter is one card headed by the street the
+  screen hands down as `buildingLabel` (this view still must never watch the
+  building scan), and a SEARCH is one card because those results are
+  relevance-ranked — letters over them would head runs that are not runs.
+  **It never re-sorts.** The page is `orderBy('name')` server-side, so the runs
+  are read off the order as given; `letterGroupsOf` opens a SECOND `A` group
+  rather than merging a later one, which is the shape that proves it.
+  **The card is a `DecoratedSliver` around a `SliverList`, never a `Container`
+  around a `Column`.** One card can hold every loaded row — the whole type
+  filter's bounded window, or the paged list at scroll depth — and a `Column`
+  builds all of them eagerly on every rebuild, keystrokes included.
+  That is also why the grouped path drives the pager ITSELF instead of using
+  `PagedListView`, which cannot host a sliver: **`PagedSliverPrefetch` +
+  `PagedListFooter` (`widgets/lists/paged_sliver_driver.dart`) own the
+  first-page request, the prefetch trigger and the spinner/retry tail**, shared
+  with `AppointmentHistoryView`, which needed the same three for its sticky
+  month bars and had its own copy. Remember `PagingController.refresh()` only
+  RESETS — without `requestFirstPage` the skeleton shimmers forever with no
+  request in flight.
 - **`ClientsSort.mostJobs` and `.recentlyAdded` order by NULLABLE fields.**
   Firestore's `orderBy` returns only documents that HAVE the ordered field, so
   a client whose `jobCount` the recount trigger never stamped, or a
@@ -702,7 +745,8 @@ Root context: `../../CLAUDE.md`.
   presence alone proves nothing.
   **A sticky header cannot live inside `PagedListView`, so
   `AppointmentHistoryView` re-owns what ISP used to do** — the prefetch
-  trigger, the new-page spinner/retry footer, and the one that is easy to miss:
+  trigger and the new-page spinner/retry footer, both of which now live in the
+  shared `paged_sliver_driver.dart` above, and the one that is easy to miss:
   **`PagingController.refresh()` only RESETS the state, it does not fetch.**
   `_requestFirstPage` is what notices the reset and asks again; without it both
   pull-to-refresh and the first-page Retry leave the skeleton shimmering

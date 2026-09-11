@@ -3983,9 +3983,30 @@
   "@clients_searchAllFields": {
     "description": "Hint of the clients search field, naming what the search matches."
   },
-  "clients_countLabel": "{count, plural, =0{No clients} =1{1 client} other{{count} clients}}",
-  "@clients_countLabel": {
-    "description": "How many clients the list is currently showing.",
+  "clients_showingAll": "{count, plural, =0{No clients} =1{Showing 1 client} other{Showing all {count} clients}}",
+  "@clients_showingAll": {
+    "description": "How many clients the unfiltered list is showing.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clients_showingType": "{count, plural, =0{No {type} clients} =1{1 {type} client} other{{count} {type} clients}}",
+  "@clients_showingType": {
+    "description": "How many clients the list is showing under a type or archived filter.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "clients_inThisBuilding": "{count, plural, =0{No clients in this building} =1{1 client in this building} other{{count} clients in this building}}",
+  "@clients_inThisBuilding": {
+    "description": "How many clients the list is showing under a shared-address filter.",
     "placeholders": {
       "count": {
         "type": "int"

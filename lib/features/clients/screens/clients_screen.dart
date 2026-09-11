@@ -70,11 +70,29 @@ class _ListInformationState extends ConsumerState<ListInformation> {
   Future<void> _openFilterSheet() async {
     final picked = await showClientsFilterSheet(context, selected: _filter);
     if (picked == null || !mounted) return;
+    _logFilter(picked.filter);
+    setState(() {
+      _filter = picked.filter;
+      _activeBuildingLabel = picked.buildingLabel;
+    });
+  }
+
+  /// A chip picks one of the fixed filters, so it never carries an address —
+  /// any of them clears the label the sheet left behind.
+  void _applyFilter(ClientsFilter filter) {
+    _logFilter(filter);
+    setState(() {
+      _filter = filter;
+      _activeBuildingLabel = null;
+    });
+  }
+
+  void _logFilter(ClientsFilter filter) {
     // The building KEY is a street address — reported as the filter KIND only,
     // never its value.
     // One switch, so a fifth variant cannot report a value under a name the
     // other half got right — a `_ =>` default on either defeats exhaustiveness.
-    final (filterName, filterValue) = switch (picked.filter) {
+    final (filterName, filterValue) = switch (filter) {
       ClientsFilterAll() => (AnalyticsFilters.none, null),
       ClientsFilterType(:final type) => (AnalyticsFilters.type, type.name),
       ClientsFilterBuilding() => (AnalyticsFilters.building, null),
@@ -87,10 +105,6 @@ class _ListInformationState extends ConsumerState<ListInformation> {
           filterName: filterName,
           filterValue: filterValue,
         );
-    setState(() {
-      _filter = picked.filter;
-      _activeBuildingLabel = picked.buildingLabel;
-    });
   }
 
   void _onListSettled() {
@@ -167,10 +181,8 @@ class _ListInformationState extends ConsumerState<ListInformation> {
                 ClientsFilterBar(
                   selected: _filter,
                   onOpen: _openFilterSheet,
-                  onClear: () => setState(() {
-                    _filter = const ClientsFilterAll();
-                    _activeBuildingLabel = null;
-                  }),
+                  onClear: () => _applyFilter(const ClientsFilterAll()),
+                  onSelect: _applyFilter,
                   activeBuildingLabel: _activeBuildingLabel,
                 ),
               ),
@@ -178,6 +190,7 @@ class _ListInformationState extends ConsumerState<ListInformation> {
                 TourStepId.clientsSort,
                 ClientsListHeader(
                   count: _visibleCount,
+                  filter: _filter,
                   sort: _sort,
                   onSortChanged: (next) {
                     ref
@@ -198,6 +211,8 @@ class _ListInformationState extends ConsumerState<ListInformation> {
                     searchQuery: _searchController.text,
                     isAdmin: widget.isAdmin,
                     filter: _filter,
+                    grouped: true,
+                    buildingLabel: _activeBuildingLabel,
                     // Only highlight the selected row when the detail pane is shown (two-pane).
                     selectedClientId: context.isTwoPane
                         ? _selectedClient?.id

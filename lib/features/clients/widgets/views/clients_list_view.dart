@@ -7,6 +7,7 @@ import 'package:scheduling/core/errors/error_cause.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
+import 'package:scheduling/features/clients/domain/client_grouping.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
@@ -14,6 +15,8 @@ import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 import 'package:scheduling/features/clients/domain/policies/client_delete_policy.dart';
 import 'package:scheduling/features/clients/domain/policies/client_search_policy.dart';
 import 'package:scheduling/features/clients/widgets/cards/client_tile.dart';
+import 'package:scheduling/features/clients/widgets/lists/clients_sliver_list.dart';
+import 'package:scheduling/features/clients/widgets/lists/paged_sliver_driver.dart';
 import 'package:scheduling/features/clients/widgets/sheets/add_client_flow.dart';
 import 'package:scheduling/features/clients/widgets/sheets/client_detail_sheet.dart';
 import 'package:scheduling/features/clients/widgets/views/client_actions_host.dart';
@@ -35,6 +38,8 @@ class ClientsListView extends ConsumerStatefulWidget {
     this.onFirstPageSettled,
     this.sort = ClientsSort.name,
     this.onCountChanged,
+    this.grouped = false,
+    this.buildingLabel,
   });
 
   final String searchQuery;
@@ -63,6 +68,16 @@ class ClientsListView extends ConsumerStatefulWidget {
   /// the booking flow's client picker, which must stay chrome-free.
   final void Function(int count)? onCountChanged;
 
+  /// Opt-in: letter headings and one card per run. Off by default so a host
+  /// that only wants rows — a picker dropped into a sheet — gets today's flat
+  /// list without passing anything.
+  final bool grouped;
+
+  /// Street of the active [ClientsFilterBuilding], which heads that filter's
+  /// single group. Passed in because this view must never watch the building
+  /// scan itself.
+  final String? buildingLabel;
+
   @override
   ConsumerState<ClientsListView> createState() => _ClientsListViewState();
 }
@@ -70,7 +85,8 @@ class ClientsListView extends ConsumerStatefulWidget {
 class _ClientsListViewState extends ConsumerState<ClientsListView>
     with
         ClientActionsHost<ClientsListView>,
-        DebouncedPagedSearch<ClientsListView> {
+        DebouncedPagedSearch<ClientsListView>,
+        PagedSliverPrefetch<ClientsListView> {
   static const int _pageSize = 50;
 
   @override
@@ -252,20 +268,38 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   // its child for intrinsic dimensions — so this one can neither scroll (a
   // nested ListView throws) nor measure (LayoutBuilder can't report intrinsics
   // either).
-  Widget _skeleton() => const SkeletonList(rows: _skeletonMaxRows);
+  Widget _skeleton() => _carded(const SkeletonList(rows: _skeletonMaxRows));
+
+  // Grouped, the settled rows arrive inside a card — so the skeleton sits in
+  // one too, or the list jumps when the first page lands.
+  Widget _carded(Widget child) {
+    if (!widget.grouped) return child;
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sp12),
+      child: DecoratedBox(
+        decoration: appCardDecoration(theme, color: theme.colorScheme.surface),
+        child: child,
+      ),
+    );
+  }
 
   // The search and type paths instead hand the skeleton the whole body of a
   // tight Expanded, which the keyboard shortens well below four rows' worth —
   // no sliver above it here, so the row count can follow the height.
   Widget _fittedSkeleton() => LayoutBuilder(
     builder: (context, constraints) => ClipRect(
-      child: SkeletonList(
-        rows: constraints.maxHeight.isFinite
-            ? ((constraints.maxHeight - AppSpacing.sp16 * 2 + AppSpacing.sp8) /
-                      (_skeletonRowExtent + AppSpacing.sp8))
-                  .floor()
-                  .clamp(1, _skeletonMaxRows)
-            : _skeletonMaxRows,
+      child: _carded(
+        SkeletonList(
+          rows: constraints.maxHeight.isFinite
+              ? ((constraints.maxHeight -
+                            AppSpacing.sp16 * 2 +
+                            AppSpacing.sp8) /
+                        (_skeletonRowExtent + AppSpacing.sp8))
+                    .floor()
+                    .clamp(1, _skeletonMaxRows)
+              : _skeletonMaxRows,
+        ),
       ),
     ),
   );
@@ -452,8 +486,45 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
         : context.l10n.common_tryADifferentSearchTerm,
   );
 
+  // The groups as rendered, memoized on the list identity plus the inputs that
+  // change the shape — this view rebuilds on every keystroke.
+  List<ClientRecord>? _groupedSource;
+  ClientsSort? _groupedSort;
+  ClientsFilter? _groupedFilter;
+  String? _groupedQuery;
+  List<ClientGroup> _groups = const [];
+
+  List<ClientGroup> _groupsFor(List<ClientRecord> items) {
+    final query = widget.searchQuery.trim();
+    if (identical(items, _groupedSource) &&
+        widget.sort == _groupedSort &&
+        widget.filter == _groupedFilter &&
+        query == _groupedQuery) {
+      return _groups;
+    }
+    _groupedSource = items;
+    _groupedSort = widget.sort;
+    _groupedFilter = widget.filter;
+    _groupedQuery = query;
+    if (widget.filter is ClientsFilterBuilding) {
+      return _groups = singleGroupOf(items, heading: widget.buildingLabel);
+    }
+    // Search results are relevance-ranked, not alphabetical, so letters over
+    // them would head runs that are not runs.
+    if (query.isNotEmpty || widget.sort != ClientsSort.name) {
+      return _groups = singleGroupOf(items);
+    }
+    return _groups = letterGroupsOf(items);
+  }
+
   Widget _resultsList(List<ClientRecord> items) {
     _reportCount(items.length);
+    if (widget.grouped) {
+      return ClientsSliverList(
+        groups: _groupsFor(items),
+        itemBuilder: (context, index) => _clientTile(items[index], index),
+      );
+    }
     return ListView.separated(
       padding: const EdgeInsets.only(bottom: AppSpacing.sp16),
       itemCount: items.length,
@@ -495,29 +566,64 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
 
     return RefreshIndicator.adaptive(
       onRefresh: () async => _pagingController.refresh(),
-      child: PagingListener<int, ClientRecord>(
-        controller: _pagingController,
-        builder: (context, state, fetchNextPage) {
-          _reportCount(state.items?.length ?? 0);
-          return PagedListView<int, ClientRecord>.separated(
-            state: state,
-            fetchNextPage: fetchNextPage,
-            padding: const EdgeInsets.only(bottom: AppSpacing.sp16),
-            separatorBuilder: (context, index) =>
-                const Divider(height: 1, indent: 64),
-            builderDelegate: PagedChildBuilderDelegate<ClientRecord>(
-              itemBuilder: (context, client, index) =>
-                  _clientTile(client, index),
-              firstPageProgressIndicatorBuilder: (_) => _skeleton(),
-              firstPageErrorIndicatorBuilder: (_) => _errorState(
-                state.error ?? Exception('clients page load failed'),
-                onRetry: _pagingController.refresh,
-              ),
-              noItemsFoundIndicatorBuilder: (_) => _emptyState(query: ''),
-            ),
-          );
-        },
-      ),
+      child: widget.grouped ? _groupedPagedList() : _pagedList(),
     );
   }
+
+  // Grouped, the cards and their headings are slivers, which PagedListView
+  // cannot host — so this drives the pager itself, the way the History view
+  // does for its sticky month bars.
+  Widget _groupedPagedList() => PagingListener<int, ClientRecord>(
+    controller: _pagingController,
+    builder: (context, state, fetchNextPage) {
+      final loaded = state.items ?? const <ClientRecord>[];
+      _reportCount(loaded.length);
+      if (loaded.isEmpty) {
+        if (state.status == PagingStatus.loadingFirstPage) {
+          requestFirstPage(state, fetchNextPage);
+        }
+        return switch (state.status) {
+          PagingStatus.loadingFirstPage => _skeleton(),
+          PagingStatus.firstPageError => _errorState(
+            state.error ?? Exception('clients page load failed'),
+            onRetry: _pagingController.refresh,
+          ),
+          _ => _emptyState(query: ''),
+        };
+      }
+      return ClientsSliverList(
+        groups: _groupsFor(loaded),
+        itemBuilder: (context, index) => _clientTile(loaded[index], index),
+        footer: PagedListFooter<int, ClientRecord>(
+          state: state,
+          onRetry: fetchNextPage,
+        ),
+        onRowBuilt: (index) =>
+            maybeFetchNext(state, fetchNextPage, index, loaded.length),
+      );
+    },
+  );
+
+  Widget _pagedList() => PagingListener<int, ClientRecord>(
+    controller: _pagingController,
+    builder: (context, state, fetchNextPage) {
+      _reportCount(state.items?.length ?? 0);
+      return PagedListView<int, ClientRecord>.separated(
+        state: state,
+        fetchNextPage: fetchNextPage,
+        padding: const EdgeInsets.only(bottom: AppSpacing.sp16),
+        separatorBuilder: (context, index) =>
+            const Divider(height: 1, indent: 64),
+        builderDelegate: PagedChildBuilderDelegate<ClientRecord>(
+          itemBuilder: (context, client, index) => _clientTile(client, index),
+          firstPageProgressIndicatorBuilder: (_) => _skeleton(),
+          firstPageErrorIndicatorBuilder: (_) => _errorState(
+            state.error ?? Exception('clients page load failed'),
+            onRetry: _pagingController.refresh,
+          ),
+          noItemsFoundIndicatorBuilder: (_) => _emptyState(query: ''),
+        ),
+      );
+    },
+  );
 }
