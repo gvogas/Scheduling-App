@@ -75,16 +75,32 @@ iOS notes (Phase 0 of clean-architecture restructure):
   `$(PRODUCT_MODULE_NAME).` prefix (`$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate`)
   — a bare Swift class name doesn't resolve from a plist, and the failure is
   silent: the scene simply never connects, with nothing logged.
-  - **The Apple grant is not the signing gate — the provisioning profile is.**
-    Apple granted `com.apple.developer.carplay-driving-task` for
-    `net.vogas.scheduling` on 2026-09-09, but `ios/Runner/RunnerCarPlay.entitlements`
-    still exists as a separate file and all three Runner build configs still
-    sign with `Runner/Runner.entitlements` (no CarPlay key in it). The trigger
-    for collapsing that scheme was never the grant itself: enable the
-    capability on the App ID in the Developer portal, refresh the provisioning
-    profiles, confirm a normal Release build still signs — only THEN move the
-    key into `Runner.entitlements` and delete `RunnerCarPlay.entitlements`.
-    Doing it in the other order breaks every App Store build's code signing.
+  - **The entitlement now lives in `Runner.entitlements`, and the two-file
+    gating scheme is RETIRED** (2026-09-10). The capability was enabled on the
+    `net.vogas.scheduling` App ID, Xcode regenerated the profiles, a device
+    build signed against "iOS Team Provisioning Profile: net.vogas.scheduling"
+    carrying the key, and `RunnerCarPlay.entitlements` was deleted.
+    **Under AUTOMATIC signing the documented order is impossible**: Xcode only
+    requests an entitlement it can already see in the entitlements file, so
+    "refresh profiles, then move the key" deadlocks. The order that works is
+    App ID capability → move the key → build to a device with
+    `-allowProvisioningUpdates`. Still unproven: **distribution** signing —
+    the Mac this ran on holds only an Apple Development certificate, so
+    archive once before shipping.
+  - **Simulator CarPlay needs no Apple grant, and you must NOT hand-sign the
+    entitlement in.** `codesign --entitlements` over a built simulator app to
+    add the CarPlay key makes SpringBoard refuse the launch outright
+    (`SBMainWorkspace` denial); it is that one key, with app-groups and
+    get-task-allow launching fine alone. Build against the entitlements file
+    instead. The `Info.plist` scene manifest is what registers the app on the
+    CarPlay dashboard.
+  - **Row anatomy is role-symmetric except the avatar** (2026-09-10). Both
+    roles lead the row text with the 12-hour time; only an ADMIN gets an image
+    (the crew avatar). The technician time tile was deleted — the time moved
+    into the text, so a tile would repeat it. An all-day block shows NO clock
+    time anywhere (its start is midnight): `CarPlayStrings.startedAt` returns
+    `String?` so the Now header cannot say "Started 12:00 AM", and the
+    detail's When row drops any tail that would only name the start time.
   - **CarPlay reads the App Group `schedule_snapshot`, never the Flutter
     engine.** It must render with no engine, no Firestore and no network —
     that absence of a live dependency is what makes it safe to add to a

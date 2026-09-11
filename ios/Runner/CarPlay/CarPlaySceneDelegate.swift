@@ -211,16 +211,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
                 self.present(self.failureAlert(CarPlayStrings.couldNotUpdateJob))
                 return
             }
-            self.popToRoot { [weak self] in
-                // Only the completed job hands the driver the next one.
-                guard let self, status == "done" else { return }
-                self.present(
-                    CarPlayTemplateBuilder.handoffAlert(
-                        after: appointment,
-                        snapshot: self.store.snapshot,
-                        now: Date(),
-                        actions: self.actions()))
-            }
+            self.popToRoot()
         }
     }
 
@@ -275,16 +266,12 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         }
     }
 
-    private func popToRoot(then work: @escaping () -> Void) {
-        guard let interfaceController else {
-            work()
-            return
-        }
+    private func popToRoot() {
+        detail = nil
+        guard let interfaceController else { return }
         interfaceController.popToRootTemplate(animated: true) {
             [weak self] _, _ in
-            self?.detail = nil
             self?.rebuild()
-            work()
         }
     }
 

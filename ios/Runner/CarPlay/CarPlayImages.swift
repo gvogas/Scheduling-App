@@ -73,33 +73,6 @@ enum CarPlayImages {
 
     // MARK: - Time tile (technician rows)
 
-    /// The start time in a rounded square, tinted by the job's clock state.
-    static func timeTile(
-        _ text: String,
-        state: CarPlayJobState,
-        style: UIUserInterfaceStyle
-    ) -> UIImage {
-        let size = slotSize
-        let key = """
-        tile|\(text)|\(state.rawValue)|\(style.rawValue)\
-        |\(size.width)x\(size.height)
-        """
-        if let hit = cache[key] { return hit }
-        let tint = stateColor(state, style: style)
-        let tile = render(size: size) {
-            let box = CGRect(origin: .zero, size: size).insetBy(dx: 1, dy: 5)
-            tint.withAlphaComponent(0.18).setFill()
-            UIBezierPath(roundedRect: box, cornerRadius: 8).fill()
-            draw(
-                text: text,
-                in: box,
-                color: tint,
-                maxFontSize: 15,
-                weight: .semibold)
-        }
-        remember(key, tile)
-        return tile
-    }
 
     // MARK: - State accessory
 

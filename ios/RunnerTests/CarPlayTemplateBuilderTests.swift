@@ -159,7 +159,9 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
             actions: CarPlayActions())
 
         XCTAssertEqual(template.sections.count, 1)
-        XCTAssertEqual(template.sections[0].header, CarPlayStrings.nextSection)
+        XCTAssertTrue(
+            template.sections[0].header?
+                .hasPrefix(CarPlayStrings.nextSection) == true)
     }
 
     // MARK: - Header subtitles
@@ -181,8 +183,11 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
             actions: CarPlayActions())
 
         XCTAssertEqual(
-            template.sections.map(\.headerSubtitle),
-            ["Started 10:00", "Overdue by 57 min", "2 more jobs · 1 done"])
+            template.sections.map(\.header),
+            [
+                "Now · Started 10:00 AM", "Next · Overdue by 57 min",
+                "Later today · 2 more jobs · 1 done",
+            ])
     }
 
     func testNextSubtitleCountsDownToAFutureJob() throws {
@@ -195,7 +200,7 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
             presentation: CarPlayPresentation(),
             actions: CarPlayActions())
 
-        XCTAssertEqual(template.sections[0].headerSubtitle, "Starts in 18 min")
+        XCTAssertEqual(template.sections[0].header, "Next · Starts in 18 min")
     }
 
     func testTwoOnSiteCollapsesTheNowSubtitle() throws {
@@ -211,7 +216,25 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
             presentation: CarPlayPresentation(),
             actions: CarPlayActions())
 
-        XCTAssertEqual(template.sections[0].headerSubtitle, "2 on site")
+        XCTAssertEqual(template.sections[0].header, "Now · 2 on site")
+    }
+
+    func testAnAllDayJobInProgressGetsNoStartedTime() throws {
+        try XCTSkipIf(CarPlayStrings.french, "English phrasing under test")
+        let template = CarPlayTemplateBuilder.todayTemplate(
+            snapshot: snapshot(days: [
+                day(10, [
+                    job(
+                        id: "ad", from: (0, 0), to: (23, 59),
+                        status: "in_progress", allDay: true),
+                ]),
+            ]),
+            now: now,
+            presentation: CarPlayPresentation(),
+            actions: CarPlayActions())
+
+        // Midnight is not a start time anybody drove to.
+        XCTAssertEqual(template.sections[0].header, CarPlayStrings.nowSection)
     }
 
     // MARK: - Week tab
@@ -232,10 +255,12 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
             presentation: CarPlayPresentation(),
             actions: CarPlayActions())
 
-        XCTAssertEqual(template.sections.map(\.header), ["Tomorrow", "Monday"])
         XCTAssertEqual(
-            template.sections.map(\.headerSubtitle),
-            ["Friday 11 September · 1 job", "14 September · 2 jobs"])
+            template.sections.map(\.header),
+            [
+                "Tomorrow · Friday 11 September · 1 job",
+                "Monday · 14 September · 2 jobs",
+            ])
         XCTAssertEqual(rows(template.sections[1]).count, 2)
     }
 
@@ -259,9 +284,11 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
             actions: CarPlayActions())
 
         XCTAssertEqual(template.sections.count, 1)
-        XCTAssertEqual(rows(template.sections[0]).map(\.text), ["Tremblay"])
+        XCTAssertEqual(
+            rows(template.sections[0]).map(\.text),
+            ["\(CarPlayStrings.time(job(id: "open", day: 11, from: (9, 0), to: (10, 0)).start))  Tremblay"])
         XCTAssertTrue(
-            template.sections[0].headerSubtitle?
+            template.sections[0].header?
                 .hasSuffix(CarPlayStrings.jobCount(1)) == true)
     }
 
@@ -287,9 +314,10 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
         XCTAssertEqual(
             drawn.reduce(0, +), CarPlayTemplateBuilder.maxRowsPerTemplate)
         // The header may never claim more jobs than the rows below it.
-        XCTAssertEqual(
-            sections[2].headerSubtitle,
-            CarPlayStrings.laterSubtitle(more: 9, done: 0))
+        XCTAssertTrue(
+            sections[2].header?
+                .hasSuffix(CarPlayStrings.laterSubtitle(more: 9, done: 0))
+                == true)
     }
 
     func testWeekSpendsTheSameBudgetAndItsDayCountsMatchItsRows() {
@@ -314,13 +342,13 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
             sections.map { rows($0).count }.reduce(0, +),
             CarPlayTemplateBuilder.maxRowsPerTemplate)
         XCTAssertTrue(
-            sections[2].headerSubtitle?
+            sections[2].header?
                 .hasSuffix(CarPlayStrings.jobCount(2)) == true)
     }
 
     // MARK: - Rows
 
-    func testAdminRowLeadsWithTheTimeAndTechnicianRowDoesNot() {
+    func testBothRolesLeadWithTheTimeAndOnlyAdminDrawsAnImage() {
         let assigned = job(
             id: "a", from: (8, 0), to: (9, 0),
             crew: [SnapshotCrewMember(name: "Luc Bergeron", colorValue: 0xFF00_5CC8)])
@@ -338,10 +366,11 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
             presentation: CarPlayPresentation(),
             actions: CarPlayActions())
 
-        XCTAssertEqual(adminRow.text, "\(CarPlayStrings.time(assigned.start))  Tremblay")
-        XCTAssertEqual(technicianRow.text, "Tremblay")
+        XCTAssertEqual(
+            adminRow.text, "\(CarPlayStrings.time(assigned.start))  Tremblay")
+        XCTAssertEqual(technicianRow.text, adminRow.text)
         XCTAssertEqual(adminRow.image?.size, CarPlayImages.slotSize)
-        XCTAssertEqual(technicianRow.image?.size, CarPlayImages.slotSize)
+        XCTAssertNil(technicianRow.image)
     }
 
     func testAdminRowHasNoImageWithoutCrew() {
@@ -439,13 +468,48 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
             adminItems,
             [
                 CarPlayStrings.whenLabel, CarPlayStrings.whereLabel,
-                CarPlayStrings.jobLabel, CarPlayStrings.crewLabel,
-                CarPlayStrings.statusLabel,
+                CarPlayStrings.crewLabel,
             ])
         XCTAssertFalse(technicianItems.contains(CarPlayStrings.crewLabel))
     }
 
-    func testStatusRowReadsTheLadderWhileTheButtonReadsTheStoredStatus() {
+    func testWhenRowDropsAStartTimeTheRangeAlreadyShows() throws {
+        try XCTSkipIf(CarPlayStrings.french, "English phrasing under test")
+        let whenRow: (SnapshotAppointment) -> String? = { appointment in
+            CarPlayTemplateBuilder.detailTemplate(
+                for: appointment,
+                snapshot: self.snapshot(days: []),
+                now: self.now,
+                presentation: CarPlayPresentation(),
+                dialableURI: nil,
+                actions: CarPlayActions()
+            ).items.first { $0.title == CarPlayStrings.whenLabel }?.detail
+        }
+
+        let far = try XCTUnwrap(whenRow(job(id: "far", from: (16, 0), to: (17, 0))))
+        XCTAssertFalse(far.contains("Starts at"))
+
+        let soon = try XCTUnwrap(
+            whenRow(job(id: "soon", from: (10, 30), to: (11, 30))))
+        XCTAssertTrue(soon.hasSuffix("Starts in 18 min"))
+
+        // Today's all-day block is genuinely "Due now", so it keeps a tail.
+        let allDayToday = try XCTUnwrap(
+            whenRow(job(id: "all", from: (0, 0), to: (23, 59), allDay: true)))
+        XCTAssertTrue(allDayToday.contains("·"))
+
+        // A FUTURE all-day block starts at midnight, so a start-time tail
+        // would read "Starts at 12:00 AM" — a time it does not have.
+        let allDayLater = try XCTUnwrap(
+            whenRow(
+                job(
+                    id: "later", day: 14, from: (0, 0), to: (23, 59),
+                    allDay: true)))
+        XCTAssertFalse(allDayLater.contains("Starts at"))
+        XCTAssertFalse(allDayLater.contains("AM"))
+    }
+
+    func testTheButtonReadsTheStoredStatusNotTheDisplayLadder() {
         let late = job(id: "a", from: (9, 15), to: (9, 15))
         let template = CarPlayTemplateBuilder.detailTemplate(
             for: late,
@@ -455,10 +519,6 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
             dialableURI: nil,
             actions: CarPlayActions())
 
-        let status = template.items.first {
-            $0.title == CarPlayStrings.statusLabel
-        }
-        XCTAssertEqual(status?.detail, CarPlayStrings.stateWord(.overdue))
         XCTAssertTrue(
             template.actions.contains { $0.title == CarPlayStrings.startJob })
     }
@@ -557,7 +617,7 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
             presentation: CarPlayPresentation(), actions: CarPlayActions())
 
         XCTAssertEqual(
-            template.emptyViewSubtitleVariants, ["Next: Monday 14 September 8:00, Lachance"])
+            template.emptyViewSubtitleVariants, ["Next: Monday 14 September 8:00 AM, Lachance"])
     }
 
     func testSignedOutShowsTheSameMessageOnBothTabs() {
@@ -584,55 +644,6 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
         XCTAssertEqual(root.templates.count, 2)
         XCTAssertEqual(root.templates.first?.tabTitle, CarPlayStrings.todayTab)
         XCTAssertEqual(root.templates.last?.tabTitle, CarPlayStrings.weekTab)
-    }
-
-    // MARK: - Mark-complete hand-off
-
-    func testHandoffAlertNamesTheNextJobAndOffersDirections() {
-        let completed = job(id: "a", from: (9, 0), to: (10, 0), status: "in_progress")
-        let alert = CarPlayTemplateBuilder.handoffAlert(
-            after: completed,
-            snapshot: snapshot(days: [
-                day(10, [
-                    completed,
-                    job(id: "b", from: (13, 30), to: (14, 30),
-                        client: "Pelletier", address: "1290 Rue Saint-Jean"),
-                ]),
-            ]),
-            now: now,
-            actions: CarPlayActions())
-
-        XCTAssertTrue(alert.titleVariants[0].contains("Pelletier"))
-        XCTAssertEqual(
-            alert.actions.map(\.title),
-            [CarPlayStrings.directions, CarPlayStrings.done])
-    }
-
-    func testHandoffAlertWithNoNextJobOffersOnlyDone() {
-        let completed = job(id: "a", from: (9, 0), to: (10, 0), status: "in_progress")
-        let alert = CarPlayTemplateBuilder.handoffAlert(
-            after: completed,
-            snapshot: snapshot(days: [day(10, [completed])]),
-            now: now,
-            actions: CarPlayActions())
-
-        XCTAssertEqual(alert.actions.map(\.title), [CarPlayStrings.done])
-    }
-
-    func testHandoffAlertOmitsDirectionsForAnAddresslessNextJob() {
-        let completed = job(id: "a", from: (9, 0), to: (10, 0), status: "in_progress")
-        let alert = CarPlayTemplateBuilder.handoffAlert(
-            after: completed,
-            snapshot: snapshot(days: [
-                day(10, [
-                    completed,
-                    job(id: "b", from: (13, 30), to: (14, 30), address: ""),
-                ]),
-            ]),
-            now: now,
-            actions: CarPlayActions())
-
-        XCTAssertEqual(alert.actions.map(\.title), [CarPlayStrings.done])
     }
 
     // MARK: - The status ladder
@@ -879,25 +890,25 @@ final class CarPlayTemplateBuilderTests: XCTestCase {
         XCTAssertFalse(installed[0] === template.sections[0])
     }
 
-    func testTheRenderKeySeesWhatOnlyTheTILEDraws() {
-        // A technician row's start time lives in the tile, not in either
-        // string. These two Later sections agree on every header, every row
-        // title and every second line — only the tile differs.
-        let fixed = [
-            job(id: "on", from: (9, 0), to: (12, 0), status: "in_progress"),
-            job(id: "next", from: (13, 0), to: (14, 0)),
-        ]
+    func testTheRenderKeySeesWhatOnlyTheAVATARDraws() {
+        // An admin row's crew lives in the avatar, not in either string. These
+        // two sections agree on every header and every row title — only the
+        // crew differs, and the key must still notice.
         let look = CarPlayPresentation()
-        let before = CarPlayTemplateBuilder.todaySections(
-            snapshot: snapshot(days: [
-                day(10, fixed + [job(id: "l", from: (16, 30), to: (17, 30))]),
-            ]),
-            now: now, presentation: look, actions: CarPlayActions())
-        let after = CarPlayTemplateBuilder.todaySections(
-            snapshot: snapshot(days: [
-                day(10, fixed + [job(id: "l", from: (17, 30), to: (18, 30))]),
-            ]),
-            now: now, presentation: look, actions: CarPlayActions())
+        let build: ([SnapshotCrewMember]) -> [CPListSection] = { crew in
+            CarPlayTemplateBuilder.todaySections(
+                snapshot: self.snapshot(role: "admin", days: [
+                    self.day(10, [
+                        self.job(
+                            id: "a", from: (13, 0), to: (14, 0), crew: crew),
+                    ]),
+                ]),
+                now: self.now, presentation: look, actions: CarPlayActions())
+        }
+        let before = build(
+            [SnapshotCrewMember(name: "Luc Bergeron", colorValue: 0xFF00_5CC8)])
+        let after = build(
+            [SnapshotCrewMember(name: "Marie Côté", colorValue: 0xFF00_5CC8)])
 
         XCTAssertEqual(describe(before), describe(after))
         XCTAssertNotEqual(

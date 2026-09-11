@@ -19,9 +19,10 @@ code; it increments by one on every store upload regardless of the semver part.
   on-device schedule the Siri shortcuts already use, so it still shows
   your jobs with no signal; marking a job started or complete, and
   calling the client, work from the car too once the phone app is
-  reachable. Not yet visible on any device — Apple's CarPlay entitlement
-  still has to reach the App Store provisioning profile before this ships
-  to a build.
+  reachable. Times read in 12-hour form, finishing a job returns straight
+  to the list, and the job screen shows only when, where and the crew.
+  Not yet visible on any device — Apple's CarPlay entitlement reaches the
+  development profile but has not been proved on an App Store one.
 
 ## [1.59.0+88] - 2026-09-07
 

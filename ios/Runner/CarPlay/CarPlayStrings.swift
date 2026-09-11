@@ -7,8 +7,7 @@
 // the app's own language switch (`AppLanguageController`), which a user can set
 // to French on an English-region phone.
 //
-// Times are 24-hour in BOTH locales, unlike SiriStrings' spoken "h:mm a" —
-// the row's image slot is small, which fits "13:30" and not "10:00 AM".
+// Times are 12-hour in BOTH locales (owner call, 2026-09-10).
 //
 // This file is compiled only on macOS/Xcode.
 
@@ -35,7 +34,15 @@ enum CarPlayStrings {
 
     // MARK: - Formatting
 
-    static func time(_ date: Date) -> String { format(date, "H:mm") }
+    /// Pinned AM/PM symbols: `en_CA` renders "a.m." and `fr_CA` "AM" by default.
+    static func time(_ date: Date) -> String {
+        let fmt = DateFormatter()
+        fmt.locale = locale
+        fmt.dateFormat = "h:mm a"
+        fmt.amSymbol = "AM"
+        fmt.pmSymbol = "PM"
+        return fmt.string(from: date)
+    }
 
     static func weekday(_ date: Date) -> String {
         capitalizedFirst(format(date, "EEEE"))
@@ -102,8 +109,12 @@ enum CarPlayStrings {
     }
     static var tomorrowSection: String { french ? "Demain" : "Tomorrow" }
 
-    static func startedAt(_ date: Date) -> String {
-        french ? "Débuté à \(time(date))" : "Started \(time(date))"
+    /// Nil for an all-day block: it starts at midnight, so "Started 12:00 AM"
+    /// names a time it does not have.
+    static func startedAt(_ appointment: SnapshotAppointment) -> String? {
+        guard !appointment.allDay else { return nil }
+        let clock = time(appointment.start)
+        return french ? "Débuté à \(clock)" : "Started \(clock)"
     }
 
     static func onSite(_ count: Int) -> String {
@@ -112,10 +123,13 @@ enum CarPlayStrings {
 
     /// The Next header's countdown, and the detail screen's When tail. One
     /// owner so the two can never disagree about how late a job is.
+    /// Under this, the tail counts down; at or over it, it names the clock time.
+    static let nearTermWindow: TimeInterval = 3600
+
     static func countdown(start: Date, end: Date, now: Date) -> String {
         if now < start {
             let minutes = Int((start.timeIntervalSince(now) / 60).rounded())
-            if minutes < 60 {
+            if start.timeIntervalSince(now) < nearTermWindow {
                 return french
                     ? "Débute dans \(minutesPhrase(minutes))"
                     : "Starts in \(minutesPhrase(minutes))"
@@ -155,21 +169,9 @@ enum CarPlayStrings {
         return "\(when) · \(jobCount(count))"
     }
 
-    /// What the technician's time tile says for an all-day block, which has
-    /// no clock time to draw and ~44 pt to draw it in.
-    static var allDayTile: String { "24 h" }
 
     // MARK: - Row and state vocabulary
 
-    static func stateWord(_ state: CarPlayJobState) -> String {
-        switch state {
-        case .overdue: return french ? "En retard" : "Overdue"
-        case .inProgress: return french ? "En cours" : "In progress"
-        case .scheduled: return french ? "Prévu" : "Scheduled"
-        case .done: return french ? "Terminé" : "Done"
-        case .cancelled: return french ? "Annulé" : "Cancelled"
-        }
-    }
 
     /// Who a row is named after: the client, then the job title, then a
     /// generic label. Mirrors `SiriStrings.who`, capitalized for display.
@@ -187,6 +189,17 @@ enum CarPlayStrings {
 
     /// Line two: the job title, then the address, which truncates from the
     /// right. An empty title lets the address take the line.
+    /// The detail heading: client then job title when BOTH exist, since `who`
+    /// already falls back to whichever one is present.
+    static func detailTitle(_ appointment: SnapshotAppointment) -> String {
+        let title = (appointment.title ?? "")
+            .trimmingCharacters(in: .whitespaces)
+        let client = appointment.clientName
+            .trimmingCharacters(in: .whitespaces)
+        guard !client.isEmpty, !title.isEmpty else { return who(appointment) }
+        return "\(client) · \(title)"
+    }
+
     static func detailLine(_ appointment: SnapshotAppointment) -> String? {
         let title = (appointment.title ?? "")
             .trimmingCharacters(in: .whitespaces)
@@ -205,7 +218,9 @@ enum CarPlayStrings {
 
     /// Admin line one — the time and the client, since the image slot is
     /// spent on the crew avatar and the time cannot be styled separately.
-    static func adminRowTitle(_ appointment: SnapshotAppointment) -> String {
+    /// Both roles lead the row with the time (decision 22). An all-day block
+    /// has no clock time to lead with.
+    static func rowTitle(_ appointment: SnapshotAppointment) -> String {
         appointment.allDay
             ? who(appointment)
             : "\(time(appointment.start))  \(who(appointment))"
@@ -215,15 +230,19 @@ enum CarPlayStrings {
 
     static var whenLabel: String { french ? "Quand" : "When" }
     static var whereLabel: String { french ? "Adresse" : "Where" }
-    static var jobLabel: String { french ? "Travail" : "Job" }
     static var crewLabel: String { french ? "Équipe" : "Crew" }
-    static var statusLabel: String { french ? "Statut" : "Status" }
 
     static func whenValue(_ appointment: SnapshotAppointment, now: Date) -> String {
         let day = relativeDay(appointment.start)
         let clock = appointment.allDay
             ? (french ? "toute la journée" : "all day")
             : "\(time(appointment.start)) – \(time(appointment.end))"
+        // A far-off job's tail is only its start time: redundant beside a range
+        // that already shows it, and meaningless on an all-day block, whose
+        // start is midnight.
+        let namesOnlyTheStartTime = appointment.start > now
+            && appointment.start.timeIntervalSince(now) >= nearTermWindow
+        guard !namesOnlyTheStartTime else { return "\(day), \(clock)" }
         let tail = countdown(
             start: appointment.start, end: appointment.end, now: now)
         return "\(day), \(clock) · \(tail)"
@@ -239,7 +258,6 @@ enum CarPlayStrings {
     static var startJob: String { french ? "Démarrer" : "Start job" }
     static var markComplete: String { french ? "Terminer" : "Mark complete" }
     static var call: String { french ? "Appeler" : "Call" }
-    static var done: String { french ? "OK" : "Done" }
 
     // MARK: - Empty views
 
@@ -304,32 +322,4 @@ enum CarPlayStrings {
 
     static var okAction: String { "OK" }
 
-    // MARK: - Mark-complete hand-off
-
-    static func completedTitle(_ appointment: SnapshotAppointment) -> String {
-        french
-            ? "\(who(appointment)) : travail terminé"
-            : "\(who(appointment)) marked complete"
-    }
-
-    static func nextJobLine(_ appointment: SnapshotAppointment) -> String {
-        let when = appointment.allDay
-            ? (french ? "toute la journée" : "all day")
-            : (french
-                ? "à \(time(appointment.start))"
-                : "at \(time(appointment.start))")
-        var line = french
-            ? "Prochain : \(who(appointment)) \(when)"
-            : "Next: \(who(appointment)) \(when)"
-        let address = appointment.address
-            .trimmingCharacters(in: .whitespaces)
-        if !address.isEmpty { line += " — \(address)" }
-        return line
-    }
-
-    static var noMoreJobsToday: String {
-        french
-            ? "Plus aucun travail aujourd'hui."
-            : "No more jobs today."
-    }
 }

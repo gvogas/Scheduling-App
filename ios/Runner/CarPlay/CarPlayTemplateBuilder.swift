@@ -252,7 +252,7 @@ enum CarPlayTemplateBuilder {
         let started = fit(ranking.inProgress, into: &budget)
         if !started.isEmpty {
             let subtitle = started.count == 1
-                ? CarPlayStrings.startedAt(started[0].start)
+                ? CarPlayStrings.startedAt(started[0])
                 : CarPlayStrings.onSite(started.count)
             sections.append(
                 section(
@@ -389,8 +389,6 @@ enum CarPlayTemplateBuilder {
         actions: CarPlayActions
     ) -> CPInformationTemplate {
         let address = appointment.address.trimmingCharacters(in: .whitespaces)
-        let title = (appointment.title ?? "")
-            .trimmingCharacters(in: .whitespaces)
         let crew = appointment.crew ?? []
 
         var items: [CPInformationItem] = [
@@ -403,23 +401,12 @@ enum CarPlayTemplateBuilder {
                 CPInformationItem(
                     title: CarPlayStrings.whereLabel, detail: address))
         }
-        if !title.isEmpty {
-            items.append(
-                CPInformationItem(
-                    title: CarPlayStrings.jobLabel, detail: title))
-        }
         if snapshot?.isAdmin == true, !crew.isEmpty {
             items.append(
                 CPInformationItem(
                     title: CarPlayStrings.crewLabel,
                     detail: CarPlayStrings.crewValue(crew)))
         }
-        items.append(
-            CPInformationItem(
-                title: CarPlayStrings.statusLabel,
-                detail: CarPlayStrings.stateWord(
-                    displayState(appointment, now: now))))
-
         var buttons: [CPTextButton] = []
         if !address.isEmpty {
             buttons.append(
@@ -454,51 +441,10 @@ enum CarPlayTemplateBuilder {
         }
 
         return CPInformationTemplate(
-            title: CarPlayStrings.who(appointment),
+            title: CarPlayStrings.detailTitle(appointment),
             layout: .leading,
             items: items,
             actions: buttons)
-    }
-
-    // MARK: - Mark-complete hand-off
-
-    /// Named the next job, because the completed one leaves the list the
-    /// moment it is written. Modal, so it costs no template depth.
-    static func handoffAlert(
-        after completed: SnapshotAppointment,
-        snapshot: ScheduleSnapshot?,
-        now: Date,
-        actions: CarPlayActions
-    ) -> CPAlertTemplate {
-        let ranking = rankToday(today(in: snapshot, at: now), now: now)
-        // The job to DRIVE to next: the earliest nobody has started, then the
-        // rest of the day, and only then something already under way.
-        let upcoming = [ranking.next].compactMap { $0 } + ranking.later
-            + ranking.inProgress
-        let next = upcoming.first { $0.id != completed.id }
-        let headline = CarPlayStrings.completedTitle(completed)
-
-        let variants: [String]
-        var alertActions: [CPAlertAction] = []
-        if let next {
-            let line = CarPlayStrings.nextJobLine(next)
-            variants = ["\(headline). \(line)", line]
-            if !next.address.trimmingCharacters(in: .whitespaces).isEmpty {
-                alertActions.append(
-                    CPAlertAction(
-                        title: CarPlayStrings.directions, style: .default
-                    ) { _ in actions.directions(next) })
-            }
-        } else {
-            variants = [
-                "\(headline). \(CarPlayStrings.noMoreJobsToday)", headline,
-            ]
-        }
-        alertActions.append(
-            CPAlertAction(title: CarPlayStrings.done, style: .cancel) { _ in
-                actions.dismissAlert()
-            })
-        return CPAlertTemplate(titleVariants: variants, actions: alertActions)
     }
 
     // MARK: - Rows
@@ -515,13 +461,10 @@ enum CarPlayTemplateBuilder {
         let accessory = CarPlayImages.stateAccessory(
             state, style: presentation.style)
         let item = CPListItem(
-            text: isAdmin
-                ? CarPlayStrings.adminRowTitle(appointment)
-                : CarPlayStrings.who(appointment),
+            text: CarPlayStrings.rowTitle(appointment),
             detailText: CarPlayStrings.detailLine(appointment),
             image: rowImage(
-                appointment, isAdmin: isAdmin, state: state,
-                presentation: presentation),
+                appointment, isAdmin: isAdmin, presentation: presentation),
             accessoryImage: accessory,
             accessoryType: accessory == nil
                 ? .disclosureIndicator : CPListItemAccessoryType.none)
@@ -578,20 +521,14 @@ enum CarPlayTemplateBuilder {
         }.joined(separator: "\u{1D}")
     }
 
+    /// Nil for a technician: the row text leads with the time now, so a tile
+    /// repeating it would be the duplication decision 21 removed elsewhere.
     private static func rowImage(
         _ appointment: SnapshotAppointment,
         isAdmin: Bool,
-        state: CarPlayJobState,
         presentation: CarPlayPresentation
     ) -> UIImage? {
-        guard isAdmin else {
-            return CarPlayImages.timeTile(
-                appointment.allDay
-                    ? CarPlayStrings.allDayTile
-                    : CarPlayStrings.time(appointment.start),
-                state: state,
-                style: presentation.style)
-        }
+        guard isAdmin else { return nil }
         return CarPlayImages.crewAvatar(
             crew: appointment.crew ?? [],
             isOwn: isOwnJob(appointment, viewerName: presentation.viewerName),
@@ -613,13 +550,11 @@ enum CarPlayTemplateBuilder {
                 for: $0, snapshot: snapshot, now: now,
                 presentation: presentation, actions: actions)
         }
+        // The rich initializer (headerSubtitle/image/button) renders a FLOATING
+        // header that a scrolling row card slides under and shows through.
+        let title = subtitle.map { "\(header) · \($0)" } ?? header
         return CPListSection(
-            items: items,
-            header: header,
-            headerSubtitle: subtitle,
-            headerImage: nil,
-            headerButton: nil,
-            sectionIndexTitle: nil)
+            items: items, header: title, sectionIndexTitle: nil)
     }
 
     // MARK: - Empty views
