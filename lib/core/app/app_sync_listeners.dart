@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:scheduling/core/app/carplay_bridge.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/platform/ios_platform.dart';
@@ -36,13 +36,21 @@ class AppSyncListeners {
     _uploadDrain();
   }
 
+  /// Runs [action] to completion, logging a throw under [tag] instead of
+  /// rethrowing, so a chained step still runs and nothing reaches the zone.
+  ///
+  /// [logger] is passed in rather than read here: a step chained after an
+  /// `await` must not touch `ref`.
+  Future<void> _guarded(
+    AppLogger logger,
+    String tag,
+    Future<void> Function() action,
+  ) => Future<void>.sync(action).catchError((Object error, StackTrace stack) {
+    logger.warn(tag, error, stack);
+  });
+
   void _fireAndForget(String tag, Future<void> Function() action) {
-    final logger = ref.read(loggerProvider);
-    unawaited(
-      Future<void>.sync(action).catchError((Object error, StackTrace stack) {
-        logger.warn(tag, error, stack);
-      }),
-    );
+    unawaited(_guarded(ref.read(loggerProvider), tag, action));
   }
 
   void _pushRegistration() {
@@ -92,7 +100,9 @@ class AppSyncListeners {
   /// "no appointments" to someone who has jobs. Both surfaces are off-screen,
   /// so nothing reported it. A stale mirror beats a wrongly-empty one: keeping
   /// the last good payload is the honest degradation while the read is broken.
-  @visibleForTesting
+  ///
+  /// Public because `CarPlayBridge` applies the same rule to the same snapshot
+  /// on connect — a second spelling of it is a second chance to lose a clause.
   static bool isUnsettled(AsyncValue<Object?> next) =>
       next.isLoading || next.hasError;
 
@@ -116,6 +126,15 @@ class AppSyncListeners {
     });
   }
 
+  /// The App Group rewrite and the CarPlay ping are ONE chain, deliberately.
+  ///
+  /// `writeSnapshot`/`clearSnapshot` run synchronously only as far as their
+  /// first `await`, so a ping fired from a second listener on the same
+  /// emission reaches the car BEFORE the file changes: the store re-reads the
+  /// old bytes, sees no change and does not re-render. On sign-out that leaves
+  /// the ex-user's client names and addresses on the car display until CarPlay
+  /// reconnects. Chaining is what makes "after the write LANDED" structural —
+  /// registration order alone would still be two unawaited futures.
   void _snapshotSync() {
     if (!isIosPlatform()) return;
     ref.listen<AsyncValue<Map<String, dynamic>?>>(scheduleSnapshotProvider, (
@@ -123,19 +142,25 @@ class AppSyncListeners {
       next,
     ) {
       if (isUnsettled(next)) return;
+      final logger = ref.read(loggerProvider);
       final payload = next.value;
       final service = ref.read(scheduleSnapshotServiceProvider);
-      if (payload == null) {
-        _fireAndForget(
-          'APP-SYNC snapshot clear failed',
-          service.clearSnapshot,
-        );
-      } else {
-        _fireAndForget(
-          'APP-SYNC snapshot write failed',
-          () => service.writeSnapshot(payload),
-        );
-      }
+      final bridge = ref.read(carPlayBridgeProvider);
+      final (String tag, Future<void> Function() rewrite) = payload == null
+          ? ('APP-SYNC snapshot clear failed', service.clearSnapshot)
+          : (
+              'APP-SYNC snapshot write failed',
+              () => service.writeSnapshot(payload),
+            );
+      unawaited(
+        _guarded(logger, tag, rewrite).then(
+          (_) => _guarded(
+            logger,
+            'APP-SYNC carplay ping failed',
+            bridge.notifySnapshotChanged,
+          ),
+        ),
+      );
     });
   }
 

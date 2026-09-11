@@ -47,6 +47,8 @@
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>FirebaseAutomaticScreenReportingEnabled</key>
+	<false/>
 	<key>FlutterDeepLinkingEnabled</key>
 	<false/>
 	<key>ITSAppUsesNonExemptEncryption</key>
@@ -99,6 +101,17 @@
 					<string>FlutterSceneDelegate</string>
 					<key>UISceneStoryboardFile</key>
 					<string>Main</string>
+				</dict>
+			</array>
+			<key>CPTemplateApplicationSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>CPTemplateApplicationScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>carplay</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
 				</dict>
 			</array>
 		</dict>

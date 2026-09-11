@@ -6,7 +6,10 @@ import UIKit
 @objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
-    registerNativeConfigChannel(messenger: engineBridge.applicationRegistrar.messenger())
+    let messenger = engineBridge.applicationRegistrar.messenger()
+    FlutterMessengers.capture(messenger)
+    registerNativeConfigChannel(messenger: messenger)
+    CarPlayBridge.shared.register(messenger: messenger)
   }
 
   private func registerNativeConfigChannel(messenger: FlutterBinaryMessenger) {
