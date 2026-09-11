@@ -144,11 +144,33 @@ untouched.
   Dynamic Type at the largest setting on the Clients chip row (it scrolls
   horizontally, it must not wrap).
 
-## Out of scope
+### Phase 4 — sheets, forms and dialogs (added 2026-09-11, owner call)
 
-- Any change to filtering logic, the filter sheet, search, sorting or paging.
-- Detail sheets, forms and dialogs — they keep their own headers.
-- A blue brand accent elsewhere (FAB, buttons, selected calendar day) stays.
+Originally out of scope; the owner asked for them in the same programme so
+the app does not end up with two header languages. Same vocabulary as
+Phase 1, applied to the surfaces that open OVER a screen:
+
+1. `SheetHeaderBar` (`shared/widgets/sheets/sheet_header_bar.dart`) — the bar
+   every detail sheet and form sheet uses (appointment details, client
+   details, employee details, add/edit forms, the clients filter sheet, the
+   History year / staff pickers): title in `headlineLarge` on the sheet
+   surface, close and action controls as the same 38 px ghost tiles, no
+   coloured band. Nothing about what the sheets do changes.
+2. `FormSheetFrame` and `AppBottomSheet` — grab handle, top padding and the
+   sheet surface stay; only the header row restyles through step 1.
+3. The **clients filter sheet** keeps its three sections (type, building,
+   archived) and its logic; it takes the ghost header and the same chip
+   styling as the Clients screen so the two read as one control.
+4. `AppDialogFrame` / `ConfirmDialog` — title to `headlineMedium` in ink,
+   buttons unchanged. Only if a dialog carries a coloured title band today;
+   otherwise no change.
+5. Detail sheets keep their body layouts. Do not redesign them here.
+6. Tests: the existing sheet-header widget tests plus an overflow pass at 2×
+   text on `SheetHeaderBar` with a long title and two actions.
+
+Behaviour that stays exactly as it is, in every phase: filtering logic, the
+filter sheet's options, search, sorting, paging, and the blue brand accent
+elsewhere (FAB, buttons, selected calendar day).
 
 ## Notes for the build
 
