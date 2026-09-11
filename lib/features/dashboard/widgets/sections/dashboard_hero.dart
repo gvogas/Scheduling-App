@@ -49,6 +49,7 @@ class DashboardHero extends StatelessWidget {
 
     return Container(
       width: double.infinity,
+      margin: const EdgeInsets.all(AppSpacing.sp16),
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.sp16,
         AppSpacing.sp4,
@@ -56,6 +57,7 @@ class DashboardHero extends StatelessWidget {
         AppSpacing.sp16,
       ),
       decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.r16),
         // Raw `Colors.black` below is not a missing token: it composes a SHADE
         // OF the theme's own primary through `alphaBlend`, so it tracks
         // whatever `scheme.primary` is in either theme.

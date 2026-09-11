@@ -73,6 +73,19 @@ void main() {
     );
   });
 
+  test('the leftover app bar theme carries nothing blue', () {
+    for (final theme in [lightTheme(), darkTheme()]) {
+      final bar = theme.appBarTheme;
+      expect(bar.backgroundColor, theme.scaffoldBackgroundColor);
+      expect(bar.foregroundColor, theme.colorScheme.onSurface);
+      expect(bar.titleTextStyle?.color, theme.colorScheme.onSurface);
+      expect(bar.titleTextStyle?.fontFamily, kFontSans);
+      expect(bar.surfaceTintColor, Colors.transparent);
+      expect(bar.elevation, 0);
+      expect(bar.centerTitle, isFalse);
+    }
+  });
+
   test('primary is the saturated fill blue, accent is the text blue', () {
     expect(lightTheme().colorScheme.primary, AppColors.blue);
     expect(lightTheme().palette.primaryAccent, AppColors.blue);

@@ -39,12 +39,12 @@ class CalendarHeaderBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final surface = theme.scaffoldBackgroundColor;
     final topInset = MediaQuery.paddingOf(context).top;
 
     // No AppBar means nothing sets the system overlay style for this screen.
     final overlay =
-        ThemeData.estimateBrightnessForColor(scheme.surface) == Brightness.dark
+        ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
         ? SystemUiOverlayStyle.light
         : SystemUiOverlayStyle.dark;
 
@@ -61,13 +61,8 @@ class CalendarHeaderBlock extends StatelessWidget {
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlay,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          border: Border(
-            bottom: BorderSide(color: scheme.outlineVariant),
-          ),
-        ),
+      child: ColoredBox(
+        color: surface,
         child: Padding(
           padding: EdgeInsets.fromLTRB(18, topInset + 10, 18, 12),
           child: Column(
@@ -142,10 +137,7 @@ class _TitleColumn extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          context.l10n.calendar_scheduleLabel,
-          style: theme.monoType.label,
-        ),
+        Text(context.l10n.calendar_scheduleLabel, style: theme.monoType.label),
         const SizedBox(height: AppSpacing.sp4),
         _MonthRow(
           monthLabel: monthLabel,

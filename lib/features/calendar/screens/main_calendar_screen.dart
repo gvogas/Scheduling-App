@@ -522,9 +522,10 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
   /// Day-route control owned by this screen's tour.
   Widget _dayRouteButton(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     return _tour.step(
       TourStepId.calendarDayRoute,
-      targetBorderRadius: BorderRadius.circular(AppRadius.rIcon),
+      targetBorderRadius: BorderRadius.circular(AppRadius.rFull),
       child: Tooltip(
         message: context.l10n.calendar_dayRouteTitle,
         child: SizedBox(
@@ -532,8 +533,11 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
           height: 48,
           child: Center(
             child: Material(
-              color: theme.colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(AppRadius.rIcon),
+              color: scheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.rFull),
+                side: BorderSide(color: scheme.outlineVariant),
+              ),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: () => Navigator.pushNamed(
@@ -551,7 +555,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
                   child: Icon(
                     Icons.alt_route_rounded,
                     size: 19,
-                    color: theme.colorScheme.onPrimaryContainer,
+                    color: scheme.onSurface,
                   ),
                 ),
               ),

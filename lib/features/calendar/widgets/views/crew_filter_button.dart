@@ -60,8 +60,15 @@ class CrewFilterButton extends ConsumerWidget {
           height: 48,
           child: Center(
             child: Material(
-              color: isActive ? scheme.primary : scheme.primaryContainer,
-              borderRadius: BorderRadius.circular(AppRadius.rIcon),
+              // Active keeps a filled tile: "filtering is on" must stay
+              // unmistakable against the ghost controls beside it.
+              color: isActive ? scheme.primary : scheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(AppRadius.rFull),
+                side: BorderSide(
+                  color: isActive ? scheme.primary : scheme.outlineVariant,
+                ),
+              ),
               clipBehavior: Clip.antiAlias,
               child: InkWell(
                 onTap: () => _pick(context, ref, roster),
@@ -72,9 +79,7 @@ class CrewFilterButton extends ConsumerWidget {
                   child: Icon(
                     Icons.person_search_rounded,
                     size: 19,
-                    color: isActive
-                        ? scheme.onPrimary
-                        : scheme.onPrimaryContainer,
+                    color: isActive ? scheme.onPrimary : scheme.onSurface,
                   ),
                 ),
               ),
