@@ -172,6 +172,31 @@ Behaviour that stays exactly as it is, in every phase: filtering logic, the
 filter sheet's options, search, sorting, paging, and the blue brand accent
 elsewhere (FAB, buttons, selected calendar day).
 
+## Two decisions taken at build time (2026-09-11)
+
+Both were raised because the plan as written contradicted a rule younger than
+it. Recorded here so neither is re-litigated from the rules file alone.
+
+- **The type badge goes BACK on the Clients row, reversing the 2026-09-07 owner
+  call.** `.claude/rules/clients.md` had reduced the row to ONE badge (Archived)
+  because archived, type, Building and the job count were "all competing under
+  one name"; the canvas design approved 2026-09-11 shows the badge again, and
+  the owner confirmed it is deliberate. What makes it survivable this time is
+  the rest of the redesign: the row is no longer a flat `ListTile` competing for
+  one line, and the Building pill and the shared-address count are still gone.
+  The two `client_tile_test.dart` tests that pinned the absence
+  ("no longer renders a type chip", "no longer marks a shared address as a
+  building") are rewritten to assert its PRESENCE, and the rules file records
+  the reversal — a test deleted without its rule updated is what makes the next
+  audit read this as drift.
+- **Grouping is opt-in: `ClientsListView` takes `grouped`, defaulting to
+  `false`.** The plan put the letter headers and group cards in that view
+  unconditionally, but it is also the booking flow's client picker, and the
+  chrome rule keeps the Filter button and list header in `clients_screen.dart`
+  precisely so the picker is suppressed for free. The Clients screen passes
+  `grouped: true`; the picker keeps today's flat list inside its sheet, where
+  vertical space is tight.
+
 ## Notes for the build
 
 - `AppTopBar` has eleven call sites; the `compact == context.isLandscape`
