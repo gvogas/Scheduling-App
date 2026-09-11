@@ -56,7 +56,7 @@
  */
 
 const {WaveValidationError, upsertCustomer} = require("./customers");
-const {isBlocked, statePatch} = require("./customer_contract");
+const {buildCustomerPayload, verdictPatch} = require("./customer_contract");
 const {adminFirestore} = require("../admin_firestore");
 const {WaveApiError} = require("./client");
 const {mappedFieldsHash} = require("./mappers");
@@ -802,8 +802,9 @@ async function requeueDeadJobs(deps = {}) {
           // no longer exists.
           if (clientSnap && clientSnap.exists) {
             const clientData = clientSnap.data() || {};
-            if (isBlocked(clientData)) {
-              tx.update(clientRef, statePatch(clientData));
+            const contract = buildCustomerPayload(clientData);
+            if (!contract.ok) {
+              tx.update(clientRef, verdictPatch(contract));
               tx.delete(doc.ref);
               return "blocked";
             }

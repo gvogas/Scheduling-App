@@ -18,7 +18,7 @@
  */
 
 const {mappedFieldsHash} = require("./mappers");
-const {buildCustomerPayload, statePatch} = require("./customer_contract");
+const {buildCustomerPayload, verdictPatch} = require("./customer_contract");
 const {adminFirestore} = require("../admin_firestore");
 // Safe at module scope: `client.js` requires only `./auth`, lazily, so this
 // closes no cycle. `retry_policy.js` and `errors.js` both already require this
@@ -271,7 +271,7 @@ async function upsertCustomer(clientId, deps = {}) {
     // client Wave would refuse. Dead-lettering it here would be permanent and
     // unrecoverable; blocking it keeps the client editable and the reason
     // readable.
-    await writeSyncBlocked(db, ref, data);
+    await writeSyncBlocked(db, ref, built);
     return {status: "blocked", problems: built.problems};
   }
   const mappedFields = built.payload;
@@ -588,14 +588,15 @@ async function healSyncState(db, ref) {
  * `lastSyncedAt` — nothing reached Wave.
  * @param {!Object} db Firestore instance.
  * @param {!Object} ref Client document reference.
- * @param {!Object} data The client fields the contract refused.
+ * @param {!Object} verdict The refusing `buildCustomerPayload` result.
  * @return {!Promise<void>}
  */
-async function writeSyncBlocked(db, ref, data) {
+async function writeSyncBlocked(db, ref, verdict) {
+  const patch = verdictPatch(verdict);
   await db.runTransaction(async (tx) => {
     const fresh = await tx.get(ref);
     if (!fresh || !fresh.exists) return;
-    tx.update(ref, statePatch(data));
+    tx.update(ref, patch);
   });
 }
 

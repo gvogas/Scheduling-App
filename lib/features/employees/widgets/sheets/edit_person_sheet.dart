@@ -24,6 +24,7 @@ import 'package:scheduling/features/employees/widgets/fields/job_title_chips.dar
 import 'package:scheduling/features/employees/widgets/fields/work_schedule_pickers.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/dialogs/confirm_dialog.dart';
+import 'package:scheduling/shared/widgets/feedback/user_status_chip.dart';
 import 'package:scheduling/shared/widgets/feedback/warning_note.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
 import 'package:scheduling/shared/widgets/fields/sheet_field_row.dart';
@@ -322,7 +323,11 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
         ref
             .read(analyticsServiceProvider)
             .logEmployeeStatusChanged(
-              status: _isDisabled ? 'active' : 'disabled',
+              // The account-status vocabulary has an owner; a second spelling
+              // here would drift from what the doc actually stores.
+              status: _isDisabled
+                  ? UserStatus.active.name
+                  : UserStatus.disabled.name,
             );
         setState(() => _isDisabled = !_isDisabled);
         ref

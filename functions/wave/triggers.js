@@ -32,7 +32,7 @@ const {
   shouldEnqueueClientWrite,
 } = require("./worker");
 const {mappedFieldsHash} = require("./mappers");
-const {statePatch, isBlocked} = require("./customer_contract");
+const {buildCustomerPayload, verdictPatch} = require("./customer_contract");
 const {classifyWaveError} = require("./errors");
 const {isImportDue} = require("./import_schedule");
 const {
@@ -131,12 +131,27 @@ const waveUpsertCustomer = onDocumentWritten(
       // refuse must never become a job: the push dead-letters permanently and
       // "Retry failed" re-sends the identical payload into the identical
       // refusal, so the client is stranded with a counter and no reason.
-      const verdict = statePatch(after);
-      if (isBlocked(after)) {
-        await db.doc("clients/" + clientId).update(verdict);
-        // An earlier edit may have left a job queued, and the worker re-reads
-        // the LIVE doc — so that job would push what was just refused.
-        await cancelCustomerUpsert(clientId);
+      const contract = buildCustomerPayload(after);
+      const verdict = verdictPatch(contract);
+      if (!contract.ok) {
+        // Different documents, neither depending on the other's result. The
+        // second is why this branch exists: an earlier edit may have left a job
+        // queued, and the worker re-reads the LIVE doc — so that job would push
+        // what was just refused.
+        //
+        // Best-effort, like the mark-pending write below: the client can be
+        // deleted between this event and the write, and an uncaught NOT_FOUND
+        // here re-runs the whole handler under `retry: true` against the same
+        // missing doc until the retry window expires.
+        try {
+          await Promise.all([
+            db.doc("clients/" + clientId).update(verdict),
+            cancelCustomerUpsert(clientId),
+          ]);
+        } catch (e) {
+          logger.warn("waveUpsertCustomer: recording the refusal failed",
+              {clientId, err: e.message});
+        }
         logger.debug("waveUpsertCustomer: blocked by contract", {clientId});
         return;
       }

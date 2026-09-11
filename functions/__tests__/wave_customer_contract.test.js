@@ -1,7 +1,7 @@
 "use strict";
 
-const {buildCustomerPayload, statePatch, blockingProblems, isBlocked} =
-  require("../wave/customer_contract");
+const {buildCustomerPayload, statePatch, verdictPatch, waveStateFields,
+  isBlocked} = require("../wave/customer_contract");
 const {IMPORT_FIELD_CAPS} = require("../wave/mappers");
 
 /**
@@ -288,18 +288,49 @@ describe("statePatch", () => {
   });
 });
 
-describe("blockingProblems", () => {
-  test("keeps only the blocking severity", () => {
-    const {problems} = buildCustomerPayload(
-        client({name: "", phone: "Contact Person"}));
-    expect(blockingProblems(problems)).toEqual([
-      {field: "name", code: "EMPTY", severity: "blocking", detail: null},
-    ]);
+describe("verdictPatch", () => {
+  test("agrees with statePatch over the same client", () => {
+    // The dispatcher blocks from a verdict it already holds. If the two ever
+    // disagree, a client's recorded reason stops describing why it was
+    // refused — so this equality is the point of the second entry point.
+    for (const fields of [
+      client(),
+      client({name: ""}),
+      client({phone: "Contact Person"}),
+      client({email: "not-an-address"}),
+    ]) {
+      expect(verdictPatch(buildCustomerPayload(fields))).toEqual(
+          statePatch(fields));
+      expect(verdictPatch(buildCustomerPayload(fields),
+          {clearedState: "synced"}))
+          .toEqual(statePatch(fields, {clearedState: "synced"}));
+    }
   });
 
-  test("tolerates nothing at all", () => {
-    expect(blockingProblems(undefined)).toEqual([]);
-    expect(blockingProblems(null)).toEqual([]);
+  test("tolerates a verdict carrying no problems array", () => {
+    expect(verdictPatch({ok: true})).toEqual({"wave.problems": null});
+  });
+});
+
+describe("waveStateFields", () => {
+  test("un-dots the same verdict the update branch merges", () => {
+    // The create branch nests; it must nest exactly what an update would set,
+    // or a client's Wave state depends on which path wrote it.
+    const patch = statePatch(client({name: ""}), {clearedState: "synced"});
+    expect(waveStateFields(patch)).toEqual({
+      syncState: "blocked",
+      syncError: null,
+      problems: patch["wave.problems"],
+    });
+  });
+
+  test("carries the cleared state through for a clean client", () => {
+    const patch = statePatch(client(), {clearedState: "synced"});
+    expect(waveStateFields(patch)).toEqual({
+      syncState: "synced",
+      syncError: null,
+      problems: null,
+    });
   });
 });
 

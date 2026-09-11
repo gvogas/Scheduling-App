@@ -345,10 +345,24 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   replaces `problemsPatch` and writes `wave.problems` plus, when something
   BLOCKS, `wave.syncState: 'blocked'` — the fourth state, separate from
   `error` because the remedy differs: an `error` may retry, a `blocked` client
-  never will until its data is edited. Every key it writes is DOTTED, and that
-  is load-bearing (below). `wave.problems` is not a mapped field, so the hash
+  never will until its data is edited. Its keys are DOTTED because its callers
+  reach Firestore through `update()`; the one caller that writes through
+  `set(..., {merge: true})` — the import — must un-dot it first
+  (`waveStateFields`, below), since `set` merge treats a dot as part of the
+  field NAME. `wave.problems` is not a mapped field, so the hash
   is unchanged and `shouldEnqueueClientWrite` stops the re-fire — the same
   protection mark-pending relies on.
+  **A verdict and the patch recording it must come from ONE evaluation.**
+  `verdictPatch(verdict, opts)` is `statePatch` over a result the caller
+  already holds, and the dispatcher uses it: `upsertCustomer` has built the
+  verdict by the time it decides to block, and re-deriving it ran the whole
+  contract a second time INSIDE `writeSyncBlocked`'s transaction, where a
+  retry runs it again. `statePatch(fields)` is now just
+  `verdictPatch(buildCustomerPayload(fields))`. There is also exactly ONE
+  spelling of the blocking test — `buildCustomerPayload` deciding `ok`;
+  everything else asks `ok`. (A `blockingProblems` export existed for a week
+  claiming to own that test while `buildCustomerPayload` still spelled it
+  inline and no gate called it; don't reintroduce it.)
   **Three enforcement points, one implementation.** At ENQUEUE
   (`waveUpsertCustomer`) a refused client never becomes a job, and
   `cancelCustomerUpsert` removes one an EARLIER edit left queued — the worker
@@ -360,14 +374,38 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   `WaveValidationError`, because throwing is what dead-letters permanently. At
   IMPORT the same contract decides, so the pull cannot write a client the push
   could never send back.
-  **The IMPORT must never clobber the verdict.** `importOneCustomer` wrote the
-  whole `wave` sub-map as a nested object, and a nested map under `merge: true`
-  REPLACES the stored one — so an import erased `wave.problems` and reset a
-  blocked client to `synced`, silently re-arming the permanent dead-letter.
-  The update branch writes DOTTED keys and re-runs the contract over the fields
-  being written (the import has just put Wave's values on the doc, so stored
-  problems describe the OLD one). The create branch may nest: there is no
-  prior state to preserve.
+  **The IMPORT must never clobber the verdict — and the fix is to RE-RUN the
+  contract, NOT to write dotted keys.** `importOneCustomer` must re-evaluate
+  over the fields it is about to write, because the import has just put Wave's
+  values on the doc and any stored problems describe the OLD one; a customer
+  Wave hands back with a blank name must not land reading `synced`.
+  **`set(..., {merge: true})` DOES NOT PARSE A DOT AS A FIELD PATH**, and
+  believing otherwise shipped a real bug (caught in review 2026-09-10, before
+  deploy). `DocumentMask.fromObject` builds `new FieldPath(key)` from the whole
+  key — its own comment says *"We don't split on dots"* — so
+  `{"wave.syncState": "blocked"}` under `set` merge creates a LITERAL top-level
+  field named `wave.syncState` (the proto mask comes back backtick-quoted) and
+  never touches the real nested one. Consequences, all silent: the import-side
+  enforcement is inert, `wave.lastSyncedHash` never advances so
+  `buildWaveIdIndex`'s skip gate misses and every imported client re-enters the
+  outbox, and each doc accrues junk fields. A NESTED plain object is masked at
+  its LEAVES (`wave.syncState`, `wave.problems`, ...), so it merges per key and
+  **cannot erase a sibling** — the premise this was "fixing" was false. Dots
+  are for `update()`, which is the only API that parses them. Both branches
+  therefore write ONE nested `wave` map, built off the same verdict through
+  **`waveStateFields(patch)`** rather than re-spelled per branch (the
+  hand-spelled create copy had already drifted into an unreachable
+  `|| "synced"`). The test that let this through asserted the dotted key it
+  wrote, over a fake batch that records the map either way; the replacement
+  asserts no key in the write contains a dot.
+  **The contract runs BELOW the import's skip gates, not above them.**
+  `statePatch` and `clientSearchTokens` are each a field mapping plus a
+  canonicalization plus a sha256, and a steady-state import skips almost every
+  node it reads (`skippedPending`/`skippedUnchanged`) — so that work was being
+  spent on the whole roster to be thrown away. `importOneCustomer` builds them
+  in `stageWrite()`, called only once a branch has decided to write. The
+  `mappedFieldsHash` above the gates is NOT the same hash and must stay where
+  it is: the skip gate is what compares it.
   **"Retry failed" no longer lies.** `requeueDeadJobs` asks the contract about
   each dead job's client: a refused one is DELETED and the reason written onto
   the client, counted as `blocked` rather than `requeued`. Requeuing it would

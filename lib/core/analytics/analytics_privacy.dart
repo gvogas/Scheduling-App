@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 
 import 'package:scheduling/core/analytics/analytics_events.dart';
 
@@ -112,13 +111,3 @@ bool isKnownUserProperty(String name) =>
 bool isKnownEvent(String name) =>
     AnalyticsEvents.allEvents.contains(name) &&
     AnalyticsNames.isValidEvent(name);
-
-/// Debug-only guard used by [debugAssertKnownEvent]'s callers.
-@visibleForTesting
-bool debugAssertKnownEvent(String name) {
-  assert(
-    isKnownEvent(name),
-    'Analytics event "$name" is not declared in AnalyticsEvents.allEvents.',
-  );
-  return true;
-}

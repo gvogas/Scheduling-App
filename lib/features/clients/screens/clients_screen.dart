@@ -72,20 +72,20 @@ class _ListInformationState extends ConsumerState<ListInformation> {
     if (picked == null || !mounted) return;
     // The building KEY is a street address — reported as the filter KIND only,
     // never its value.
+    // One switch, so a fifth variant cannot report a value under a name the
+    // other half got right — a `_ =>` default on either defeats exhaustiveness.
+    final (filterName, filterValue) = switch (picked.filter) {
+      ClientsFilterAll() => (AnalyticsFilters.none, null),
+      ClientsFilterType(:final type) => (AnalyticsFilters.type, type.name),
+      ClientsFilterBuilding() => (AnalyticsFilters.building, null),
+      ClientsFilterArchived() => (AnalyticsFilters.archived, null),
+    };
     ref
         .read(analyticsServiceProvider)
         .logFilterUsed(
           surface: AnalyticsSurfaces.clients,
-          filterName: switch (picked.filter) {
-            ClientsFilterAll() => 'none',
-            ClientsFilterType() => 'type',
-            ClientsFilterBuilding() => 'building',
-            ClientsFilterArchived() => 'archived',
-          },
-          filterValue: switch (picked.filter) {
-            ClientsFilterType(:final type) => type.name,
-            _ => null,
-          },
+          filterName: filterName,
+          filterValue: filterValue,
         );
     setState(() {
       _filter = picked.filter;
@@ -184,7 +184,7 @@ class _ListInformationState extends ConsumerState<ListInformation> {
                         .read(analyticsServiceProvider)
                         .logFilterUsed(
                           surface: AnalyticsSurfaces.clients,
-                          filterName: 'sort',
+                          filterName: AnalyticsFilters.sort,
                           filterValue: next.name,
                         );
                     setState(() => _sort = next);

@@ -69,11 +69,6 @@ class _BlockedRow extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  // The badge already owns the problem sentences, so the list
-                  // and the client detail cannot word the same failure two
-                  // ways. The chip itself would be redundant here.
-                  // Shares the badge's sentences so the list and the client
-                  // detail cannot word the same failure two ways.
                   WaveProblemList(problems: client.waveProblems),
                 ],
               ),

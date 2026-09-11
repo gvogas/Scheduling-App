@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:scheduling/core/utils/firestore_parsing.dart';
 
 /// One reason Wave will not accept a client, as recorded by the server-side
 /// customer contract (`functions/wave/customer_contract.js`).
@@ -58,14 +59,13 @@ class WaveProblem {
       field: field,
       code: WaveProblemCode.fromRaw(map['code']?.toString()),
       isBlocking: map['severity'] == 'blocking',
-      length: (detail?['length'] as num?)?.toInt(),
-      cap: (detail?['cap'] as num?)?.toInt(),
+      length: firestoreInt(detail?['length']),
+      cap: firestoreInt(detail?['cap']),
     );
   }
 
   static List<WaveProblem> parseList(Object? raw) {
-    if (raw is! List) return const <WaveProblem>[];
-    return raw
+    return firestoreList(raw)
         .map(WaveProblem.fromMap)
         .whereType<WaveProblem>()
         .toList(growable: false);

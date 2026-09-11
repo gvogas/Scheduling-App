@@ -94,10 +94,13 @@ describe("the customer contract is the sole payload producer", () => {
   test("the enqueue trigger asks the contract before queueing anything", () => {
     const source = fs.readFileSync(
         path.join(FUNCTIONS_DIR, "wave", "triggers.js"), "utf8");
-    const gate = source.indexOf("isBlocked(after)");
+    const gate = source.indexOf("buildCustomerPayload(after)");
+    const refuse = source.indexOf("if (!contract.ok)");
     const enqueue = source.indexOf("enqueueCustomerUpsert(clientId");
     expect(gate).toBeGreaterThan(-1);
+    expect(refuse).toBeGreaterThan(-1);
     // The refusal has to come FIRST, or a refused client is queued anyway.
-    expect(gate).toBeLessThan(enqueue);
+    expect(gate).toBeLessThan(refuse);
+    expect(refuse).toBeLessThan(enqueue);
   });
 });

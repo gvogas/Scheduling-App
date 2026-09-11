@@ -192,7 +192,12 @@ class AgendaSliverList extends StatelessWidget {
           if (onAppointmentTap != null) {
             onAppointmentTap!(e);
           } else {
-            showEventDetails(context, e, analyticsSource: AnalyticsSources.calendar, showActions: isAdmin);
+            showEventDetails(
+              context,
+              e,
+              analyticsSource: AnalyticsSources.calendar,
+              showActions: isAdmin,
+            );
           }
         },
       ),

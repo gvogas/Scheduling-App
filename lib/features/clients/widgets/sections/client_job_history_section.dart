@@ -100,9 +100,9 @@ class _JobList extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: AppSpacing.sp4),
             child: Text(
               DateUtilsHelper.formatDate(job.startTime),
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: scheme.onSurfaceVariant,
-              ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
             ),
           ),
           AppointmentCard(
@@ -112,7 +112,12 @@ class _JobList extends StatelessWidget {
             // before.
             crew: crewFor(job, colorMap: colorMap),
             dimWhenCancelled: true,
-            onTap: () => showEventDetails(context, job, analyticsSource: AnalyticsSources.clientDetail, showActions: false),
+            onTap: () => showEventDetails(
+              context,
+              job,
+              analyticsSource: AnalyticsSources.clientDetail,
+              showActions: false,
+            ),
           ),
           const SizedBox(height: AppSpacing.sp8),
         ],

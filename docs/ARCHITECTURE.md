@@ -840,7 +840,7 @@ UI catches the typed failure, calls `failure.toLocalizedMessage(context)`, and p
 
 `lib/core/analytics/` is the only place the app talks to Firebase Analytics. Four files, one job each: `analytics_events.dart` (event names, the parameter allowlist, user properties, and the canonical `source`/`surface`/`scope` values), `analytics_privacy.dart` (the sanitizer and count bucketing), `analytics_screens.dart` (route/tab → canonical screen name), and `analytics_service.dart` — the single importer of `firebase_analytics`. `analytics_providers.dart` exposes `analyticsServiceProvider` and `analyticsObserverProvider` plus the build-mode constants.
 
-**Privacy is enforced by the allowlist, not by convention.** `sanitizeAnalyticsParams` drops any key absent from `AnalyticsParams.allParams` (asserting in debug), narrows values to `num`/`bool`/`String` — dropping anything else rather than `toString()`-ing it — and caps string length. Counts are bucketed and a search query is reduced to a bucketed LENGTH. `setUserId` is never called; the only identity-adjacent signal is the `user_role` user property, kept in step with the live Firestore doc by `AnalyticsIdentityListener` (`core/app/`).
+**Privacy is enforced by the allowlist, not by convention.** `sanitizeAnalyticsParams` drops any key absent from `AnalyticsParams.allParams` (asserting in debug), narrows values to `num`/`bool`/`String` — dropping anything else rather than `toString()`-ing it — and caps string length. Parameter VALUES have owners too — `AnalyticsSources`, `AnalyticsSurfaces`, `AnalyticsScopes`, `AnalyticsContactActions`, `AnalyticsFilters`, `AnalyticsSettings`, `AnalyticsDirections`, `AnalyticsArchiveActions` — because nothing rejects an undeclared value, so a literal spelled at a call site silently becomes a second console row. All three senders check MEMBERSHIP, not just shape: `_log` against `allEvents`, `_setUserProperty` against `allProperties`, `logScreenView` against `AnalyticsScreens.allScreens`. Counts are bucketed and a search query is reduced to a bucketed LENGTH. `setUserId` is never called; the only identity-adjacent signal is the `user_role` user property, kept in step with the live Firestore doc by `AnalyticsIdentityListener` (`core/app/`).
 
 **Screen views are split between the observer and the hub shell.** `FirebaseAnalyticsObserver` handles named pushed routes through `analyticsScreenForRoute`, which returns null for the four routes in `kShellOwnedRoutes` — `HubShellState` reports those tabs itself. Without the split, `HubTabRedirectRoute` (which pushes a named route *and* hands off to the live shell) would double-count one of the three ways a tab is reached. Modal sheets carry no route name, so each reports itself from `initState`.
 
@@ -1557,12 +1557,20 @@ clients/{docId}
                        never enqueue) or `advisory` ("Wave accepts it, but the
                        data is wrong", push anyway); only `blocking` decides
                        `ok`, and collapsing the two costs a real failure in each
-                       direction. REPORT-ONLY in Phase 1 — nothing is blocked,
-                       `syncState` is untouched — and always written, null when
-                       clean, so a repaired client does not keep stale problems.
-                       It rides the existing mark-pending batch and is not a
-                       mapped field, so the hash is unchanged and it cannot
-                       re-fire the trigger
+                       direction. ENFORCED since 2026-09-10 (Phase 2): a
+                       blocking problem writes `wave.syncState: 'blocked'` — a
+                       FOURTH state beside synced/pending/error, separate
+                       because the remedy differs (an `error` may retry; a
+                       `blocked` client never will until its data is edited) —
+                       and the client never becomes a queued job. Always
+                       written, null when clean, so a repaired client does not
+                       keep stale problems. It rides the existing mark-pending
+                       batch and is not a mapped field, so the hash is unchanged
+                       and it cannot re-fire the trigger. `statePatch`'s keys
+                       are DOTTED for `update()` callers; the IMPORT writes
+                       through `set(..., {merge:true})`, which does NOT parse a
+                       dot as a path, so it un-dots via `waveStateFields` and
+                       writes ONE nested `wave` map on both branches
   archived             bool, REQUIRED on every client doc forever. The list
                        filters `where('archived','==',false)` SERVER-side, and
                        Firestore excludes docs missing a filtered field — so a
@@ -1773,9 +1781,9 @@ not default it off.
   `core/platform/`) rather than a bare `Platform.isIOS`, which on the host
   returns before anything injectable and writes the branch off as device-only.
 
-Run: `flutter test` (3502 passing as of 2026-09-07 — that is the runner's count;
-`grep`ing for `test(`/`testWidgets(` gives fewer (3381), since some cases are
-generated inside loops; `functions` adds 1848 jest tests across 86 suites in
+Run: `flutter test` (3573 passing as of 2026-09-10 — that is the runner's count;
+`grep`ing for `test(`/`testWidgets(` gives fewer (3452), since some cases are
+generated inside loops; `functions` adds 1876 jest tests across 87 suites in
 `functions/__tests__/` — the parallel `functions/test/` directory was
 merged away). **The runner's count is the only one that settles whether the
 branch is green**, and a recorded green is a claim, not a fact: on 2026-09-02

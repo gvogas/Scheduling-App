@@ -18,6 +18,7 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:scheduling/core/adaptive/app_scroll_behavior.dart';
+import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/app/account_exit_listeners.dart';
 import 'package:scheduling/core/app/analytics_identity_listener.dart';
@@ -284,7 +285,7 @@ class _PaulAppState extends ConsumerState<PaulApp> {
     ref
         .read(analyticsServiceProvider)
         .logSettingsChanged(
-          settingName: 'theme',
+          settingName: AnalyticsSettings.theme,
           settingValue: _themeMode.name,
         );
     unawaited(_saveSettings(themeMode: _themeMode));
@@ -300,7 +301,7 @@ class _PaulAppState extends ConsumerState<PaulApp> {
     ref
         .read(analyticsServiceProvider)
         .logSettingsChanged(
-          settingName: 'text_scale',
+          settingName: AnalyticsSettings.textScale,
           settingValue: value.toStringAsFixed(2),
         );
     _settingsSaveDebouncer.run(() => _saveSettings(textScale: value));
@@ -311,7 +312,10 @@ class _PaulAppState extends ConsumerState<PaulApp> {
     unawaited(_saveSettings(language: code));
     ref.read(analyticsServiceProvider)
       ..setAppLocale(code)
-      ..logSettingsChanged(settingName: 'language', settingValue: code);
+      ..logSettingsChanged(
+        settingName: AnalyticsSettings.language,
+        settingValue: code,
+      );
     // Re-upsert the token so its `locale` field follows the app language.
     unawaited(ref.read(pushRegistrationControllerProvider).sync());
     // Same for the Live Activity tokens — `locale` drives the card's text.

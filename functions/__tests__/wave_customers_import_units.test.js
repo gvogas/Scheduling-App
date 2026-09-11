@@ -148,10 +148,11 @@ describe("importOneCustomer", () => {
     expect(ctx.batch.sets).toHaveLength(0);
   });
 
-  test("the update branch never writes a nested wave map", () => {
-    // A nested object under `merge: true` REPLACES the whole map, which is how
-    // the import erased `wave.problems` and reset a blocked client to synced.
-    // Dotted keys leave sibling keys alone.
+  test("the update branch merges the wave map per LEAF", () => {
+    // `set(..., {merge: true})` masks a nested plain object at its leaves
+    // (`wave.syncState`, `wave.problems`, ...), so it merges per key and
+    // cannot erase a sibling. It also does not parse a dot as a path, so the
+    // dotted spelling would write a literal "wave.syncState" field instead.
     const ctx = ctxFor({
       existingByWaveId: new Map([
         ["wave-1", {ref: {id: "c1"}, hasCreatedAt: true, lastSyncedHash: "x"}],
@@ -159,10 +160,10 @@ describe("importOneCustomer", () => {
     });
     expect(importOneCustomer(node(), ctx)).toBe(true);
     const written = ctx.batch.sets[0].data;
-    expect(written.wave).toBeUndefined();
-    expect(written["wave.syncState"]).toBe("synced");
-    expect(written["wave.syncError"]).toBeNull();
-    expect(typeof written["wave.lastSyncedHash"]).toBe("string");
+    expect(written["wave.syncState"]).toBeUndefined();
+    expect(written.wave.syncState).toBe("synced");
+    expect(written.wave.syncError).toBeNull();
+    expect(typeof written.wave.lastSyncedHash).toBe("string");
   });
 
   test("the update branch re-runs the contract over the merged fields", () => {
@@ -176,8 +177,8 @@ describe("importOneCustomer", () => {
     });
     expect(importOneCustomer(node({name: ""}), ctx)).toBe(true);
     const written = ctx.batch.sets[0].data;
-    expect(written["wave.syncState"]).toBe("blocked");
-    expect(written["wave.problems"]).toEqual([
+    expect(written.wave.syncState).toBe("blocked");
+    expect(written.wave.problems).toEqual([
       {field: "name", code: "EMPTY", severity: "blocking", detail: null},
     ]);
   });
@@ -189,7 +190,27 @@ describe("importOneCustomer", () => {
       ]),
     });
     importOneCustomer(node(), ctx);
-    expect(ctx.batch.sets[0].data["wave.problems"]).toBeNull();
+    expect(ctx.batch.sets[0].data.wave.problems).toBeNull();
+  });
+
+  test("the update branch writes a NESTED wave map, never dotted keys", () => {
+    // `set(..., {merge: true})` does NOT parse a dot as a field path —
+    // `DocumentMask.fromObject` builds `new FieldPath(key)` from the whole
+    // key, so a dotted key here creates a literal top-level field called
+    // "wave.syncState" and leaves the real one untouched. That silently made
+    // the import's enforcement inert AND stopped `wave.lastSyncedHash` from
+    // advancing, which re-enters every imported client into the outbox.
+    const ctx = ctxFor({
+      existingByWaveId: new Map([
+        ["wave-1", {ref: {id: "c1"}, hasCreatedAt: true, lastSyncedHash: "x"}],
+      ]),
+    });
+    importOneCustomer(node({name: ""}), ctx);
+    const {data, options} = ctx.batch.sets[0];
+    expect(options).toEqual({merge: true});
+    expect(Object.keys(data).some((k) => k.includes("."))).toBe(false);
+    expect(data.wave.syncState).toBe("blocked");
+    expect(typeof data.wave.lastSyncedHash).toBe("string");
   });
 
   test("the create branch records the contract verdict too", () => {
