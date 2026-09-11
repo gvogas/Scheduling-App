@@ -24,6 +24,7 @@ import 'package:scheduling/core/app/account_exit_listeners.dart';
 import 'package:scheduling/core/app/analytics_identity_listener.dart';
 import 'package:scheduling/core/app/app_sync_listeners.dart';
 import 'package:scheduling/core/app/appointment_link_opener.dart';
+import 'package:scheduling/core/app/carplay_bridge.dart';
 import 'package:scheduling/core/connectivity/offline_banner.dart';
 import 'package:scheduling/core/deep_links/deep_link_dispatcher.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
@@ -99,11 +100,7 @@ Future<void> _recordUnhandledError(
       debugPrintStack(stackTrace: stack);
       return;
     }
-    await FirebaseCrashlytics.instance.recordError(
-      error,
-      stack,
-      fatal: fatal,
-    );
+    await FirebaseCrashlytics.instance.recordError(error, stack, fatal: fatal);
   } catch (_) {
     debugPrint('Failed to report unhandled error: $error');
     debugPrintStack(stackTrace: stack);
@@ -119,9 +116,7 @@ Future<void> main() async {
       final settingsFuture = SharedPrefsSettingsRepository().load();
 
       await Future.wait([
-        Firebase.initializeApp(
-          options: DefaultFirebaseOptions.currentPlatform,
-        ),
+        Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform),
         initializeDateFormatting('en_CA'),
         initializeDateFormatting('fr_CA'),
       ]);
@@ -209,6 +204,7 @@ class _PaulAppState extends ConsumerState<PaulApp> {
   final _topRouteObserver = TopRouteObserver();
   // Held so `dispose` can cancel them.
   late final AppointmentLinkOpener _linkOpener;
+  late final CarPlayBridge _carPlayBridge;
   DeepLinkDispatcher? _deepLinkDispatcher;
   late ThemeMode _themeMode;
   late double _textScale;
@@ -228,6 +224,7 @@ class _PaulAppState extends ConsumerState<PaulApp> {
     _languageController = AppLanguageController.instance;
     _languageController.setLanguage(widget.settings.language);
     _setupLinkOpening();
+    _setupCarPlay();
     _setupDeepLinkHandling();
     _setupAnalytics();
   }
@@ -253,6 +250,11 @@ class _PaulAppState extends ConsumerState<PaulApp> {
     )..start();
   }
 
+  /// The CarPlay scene's Swift → Dart channel.
+  void _setupCarPlay() {
+    _carPlayBridge = ref.read(carPlayBridgeProvider)..start();
+  }
+
   /// Inbound `esproschedule://` URLs — appointment links only since the invite
   /// code flow was retired.
   void _setupDeepLinkHandling() {
@@ -265,6 +267,7 @@ class _PaulAppState extends ConsumerState<PaulApp> {
   @override
   void dispose() {
     _linkOpener.dispose();
+    _carPlayBridge.dispose();
     _deepLinkDispatcher?.dispose();
     _settingsSaveDebouncer.dispose();
     super.dispose();
@@ -301,9 +304,7 @@ class _PaulAppState extends ConsumerState<PaulApp> {
           settingName: AnalyticsSettings.textScale,
           settingValue: value.toStringAsFixed(2),
         );
-    _settingsSaveDebouncer.run(
-      () => _saveSettings(textScale: value),
-    );
+    _settingsSaveDebouncer.run(() => _saveSettings(textScale: value));
   }
 
   void setLanguage(String code) {
@@ -404,10 +405,7 @@ class _PaulAppState extends ConsumerState<PaulApp> {
               final media = MediaQuery.of(context);
               // Compose in-app text scale with the OS scale, capped at 2.2.
               final systemFactor = media.textScaler.scale(14) / 14;
-              final effectiveScale = math.min(
-                _textScale * systemFactor,
-                2.2,
-              );
+              final effectiveScale = math.min(_textScale * systemFactor, 2.2);
               // iOS "Bold Text". Flutter exposes the flag and applies it to
               // nothing, so the weight bump is ours to make — here, where the
               // RESOLVED theme is in scope, so it composes with light/dark and

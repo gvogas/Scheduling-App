@@ -16,9 +16,34 @@ import Foundation
 private let appGroupId = "group.net.vogas.scheduling"
 private let snapshotKey = "schedule_snapshot"
 
-/// Schema version this decoder understands. A snapshot stamped with anything
+/// Schema versions this decoder understands. A snapshot stamped with anything
 /// else is rejected outright, rather than risk a mis-decode.
-private let supportedVersion = 3
+///
+/// v4 (CarPlay's `crew`) is additive, and BOTH are accepted on purpose: the
+/// on-disk snapshot stays v3 until the app next runs after an update, and a
+/// strict v4 gate would make Siri answer "no appointments" for that window.
+private let supportedVersions: Set<Int> = [3, 4]
+
+/// One assignee on an admin snapshot. Name and stored colour and nothing else
+/// — no id, no phone, no email; the App Group is readable while locked.
+struct SnapshotCrewMember: Codable, Hashable {
+    let name: String
+    /// The stored LIGHT-theme ARGB. The reader does the dark lift.
+    ///
+    /// Optional because the Dart builder OMITS the key when the roster has no
+    /// colour for that assignee — a required Int here would fail the whole
+    /// snapshot decode and blank Siri too.
+    let colorValue: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case name = "n"
+        case colorValue = "c"
+    }
+
+    /// Falls back to `AppColors.crewDefault`, which is what an employee with
+    /// no stored `colorValue` renders as in the app.
+    var storedColor: Int { colorValue ?? 0xFF00_5CC8 }
+}
 
 struct SnapshotAppointment: Codable, Hashable {
     // Non-optional on purpose: the Dart builder drops records without a doc id,
@@ -33,12 +58,20 @@ struct SnapshotAppointment: Codable, Hashable {
     let address: String
     let status: String
     let isAllDay: Bool?
+    // v4. The two flags `displayStatusAt` branches on. Unlike `isAllDay` above,
+    // which is always written, these are OMITTED when false — read them
+    // through `personal`/`dayOff` below, never as a plain `Bool`.
+    let isPersonal: Bool?
+    let isDayOff: Bool?
     // v3. Optional so the decode of an older payload still reaches the version
     // gate above rather than failing field-wise. Absent means a single-day job
     // — the builder omits them rather than sending 1 of 1.
     let dayIndex: Int?
     let dayCount: Int?
     let isOvernight: Bool?
+    // v4. Emitted only on an admin snapshot, where every row is somebody
+    // else's; optional so a v3 payload still decodes.
+    let crew: [SnapshotCrewMember]?
 
     var start: Date { Date(timeIntervalSince1970: startMillis / 1000) }
     var end: Date { Date(timeIntervalSince1970: endMillis / 1000) }
@@ -46,6 +79,16 @@ struct SnapshotAppointment: Codable, Hashable {
     /// True for an all-day block, which stores a real midnight–23:59 span but
     /// must never be read out as a clock time.
     var allDay: Bool { isAllDay == true }
+
+    /// Somebody's own block rather than a client visit — a clinic, a school
+    /// run. Absent means false, which is what an omitted key encodes.
+    var personal: Bool { isPersonal == true }
+
+    /// Meaningful only through `isTimeOff`, the same rule the app applies.
+    var dayOff: Bool { isDayOff == true }
+
+    /// Mirrors `AppointmentRecord.isTimeOff`.
+    var isTimeOff: Bool { personal && dayOff }
 
     /// True when this job runs across more than one day, so Siri names which
     /// day of the run it is speaking about.
@@ -75,6 +118,10 @@ struct ScheduleSnapshot: Codable {
     let version: Int
     let generatedAt: Double
     let role: String
+    /// v4. The signed-in person's own name, so the car can ring the jobs they
+    /// are on. Present ONLY on an admin snapshot whose name resolved, so nil
+    /// is the ordinary case and rings nothing.
+    let viewer: String?
     let days: [SnapshotDay]
 
     var isAdmin: Bool { role == "admin" }
@@ -112,6 +159,13 @@ struct ScheduleSnapshot: Codable {
         return timedWithin.min { $0.start < $1.start } ?? earliest
     }
 
+    /// Whether this decoder understands a payload stamped [version]. Separate
+    /// from `load()`, which reaches `UserDefaults(suiteName:)` and so needs the
+    /// App Group entitlement to run — the gate it consults does not.
+    static func accepts(version: Int) -> Bool {
+        supportedVersions.contains(version)
+    }
+
     static func load() -> ScheduleSnapshot? {
         guard
             let defaults = UserDefaults(suiteName: appGroupId),
@@ -120,7 +174,7 @@ struct ScheduleSnapshot: Codable {
             let snapshot = try? JSONDecoder().decode(
                 ScheduleSnapshot.self, from: data)
         else { return nil }
-        guard snapshot.version == supportedVersion else { return nil }
+        guard accepts(version: snapshot.version) else { return nil }
         return snapshot
     }
 

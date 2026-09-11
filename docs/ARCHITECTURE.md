@@ -660,6 +660,48 @@ an overnight run can be listed on the morning it finishes; and
 `travel_utils.js`' `MAX_BOOKING_MS` keeps a long run out of the travel context
 rather than risk `decideOrigin` picking a wrong origin from it.
 
+### CarPlay (2026-09-09)
+
+A native CarPlay scene (`ios/Runner/CarPlay/`) shows the signed-in user
+their jobs on the car display — a Today tab ranked around the drive, a
+Week tab for the next 7 days, one detail push, and a hand-off to the
+phone's navigation app. Apple's Driving Task category
+(`com.apple.developer.carplay-driving-task`, granted 2026-09-09) is the
+only category ES Pro's job list fits; see `ios/CLAUDE.md` for why the
+grant alone doesn't ship it (the provisioning profile is the real gate).
+
+**Two paths, deliberately.** The App Group `schedule_snapshot` (the same
+payload Siri reads — see `.claude/rules/notifications.md`) is the DATA
+path and always works, including when CarPlay launches the app with no
+phone window: `CarPlayScheduleStore` decodes it with no Flutter engine, no
+Firestore and no network. The method channel
+`net.vogas.scheduling/carplay` is the FRESHNESS path only — a CarPlay
+connect asks Dart (`CarPlayBridge`, `lib/core/app/carplay_bridge.dart`) to
+refresh the snapshot, and a snapshot rewrite pokes CarPlay to re-read.
+**If the channel is unavailable, CarPlay still renders from the last
+written snapshot** — the two engine-dependent actions (job-status write,
+Call) are simply ABSENT rather than present-but-broken; Directions works
+from the snapshot's address string alone and is always available.
+
+**Template shape.** The root is a `CPTabBarTemplate` (Today / Week), each
+tab a `CPListTemplate`; a row push opens one `CPInformationTemplate`
+detail — that is the whole stack, and it sits exactly at the driving-task
+depth cap of 2 (the root counts). Today is ranked, not sorted by clock
+time: a **Now** section (every `in_progress` job), then **Next** (the
+single earliest open job, scheduled or overdue), then **Later today** —
+done and cancelled jobs are omitted and counted in the section subtitle
+instead. Mark-complete pops to the root and presents a `CPAlertTemplate`
+naming the next job, which does not count toward template depth.
+
+**`CarPlayTemplateBuilder` is pure functions that take `now` as a
+parameter** — snapshot in, `CPTemplate`s out, no `Date()` read
+internally — so `ios/RunnerTests/CarPlayTemplateBuilderTests.swift` can
+cover the Today ranking, the Week grouping, every header subtitle and
+every omit-the-empty-field rule without a car or a device clock.
+`CarPlaySceneDelegate` and `CarPlayScheduleStore` own everything stateful
+(the 60 s re-rank timer, template lifecycle, the bridge ping) and are the
+only pieces that read `Date()` or call CarPlay's own APIs.
+
 ### Repeating Appointments
 
 Repeats are **materialized, not rule-evaluated**: picking a Repeat option in the

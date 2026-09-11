@@ -3,7 +3,7 @@
 	archiveVersion = 1;
 	classes = {
 	};
-	objectVersion = 54;
+	objectVersion = 70;
 	objects = {
 
 /* Begin PBXBuildFile section */
@@ -28,12 +28,20 @@
 		BB4A3C8F1D353ABC0083082F /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = BB4A3C8E1D353ABC0083082F /* PrivacyInfo.xcprivacy */; };
 		C7632D212FF0F8669A405582 /* SiriIntents.appex in Embed ExtensionKit Extensions */ = {isa = PBXBuildFile; fileRef = 4FA6D6A972DB7784BD239D75 /* SiriIntents.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C96255C3E7B15468BEDA40BE /* ESProShortcuts.swift in Sources */ = {isa = PBXBuildFile; fileRef = B68B901D894CE9FE351D9D60 /* ESProShortcuts.swift */; };
+		CA9F1000000000000000C001 /* CarPlayBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B001 /* CarPlayBridge.swift */; };
+		CA9F1000000000000000C002 /* CarPlayImages.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B002 /* CarPlayImages.swift */; };
+		CA9F1000000000000000C003 /* CarPlayScheduleStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B003 /* CarPlayScheduleStore.swift */; };
+		CA9F1000000000000000C004 /* CarPlaySceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B004 /* CarPlaySceneDelegate.swift */; };
+		CA9F1000000000000000C005 /* CarPlayStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B005 /* CarPlayStrings.swift */; };
+		CA9F1000000000000000C006 /* CarPlayTemplateBuilder.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B006 /* CarPlayTemplateBuilder.swift */; };
+		CA9F1000000000000000C007 /* ScheduleSnapshot.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ECD0A6DE641D05902F08E54 /* ScheduleSnapshot.swift */; };
+		CA9F1000000000000000C008 /* CarPlayTemplateBuilderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA9F1000000000000000B007 /* CarPlayTemplateBuilderTests.swift */; };
 		CE1A5A119F21774B8A53B6E6 /* SiriStrings.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1B3C4064AE19F11DBF0ABD0 /* SiriStrings.swift */; };
 		D9C4679D00D13B2280D28348 /* AppointmentCountIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35DDB15D85502485A5567909 /* AppointmentCountIntent.swift */; };
 		DA57DA1E5C4EDF0000000B01 /* DayScheduleIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA57DA1E5C4EDF0000000D01 /* DayScheduleIntent.swift */; };
 		DA57DA1E5C4EDF0000000B02 /* TomorrowScheduleIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA57DA1E5C4EDF0000000D02 /* TomorrowScheduleIntent.swift */; };
-		DA57DA1E5C4EDF0000000C01 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DA57DA1E5C4EDF0000000E01 /* PrivacyInfo.xcprivacy */; };
 		DA57DA1E5C4EDF0000000B03 /* NthAppointmentIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA57DA1E5C4EDF0000000D03 /* NthAppointmentIntent.swift */; };
+		DA57DA1E5C4EDF0000000C01 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = DA57DA1E5C4EDF0000000E01 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -104,9 +112,9 @@
 		25006DD53002A7A500204FFE /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		25006E043002AFF100204FFE /* ScheduleWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ScheduleWidgetExtension.entitlements; sourceTree = "<group>"; };
 		259019412FE840DE003177D5 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+		25AC829F2FFEAB0A00DD3CDD /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		25FF1A010000000000000001 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		25FF1A010000000000000002 /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = fr.lproj/InfoPlist.strings; sourceTree = "<group>"; };
-		25AC829F2FFEAB0A00DD3CDD /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		2ECD0A6DE641D05902F08E54 /* ScheduleSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ScheduleSnapshot.swift; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -128,6 +136,13 @@
 		9D48DC829E96DEF5E51D596A /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		B68B901D894CE9FE351D9D60 /* ESProShortcuts.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ESProShortcuts.swift; sourceTree = "<group>"; };
 		BB4A3C8E1D353ABC0083082F /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		CA9F1000000000000000B001 /* CarPlayBridge.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlayBridge.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B002 /* CarPlayImages.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlayImages.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B003 /* CarPlayScheduleStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlayScheduleStore.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B004 /* CarPlaySceneDelegate.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlaySceneDelegate.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B005 /* CarPlayStrings.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlayStrings.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B006 /* CarPlayTemplateBuilder.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlayTemplateBuilder.swift; sourceTree = "<group>"; };
+		CA9F1000000000000000B007 /* CarPlayTemplateBuilderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CarPlayTemplateBuilderTests.swift; sourceTree = "<group>"; };
 		DA57DA1E5C4EDF0000000D01 /* DayScheduleIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DayScheduleIntent.swift; sourceTree = "<group>"; };
 		DA57DA1E5C4EDF0000000D02 /* TomorrowScheduleIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TomorrowScheduleIntent.swift; sourceTree = "<group>"; };
 		DA57DA1E5C4EDF0000000D03 /* NthAppointmentIntent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NthAppointmentIntent.swift; sourceTree = "<group>"; };
@@ -200,6 +215,7 @@
 			isa = PBXGroup;
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
+				CA9F1000000000000000B007 /* CarPlayTemplateBuilderTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -264,6 +280,7 @@
 			isa = PBXGroup;
 			children = (
 				25AC829F2FFEAB0A00DD3CDD /* Runner.entitlements */,
+				CA9F1000000000000000A001 /* CarPlay */,
 				97C146FA1CF9000F007C117D /* Main.storyboard */,
 				97C146FD1CF9000F007C117D /* Assets.xcassets */,
 				97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */,
@@ -284,6 +301,19 @@
 				9D48DC829E96DEF5E51D596A /* Foundation.framework */,
 			);
 			name = iOS;
+			sourceTree = "<group>";
+		};
+		CA9F1000000000000000A001 /* CarPlay */ = {
+			isa = PBXGroup;
+			children = (
+				CA9F1000000000000000B001 /* CarPlayBridge.swift */,
+				CA9F1000000000000000B002 /* CarPlayImages.swift */,
+				CA9F1000000000000000B003 /* CarPlayScheduleStore.swift */,
+				CA9F1000000000000000B004 /* CarPlaySceneDelegate.swift */,
+				CA9F1000000000000000B005 /* CarPlayStrings.swift */,
+				CA9F1000000000000000B006 /* CarPlayTemplateBuilder.swift */,
+			);
+			path = CarPlay;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -583,6 +613,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
+				CA9F1000000000000000C008 /* CarPlayTemplateBuilderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -591,6 +622,13 @@
 			buildActionMask = 2147483647;
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
+				CA9F1000000000000000C001 /* CarPlayBridge.swift in Sources */,
+				CA9F1000000000000000C002 /* CarPlayImages.swift in Sources */,
+				CA9F1000000000000000C003 /* CarPlayScheduleStore.swift in Sources */,
+				CA9F1000000000000000C004 /* CarPlaySceneDelegate.swift in Sources */,
+				CA9F1000000000000000C005 /* CarPlayStrings.swift in Sources */,
+				CA9F1000000000000000C006 /* CarPlayTemplateBuilder.swift in Sources */,
+				CA9F1000000000000000C007 /* ScheduleSnapshot.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -752,7 +790,7 @@
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
@@ -1138,7 +1176,7 @@
 			baseConfigurationReference = 9740EEB21CF90195004384FC /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
@@ -1168,7 +1206,7 @@
 			baseConfigurationReference = 7AFA3C8E1D35360C0083082E /* Release.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = NO;
+				ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS = YES;
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";

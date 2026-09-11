@@ -1,9 +1,12 @@
 # Firebase Analytics — remaining work
 
-**State: code COMPLETE and verified; every item below is off-repo** — a
-Firebase Console setting, an Xcode/App Store Connect action, or a device pass.
-Nothing here is a code change, and nothing here blocks development. Items 1, 6
-and 7 **do** block a useful reporting window or an App Store submission.
+**State: verified on a device 2026-09-10; what remains is off-repo** — an App
+Store Connect action, a release step, or a reporting-window wait. Nothing here
+blocks development. Item 6 blocks an App Store submission.
+
+The device pass was NOT purely off-repo in the end: it found that iOS reports a
+`screen_view` of its own, now disabled by `FirebaseAutomaticScreenReportingEnabled`
+in `ios/Runner/Info.plist` (the reasoning is in `.claude/rules/analytics.md`).
 
 Built 2026-09-07. Implementation notes live in `.claude/rules/analytics.md` and
 the Analytics section of `docs/ARCHITECTURE.md`; the current state of the code
@@ -43,8 +46,8 @@ and no warning anywhere — in the app, in the console or in the logs. It looks
 exactly like an app nobody is using, which is the one failure mode that could
 survive a whole release unnoticed.
 
-- [ ] Google Analytics enabled on `schedulingapp-88727`
-- [ ] The iOS app appears under the linked GA4 property's data streams
+- [x] Google Analytics enabled on `schedulingapp-88727`
+- [x] The iOS app appears under the linked GA4 property's data streams
 
 ## 2. Register custom dimensions (or the parameters are invisible in reports)
 
@@ -54,22 +57,48 @@ Custom **event parameters are collected immediately but are not queryable in
 reports until registered.** They will show in DebugView and in the raw event
 count either way, so this is easy to assume is working when it is not.
 
-Register as **event-scoped** dimensions:
+**The allowlist collects 25 parameters, not the 10 this doc listed until
+2026-09-10** — and 9 of them are numeric, which is the *Custom metrics* tab, a
+different form. Registration is also NOT retroactive: whatever is missing when a
+release ships is unqueryable for that entire reporting window.
 
-| Parameter | Answers |
+Event-scoped **dimensions**, the 16 text parameters:
+
+| Parameter | Values it sends |
 |---|---|
-| `source` | "how do people actually reach a job / a client?" |
-| `surface` | splits search, filters and photos by which list they happened on |
-| `filter_name` | which filter controls are used and which are dead |
-| `direction` | how the calendar is navigated (swipe vs Today vs picker) |
-| `view_mode` | day vs week agenda |
-| `status` | which job states get opened most |
-| `scope` | single vs series edits and deletes |
-| `setting_name` | which settings people actually change |
-| `action` | call vs email vs directions |
-| `period` | which dashboard window admins live in |
+| `source` | `calendar`, `clients_tab`, `client_detail`, `inline_add_client`, `dashboard`, `history`, `day_route`, `employees`, `notification`, `notice` |
+| `surface` | `clients`, `history`, `appointment_form`, `field_record` |
+| `status` | an appointment status, AND the new employee status |
+| `scope` | `single`, `series` |
+| `repeat` | `none`, `fourMonths`, `sixMonths`, `oneYear` |
+| `view_mode` | `day`, `week` |
+| `direction` | `today`, `picked`, `week_strip`, `day` |
+| `filter_name` | `none`, `type`, `building`, `archived`, `sort`, `year`, `employee`, `status` |
+| `filter_value` | the chosen type / sort / status slug |
+| `setting_name` | `app_lock`, `live_activity`, `theme`, `text_scale`, `language` |
+| `setting_value` | `on`/`off`, theme mode, a 2-dp text scale, locale code |
+| `action` | `call`, `email`, `directions`, `link`, AND `archive`/`unarchive` |
+| `period` | `today`, `week`, `month` |
+| `role` | `admin`, `employee` — the event-scoped twin of `user_role`, on `login` |
+| `method` | `password` — the only value today, lowest value to register |
+| `feature` | nothing yet; `logFeatureUsed` has no call site |
 
-Register as a **user-scoped** dimension:
+Event-scoped **dimensions**, the 8 numeric ones — they belong on the dimensions
+tab, NOT metrics. `bucketCount` maps 6-10 to `10` and 100+ to `500`, so a metric
+would sum and average bucket CEILINGS; a dimension gives the distribution the
+bucketing exists to produce. The 1/0 flags likewise segment better than they sum.
+
+| Parameter | What it sends |
+|---|---|
+| `assignee_count` | bucketed: 1-5, 10, 25, 50, 100, 500 |
+| `photo_count` | same buckets |
+| `query_length` | bucketed: 0, 2, 5, 10, 20 — never the text |
+| `has_photos` · `is_personal` · `is_all_day` · `is_day_off` · `is_multi_day` | 1/0 |
+
+Event-scoped **metric** — `delay_minutes`, unit **Minutes**. The one raw,
+unbucketed number, so the only genuine metric.
+
+Register as **user-scoped** dimensions:
 
 | Property | Answers |
 |---|---|
@@ -77,11 +106,11 @@ Register as a **user-scoped** dimension:
 | `app_locale` | EN vs FR usage |
 | `build_env` | lets you EXCLUDE debug traffic from reports |
 
-There is a limit of 50 event-scoped and 25 user-scoped custom dimensions, so
-this uses a small fraction of the budget.
+Limits are 50 event-scoped dimensions, 25 user-scoped and 50 metrics, so this
+uses roughly half the event budget.
 
-- [ ] 10 event-scoped dimensions registered
-- [ ] 3 user-scoped dimensions registered
+- [x] 24 event-scoped dimensions registered (owner, 2026-09-10)
+- [x] 3 user-scoped dimensions registered (owner, 2026-09-10)
 
 ## 3. Mark key events as conversions (optional)
 
@@ -109,30 +138,52 @@ Then Firebase Console → *Analytics → DebugView*, pick the device top-left.
 Verify one of each shape rather than every event — if these four work, the
 plumbing is right and the rest is the same code path:
 
-- [ ] A **screen view**: switch hub tabs, confirm exactly ONE `screen_view` per
+- [x] A **screen view**: switch hub tabs, confirm exactly ONE `screen_view` per
       tab arrival. Then reach Clients from the drawer instead — still one.
       (This is the observer/hub-shell split; a double here is the one real
       regression risk in the design.)
-- [ ] A **parameterised custom event**: create an appointment, confirm
+- [x] A **parameterised custom event**: create an appointment, confirm
       `appointment_created` carries `repeat`, `assignee_count`, `has_photos` etc.
-- [ ] A **user property**: DebugView → the device card → *User properties* →
+- [x] A **user property**: DebugView → the device card → *User properties* →
       `user_role` reads `admin` or `employee`.
-- [ ] **No PII anywhere** in the DebugView payloads — spot-check
+- [x] **No PII anywhere** in the payloads — every parameter on all 11 observed
+      event types scanned for `@`, any 7+ digit run and address words: clean.
+      Every value was a slug or a bucketed number.
+- [ ] The four spot-checks item 4 names by hand are still UNOBSERVED, because
+      that pass exercised no search, photo, note or contact action:
       `search_used` (no query text), `note_added` (no note), `photo_added` (no
-      filename), `contact_action` (no phone number).
+      filename), `contact_action` (no phone number). The signatures make them
+      structurally safe — `logSearchUsed` takes an `int`, `logContactAction` a
+      slug — but that is an argument from types, not an observation.
 
 **Turn it back off when finished** — remove `-FIRDebugEnabled` from the scheme,
 or that device keeps streaming every session into DebugView.
 
-- [ ] `-FIRDebugEnabled` removed from the scheme after testing
+- [x] Debug streaming turned back off (the scheme flag was never enabled —
+      `simctl launch ... -FIRDebugEnabled` passed it, then `-FIRDebugDisabled`
+      cleared it; `flutter run` cannot pass an iOS launch argument at all)
 
 ## 5. Confirm the debug/production split actually holds
 
 Cheap, and it is the thing that protects the numbers for the rest of the
 product's life:
 
-- [ ] Run **without** `ANALYTICS_DEBUG` and confirm DebugView shows nothing
-      (collection is off in debug builds by default)
+- [x] Run **without** `ANALYTICS_DEBUG` and confirm nothing is collected —
+      verified 2026-09-10 on the simulator: `Analytics collection disabled`
+      and zero events logged.
+- [ ] **Consider `FIREBASE_ANALYTICS_COLLECTION_ENABLED=NO` in `Info.plist`.**
+      That verification also exposed a ~0.8 s hole in the split.
+      `setAnalyticsCollectionEnabled` PERSISTS natively in `NSUserDefaults`, so
+      the SDK starts each launch on the PREVIOUS run's setting and only obeys
+      this build at `setCollectionEnabled` — the clean build logged
+      `collection enabled` at 22:19:06.175 and `collection disabled` at
+      22:19:07.011. Anything the SDK fires in that window (`session_start`,
+      `user_engagement`) is collected under the old setting, so a debug session
+      on a previously-debug-enabled device can still put a session into the
+      production property. The Info.plist key makes the SDK start disabled and
+      ignore the persisted value, which closes it; release builds lose nothing
+      real, since `!kDebugMode` enables collection a second into launch and
+      `session_start` then fires normally.
 - [ ] After a real release, confirm `build_env` reports `release` for the fleet
 
 ## 6. App Store Connect privacy labels — SUBMISSION BLOCKER
@@ -145,13 +196,32 @@ App Store Connect → the app → *App Privacy* → add **Usage Data → Product
 Interaction**, purpose *Analytics*, not linked to identity, not used for
 tracking.
 
-The "not linked" answer rests on two facts about the code, both worth
-re-reading before you sign it: `setUserId` is never called anywhere, and no
-analytics parameter carries a name, email, phone, address, note or filename —
-enforced by the allowlist in `AnalyticsParams.allParams`, not by convention.
+**Device ID needed `Analytics` adding too** (2026-09-10). It was declared
+App Functionality only, for the FCM push token, but Analytics also collects a
+vendor / app-instance identifier and Firebase's own Apple-label guidance lists
+Device ID under Analytics — so the manifest was still describing the
+pre-analytics app. `Linked` stays `true` there: that is the FCM token mapping to
+a `users` doc, not anything analytics does. The counter-argument (the
+app-instance id is app-scoped, not device-level) was heard and rejected — the
+cost of disclosing is a checkbox, the cost of under-disclosing is a rejection or
+a post-ship label correction.
 
-- [ ] **Owner has read and agreed** with the `PrivacyInfo.xcprivacy` entry
-- [ ] App Store Connect labels updated to match
+The "not linked" answer for Product Interaction rests on two facts about the
+code, **both re-verified 2026-09-10**: `setUserId` has zero call sites (the only
+occurrence in `lib/` is a comment in `analytics_identity_listener.dart` saying
+so), and no analytics parameter carries a name, email, phone, address, note or
+filename — enforced by the allowlist in `AnalyticsParams.allParams`, not by
+convention. The device pass also scanned every payload across 11 event types for
+`@`, 7+ digit runs and address words: clean.
+
+**Do NOT add Advertising Data or IDFA, and keep tracking `No` everywhere.** That
+answer is only true while release builds carry the item-7 flag.
+
+- [ ] **Owner has read and agreed** with the `PrivacyInfo.xcprivacy` entries
+- [ ] App Store Connect: **Usage Data → Product Interaction**, purpose
+      Analytics, not linked, not tracking
+- [ ] App Store Connect: **Identifiers → Device ID** purposes now include
+      Analytics alongside App Functionality
 
 ## 7. Build releases with the ad-id dropped — RELEASE STEP
 
