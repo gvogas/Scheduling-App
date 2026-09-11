@@ -6,6 +6,7 @@ import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_header_pair.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_top_bar.dart';
 import 'package:scheduling/shared/widgets/fields/app_search_bar.dart';
+import 'package:scheduling/shared/widgets/primitives/app_back_button.dart';
 
 const _delegates = <LocalizationsDelegate<Object?>>[
   AppLocalizations.delegate,
@@ -204,6 +205,21 @@ void main() {
     await tester.tap(find.byIcon(Icons.arrow_back_rounded));
     await tester.pumpAndSettle();
     expect(tapped, 1);
+  });
+
+  testWidgets('the back chevron meets the 48px tap minimum', (tester) async {
+    await _pump(
+      tester,
+      AppTopBar(
+        title: 'Clients',
+        onBack: () {},
+        actions: const [AppHeaderPair()],
+      ),
+    );
+
+    final size = tester.getSize(find.byType(AppBackButton));
+    expect(size.width, greaterThanOrEqualTo(48));
+    expect(size.height, greaterThanOrEqualTo(48));
   });
 
   testWidgets('the menu button still opens the end drawer from the header', (

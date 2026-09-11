@@ -177,10 +177,10 @@ class _BackChevron extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     // Nudged left so the glyph, not its tile, lines up with the gutter.
     return Transform.translate(
-      offset: const Offset(-12, 0),
+      offset: const Offset(-14, 0),
       child: SizedBox(
-        width: 44,
-        height: 44,
+        width: AppTopBar._controlsRow,
+        height: AppTopBar._controlsRow,
         child: IconButtonTheme(
           data: IconButtonThemeData(
             style: IconButton.styleFrom(foregroundColor: scheme.onSurface),
