@@ -1,8 +1,29 @@
 # Fresh header and Clients list redesign
 
 **Date:** 2026-09-11
-**Status: PLAN, NOT STARTED.** Design finalised 2026-09-11 on the canvas below;
-no code written yet.
+**Status: ALL FOUR PHASES BUILT 2026-09-11 on branch `fresh-header`, NOT
+merged, NOT shipped.** App-only — nothing here touches `functions/`, the rules
+or the indexes, so there is no deploy step. Verified at build time:
+`flutter analyze` **No issues found!** · `flutter test` **3661 passing** ·
+`flutter gen-l10n` clean with an empty `untranslated.json`.
+**What is left is Phase 3's DEVICE PASS**, which the harness cannot reach —
+see the list in Phase 3, plus three things a full-branch review flagged for
+the device specifically: the ghost tile's contrast on a form sheet (it is
+`surface` on `surfaceContainerLowest`, so in light mode the 1px border does
+nearly all the separation, a thinner margin than the same tile has on a page),
+the group card's corners under a row's ink splash, and the filter bar under
+the feature tour on a TABLET, where the unbounded-width fallback resolves to
+the screen rather than the master pane.
+
+**A review after the build found five defects the green suite was hiding**, all
+since fixed and pinned: three ghost controls whose 48px box sat OUTSIDE the
+`InkWell` (the Clients Filter button measured 38x34, and the filter sheet's
+back tile had no `InkWell` at all), the same painted control hand-spelled at
+eight sites with `_kTapTarget = 48` declared three times, a grouping memo that
+never hit on the paged path because `PagingState.items` returns a fresh list
+on every access, a tour-showcase test whose harness gave `MediaQueryData` no
+`size` so the bar rendered 16px wide and passed anyway, and a test whose name
+promised a check it did not make.
 **Mockup:** https://claude.ai/code/artifact/ed4167b6-9b21-4dbf-a950-d05d292a2347
 (page "Clients page" holds the six screens, light and dark; page "Header
 options" holds the four directions that were compared).
