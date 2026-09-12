@@ -42,6 +42,7 @@ import 'package:scheduling/features/feature_tour/widgets/feature_tour_host.dart'
 import 'package:scheduling/features/navigation/widgets/app_nav_drawer.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
+import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 
 /// Most of the portrait pane the month grid may take before it starts clipping.
 const double _kMaxGridShare = 0.7;
@@ -520,51 +521,22 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
   }
 
   /// Day-route control owned by this screen's tour.
-  Widget _dayRouteButton(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return _tour.step(
-      TourStepId.calendarDayRoute,
-      targetBorderRadius: BorderRadius.circular(AppRadius.rFull),
-      child: Tooltip(
-        message: context.l10n.calendar_dayRouteTitle,
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Center(
-            child: Material(
-              color: scheme.surface,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(AppRadius.rFull),
-                side: BorderSide(color: scheme.outlineVariant),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.dayRoute,
-                  arguments: DayRouteArgs(
-                    isAdmin: widget.isAdmin,
-                    employeeId: widget.employeeId,
-                  ),
-                ),
-                highlightColor: theme.palette.blueTintPressed,
-                child: SizedBox(
-                  width: 38,
-                  height: 38,
-                  child: Icon(
-                    Icons.alt_route_rounded,
-                    size: 19,
-                    color: scheme.onSurface,
-                  ),
-                ),
-              ),
-            ),
-          ),
+  Widget _dayRouteButton(BuildContext context) => _tour.step(
+    TourStepId.calendarDayRoute,
+    targetBorderRadius: BorderRadius.circular(AppRadius.rFull),
+    child: GhostControl.icon(
+      onTap: () => Navigator.pushNamed(
+        context,
+        AppRoutes.dayRoute,
+        arguments: DayRouteArgs(
+          isAdmin: widget.isAdmin,
+          employeeId: widget.employeeId,
         ),
       ),
-    );
-  }
+      icon: Icons.alt_route_rounded,
+      tooltip: context.l10n.calendar_dayRouteTitle,
+    ),
+  );
 
   Widget? _addAppointmentFab(BuildContext context) {
     if (!widget.isAdmin) return null;

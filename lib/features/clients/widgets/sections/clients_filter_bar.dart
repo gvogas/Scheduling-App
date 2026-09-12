@@ -5,15 +5,12 @@ import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 
 /// How wide the active building chip's label may grow before it ellipsizes. An
 /// unbounded street ("1200 Rue Sherbrooke Ouest") would otherwise push the
 /// scrolling chips off the row entirely.
 const double _maxChipLabelWidth = 160;
-
-/// Minimum tap target. The painted boxes below are smaller on purpose — the
-/// design's sizes are visual, never hit areas.
-const double _kTapTarget = 48;
 
 /// The Filter button, pinned FIRST and outside the scroller, then the filter
 /// chips scrolling horizontally beside it.
@@ -142,54 +139,14 @@ class _FilterButton extends StatelessWidget {
   final String tooltip;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return Tooltip(
-      message: tooltip,
-      child: SizedBox(
-        width: _kTapTarget,
-        height: _kTapTarget,
-        child: Center(
-          child: Material(
-            color: scheme.surface,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.rFull),
-              side: BorderSide(color: scheme.primary, width: 1.5),
-            ),
-            clipBehavior: Clip.antiAlias,
-            child: InkWell(
-              onTap: onPressed,
-              highlightColor: theme.palette.blueTintPressed,
-              child: SizedBox(
-                width: 38,
-                height: 34,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Icon(Icons.tune, size: 18, color: scheme.primary),
-                    if (isActive)
-                      Positioned(
-                        top: 5,
-                        right: 6,
-                        child: Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: theme.palette.primaryAccent,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => GhostControl.icon(
+    onTap: onPressed,
+    icon: Icons.tune,
+    tooltip: tooltip,
+    tone: GhostTone.accent,
+    iconSize: 18,
+    showBadge: isActive,
+  );
 }
 
 /// One scrolling filter chip: ink fill with a page-colour label when it is the
@@ -206,46 +163,11 @@ class _FilterChip extends StatelessWidget {
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: _kTapTarget),
-      child: Center(
-        child: Material(
-          color: selected ? scheme.onSurface : scheme.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.rFull),
-            side: selected
-                ? BorderSide.none
-                : BorderSide(color: scheme.outlineVariant),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                vertical: AppSpacing.sp8,
-                horizontal: 14,
-              ),
-              child: Text(
-                label,
-                maxLines: 1,
-                style: TextStyle(
-                  fontFamily: kFontSans,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: selected
-                      ? theme.scaffoldBackgroundColor
-                      : scheme.onSurface,
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => GhostControl.pill(
+    onTap: onTap,
+    label: label,
+    tone: selected ? GhostTone.selected : GhostTone.ghost,
+  );
 }
 
 /// The active address filter, as a tinted chip whose only action is to clear.
@@ -260,7 +182,7 @@ class _BuildingChip extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     return ConstrainedBox(
-      constraints: const BoxConstraints(minHeight: _kTapTarget),
+      constraints: const BoxConstraints(minHeight: kGhostTapTarget),
       child: Center(
         child: Material(
           color: scheme.primaryContainer,

@@ -7,16 +7,12 @@ import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/primitives/app_back_button.dart';
+import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 import 'package:scheduling/shared/widgets/primitives/section_label.dart';
 
 /// What the sheet hands back: the filter, plus the street of a picked address
 /// so the caller can label its chip without watching the building scan.
 typedef ClientsFilterPick = ({ClientsFilter filter, String? buildingLabel});
-
-/// Minimum tap target. The painted tile below is smaller on purpose — the
-/// design's sizes are visual, never hit areas.
-const double _kTapTarget = 48;
-const double _kGhostTile = 38;
 
 /// The clients list's one filter surface: Type and Shared address as a single
 /// radio group.
@@ -148,34 +144,19 @@ class _GhostBack extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    return SizedBox(
-      width: _kTapTarget,
-      height: _kTapTarget,
-      child: Center(
-        child: Material(
-          color: scheme.surface,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppRadius.rFull),
-            side: BorderSide(color: scheme.outlineVariant),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: SizedBox(
-            width: _kGhostTile,
-            height: _kGhostTile,
-            child: IconButtonTheme(
-              data: IconButtonThemeData(
-                style: IconButton.styleFrom(
-                  foregroundColor: scheme.onSurface,
-                  iconSize: 18,
-                  padding: EdgeInsets.zero,
-                  minimumSize: const Size(_kGhostTile, _kGhostTile),
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-              child: AppBackButton(onTap: onTap),
-            ),
+    return GhostControl.wrapping(
+      onTap: onTap,
+      child: IconButtonTheme(
+        data: IconButtonThemeData(
+          style: IconButton.styleFrom(
+            foregroundColor: scheme.onSurface,
+            iconSize: 18,
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(kGhostTile, kGhostTile),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
         ),
+        child: AppBackButton(onTap: onTap),
       ),
     );
   }
@@ -244,7 +225,7 @@ class _Option extends StatelessWidget {
             buildingLabel: value is ClientsFilterBuilding ? label : null,
           )),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(minHeight: _kTapTarget),
+            constraints: const BoxConstraints(minHeight: kGhostTapTarget),
             child: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: 14,

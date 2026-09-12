@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:scheduling/core/layout/breakpoints.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/shared/widgets/primitives/app_back_button.dart';
+import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 
 /// The standard screen header: a large title on the page colour, ghost
 /// controls beside it, and no coloured app bar.
@@ -37,8 +38,8 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
   static const double _titleGap = 6;
   static const double _bottomGap = 14;
 
-  /// The 48px tap floor `AppHeaderPair` already paints to.
-  static const double _controlsRow = 48;
+  /// The 48px tap floor every ghost control in the row already clears.
+  static const double _controlsRow = kGhostTapTarget;
 
   static const double _displayTitleLine = 28.6; // displayLarge, 26 / 1.1
 
