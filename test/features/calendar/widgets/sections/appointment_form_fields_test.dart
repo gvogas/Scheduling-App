@@ -11,6 +11,7 @@ import 'package:scheduling/features/calendar/widgets/fields/repeat_interval_pick
 import 'package:scheduling/features/calendar/widgets/sections/appointment_form_fields.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_search_status.dart';
+import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/cards/sheet_panel.dart';
 import 'package:scheduling/shared/widgets/fields/sheet_field_row.dart';
@@ -44,6 +45,7 @@ void main() {
     ValueChanged<DateTime>? onSelectStartDate,
     ValueChanged<DateTime>? onSelectEndDate,
     ClientSearchStatus clientSearchStatus = const ClientSearchStatus(),
+    Widget Function(TourStepId, Widget)? tourWrap,
   }) async {
     tester.view.physicalSize = Size(width, 740);
     tester.view.devicePixelRatio = 1.0;
@@ -107,8 +109,7 @@ void main() {
                 materialsHint: 'Materials',
                 photosSection: const SizedBox.shrink(),
                 callbacks: AppointmentFormCallbacks(
-                  onSearchClients: (_) {},
-                  onClientQueryModeChanged: (_) {},
+                  onSearchClients: (_) {},
                   onRetryClientSearch: () {},
                   onSelectClient: onSelectClient ?? (_) {},
                   onClearClient: () {},
@@ -124,6 +125,7 @@ void main() {
                 ),
                 onRequestAddClient: onRequestAddClient,
                 onApplyTemplate: onApplyTemplate,
+                tourWrap: tourWrap,
               ),
             ),
           ),
@@ -139,8 +141,8 @@ void main() {
   ) async {
     await pumpAppointmentForm(tester, width: 320);
 
-    final startLabel = tester.getTopLeft(find.text('Start Time'));
-    final endLabel = tester.getTopLeft(find.text('End Time'));
+    final startLabel = tester.getTopLeft(find.text('Start time'));
+    final endLabel = tester.getTopLeft(find.text('End time'));
 
     expect(endLabel.dy, greaterThan(startLabel.dy + 20));
     expect((endLabel.dx - startLabel.dx).abs(), lessThan(4));
@@ -157,7 +159,6 @@ void main() {
       onApplyTemplate: (t) => picked = t,
     );
 
-    expect(find.text('TEMPLATES'), findsOneWidget);
     await tester.tap(find.text('Water heater'));
     await tester.pumpAndSettle();
     expect(picked, JobTemplate.waterHeater);
@@ -200,7 +201,8 @@ void main() {
   testWidgets('renders the mono section labels', (tester) async {
     await pumpAppointmentForm(tester, width: 400, onApplyTemplate: (_) {});
 
-    expect(find.text('TEMPLATES'), findsOneWidget);
+    // TEMPLATES is gone — the chips live under the field they fill now.
+    expect(find.text('TEMPLATES'), findsNothing);
     expect(find.text('WHO'), findsOneWidget);
     expect(find.text('SCHEDULE'), findsOneWidget);
     expect(find.text('DETAILS'), findsOneWidget);
@@ -270,8 +272,8 @@ void main() {
 
     expect(find.text('3 days'), findsNothing);
     expect(find.text('3 nights'), findsNothing);
-    expect(find.text('Start Time'), findsOneWidget);
-    expect(find.text('End Time'), findsOneWidget);
+    expect(find.text('Start time'), findsOneWidget);
+    expect(find.text('End time'), findsOneWidget);
   });
 
   testWidgets(
@@ -283,7 +285,7 @@ void main() {
       expect(find.text('Client'), findsNothing);
       // A personal block can still have somewhere to be — the field stays, and
       // says so rather than reading as an unfinished required one.
-      expect(find.text('Address'), findsWidgets);
+      expect(find.text('Job address'), findsWidgets);
       expect(
         tester
             .widget<AppointmentAddressField>(
@@ -419,9 +421,51 @@ void main() {
     expect(find.text('All day'), findsOneWidget);
     // Only the date pair is left in the schedule panel.
     expect(find.byType(SheetFieldRow), findsNWidgets(2));
-    expect(find.text('Start Time'), findsNothing);
-    expect(find.text('End Time'), findsNothing);
+    expect(find.text('Start time'), findsNothing);
+    expect(find.text('End time'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the job-template chips sit under Service / Title, above Client', (
+    tester,
+  ) async {
+    await pumpAppointmentForm(tester, width: 400, onApplyTemplate: (_) {});
+
+    // A template fills the title and the duration and nothing else, so it
+    // belongs beside the field it fills, not in a section above the form.
+    final title = tester.getBottomLeft(find.text('Service / Title')).dy;
+    final chip = tester.getTopLeft(find.text('Water heater')).dy;
+    final client = tester.getTopLeft(find.text('Client')).dy;
+
+    expect(chip, greaterThan(title));
+    expect(chip, lessThan(client));
+    expect(find.text('Tap one to fill the title and duration'), findsOneWidget);
+  });
+
+  testWidgets('the apptTemplates tour step targets the title and the chips', (
+    tester,
+  ) async {
+    await pumpAppointmentForm(
+      tester,
+      width: 400,
+      onApplyTemplate: (_) {},
+      tourWrap: (id, child) =>
+          KeyedSubtree(key: ValueKey('tour-${id.name}'), child: child),
+    );
+
+    // The member is KEPT and only its target moves: the name IS the tour's
+    // storage key, so renaming or retiring it would replay or orphan the
+    // walkthrough on every installed device.
+    final target = find.byKey(const ValueKey('tour-apptTemplates'));
+    expect(target, findsOneWidget);
+    expect(
+      find.descendant(of: target, matching: find.text('Service / Title')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: target, matching: find.text('Water heater')),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -434,7 +478,6 @@ void main() {
         onApplyTemplate: (_) {},
       );
 
-      expect(find.text('TEMPLATES'), findsNothing);
       expect(find.text('Water heater'), findsNothing);
       expect(find.text('Repeat'), findsNothing);
       expect(find.text('Materials needed'), findsNothing);
@@ -521,7 +564,8 @@ void main() {
 
   testWidgets('the toggle OFF shows the Job address section', (tester) async {
     await pumpAppointmentForm(tester, width: 400, selectedClient: withAddress);
-    expect(find.text('Job address'), findsOneWidget);
+    // Label and placeholder both, now the field carries the section's name.
+    expect(find.text('Job address'), findsWidgets);
   });
 
   testWidgets('a client with NO address on file keeps the field', (

@@ -11,6 +11,7 @@ import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 import 'package:scheduling/features/clients/screens/clients_screen.dart';
+import 'package:scheduling/features/clients/widgets/sheets/clients_filter_sheet.dart';
 import 'package:scheduling/features/clients/widgets/sheets/edit_client_sheet.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
@@ -202,7 +203,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('shows the pinned Filter button, not the old chip row', (
+  // The per-type chips were removed 2026-09-11 (owner call): the sheet the
+  // button opens already offers every one of them.
+  testWidgets('offers the Filter button alone, with no type chips', (
     tester,
   ) async {
     when(
@@ -216,8 +219,7 @@ void main() {
     await tester.pumpWidget(_wrap(repo));
     await tester.pumpAndSettle();
 
-    expect(find.text('Filter'), findsOneWidget);
-    // The type chips are gone from the screen — they live in the sheet now.
+    expect(find.byIcon(Icons.tune), findsOneWidget);
     expect(find.text('Residential'), findsNothing);
     expect(find.text('Commercial'), findsNothing);
   });
@@ -237,7 +239,7 @@ void main() {
     expect(find.text('Name, phone, address, email…'), findsOneWidget);
   });
 
-  testWidgets('picking a type in the sheet shows one dismissible chip', (
+  testWidgets('picking a type in the sheet narrows the list to it', (
     tester,
   ) async {
     when(
@@ -247,20 +249,42 @@ void main() {
         sort: any(named: 'sort'),
       ),
     ).thenAnswer((_) async => const []);
-    when(
-      () => repo.fetchClientsByType(any()),
-    ).thenAnswer((_) async => const []);
+    when(() => repo.fetchClientsByType(ClientType.residential)).thenAnswer(
+      (_) async => const [
+        ClientRecord(id: 'r1', name: 'Rita Home', type: ClientType.residential),
+      ],
+    );
 
     await tester.pumpWidget(_wrap(repo));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Filter'));
+    await tester.tap(find.byIcon(Icons.tune));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Residential'));
+    // The sheet's own option, scoped past the chip of the same name behind it.
+    await tester.tap(find.text('Residential').last);
     await tester.pumpAndSettle();
 
-    // Back on the list: exactly one chip, naming the active filter.
-    expect(find.byType(InputChip), findsOneWidget);
-    expect(find.text('Residential'), findsOneWidget);
+    expect(find.text('Rita Home'), findsOneWidget);
+  });
+
+  // With the chips gone the sheet is the only way in, so it is what the
+  // button has to reach.
+  testWidgets('the Filter button opens the filter sheet', (tester) async {
+    when(
+      () => repo.fetchClientsPage(
+        after: any(named: 'after'),
+        limit: any(named: 'limit'),
+        sort: any(named: 'sort'),
+      ),
+    ).thenAnswer((_) async => const []);
+    when(repo.fetchBuildings).thenAnswer((_) async => const []);
+
+    await tester.pumpWidget(_wrap(repo));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.tune));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ClientsFilterSheet), findsOneWidget);
   });
 }

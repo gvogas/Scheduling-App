@@ -166,6 +166,15 @@
       ]
     },
     {
+      "collectionGroup": "appointments",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clientId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "dayIndex", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "waveSyncQueue",
       "queryScope": "COLLECTION",
       "fields": [

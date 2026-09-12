@@ -7,6 +7,7 @@ import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/primitives/app_back_button.dart';
+import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 import 'package:scheduling/shared/widgets/primitives/section_label.dart';
 
 /// What the sheet hands back: the filter, plus the street of a picked address
@@ -52,18 +53,24 @@ class ClientsFilterSheet extends ConsumerWidget {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(
-                AppSpacing.sp4,
+                AppSpacing.sp8,
                 AppSpacing.sp4,
                 AppSpacing.sp16,
                 AppSpacing.sp8,
               ),
               child: Row(
+                spacing: AppSpacing.sp8,
                 children: [
-                  AppBackButton(onTap: onBack),
+                  _GhostBack(onTap: onBack),
                   Expanded(
                     child: Text(
                       l10n.clients_filterTitle,
-                      style: Theme.of(context).textTheme.titleMedium,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.headlineLarge
+                          ?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurface,
+                          ),
                     ),
                   ),
                 ],
@@ -128,6 +135,33 @@ class ClientsFilterSheet extends ConsumerWidget {
   }
 }
 
+/// The sheet's dismiss control, painted as the header's ghost tile.
+class _GhostBack extends StatelessWidget {
+  const _GhostBack({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return GhostControl.wrapping(
+      onTap: onTap,
+      child: IconButtonTheme(
+        data: IconButtonThemeData(
+          style: IconButton.styleFrom(
+            foregroundColor: scheme.onSurface,
+            iconSize: 18,
+            padding: EdgeInsets.zero,
+            minimumSize: const Size(kGhostTile, kGhostTile),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+        ),
+        child: AppBackButton(onTap: onTap),
+      ),
+    );
+  }
+}
+
 class _SectionHeading extends StatelessWidget {
   const _SectionHeading(this.label);
 
@@ -166,29 +200,88 @@ class _Option extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final isSelected = selected == value;
-    return ListTile(
-      leading: Icon(
-        isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-        color: isSelected
-            ? theme.palette.primaryAccent
-            : theme.palette.textMuted,
+    // The chip row's vocabulary at row width: ink fill and a page-colour label
+    // when picked, a ghost outline otherwise.
+    final ink = isSelected ? theme.scaffoldBackgroundColor : scheme.onSurface;
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sp16,
+        vertical: AppSpacing.sp4,
       ),
-      title: Text(label),
-      subtitle: secondary == null ? null : Text(secondary!),
-      trailing: trailing == null
-          ? null
-          : Text(
-              trailing!,
-              style: theme.monoType.data.copyWith(
-                color: theme.palette.textMuted,
+      child: Material(
+        color: isSelected ? scheme.onSurface : scheme.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.rFull),
+          side: isSelected
+              ? BorderSide.none
+              : BorderSide(color: scheme.outlineVariant),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => onChanged((
+            filter: value,
+            buildingLabel: value is ClientsFilterBuilding ? label : null,
+          )),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: kGhostTapTarget),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: AppSpacing.sp8,
+              ),
+              child: Row(
+                spacing: AppSpacing.sp12,
+                children: [
+                  Icon(
+                    isSelected
+                        ? Icons.radio_button_checked
+                        : Icons.radio_button_unchecked,
+                    size: 20,
+                    color: isSelected ? ink : theme.palette.textMuted,
+                  ),
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontFamily: kFontSans,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: ink,
+                          ),
+                        ),
+                        if (secondary != null)
+                          Text(
+                            secondary!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: isSelected ? ink : scheme.onSurfaceVariant,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (trailing != null)
+                    Text(
+                      trailing!,
+                      style: theme.monoType.data.copyWith(
+                        color: isSelected ? ink : theme.palette.textMuted,
+                      ),
+                    ),
+                ],
               ),
             ),
-      selected: isSelected,
-      onTap: () => onChanged((
-        filter: value,
-        buildingLabel: value is ClientsFilterBuilding ? label : null,
-      )),
+          ),
+        ),
+      ),
     );
   }
 }

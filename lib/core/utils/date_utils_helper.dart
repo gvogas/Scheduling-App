@@ -5,6 +5,7 @@ abstract final class DateUtilsHelper {
   static final Map<String, DateFormat> _timeFormats = {};
   static final Map<String, DateFormat> _dateFormats = {};
   static final Map<String, DateFormat> _dayHeaderFormats = {};
+  static final Map<String, DateFormat> _dayHeaderShortFormats = {};
   static final Map<String, DateFormat> _whenLineFormats = {};
   static final Map<String, DateFormat> _dayMonthFormats = {};
 
@@ -36,6 +37,17 @@ abstract final class DateUtilsHelper {
     final format = _dayHeaderFormats.putIfAbsent(
       _locale,
       () => DateFormat.MMMMEEEEd(_locale),
+    );
+    return format.format(date);
+  }
+
+  /// The same day, abbreviated — `Fri, Sep 11`. For a header that has to fit
+  /// the date beside other controls; a skeleton again, so the word order stays
+  /// the locale's.
+  static String formatDayHeaderShort(DateTime date) {
+    final format = _dayHeaderShortFormats.putIfAbsent(
+      _locale,
+      () => DateFormat.MMMEd(_locale),
     );
     return format.format(date);
   }

@@ -68,6 +68,13 @@ abstract class ClientsRepository {
     ClientsSort sort = ClientsSort.name,
   });
 
+  /// How many non-archived clients exist, for the list header's "N of M".
+  ///
+  /// A count aggregate, not a scan: the list pages, so the rows it holds are
+  /// never the roster size, and reading the roster to count it would cost more
+  /// than the list itself.
+  Future<int> countClients();
+
   /// One-shot fetch of clients created since [since], used for dashboard
   /// trends. Legacy docs without `createdAt` (old imports) are excluded.
   Future<List<ClientRecord>> fetchClientsCreatedSince(DateTime since);

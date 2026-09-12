@@ -409,9 +409,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // The collapsed row drops the avatars, so the glyph is the only thing left
-    // saying there is something to look at.
-    expect(find.byType(AppAvatar), findsNothing);
     expect(find.byIcon(Icons.photo_outlined), findsOneWidget);
   });
 
@@ -643,7 +640,11 @@ void main() {
       return (box.decoration as BoxDecoration).color!;
     }
 
-    testWidgets('a done job takes the success tint and drops its avatars', (
+    // 2026-09-11, owner option B: this REVERSES part of the 2026-08-08
+    // collapse design. The row stays collapsed, but the avatars come back and
+    // the time gets its own line — at ~64px it read as shrunken rather than as
+    // finished. The tint and the shorter-than-a-full-card property both stay.
+    testWidgets('a done job takes the success tint and KEEPS its avatars', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -658,10 +659,40 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(fillOf(tester), AppColors.greenFill);
-      // The colour bar still carries the crew, so only the faces go.
-      expect(find.byType(AppAvatar), findsNothing);
+      expect(find.byType(AppAvatar), findsOneWidget);
       expect(find.text('Marchetti Residence'), findsOneWidget);
       expect(tester.takeException(), isNull);
+    });
+
+    // The pair that proves the row stopped reading as shrunken WITHOUT
+    // silently becoming a full card (the rejected option A).
+    testWidgets('the collapsed row is taller than it was, still shorter than '
+        'a full card', (tester) async {
+      await tester.pumpWidget(
+        _wrap(
+          AppointmentCard(
+            appointment: _appt(status: 'done'),
+            crew: _theo,
+            collapseWhenClosed: true,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final collapsed = tester.getSize(find.byType(AppointmentCard)).height;
+
+      await tester.pumpWidget(
+        _wrap(
+          AppointmentCard(
+            appointment: _appt(status: 'done'),
+            crew: _theo,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final full = tester.getSize(find.byType(AppointmentCard)).height;
+
+      expect(collapsed, greaterThan(70), reason: 'no longer half-height');
+      expect(collapsed, lessThan(full), reason: 'the collapse still collapses');
     });
 
     testWidgets('the same job stays plain white without the flag', (
@@ -712,7 +743,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(fillOf(tester), isNot(AppColors.greenFill));
-      expect(find.byType(AppAvatar), findsNothing);
+      // Owner call 2026-09-11: cancelled takes the same collapsed branch, so
+      // it gets the restoration too rather than becoming the odd row out.
+      expect(find.byType(AppAvatar), findsOneWidget);
     });
 
     testWidgets('the collapsed row clears the 48px tap-target minimum', (
@@ -758,6 +791,20 @@ void main() {
 
       // Without it, every day of a closed run renders an identical row.
       expect(find.textContaining('Day 3 of 5'), findsOneWidget);
+
+      // The counter used to be ellipsised away here: the time shared a Row
+      // with the client name at equal flex, so RenderFlex capped it at HALF
+      // the row width even when the name was short. Asserting the width rather
+      // than didExceedMaxLines because the test font is far wider per glyph
+      // than the shipped one, so this string overflows 375px either way — what
+      // changed, and what this pins, is that it now gets the whole row.
+      final cardWidth = tester.getSize(find.byType(AppointmentCard)).width;
+      final timeWidth = tester.getSize(find.textContaining('Day 3 of 5')).width;
+      expect(
+        timeWidth,
+        greaterThan(cardWidth / 2),
+        reason: 'the time line no longer splits the row with the client name',
+      );
     });
 
     testWidgets('collapsed survives 260x640 at a 2.0 text scale', (
@@ -781,6 +828,41 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+    });
+
+    // The literal "make the icons match the other status icons" request, kept
+    // as a regression guard: nothing ever mis-sized them, and the taller row
+    // must not start.
+    testWidgets('the photo glyph is the same size collapsed and full', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(260, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      Future<Size> glyphSize({required bool collapsed}) async {
+        await tester.pumpWidget(
+          _wrap(
+            MediaQuery(
+              data: const MediaQueryData(textScaler: TextScaler.linear(2)),
+              child: AppointmentCard(
+                appointment: _withPhoto(status: collapsed ? 'done' : 'pending'),
+                crew: _theo,
+                collapseWhenClosed: collapsed,
+              ),
+            ),
+            width: 260,
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        return tester.getSize(find.byIcon(Icons.photo_outlined));
+      }
+
+      final collapsed = await glyphSize(collapsed: true);
+      final full = await glyphSize(collapsed: false);
+      expect(collapsed, const Size(15, 15));
+      expect(collapsed, full);
     });
   });
 

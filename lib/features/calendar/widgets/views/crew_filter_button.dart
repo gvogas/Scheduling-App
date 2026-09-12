@@ -8,6 +8,7 @@ import 'package:scheduling/features/employees/application/employees_providers.da
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/primitives/app_avatar.dart';
+import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 
 /// The admin calendar's "show one person's jobs" control.
 class CrewFilterButton extends ConsumerWidget {
@@ -37,8 +38,6 @@ class CrewFilterButton extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final isActive = ref.watch(calendarCrewFilterProvider) != null;
     // WATCHED here, never read inside the tap handler: a `ref.read` at tap time
     // built the roster cold, got `AsyncLoading` back and disposed it again —
@@ -53,34 +52,13 @@ class CrewFilterButton extends ConsumerWidget {
     return Semantics(
       button: true,
       label: label,
-      child: Tooltip(
-        message: label,
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Center(
-            child: Material(
-              color: isActive ? scheme.primary : scheme.primaryContainer,
-              borderRadius: BorderRadius.circular(AppRadius.rIcon),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => _pick(context, ref, roster),
-                highlightColor: theme.palette.blueTintPressed,
-                child: SizedBox(
-                  width: 38,
-                  height: 38,
-                  child: Icon(
-                    Icons.person_search_rounded,
-                    size: 19,
-                    color: isActive
-                        ? scheme.onPrimary
-                        : scheme.onPrimaryContainer,
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+      child: GhostControl.icon(
+        onTap: () => _pick(context, ref, roster),
+        icon: Icons.person_search_rounded,
+        tooltip: label,
+        // Active keeps a filled tile: "filtering is on" must stay
+        // unmistakable against the ghost controls beside it.
+        tone: isActive ? GhostTone.active : GhostTone.ghost,
       ),
     );
   }

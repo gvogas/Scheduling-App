@@ -12,6 +12,7 @@ import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/utils/date_utils_helper.dart';
 import 'package:scheduling/core/utils/debouncer.dart';
 import 'package:scheduling/features/calendar/application/add_event_controller.dart';
+import 'package:scheduling/features/calendar/domain/appointment_time_step.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_prefill.dart';
 import 'package:scheduling/features/calendar/domain/models/job_template.dart';
 import 'package:scheduling/features/calendar/domain/policies/appointment_form_validator.dart';
@@ -24,7 +25,7 @@ import 'package:scheduling/features/calendar/widgets/sections/appointment_form_f
 import 'package:scheduling/features/calendar/widgets/sections/photo_picker_section.dart';
 import 'package:scheduling/features/calendar/widgets/sheets/image_source_picker.dart';
 import 'package:scheduling/features/calendar/widgets/sheets/inline_add_client_host.dart';
-import 'package:scheduling/features/clients/domain/models/client_search_status.dart';
+
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
@@ -131,15 +132,6 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
     _clientSearchDebounce.run(() => _notifier.searchClients(query));
   }
 
-  void _onClientQueryModeChanged(ClientQueryMode mode) {
-    // Swapping keyboardType on a focused field does not reliably swap the
-    // software keyboard, so drop focus and let the rebuilt field take it back.
-    FocusScope.of(context).unfocus();
-    _clientSearchDebounce.cancel();
-    _controllers.clientSearch.clear();
-    _notifier.setClientQueryMode(mode);
-  }
-
   void _onRetryClientSearch() =>
       unawaited(_notifier.searchClients(_controllers.clientSearch.text));
 
@@ -165,6 +157,7 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
     final picked = await showAdaptiveTimePicker(
       context,
       initialTime: stateBefore.selectedStartTime,
+      minuteInterval: appointmentMinuteStep,
     );
     if (picked == null || !mounted) return;
     _controllers.startTime.text = picked.format(context);
@@ -183,6 +176,7 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
     final picked = await showAdaptiveTimePicker(
       context,
       initialTime: state.selectedEndTime,
+      minuteInterval: appointmentMinuteStep,
     );
     if (picked == null || !mounted) return;
     _controllers.endTime.text = picked.format(context);
@@ -370,7 +364,7 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
             spanLength: spanLength,
             callbacks: AppointmentFormCallbacks(
               onSearchClients: _onClientSearchChanged,
-              onClientQueryModeChanged: _onClientQueryModeChanged,
+
               onRetryClientSearch: _onRetryClientSearch,
               onSelectClient: _notifier.selectClient,
               onClearClient: _notifier.clearClient,

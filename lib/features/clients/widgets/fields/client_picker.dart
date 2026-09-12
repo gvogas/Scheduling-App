@@ -8,6 +8,7 @@ import 'package:scheduling/features/clients/domain/models/client_search_status.d
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/fields/attached_dropdown.dart';
 import 'package:scheduling/shared/widgets/fields/form_helpers.dart';
+import 'package:scheduling/shared/widgets/primitives/app_avatar.dart';
 
 /// The add-job client step: a mode switch, one field, and whatever the current
 /// search has to say about it.
@@ -21,7 +22,6 @@ class ClientPicker extends StatelessWidget {
     required this.status,
     required this.isSearching,
     required this.onChanged,
-    required this.onModeChanged,
     required this.onSelect,
     required this.onRetry,
     super.key,
@@ -34,7 +34,6 @@ class ClientPicker extends StatelessWidget {
   final ClientSearchStatus status;
   final bool isSearching;
   final ValueChanged<String> onChanged;
-  final ValueChanged<ClientQueryMode> onModeChanged;
   final ValueChanged<ClientRecord> onSelect;
   final VoidCallback onRetry;
   final String? errorText;
@@ -48,19 +47,19 @@ class ClientPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final isPhone = status.mode == ClientQueryMode.phone;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _ModeSwitch(mode: status.mode, onChanged: onModeChanged),
-        const SizedBox(height: AppSpacing.sp8),
         TextFormField(
           controller: controller,
-          keyboardType: isPhone ? TextInputType.phone : TextInputType.text,
-          inputFormatters: isPhone ? const [PhoneInputFormatter()] : null,
+          // A phone formatter here would discard the letters of a name.
+          keyboardType: TextInputType.text,
           textInputAction: TextInputAction.search,
-          decoration: formInputDecoration(context, l10n.clients_tapPhoneToStart)
-              .copyWith(
+          decoration:
+              formInputDecoration(
+                context,
+                l10n.clients_searchNameOrPhone,
+              ).copyWith(
                 errorText: errorText,
                 // The spinner rides the FIELD, not the list: replacing the
                 // results with a centred indicator made the list jump on
@@ -118,30 +117,41 @@ class ClientPicker extends StatelessWidget {
       );
     }
     final isPhone = status.mode == ClientQueryMode.phone;
-    return _Dropdown(
+    final theme = Theme.of(context);
+    return AttachedDropdown(
       // Option A drops the panel header, so the fallback rung keeps its
       // warning as a caption: those rows answer a query nobody typed and must
       // never read as matches.
       caption: status.isFallback ? l10n.clients_noExactMatchClosest : null,
       children: [
         for (final client in results)
-          _DropdownRow(
+          AttachedDropdownRow(
+            // The same avatar the Clients list uses, so a result reads as the
+            // client it is rather than as a line of text.
+            leading: AppAvatar(name: client.displayName, size: AvatarSize.sm),
             headline: isPhone && client.phone.trim().isNotEmpty
                 ? formatPhoneNumber(client.phone)
                 : client.displayName,
+            headlineStyle: isPhone ? theme.monoType.metric : null,
             detail: isPhone
                 ? client.displayName
                 : (client.phone.trim().isEmpty
                       ? null
                       : formatPhoneNumber(client.phone)),
-            mono: isPhone,
-            action: l10n.clients_attach,
             onTap: () => _attach(context, client),
           ),
         if (onAddNew != null)
-          _DropdownRow(
+          AttachedDropdownRow(
+            leading: Icon(
+              Icons.person_add_alt_1,
+              size: 20,
+              color: theme.colorScheme.primary,
+            ),
             headline: l10n.clients_noneOfTheseNewClient,
-            icon: Icons.person_add_alt_1,
+            headlineStyle: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w600,
+            ),
             onTap: () {
               FocusScope.of(context).unfocus();
               onAddNew!();
@@ -155,87 +165,6 @@ class ClientPicker extends StatelessWidget {
   void _attach(BuildContext context, ClientRecord client) {
     FocusScope.of(context).unfocus();
     onSelect(client);
-  }
-}
-
-/// Phone / Name-or-address, rendered whether or not the field has focus so
-/// choosing a name search never opens a phone pad first.
-class _ModeSwitch extends StatelessWidget {
-  const _ModeSwitch({required this.mode, required this.onChanged});
-
-  final ClientQueryMode mode;
-  final ValueChanged<ClientQueryMode> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final l10n = context.l10n;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(AppRadius.r12),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _Segment(
-              label: l10n.clients_modePhone,
-              selected: mode == ClientQueryMode.phone,
-              onTap: () => onChanged(ClientQueryMode.phone),
-            ),
-          ),
-          Expanded(
-            child: _Segment(
-              label: l10n.clients_modeNameOrAddress,
-              selected: mode == ClientQueryMode.text,
-              onTap: () => onChanged(ClientQueryMode.text),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _Segment extends StatelessWidget {
-  const _Segment({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.r12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sp8,
-          vertical: AppSpacing.sp8,
-        ),
-        decoration: BoxDecoration(
-          color: selected ? scheme.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.r12),
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: selected ? scheme.onPrimary : scheme.onSurfaceVariant,
-            fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
-          ),
-        ),
-      ),
-    );
   }
 }
 
@@ -265,144 +194,6 @@ class _Tally extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// The client results, in the same attached list the address picker uses, so
-/// the two fields behave identically.
-class _Dropdown extends StatelessWidget {
-  const _Dropdown({required this.children, this.caption});
-
-  final String? caption;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    return AttachedDropdown(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (caption != null)
-            Container(
-              width: double.infinity,
-              color: theme.statusColors.warningContainer,
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sp12,
-                vertical: AppSpacing.sp8,
-              ),
-              child: Text(
-                caption!,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: theme.monoType.groupLabel.copyWith(
-                  color: theme.statusColors.onWarningContainer,
-                ),
-              ),
-            ),
-          for (var i = 0; i < children.length; i++) ...[
-            if (i > 0 || caption != null)
-              Divider(height: 1, color: scheme.outlineVariant),
-            children[i],
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _DropdownRow extends StatelessWidget {
-  const _DropdownRow({
-    required this.headline,
-    required this.onTap,
-    this.detail,
-    this.action,
-    this.icon,
-    this.mono = false,
-  });
-
-  final String headline;
-  final String? detail;
-  final String? action;
-  final IconData? icon;
-
-  /// A phone number reads as a number, not as prose.
-  final bool mono;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
-    final TextStyle? headlineStyle;
-    if (icon != null) {
-      headlineStyle = theme.textTheme.bodyMedium?.copyWith(
-        color: scheme.primary,
-        fontWeight: FontWeight.w600,
-      );
-    } else if (mono) {
-      headlineStyle = theme.monoType.metric;
-    } else {
-      headlineStyle = theme.textTheme.bodyMedium?.copyWith(
-        fontWeight: FontWeight.w600,
-      );
-    }
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sp12,
-          vertical: AppSpacing.sp8,
-        ),
-        child: Row(
-          children: [
-            if (icon != null) ...[
-              Icon(icon, size: 20, color: scheme.primary),
-              const SizedBox(width: AppSpacing.sp8),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    headline,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: headlineStyle,
-                  ),
-                  if (detail != null && detail!.trim().isNotEmpty)
-                    Text(
-                      detail!,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.labelLarge?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            if (action != null)
-              TextButton(
-                onPressed: onTap,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.sp8,
-                  ),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(
-                  action!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 }

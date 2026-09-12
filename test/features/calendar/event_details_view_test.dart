@@ -294,8 +294,8 @@ void main() {
     );
     expect(find.text('End date'), findsNothing);
     expect(find.textContaining(RegExp(r'\d+ (days|nights)')), findsNothing);
-    expect(find.text('Start Time'), findsOneWidget);
-    expect(find.text('End Time'), findsOneWidget);
+    expect(find.text('Start time'), findsOneWidget);
+    expect(find.text('End time'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

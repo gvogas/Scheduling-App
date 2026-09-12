@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
-import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
 import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
@@ -15,8 +14,10 @@ import 'package:scheduling/features/clients/application/appointment_history_prov
 import 'package:scheduling/features/clients/domain/history_grouping.dart';
 import 'package:scheduling/features/clients/domain/policies/client_search_policy.dart';
 import 'package:scheduling/features/clients/widgets/lists/history_sliver_list.dart';
+import 'package:scheduling/features/clients/widgets/lists/paged_sliver_driver.dart';
 import 'package:scheduling/features/clients/widgets/sections/history_filter_bar.dart';
 import 'package:scheduling/features/clients/widgets/views/debounced_paged_search.dart';
+import 'package:scheduling/features/clients/widgets/views/row_cache.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/app_empty_state.dart';
@@ -59,11 +60,10 @@ class AppointmentHistoryView extends ConsumerStatefulWidget {
 }
 
 class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
-    with DebouncedPagedSearch<AppointmentHistoryView> {
+    with
+        DebouncedPagedSearch<AppointmentHistoryView>,
+        PagedSliverPrefetch<AppointmentHistoryView> {
   static const int _pageSize = 25;
-
-  /// Remaining-row threshold before fetching the next page.
-  static const int _prefetchThreshold = 3;
 
   @override
   String searchQueryOf(AppointmentHistoryView widget) => widget.searchQuery;
@@ -110,9 +110,9 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
   }
 
   /// Cached row lists for loaded, filtered, and searched states.
-  final _RowCache _loadedRows = _RowCache();
-  final _RowCache _filteredRows = _RowCache();
-  final _RowCache _searchRows = _RowCache();
+  final RowCache<AppointmentRecord> _loadedRows = RowCache();
+  final RowCache<AppointmentRecord> _filteredRows = RowCache();
+  final RowCache<AppointmentRecord> _searchRows = RowCache();
 
   late final PagingController<int, AppointmentRecord> _pagingController =
       PagingController<int, AppointmentRecord>(
@@ -321,7 +321,7 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
   ) {
     if (loaded.isEmpty) {
       if (state.status == PagingStatus.loadingFirstPage) {
-        _requestFirstPage(state, fetchNextPage);
+        requestFirstPage(state, fetchNextPage);
       }
       // AppEmptyState owns its own scrollable.
       return switch (state.status) {
@@ -345,59 +345,13 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
         colorMap: colorMap,
         currentYear: currentYear,
         inSearch: false,
-        footer: _pagingFooter(state, fetchNextPage),
-        onRowBuilt: (index) =>
-            _maybeFetchNext(state, fetchNextPage, index, loaded.length),
-      ),
-    );
-  }
-
-  /// Requests the first page after a paging reset.
-  void _requestFirstPage(
-    PagingState<int, AppointmentRecord> state,
-    void Function() fetchNextPage,
-  ) {
-    if (state.isLoading) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) fetchNextPage();
-    });
-  }
-
-  /// Requests the next page near the end of the loaded rows.
-  void _maybeFetchNext(
-    PagingState<int, AppointmentRecord> state,
-    void Function() fetchNextPage,
-    int index,
-    int total,
-  ) {
-    if (index < total - _prefetchThreshold) return;
-    if (!state.hasNextPage || state.isLoading || state.error != null) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) fetchNextPage();
-    });
-  }
-
-  /// Spinner, retry row, or nothing for the paged-list tail.
-  Widget _pagingFooter(
-    PagingState<int, AppointmentRecord> state,
-    void Function() fetchNextPage,
-  ) {
-    if (state.error != null) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sp16),
-        child: Center(
-          child: TextButton(
-            onPressed: fetchNextPage,
-            child: Text(context.l10n.common_retry),
-          ),
+        footer: PagedListFooter<int, AppointmentRecord>(
+          state: state,
+          onRetry: fetchNextPage,
         ),
-      );
-    }
-    if (!state.isLoading) return const SizedBox.shrink();
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: AppSpacing.sp16),
-      // Use the app's adaptive seam for testable platform styling.
-      child: Center(child: AdaptiveProgressIndicator(size: 36, strokeWidth: 4)),
+        onRowBuilt: (index) =>
+            maybeFetchNext(state, fetchNextPage, index, loaded.length),
+      ),
     );
   }
 
@@ -522,23 +476,6 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
       actionLabel: _hasChipFilter ? l10n.clients_clearFilters : null,
       onAction: _hasChipFilter ? _clearFilters : null,
     );
-  }
-}
-
-/// Caches one derived row list against its input key.
-class _RowCache {
-  Object? _key;
-  List<AppointmentRecord> _rows = const [];
-
-  List<AppointmentRecord> of(
-    Object key,
-    List<AppointmentRecord> Function() compute,
-  ) {
-    if (_key != key) {
-      _key = key;
-      _rows = compute();
-    }
-    return _rows;
   }
 }
 

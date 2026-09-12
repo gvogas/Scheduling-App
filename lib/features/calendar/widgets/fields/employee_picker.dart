@@ -287,7 +287,7 @@ class _EmployeeChip extends StatelessWidget {
       child: GestureDetector(
         onTap: onTap,
         child: Container(
-          alignment: Alignment.center,
+          // No `alignment`: one would expand this chip to the Wrap's width.
           constraints: const BoxConstraints(minHeight: 44),
           padding: const EdgeInsets.fromLTRB(
             AppSpacing.sp8,

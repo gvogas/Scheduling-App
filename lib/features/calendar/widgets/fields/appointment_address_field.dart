@@ -3,6 +3,7 @@ import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/fields/address_autocomplete_field.dart';
+import 'package:scheduling/shared/widgets/fields/form_helpers.dart';
 import 'package:scheduling/shared/widgets/sheets/sheet_widgets.dart';
 
 class AppointmentAddressField extends StatelessWidget {
@@ -32,16 +33,21 @@ class AppointmentAddressField extends StatelessWidget {
   Widget build(BuildContext context) {
     final showPill = selectedClient != null && !useCustomAddress;
     final scheme = Theme.of(context).colorScheme;
+    // This block names itself; the form must not label it as well.
+    final label = context.l10n.calendar_jobAddress;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (showPill)
-          _AddressPill(client: selectedClient!, onChange: onSwitchToCustom)
-        else ...[
+        if (showPill) ...[
+          formLabel(context, label, required: !optional, optional: optional),
+          _AddressPill(client: selectedClient!, onChange: onSwitchToCustom),
+        ] else ...[
           SheetFocusScroll(
             child: AddressAutocompleteField(
               controller: addressController,
+              label: label,
+              required: !optional,
               optional: optional,
             ),
           ),

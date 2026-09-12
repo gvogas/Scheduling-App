@@ -19,6 +19,7 @@
 const {onDocumentWritten} = require("firebase-functions/v2/firestore");
 const logger = require("firebase-functions/logger");
 const {debounceRecount} = require("./recount_claim");
+const {isCancelledStatus} = require("./time_utils");
 const {adminFirestore} = require("./admin_firestore");
 
 /** Firestore `NOT_FOUND` — the client was deleted out from under the job. */
@@ -45,9 +46,15 @@ function clientIdOf(data) {
 /**
  * Which client docs need their `jobCount` recomputed after this write.
  *
- * Creates and deletes touch one client; a reassignment touches both. An edit
- * that leaves `clientId` alone touches none, so an ordinary title or time
- * change costs zero reads. Personal jobs carry no `clientId` and are skipped.
+ * Creates and deletes touch one client; a reassignment touches both. Personal
+ * jobs carry no `clientId` and are skipped.
+ *
+ * An unchanged `clientId` ALSO recounts when the job's cancelled-ness flipped,
+ * because the aggregate excludes cancelled jobs — without this the count only
+ * corrects itself on some later write that happens to move `clientId`, so a
+ * cancellation left the client reading one job too many indefinitely. The gate
+ * is cancelled-ness and NOT "the status changed", so an ordinary
+ * `pending -> done` edit still costs zero reads.
  *
  * @param {?Object} beforeData Appointment fields before the write, or null.
  * @param {?Object} afterData Appointment fields after the write, or null.
@@ -56,11 +63,66 @@ function clientIdOf(data) {
 function clientsToRecount(beforeData, afterData) {
   const before = clientIdOf(beforeData);
   const after = clientIdOf(afterData);
-  if (before === after) return [];
+  if (before === after) {
+    if (!after) return [];
+    const wasCancelled = isCancelledStatus(beforeData && beforeData.status);
+    const isCancelled = isCancelledStatus(afterData && afterData.status);
+    return wasCancelled === isCancelled ? [] : [after];
+  }
   const ids = [];
   if (before) ids.push(before);
   if (after) ids.push(after);
   return ids;
+}
+
+/**
+ * The `jobCount` this client's appointments add up to.
+ *
+ * Exported because `scripts/recount-client-jobs.js` has to answer exactly the
+ * same question for the backfill, and a second spelling of the
+ * inclusion-exclusion below is a backfill that disagrees with the trigger —
+ * which would look like the trigger being broken, on whichever clients the
+ * script had touched most recently.
+ *
+ * @param {!Object} db Firestore instance.
+ * @param {string} clientId Client doc id.
+ * @return {!Promise<number>}
+ */
+async function countJobsFor(db, clientId) {
+  const base = db.collection("appointments").where("clientId", "==", clientId);
+  // A multi-day run is ONE job stored as one document per work day, so a
+  // document count would read 5 for a Monday-to-Friday booking — on a badge
+  // captioned "jobs". The later days are exactly the documents carrying
+  // `dayIndex > 1`: a single-day job omits the field entirely and day 1 stores
+  // 1, and an inequality filter excludes a document missing the field, so this
+  // subtraction needs no backfill and no per-document read. Served by the
+  // (clientId ASC, dayIndex ASC) composite.
+  // Cancelled visits are not jobs. Subtracting them — rather than filtering to
+  // an allowlist of live statuses — is what keeps a legacy `confirmed` or a
+  // doc with no status counted, which fails in the safe direction.
+  //
+  // The fourth term is the inclusion-exclusion correction, not a guard: one
+  // live 5-day run plus one cancelled 5-day run is 10 - 8 - 5 = -3 without it,
+  // and the right answer is 1, so clamping at 0 would also be wrong.
+  //
+  // Accepted limitation: a Firestore `where` cannot lowercase, so a
+  // console- or Admin-SDK-written "Cancelled" still counts.
+  // `isValidAppointmentStatus` holds every CLIENT write to the lowercase set.
+  const laterRunDaysOf = (q) => q.where("dayIndex", ">", 1);
+  const cancelledOf = (q) => q.where("status", "==", "cancelled");
+  const [total, laterRunDays, cancelled, cancelledLaterRunDays] =
+    await Promise.all([
+      base.count().get(),
+      laterRunDaysOf(base).count().get(),
+      cancelledOf(base).count().get(),
+      laterRunDaysOf(cancelledOf(base)).count().get(),
+    ]);
+  return (
+    total.data().count -
+    laterRunDays.data().count -
+    cancelled.data().count +
+    cancelledLaterRunDays.data().count
+  );
 }
 
 /**
@@ -70,19 +132,7 @@ function clientsToRecount(beforeData, afterData) {
  * @return {!Promise<void>}
  */
 async function recountOne(db, clientId) {
-  const base = db.collection("appointments").where("clientId", "==", clientId);
-  // A multi-day run is ONE job stored as one document per work day, so a
-  // document count would read 5 for a Monday-to-Friday booking — on a badge
-  // captioned "jobs". The later days are exactly the documents carrying
-  // `dayIndex > 1`: a single-day job omits the field entirely and day 1 stores
-  // 1, and an inequality filter excludes a document missing the field, so this
-  // subtraction needs no backfill and no per-document read. Served by the
-  // (clientId ASC, dayIndex ASC) composite.
-  const [total, laterRunDays] = await Promise.all([
-    base.count().get(),
-    base.where("dayIndex", ">", 1).count().get(),
-  ]);
-  const jobCount = total.data().count - laterRunDays.data().count;
+  const jobCount = await countJobsFor(db, clientId);
   try {
     // update(), not set({merge:true}) — a client removed out-of-band (the app
     // has no delete path, but the Admin SDK and console bypass that) must not
@@ -198,6 +248,7 @@ module.exports = {
   // update() over set({merge:true}), and swallowing NOT_FOUND while rethrowing
   // everything else so `retry: true` still means something — are silent when
   // wrong, so they are asserted directly rather than through the trigger.
+  countJobsFor,
   recountOne,
   NOT_FOUND,
 };

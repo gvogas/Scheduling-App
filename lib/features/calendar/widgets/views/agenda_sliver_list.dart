@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:scheduling/core/analytics/analytics_events.dart';
+import 'package:scheduling/core/layout/floating_controls.dart';
+import 'package:scheduling/core/layout/text_measure.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/calendar/domain/appointment_crew.dart';
 import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
@@ -13,11 +15,6 @@ import 'package:scheduling/shared/widgets/feedback/app_empty_state.dart';
 import 'package:scheduling/shared/widgets/feedback/skeleton_loader.dart';
 import 'package:scheduling/shared/widgets/primitives/fade_in_item.dart';
 
-/// Bottom gap a host must leave when it floats controls over this list: the
-/// calendar's 58px FAB and its "Today" pill both sit 16px above the bottom of
-/// the body, so without it the LAST card of the day scrolls to a rest position
-/// underneath them and can neither be read nor tapped.
-const double kAgendaFloatingControlsClearance = 90;
 
 /// The day's agenda rows as slivers — the skeleton, the empty state or the card
 /// list.
@@ -48,7 +45,7 @@ class AgendaSliverList extends StatelessWidget {
 
   /// Extra scrollable extent below the last card, so a host that floats
   /// controls over the list can scroll the last job clear of them — pass
-  /// [kAgendaFloatingControlsClearance].
+  /// [kFloatingControlsClearance].
   final double bottomClearance;
 
   /// One day of the week agenda rather than the whole agenda.
@@ -242,12 +239,18 @@ class _ClosedRule extends StatelessWidget {
 class AgendaHeader extends StatelessWidget {
   const AgendaHeader({
     required this.dayTitle,
+    required this.dayTitleShort,
     required this.jobLabel,
     super.key,
     this.trailing,
   });
 
   final String dayTitle;
+
+  /// Used when the full title would not fit beside the count and the toggle —
+  /// the same long/short pair the calendar's month row picks between.
+  final String dayTitleShort;
+
   final String jobLabel;
 
   /// A control after the count — the day/week toggle.
@@ -261,11 +264,20 @@ class AgendaHeader extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: Text(
-              dayTitle,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.titleLarge,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final style = theme.textTheme.titleLarge;
+                final fits =
+                    !constraints.hasBoundedWidth ||
+                    measureTextWidth(context, dayTitle, style) <=
+                        constraints.maxWidth;
+                return Text(
+                  fits ? dayTitle : dayTitleShort,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: style,
+                );
+              },
             ),
           ),
           const SizedBox(width: AppSpacing.sp8),

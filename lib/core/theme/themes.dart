@@ -99,16 +99,19 @@ ThemeData _buildLightTheme() {
       secondary: AppColors.ink60,
       caption: AppColors.ink25,
     ),
+    // The raw AppBars left are dialog routes and InvalidRouteScreen; AppTopBar
+    // styles itself.
     appBarTheme: const AppBarTheme(
-      backgroundColor: AppColors.blue,
-      foregroundColor: Colors.white,
+      backgroundColor: AppColors.paper,
+      foregroundColor: AppColors.ink,
+      surfaceTintColor: Colors.transparent,
       elevation: 0,
       centerTitle: false,
       titleTextStyle: TextStyle(
         fontFamily: kFontSans,
         fontSize: 17,
         fontWeight: FontWeight.w700,
-        color: Colors.white,
+        color: AppColors.ink,
       ),
     ),
     cardTheme: CardThemeData(
@@ -279,16 +282,19 @@ ThemeData _buildDarkTheme() {
       secondary: AppColors.darkTextSecondary,
       caption: AppColors.darkTextMuted,
     ),
+    // The raw AppBars left are dialog routes and InvalidRouteScreen; AppTopBar
+    // styles itself.
     appBarTheme: const AppBarTheme(
-      backgroundColor: AppColors.darkBlueFill,
-      foregroundColor: Colors.white,
+      backgroundColor: AppColors.darkPage,
+      foregroundColor: AppColors.darkTextPrimary,
+      surfaceTintColor: Colors.transparent,
       elevation: 0,
       centerTitle: false,
       titleTextStyle: TextStyle(
         fontFamily: kFontSans,
         fontSize: 17,
         fontWeight: FontWeight.w700,
-        color: Colors.white,
+        color: AppColors.darkTextPrimary,
       ),
     ),
     cardTheme: CardThemeData(

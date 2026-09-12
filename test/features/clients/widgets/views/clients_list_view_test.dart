@@ -9,12 +9,14 @@ import 'package:mocktail/mocktail.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
+import 'package:scheduling/features/clients/domain/client_grouping.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 import 'package:scheduling/features/clients/domain/policies/client_building.dart';
+import 'package:scheduling/features/clients/widgets/lists/clients_sliver_list.dart';
 import 'package:scheduling/features/clients/widgets/views/clients_list_view.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/skeleton_loader.dart';
@@ -36,6 +38,8 @@ Widget _wrap(
   ClientsSort sort = ClientsSort.name,
   void Function(int count)? onCountChanged,
   List<Override> extraOverrides = const [],
+  bool grouped = false,
+  String? buildingLabel,
 }) {
   final view = ClientsListView(
     searchQuery: searchQuery,
@@ -43,6 +47,8 @@ Widget _wrap(
     filter: filter,
     sort: sort,
     onCountChanged: onCountChanged,
+    grouped: grouped,
+    buildingLabel: buildingLabel,
   );
   return ProviderScope(
     overrides: [
@@ -190,6 +196,56 @@ void main() {
     verify(() => repo.fetchClientsByType(ClientType.commercial)).called(1);
   });
 
+  // The repro: with a filter active, picking a sort rebuilt the view but
+  // nothing downstream consumed the new value, so the rows never moved.
+  testWidgets('a sort change RE-ORDERS the filtered list, with no refetch', (
+    tester,
+  ) async {
+    when(() => repo.fetchClientsByType(ClientType.commercial)).thenAnswer(
+      (_) async => const [
+        ClientRecord(
+          id: 'v1',
+          name: 'Alpha Co',
+          type: ClientType.commercial,
+          jobCount: 1,
+        ),
+        ClientRecord(
+          id: 'v2',
+          name: 'Zulu Co',
+          type: ClientType.commercial,
+          jobCount: 9,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _wrap(repo, filter: const ClientsFilterType(ClientType.commercial)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.text('Alpha Co')).dy,
+      lessThan(tester.getTopLeft(find.text('Zulu Co')).dy),
+      reason: 'name order puts Alpha first',
+    );
+
+    await tester.pumpWidget(
+      _wrap(
+        repo,
+        filter: const ClientsFilterType(ClientType.commercial),
+        sort: ClientsSort.mostJobs,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.text('Zulu Co')).dy,
+      lessThan(tester.getTopLeft(find.text('Alpha Co')).dy),
+      reason: 'most jobs floats Zulu, which name order buried',
+    );
+
+    // Ordering is a view concern: re-sorting must not cost a second read.
+    verify(() => repo.fetchClientsByType(ClientType.commercial)).called(1);
+  });
+
   testWidgets('the archived filter reads its own bounded query', (
     tester,
   ) async {
@@ -334,6 +390,118 @@ void main() {
         sort: ClientsSort.mostJobs,
       ),
     ).called(greaterThan(0));
+  });
+
+  // Grouping is opt-in so a host that only wants rows — a picker dropped into
+  // a sheet — keeps the flat list without passing anything.
+  testWidgets('groups by initial under Name sort only when asked', (
+    tester,
+  ) async {
+    when(
+      () => repo.fetchClientsPage(
+        after: any(named: 'after'),
+        limit: any(named: 'limit'),
+        sort: any(named: 'sort'),
+      ),
+    ).thenAnswer(
+      (_) async => const [
+        ClientRecord(id: 'c1', name: 'Alice Brown'),
+        ClientRecord(id: 'c2', name: 'Bob Carter'),
+      ],
+    );
+
+    await tester.pumpWidget(_wrap(repo));
+    await tester.pumpAndSettle();
+    expect(find.text('A'), findsNothing);
+
+    await tester.pumpWidget(_wrap(repo, grouped: true));
+    await tester.pumpAndSettle();
+
+    expect(find.text('A'), findsOneWidget);
+    expect(find.text('B'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('drops the letter headings under a sort that is not Name', (
+    tester,
+  ) async {
+    when(
+      () => repo.fetchClientsPage(
+        after: any(named: 'after'),
+        limit: any(named: 'limit'),
+        sort: any(named: 'sort'),
+      ),
+    ).thenAnswer(
+      (_) async => const [
+        ClientRecord(id: 'c1', name: 'Alice Brown', jobCount: 9),
+        ClientRecord(id: 'c2', name: 'Bob Carter', jobCount: 2),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _wrap(repo, grouped: true, sort: ClientsSort.mostJobs),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('A'), findsNothing);
+    expect(find.text('B'), findsNothing);
+    expect(find.text('Alice Brown'), findsOneWidget);
+  });
+
+  testWidgets('a building filter heads its one group with the street', (
+    tester,
+  ) async {
+    when(() => repo.fetchClientsByBuilding('k1')).thenAnswer(
+      (_) async => const [
+        ClientRecord(id: 'c1', name: 'Alice Brown'),
+        ClientRecord(id: 'c2', name: 'Bob Carter'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _wrap(
+        repo,
+        grouped: true,
+        filter: const ClientsFilterBuilding('k1'),
+        buildingLabel: '4450 Prom. Paton',
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('4450 PROM. PATON'), findsOneWidget);
+    expect(find.text('A'), findsNothing);
+  });
+
+  // Grouping is an O(N) pass per row — two regex passes through displayName
+  // plus an accent fold — and PagingState.items hands back a freshly flattened
+  // list on every access, so a memo can only hit against a cached instance.
+  testWidgets('regroups nothing on a rebuild that changes none of its inputs', (
+    tester,
+  ) async {
+    when(
+      () => repo.fetchClientsPage(
+        after: any(named: 'after'),
+        limit: any(named: 'limit'),
+        sort: any(named: 'sort'),
+      ),
+    ).thenAnswer(
+      (_) async => const [
+        ClientRecord(id: 'c1', name: 'Alice Brown'),
+        ClientRecord(id: 'c2', name: 'Bob Carter'),
+      ],
+    );
+
+    List<ClientGroup> groupsNow() =>
+        tester.widget<ClientsSliverList>(find.byType(ClientsSliverList)).groups;
+
+    await tester.pumpWidget(_wrap(repo, grouped: true));
+    await tester.pumpAndSettle();
+    final grouped = groupsNow();
+
+    await tester.pumpWidget(_wrap(repo, grouped: true));
+    await tester.pumpAndSettle();
+
+    expect(identical(groupsNow(), grouped), isTrue);
   });
 
   testWidgets('reports the loaded row count to its host', (tester) async {

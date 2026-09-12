@@ -1,8 +1,46 @@
 # Fresh header and Clients list redesign
 
 **Date:** 2026-09-11
-**Status: PLAN, NOT STARTED.** Design finalised 2026-09-11 on the canvas below;
-no code written yet.
+**Status: ALL FOUR PHASES BUILT 2026-09-11 on branch `fresh-header`, NOT
+merged, NOT shipped.** App-only — nothing here touches `functions/`, the rules
+or the indexes, so there is no deploy step. Verified at build time:
+`flutter analyze` **No issues found!** · `flutter test` **3661 passing** ·
+`flutter gen-l10n` clean with an empty `untranslated.json`.
+**What is left is Phase 3's DEVICE PASS**, which the harness cannot reach —
+see the list in Phase 3, plus three things a full-branch review flagged for
+the device specifically: the ghost tile's contrast on a form sheet (it is
+`surface` on `surfaceContainerLowest`, so in light mode the 1px border does
+nearly all the separation, a thinner margin than the same tile has on a page),
+the group card's corners under a row's ink splash, and the filter bar under
+the feature tour on a TABLET, where the unbounded-width fallback resolves to
+the screen rather than the master pane.
+
+**A simulator pass on the Add Appointment sheet (2026-09-12) found four more**,
+all fixed and pinned. One belongs to Phase 4 and reached every sheet in the
+app: `SheetHeaderBar` split the bar `flex: 3/4/3`, so the title got 40% and
+"New Appointment" rendered "New Appoin..." on the WIDEST iPhone at default text
+size while both ghost tiles sat half empty — the tiles are measured to the
+wider label now, which keeps the centring the two existing tests pin and hands
+the title the remainder. The other three predate this branch: an
+`EmployeePicker` chip carried `alignment: Alignment.center` beside its 44pt tap
+floor (added 2026-08-22 in `cc008388`), and a `Container` with an alignment
+expands to its parent's bounded width, so every chip took a whole row of the
+`Wrap`; the appointment form labelled the address block itself AND let
+`AddressAutocompleteField` default its own label, reading "Job address /
+Address / Address" down three lines; and EN alone had "Start Time"/"End Time"
+beside "Start date"/"End date" in the same panel, where the multi-day variants
+were already lowercase. Together they returned about 150pt to the form — the
+`SCHEDULE` panel is now on the first screen instead of below the fold.
+
+**A review after the build found five defects the green suite was hiding**, all
+since fixed and pinned: three ghost controls whose 48px box sat OUTSIDE the
+`InkWell` (the Clients Filter button measured 38x34, and the filter sheet's
+back tile had no `InkWell` at all), the same painted control hand-spelled at
+eight sites with `_kTapTarget = 48` declared three times, a grouping memo that
+never hit on the paged path because `PagingState.items` returns a fresh list
+on every access, a tour-showcase test whose harness gave `MediaQueryData` no
+`size` so the bar rendered 16px wide and passed anyway, and a test whose name
+promised a check it did not make.
 **Mockup:** https://claude.ai/code/artifact/ed4167b6-9b21-4dbf-a950-d05d292a2347
 (page "Clients page" holds the six screens, light and dark; page "Header
 options" holds the four directions that were compared).
@@ -171,6 +209,31 @@ Phase 1, applied to the surfaces that open OVER a screen:
 Behaviour that stays exactly as it is, in every phase: filtering logic, the
 filter sheet's options, search, sorting, paging, and the blue brand accent
 elsewhere (FAB, buttons, selected calendar day).
+
+## Two decisions taken at build time (2026-09-11)
+
+Both were raised because the plan as written contradicted a rule younger than
+it. Recorded here so neither is re-litigated from the rules file alone.
+
+- **The type badge goes BACK on the Clients row, reversing the 2026-09-07 owner
+  call.** `.claude/rules/clients.md` had reduced the row to ONE badge (Archived)
+  because archived, type, Building and the job count were "all competing under
+  one name"; the canvas design approved 2026-09-11 shows the badge again, and
+  the owner confirmed it is deliberate. What makes it survivable this time is
+  the rest of the redesign: the row is no longer a flat `ListTile` competing for
+  one line, and the Building pill and the shared-address count are still gone.
+  The two `client_tile_test.dart` tests that pinned the absence
+  ("no longer renders a type chip", "no longer marks a shared address as a
+  building") are rewritten to assert its PRESENCE, and the rules file records
+  the reversal — a test deleted without its rule updated is what makes the next
+  audit read this as drift.
+- **Grouping is opt-in: `ClientsListView` takes `grouped`, defaulting to
+  `false`.** The plan put the letter headers and group cards in that view
+  unconditionally, but it is also the booking flow's client picker, and the
+  chrome rule keeps the Filter button and list header in `clients_screen.dart`
+  precisely so the picker is suppressed for free. The Clients screen passes
+  `grouped: true`; the picker keeps today's flat list inside its sheet, where
+  vertical space is tight.
 
 ## Notes for the build
 

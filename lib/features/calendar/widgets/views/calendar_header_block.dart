@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:scheduling/core/layout/breakpoints.dart';
+import 'package:scheduling/core/layout/text_measure.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_header_pair.dart';
@@ -39,12 +40,12 @@ class CalendarHeaderBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final surface = theme.scaffoldBackgroundColor;
     final topInset = MediaQuery.paddingOf(context).top;
 
     // No AppBar means nothing sets the system overlay style for this screen.
     final overlay =
-        ThemeData.estimateBrightnessForColor(scheme.surface) == Brightness.dark
+        ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
         ? SystemUiOverlayStyle.light
         : SystemUiOverlayStyle.dark;
 
@@ -61,13 +62,8 @@ class CalendarHeaderBlock extends StatelessWidget {
 
     return AnnotatedRegion<SystemUiOverlayStyle>(
       value: overlay,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: scheme.surface,
-          border: Border(
-            bottom: BorderSide(color: scheme.outlineVariant),
-          ),
-        ),
+      child: ColoredBox(
+        color: surface,
         child: Padding(
           padding: EdgeInsets.fromLTRB(18, topInset + 10, 18, 12),
           child: Column(
@@ -142,10 +138,7 @@ class _TitleColumn extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          context.l10n.calendar_scheduleLabel,
-          style: theme.monoType.label,
-        ),
+        Text(context.l10n.calendar_scheduleLabel, style: theme.monoType.label),
         const SizedBox(height: AppSpacing.sp4),
         _MonthRow(
           monthLabel: monthLabel,
@@ -193,19 +186,6 @@ class _MonthRow extends StatelessWidget {
   final String yearLabel;
   final VoidCallback onTap;
 
-  /// Width [text] would paint at, at the ambient text scale.
-  static double _widthOf(BuildContext context, String text, TextStyle? style) {
-    final painter = TextPainter(
-      text: TextSpan(text: text, style: style),
-      textDirection: Directionality.of(context),
-      textScaler: MediaQuery.textScalerOf(context),
-      maxLines: 1,
-    )..layout();
-    final width = painter.width;
-    painter.dispose();
-    return width;
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -219,11 +199,11 @@ class _MonthRow extends StatelessWidget {
         // Everything the month has to share the row with: the gap, the year,
         // the gap before the chevron, and the chevron.
         final reserved =
-            AppSpacing.sp8 + _widthOf(context, yearLabel, yearStyle) + 6 + 18;
+            AppSpacing.sp8 + measureTextWidth(context, yearLabel, yearStyle) + 6 + 18;
         final available = constraints.maxWidth - reserved;
         final label =
             !constraints.hasBoundedWidth ||
-                _widthOf(context, monthLabel, monthStyle) <= available
+                measureTextWidth(context, monthLabel, monthStyle) <= available
             ? monthLabel
             : monthLabelShort;
 

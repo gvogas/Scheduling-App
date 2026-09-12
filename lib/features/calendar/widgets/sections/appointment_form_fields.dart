@@ -69,8 +69,7 @@ class AppointmentFormControllers {
 /// Required callbacks shared by add and edit appointment forms.
 class AppointmentFormCallbacks {
   const AppointmentFormCallbacks({
-    required this.onSearchClients,
-    required this.onClientQueryModeChanged,
+    required this.onSearchClients,
     required this.onRetryClientSearch,
     required this.onSelectClient,
     required this.onClearClient,
@@ -89,8 +88,7 @@ class AppointmentFormCallbacks {
   final ValueChanged<bool> onDayOffChanged;
   final ValueChanged<bool> onAllDayChanged;
 
-  final ValueChanged<String> onSearchClients;
-  final ValueChanged<ClientQueryMode> onClientQueryModeChanged;
+  final ValueChanged<String> onSearchClients;
   final VoidCallback onRetryClientSearch;
   final ValueChanged<ClientRecord> onSelectClient;
   final VoidCallback onClearClient;
@@ -313,7 +311,6 @@ class AppointmentFormFields extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ..._templatesSection(context, l10n),
         ..._whoSection(context, l10n),
         ..._scheduleSection(context, l10n),
         ..._detailsSection(context, l10n),
@@ -321,28 +318,61 @@ class AppointmentFormFields extends StatelessWidget {
     );
   }
 
-  /// Quick-fill job-template chips for add flow.
-  List<Widget> _templatesSection(BuildContext context, AppLocalizations l10n) {
-    if (onApplyTemplate == null || isPersonal) return const [];
-    return [
-      MonoSectionLabel(l10n.calendar_sectionTemplates),
-      const SizedBox(height: AppSpacing.sp8),
-      _tour(
-        TourStepId.apptTemplates,
-        Wrap(
-          spacing: AppSpacing.sp8,
-          runSpacing: AppSpacing.sp8,
-          children: [
-            for (final template in JobTemplate.values)
-              ActionChip(
-                label: Text(jobTemplateLabel(l10n, template)),
-                onPressed: () => onApplyTemplate!(template),
-              ),
-          ],
-        ),
+  /// Service title, and on the add flow the job-template chips that fill it.
+  ///
+  /// A template sets this field and the default duration and nothing else, so
+  /// the chips sit under it rather than in a section of their own. They keep
+  /// the `apptTemplates` tour step: its copy still describes them, and the
+  /// member name IS the tour's storage key, so moving the target replays
+  /// nothing.
+  Widget _titleGroup(BuildContext context, AppLocalizations l10n) {
+    final field = SheetFocusScroll(
+      child: LabeledTextField(
+        label: l10n.calendar_serviceTitle,
+        // Blank personal titles save as "Personal".
+        hint: isPersonal
+            ? l10n.calendar_personal
+            : l10n.calendar_eGPlumbingRepair,
+        controller: controllers.title,
+        required: !isPersonal,
+        optional: isPersonal,
+        textCapitalization: TextCapitalization.sentences,
+        textInputAction: TextInputAction.next,
+        maxLength: TextLimits.appointmentTitle,
+        errorText: _err(context, 'title'),
       ),
-      const SizedBox(height: AppSpacing.sp16),
-    ];
+    );
+    if (onApplyTemplate == null || isPersonal) return field;
+    final theme = Theme.of(context);
+    return _tour(
+      TourStepId.apptTemplates,
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          field,
+          const SizedBox(height: AppSpacing.sp8),
+          Wrap(
+            spacing: AppSpacing.sp8,
+            runSpacing: AppSpacing.sp8,
+            children: [
+              for (final template in JobTemplate.values)
+                ActionChip(
+                  label: Text(jobTemplateLabel(l10n, template)),
+                  onPressed: () => onApplyTemplate!(template),
+                ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sp4),
+          // Nothing else says a template sets the duration too.
+          Text(
+            l10n.calendar_templateHint,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.palette.textTertiary,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Service title, the personal-job switch, client picker and employee picker.
@@ -362,23 +392,8 @@ class AppointmentFormFields extends StatelessWidget {
       ],
       const SizedBox(height: AppSpacing.sp16),
     ],
-    // --- Service title ---
-    SheetFocusScroll(
-      child: LabeledTextField(
-        label: l10n.calendar_serviceTitle,
-        // Blank personal titles save as "Personal".
-        hint: isPersonal
-            ? l10n.calendar_personal
-            : l10n.calendar_eGPlumbingRepair,
-        controller: controllers.title,
-        required: !isPersonal,
-        optional: isPersonal,
-        textCapitalization: TextCapitalization.sentences,
-        textInputAction: TextInputAction.next,
-        maxLength: TextLimits.appointmentTitle,
-        errorText: _err(context, 'title'),
-      ),
-    ),
+    // --- Service title, and the chips that fill it ---
+    _titleGroup(context, l10n),
     const SizedBox(height: AppSpacing.sp16),
     // --- Client (a personal job has none) ---
     if (!isPersonal) ...[
@@ -392,8 +407,7 @@ class AppointmentFormFields extends StatelessWidget {
                   results: clientResults,
                   status: clientSearchStatus,
                   isSearching: isSearchingClient,
-                  onChanged: callbacks.onSearchClients,
-                  onModeChanged: callbacks.onClientQueryModeChanged,
+                  onChanged: callbacks.onSearchClients,
                   onSelect: _selectClient,
                   onRetry: callbacks.onRetryClientSearch,
                   errorText: _err(context, 'client'),
@@ -412,8 +426,6 @@ class AppointmentFormFields extends StatelessWidget {
       ),
       const SizedBox(height: AppSpacing.sp16),
       if (!_clientAddressInUse) ...[
-        formLabel(context, l10n.calendar_jobAddress, required: true),
-        const SizedBox(height: AppSpacing.sp4),
         _tour(TourStepId.apptJobAddress, _jobAddress()),
         const SizedBox(height: AppSpacing.sp16),
       ],
@@ -421,8 +433,6 @@ class AppointmentFormFields extends StatelessWidget {
     // A personal block has no client but may still name a place. Day off has
     // neither.
     if (isPersonal && !isDayOff) ...[
-      formLabel(context, l10n.calendar_jobAddress, optional: true),
-      const SizedBox(height: AppSpacing.sp4),
       _jobAddress(),
       const SizedBox(height: AppSpacing.sp16),
     ],
@@ -582,7 +592,6 @@ class AppointmentFormFields extends StatelessWidget {
         textCapitalization: TextCapitalization.sentences,
         maxLines: 2,
         maxLength: TextLimits.appointmentNotes,
-        showCounter: true,
       ),
     ),
     const SizedBox(height: AppSpacing.sp16),

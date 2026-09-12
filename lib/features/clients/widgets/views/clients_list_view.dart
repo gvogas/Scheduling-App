@@ -4,9 +4,11 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
+import 'package:scheduling/core/layout/floating_controls.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
+import 'package:scheduling/features/clients/domain/client_grouping.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
@@ -14,10 +16,13 @@ import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 import 'package:scheduling/features/clients/domain/policies/client_delete_policy.dart';
 import 'package:scheduling/features/clients/domain/policies/client_search_policy.dart';
 import 'package:scheduling/features/clients/widgets/cards/client_tile.dart';
+import 'package:scheduling/features/clients/widgets/lists/clients_sliver_list.dart';
+import 'package:scheduling/features/clients/widgets/lists/paged_sliver_driver.dart';
 import 'package:scheduling/features/clients/widgets/sheets/add_client_flow.dart';
 import 'package:scheduling/features/clients/widgets/sheets/client_detail_sheet.dart';
 import 'package:scheduling/features/clients/widgets/views/client_actions_host.dart';
 import 'package:scheduling/features/clients/widgets/views/debounced_paged_search.dart';
+import 'package:scheduling/features/clients/widgets/views/row_cache.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/app_empty_state.dart';
 import 'package:scheduling/shared/widgets/feedback/skeleton_loader.dart';
@@ -35,6 +40,8 @@ class ClientsListView extends ConsumerStatefulWidget {
     this.onFirstPageSettled,
     this.sort = ClientsSort.name,
     this.onCountChanged,
+    this.grouped = false,
+    this.buildingLabel,
   });
 
   final String searchQuery;
@@ -53,14 +60,23 @@ class ClientsListView extends ConsumerStatefulWidget {
   /// appear on its own.
   final VoidCallback? onFirstPageSettled;
 
-  /// Order for the unfiltered paginated list. Ignored by the filter and search
-  /// paths, which are bounded in-memory lists ordered by the query behind them.
+  /// Order for the paginated list AND for the filtered paths, which apply it in
+  /// Dart over their bounded window. The SEARCH path still ignores it: those
+  /// results are relevance-ranked, and re-sorting them destroys that ranking.
   final ClientsSort sort;
 
-  /// Fires with however many rows are currently rendered, so the screen's
-  /// header can show a count without this view owning any chrome — it is also
-  /// the booking flow's client picker, which must stay chrome-free.
+  /// Fires with the rendered row count, so the screen's header can show a
+  /// count without this view owning chrome.
   final void Function(int count)? onCountChanged;
+
+  /// Opt-in letter headings and one card per run; off by default so a host
+  /// that wants bare rows gets the flat list.
+  final bool grouped;
+
+  /// Street of the active [ClientsFilterBuilding], which heads that filter's
+  /// single group. Passed in because this view must never watch the building
+  /// scan itself.
+  final String? buildingLabel;
 
   @override
   ConsumerState<ClientsListView> createState() => _ClientsListViewState();
@@ -69,8 +85,14 @@ class ClientsListView extends ConsumerStatefulWidget {
 class _ClientsListViewState extends ConsumerState<ClientsListView>
     with
         ClientActionsHost<ClientsListView>,
-        DebouncedPagedSearch<ClientsListView> {
+        DebouncedPagedSearch<ClientsListView>,
+        PagedSliverPrefetch<ClientsListView> {
+  // Every page, under every sort, is the same size (owner call 2026-09-11).
   static const int _pageSize = 50;
+
+  // PagingState.items re-flattens on every access, so the grouping memo can
+  // only hit against a list instance cached here at the source.
+  final RowCache<ClientRecord> _loadedRows = RowCache();
 
   @override
   String searchQueryOf(ClientsListView widget) => widget.searchQuery;
@@ -160,8 +182,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   @override
   void onClientDeleted(ClientRecord client) => _pagingController.refresh();
 
-  // The Slidable wraps the tile HERE, not inside ClientTile — the booking
-  // flow's client picker reuses that tile and must not gain archive/delete.
+  // The Slidable wraps the tile HERE so ClientTile itself can never archive.
   Widget _clientTile(ClientRecord client, int index) {
     final tile = _slidableTile(client, index);
     final wrap = widget.firstRowTourWrap;
@@ -251,20 +272,37 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   // its child for intrinsic dimensions — so this one can neither scroll (a
   // nested ListView throws) nor measure (LayoutBuilder can't report intrinsics
   // either).
-  Widget _skeleton() => const SkeletonList(rows: _skeletonMaxRows);
+  Widget _skeleton() => _carded(const SkeletonList(rows: _skeletonMaxRows));
+
+  // The skeleton sits in a card too, or the list jumps when the page lands.
+  Widget _carded(Widget child) {
+    if (!widget.grouped) return child;
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sp12),
+      child: DecoratedBox(
+        decoration: appCardDecoration(theme, color: theme.colorScheme.surface),
+        child: child,
+      ),
+    );
+  }
 
   // The search and type paths instead hand the skeleton the whole body of a
   // tight Expanded, which the keyboard shortens well below four rows' worth —
   // no sliver above it here, so the row count can follow the height.
   Widget _fittedSkeleton() => LayoutBuilder(
     builder: (context, constraints) => ClipRect(
-      child: SkeletonList(
-        rows: constraints.maxHeight.isFinite
-            ? ((constraints.maxHeight - AppSpacing.sp16 * 2 + AppSpacing.sp8) /
-                      (_skeletonRowExtent + AppSpacing.sp8))
-                  .floor()
-                  .clamp(1, _skeletonMaxRows)
-            : _skeletonMaxRows,
+      child: _carded(
+        SkeletonList(
+          rows: constraints.maxHeight.isFinite
+              ? ((constraints.maxHeight -
+                            AppSpacing.sp16 * 2 +
+                            AppSpacing.sp8) /
+                        (_skeletonRowExtent + AppSpacing.sp8))
+                    .floor()
+                    .clamp(1, _skeletonMaxRows)
+              : _skeletonMaxRows,
+        ),
       ),
     ),
   );
@@ -347,6 +385,39 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
     return _filterIndex;
   }
 
+  // The filtered slice as rendered: narrowed by the query, then ordered by the
+  // sort. Memoized on its inputs — the list by identity, the query and the sort
+  // by value — so a keystroke rebuild re-sorts nothing.
+  List<ClientRecord>? _visibleSource;
+  String? _visibleQuery;
+  ClientsSort? _visibleSort;
+  List<ClientRecord> _visibleItems = const [];
+
+  List<ClientRecord> _filteredAndSorted(List<ClientRecord> all, String query) {
+    if (identical(all, _visibleSource) &&
+        query == _visibleQuery &&
+        widget.sort == _visibleSort) {
+      return _visibleItems;
+    }
+    final q = ClientSearchPolicy.normalize(query);
+    final qDigits = ClientSearchPolicy.digitsOnly(query);
+    final matched = query.isEmpty
+        ? all
+        : [
+            for (final entry in _filterSearchIndex(all))
+              if (ClientSearchPolicy.entryMatches(
+                entry,
+                queryText: q,
+                queryDigits: qDigits,
+              ))
+                entry.client,
+          ];
+    _visibleSource = all;
+    _visibleQuery = query;
+    _visibleSort = widget.sort;
+    return _visibleItems = sortClients(matched, widget.sort);
+  }
+
   // Every non-All filter is a bounded, already-in-memory list, so searching
   // within it is the shared local matcher rather than a second server query.
   Widget _buildFromAsync(
@@ -357,19 +428,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
     final query = widget.searchQuery.trim();
     return async.when(
       data: (all) {
-        final q = ClientSearchPolicy.normalize(query);
-        final qDigits = ClientSearchPolicy.digitsOnly(query);
-        final items = query.isEmpty
-            ? all
-            : [
-                for (final entry in _filterSearchIndex(all))
-                  if (ClientSearchPolicy.entryMatches(
-                    entry,
-                    queryText: q,
-                    queryDigits: qDigits,
-                  ))
-                    entry.client,
-              ];
+        final items = _filteredAndSorted(all, query);
         return items.isEmpty ? emptyState(query) : _resultsList(items);
       },
       loading: _fittedSkeleton,
@@ -430,10 +489,46 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
         : context.l10n.common_tryADifferentSearchTerm,
   );
 
+  // The groups as rendered, memoized on the inputs that change their shape.
+  List<ClientRecord>? _groupedSource;
+  ClientsSort? _groupedSort;
+  ClientsFilter? _groupedFilter;
+  String? _groupedQuery;
+  List<ClientGroup> _groups = const [];
+
+  List<ClientGroup> _groupsFor(List<ClientRecord> items) {
+    final query = widget.searchQuery.trim();
+    if (identical(items, _groupedSource) &&
+        widget.sort == _groupedSort &&
+        widget.filter == _groupedFilter &&
+        query == _groupedQuery) {
+      return _groups;
+    }
+    _groupedSource = items;
+    _groupedSort = widget.sort;
+    _groupedFilter = widget.filter;
+    _groupedQuery = query;
+    if (widget.filter is ClientsFilterBuilding) {
+      return _groups = singleGroupOf(items, heading: widget.buildingLabel);
+    }
+    // Search results are relevance-ranked, not alphabetical, so letters over
+    // them would head runs that are not runs.
+    if (query.isNotEmpty || widget.sort != ClientsSort.name) {
+      return _groups = singleGroupOf(items);
+    }
+    return _groups = letterGroupsOf(items);
+  }
+
   Widget _resultsList(List<ClientRecord> items) {
     _reportCount(items.length);
+    if (widget.grouped) {
+      return ClientsSliverList(
+        groups: _groupsFor(items),
+        itemBuilder: (context, index) => _clientTile(items[index], index),
+      );
+    }
     return ListView.separated(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sp16),
+      padding: const EdgeInsets.only(bottom: kFloatingControlsClearance),
       itemCount: items.length,
       separatorBuilder: (context, index) =>
           const Divider(height: 1, indent: 64),
@@ -473,29 +568,65 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
 
     return RefreshIndicator.adaptive(
       onRefresh: () async => _pagingController.refresh(),
-      child: PagingListener<int, ClientRecord>(
-        controller: _pagingController,
-        builder: (context, state, fetchNextPage) {
-          _reportCount(state.items?.length ?? 0);
-          return PagedListView<int, ClientRecord>.separated(
-            state: state,
-            fetchNextPage: fetchNextPage,
-            padding: const EdgeInsets.only(bottom: AppSpacing.sp16),
-            separatorBuilder: (context, index) =>
-                const Divider(height: 1, indent: 64),
-            builderDelegate: PagedChildBuilderDelegate<ClientRecord>(
-              itemBuilder: (context, client, index) =>
-                  _clientTile(client, index),
-              firstPageProgressIndicatorBuilder: (_) => _skeleton(),
-              firstPageErrorIndicatorBuilder: (_) => _errorState(
-                state.error ?? Exception('clients page load failed'),
-                onRetry: _pagingController.refresh,
-              ),
-              noItemsFoundIndicatorBuilder: (_) => _emptyState(query: ''),
-            ),
-          );
-        },
-      ),
+      child: widget.grouped ? _groupedPagedList() : _pagedList(),
     );
   }
+
+  // Cards and headings are slivers, which PagedListView cannot host.
+  Widget _groupedPagedList() => PagingListener<int, ClientRecord>(
+    controller: _pagingController,
+    builder: (context, state, fetchNextPage) {
+      final loaded = _loadedRows.of(
+        state.pages,
+        () => state.items ?? const <ClientRecord>[],
+      );
+      _reportCount(loaded.length);
+      if (loaded.isEmpty) {
+        if (state.status == PagingStatus.loadingFirstPage) {
+          requestFirstPage(state, fetchNextPage);
+        }
+        return switch (state.status) {
+          PagingStatus.loadingFirstPage => _skeleton(),
+          PagingStatus.firstPageError => _errorState(
+            state.error ?? Exception('clients page load failed'),
+            onRetry: _pagingController.refresh,
+          ),
+          _ => _emptyState(query: ''),
+        };
+      }
+      return ClientsSliverList(
+        groups: _groupsFor(loaded),
+        itemBuilder: (context, index) => _clientTile(loaded[index], index),
+        footer: PagedListFooter<int, ClientRecord>(
+          state: state,
+          onRetry: fetchNextPage,
+        ),
+        onRowBuilt: (index) =>
+            maybeFetchNext(state, fetchNextPage, index, loaded.length),
+      );
+    },
+  );
+
+  Widget _pagedList() => PagingListener<int, ClientRecord>(
+    controller: _pagingController,
+    builder: (context, state, fetchNextPage) {
+      _reportCount(state.items?.length ?? 0);
+      return PagedListView<int, ClientRecord>.separated(
+        state: state,
+        fetchNextPage: fetchNextPage,
+        padding: const EdgeInsets.only(bottom: kFloatingControlsClearance),
+        separatorBuilder: (context, index) =>
+            const Divider(height: 1, indent: 64),
+        builderDelegate: PagedChildBuilderDelegate<ClientRecord>(
+          itemBuilder: (context, client, index) => _clientTile(client, index),
+          firstPageProgressIndicatorBuilder: (_) => _skeleton(),
+          firstPageErrorIndicatorBuilder: (_) => _errorState(
+            state.error ?? Exception('clients page load failed'),
+            onRetry: _pagingController.refresh,
+          ),
+          noItemsFoundIndicatorBuilder: (_) => _emptyState(query: ''),
+        ),
+      );
+    },
+  );
 }

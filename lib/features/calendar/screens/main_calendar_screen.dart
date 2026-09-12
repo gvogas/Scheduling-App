@@ -7,6 +7,7 @@ import 'package:scheduling/core/app/photo_upload_failure_listener.dart';
 import 'package:scheduling/core/app/role_upgrade_listener.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
 import 'package:scheduling/core/layout/breakpoints.dart';
+import 'package:scheduling/core/layout/floating_controls.dart';
 import 'package:scheduling/core/layout/primary_scroll_scope.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/navigation/app_destination.dart';
@@ -42,6 +43,7 @@ import 'package:scheduling/features/feature_tour/widgets/feature_tour_host.dart'
 import 'package:scheduling/features/navigation/widgets/app_nav_drawer.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
+import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 
 /// Most of the portrait pane the month grid may take before it starts clipping.
 const double _kMaxGridShare = 0.7;
@@ -337,6 +339,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
     String monthLabelShort,
     String yearLabel,
     String dayTitle,
+    String dayTitleShort,
     String jobLabel,
     DateTime today,
     List<DateTime> weekDays,
@@ -389,6 +392,10 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
       dayTitle: _agendaMode == _AgendaMode.week
           ? _weekLabel(weekDays)
           : DateUtilsHelper.formatDayHeader(selectedDay),
+      // The week label is already short; only the day title has two forms.
+      dayTitleShort: _agendaMode == _AgendaMode.week
+          ? _weekLabel(weekDays)
+          : DateUtilsHelper.formatDayHeaderShort(selectedDay),
       jobLabel: _jobLabel(context, agendaEvents),
       today: today,
       weekDays: weekDays,
@@ -471,6 +478,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
                           nameMap: data.nameMap,
                           today: data.today,
                           dayTitle: data.dayTitle,
+                          dayTitleShort: data.dayTitleShort,
                           jobLabel: data.jobLabel,
                           weekDays: data.weekDays,
                         ),
@@ -520,47 +528,22 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
   }
 
   /// Day-route control owned by this screen's tour.
-  Widget _dayRouteButton(BuildContext context) {
-    final theme = Theme.of(context);
-    return _tour.step(
-      TourStepId.calendarDayRoute,
-      targetBorderRadius: BorderRadius.circular(AppRadius.rIcon),
-      child: Tooltip(
-        message: context.l10n.calendar_dayRouteTitle,
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Center(
-            child: Material(
-              color: theme.colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(AppRadius.rIcon),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.dayRoute,
-                  arguments: DayRouteArgs(
-                    isAdmin: widget.isAdmin,
-                    employeeId: widget.employeeId,
-                  ),
-                ),
-                highlightColor: theme.palette.blueTintPressed,
-                child: SizedBox(
-                  width: 38,
-                  height: 38,
-                  child: Icon(
-                    Icons.alt_route_rounded,
-                    size: 19,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
-              ),
-            ),
-          ),
+  Widget _dayRouteButton(BuildContext context) => _tour.step(
+    TourStepId.calendarDayRoute,
+    targetBorderRadius: BorderRadius.circular(AppRadius.rFull),
+    child: GhostControl.icon(
+      onTap: () => Navigator.pushNamed(
+        context,
+        AppRoutes.dayRoute,
+        arguments: DayRouteArgs(
+          isAdmin: widget.isAdmin,
+          employeeId: widget.employeeId,
         ),
       ),
-    );
-  }
+      icon: Icons.alt_route_rounded,
+      tooltip: context.l10n.calendar_dayRouteTitle,
+    ),
+  );
 
   Widget? _addAppointmentFab(BuildContext context) {
     if (!widget.isAdmin) return null;
@@ -611,6 +594,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
     required Map<String, String> nameMap,
     required DateTime today,
     required String dayTitle,
+    required String dayTitleShort,
     required String jobLabel,
     required List<DateTime> weekDays,
   }) {
@@ -626,6 +610,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
           TourStepId.calendarDayList,
           child: AgendaHeader(
             dayTitle: dayTitle,
+            dayTitleShort: dayTitleShort,
             jobLabel: jobLabel,
             trailing: _tour.stepIf(
               TourStepId.calendarWeekToggle,
@@ -648,7 +633,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
             colorMap: colorMap,
             isAdmin: widget.isAdmin,
             isLoading: isLoading,
-            bottomClearance: kAgendaFloatingControlsClearance,
+            bottomClearance: kFloatingControlsClearance,
           )
         : [
             AgendaSliverList(
@@ -658,7 +643,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
               isLoading: isLoading,
               isAdmin: widget.isAdmin,
               day: agendaDay,
-              bottomClearance: kAgendaFloatingControlsClearance,
+              bottomClearance: kFloatingControlsClearance,
             ),
           ];
 
@@ -680,33 +665,33 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
   }
 
   /// Icon-only day/week toggle.
+  /// Day / week agenda toggle, in the header's own vocabulary: two ghost
+  /// tiles with the active one inverted. It was a Material `SegmentedButton`,
+  /// which painted its selected half `secondaryContainer` green beside the
+  /// ghost controls directly above it.
   Widget _agendaModeToggle(BuildContext context) {
     final l10n = context.l10n;
-    return SizedBox(
-      height: 32,
-      child: SegmentedButton<_AgendaMode>(
-        segments: [
-          ButtonSegment(
-            value: _AgendaMode.day,
-            icon: const Icon(Icons.view_day_outlined, size: 18),
-            tooltip: l10n.calendar_agendaDayView,
-          ),
-          ButtonSegment(
-            value: _AgendaMode.week,
-            icon: const Icon(Icons.view_week_outlined, size: 18),
-            tooltip: l10n.calendar_agendaWeekView,
-          ),
-        ],
-        selected: {_agendaMode},
-        onSelectionChanged: (modes) => _setAgendaMode(modes.single),
-        showSelectedIcon: false,
-        style: const ButtonStyle(
-          visualDensity: VisualDensity.compact,
-          padding: WidgetStatePropertyAll(
-            EdgeInsets.symmetric(horizontal: AppSpacing.sp8),
-          ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GhostControl.icon(
+          onTap: () => _setAgendaMode(_AgendaMode.day),
+          icon: Icons.calendar_view_day_rounded,
+          tooltip: l10n.calendar_agendaDayView,
+          tone: _agendaMode == _AgendaMode.day
+              ? GhostTone.selected
+              : GhostTone.ghost,
         ),
-      ),
+        const SizedBox(width: 6),
+        GhostControl.icon(
+          onTap: () => _setAgendaMode(_AgendaMode.week),
+          icon: Icons.calendar_view_week_rounded,
+          tooltip: l10n.calendar_agendaWeekView,
+          tone: _agendaMode == _AgendaMode.week
+              ? GhostTone.selected
+              : GhostTone.ghost,
+        ),
+      ],
     );
   }
 

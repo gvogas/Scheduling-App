@@ -13,6 +13,22 @@ paths:
 Loaded when working on appointments. Root context: `../../CLAUDE.md`.
 Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
 
+- **An appointment's times snap to the QUARTER HOUR.** `appointmentMinuteStep`
+  (`calendar/domain/appointment_time_step.dart`) is 15, and the four
+  appointment pickers — start and end on the add sheet and on the details edit
+  body — pass it to `showAdaptiveTimePicker`, which hands it to
+  `CupertinoDatePicker.minuteInterval` so the wheel offers 00/15/30/45 and
+  nothing else. Jobs are booked and invoiced by the quarter hour, so the other
+  45 minutes are answers nobody wants. **`CupertinoDatePicker` ASSERTS that its
+  initial minute is already a multiple of the interval**, so a stored time is
+  put through `snapToMinuteInterval` first — nearest, except where rounding up
+  would leave the day (23:53 floors to 23:45 rather than producing an hour of
+  24). The Material branch cannot restrict its minutes, so it snaps the result
+  on the way out instead; iOS is the only platform that ships, so that path is
+  the test harness's. **Employee AVAILABILITY keeps the full minute wheel** —
+  `showAdaptiveTimePicker`'s interval defaults to 1 and the availability panel
+  passes nothing; working hours are not billed in quarters.
+
 - **Appointment status allowlist:** The lifecycle is `pending` →
   `in_progress` → `done`, plus `cancelled` (set by the separate Cancel action).
   These four are the ONLY valid *stored* values — enforced by

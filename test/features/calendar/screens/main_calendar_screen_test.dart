@@ -23,6 +23,7 @@ import 'package:scheduling/features/employees/domain/employees_repository.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_header_pair.dart';
+import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 
 class _MockEmployeesRepo extends Mock implements EmployeesRepository {}
 
@@ -109,29 +110,25 @@ Widget _wrap({
 }
 
 /// The en_CA agenda day header, spelled out literally.
+///
+/// The SHORT spelling: these tests run at phone width, where the full
+/// "Thursday, October 1" does not fit beside the count and the view toggle and
+/// the header falls back to `DateUtilsHelper.formatDayHeaderShort`.
 String _dayHeader(DateTime day) {
-  const weekdays = [
-    'Monday',
-    'Tuesday',
-    'Wednesday',
-    'Thursday',
-    'Friday',
-    'Saturday',
-    'Sunday',
-  ];
+  const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const months = [
-    'January',
-    'February',
-    'March',
-    'April',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
     'May',
-    'June',
-    'July',
-    'August',
-    'September',
-    'October',
-    'November',
-    'December',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   return '${weekdays[day.weekday - 1]}, ${months[day.month - 1]} ${day.day}';
 }
@@ -870,7 +867,13 @@ void main() {
   testWidgets('week mode lists every day of the week and a bar tap returns', (
     tester,
   ) async {
-    await withPhoneViewport(tester);
+    // Taller than `withPhoneViewport`: this asserts all SEVEN bars are built at
+    // once, and the agenda header grew by the toggle's tap floor, so on a
+    // 915pt phone the last bar now falls outside the viewport and its cache.
+    tester.view.physicalSize = const Size(412 * 3, 1000 * 3);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     final today = DateTime.now();
     // Sunday-first (en_CA), spelled as the index: the locale table is only
     // loaded once the app below has pumped, and the jobs are built before it.
@@ -919,7 +922,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the week toggle does not grow the agenda header at 2x text', (
+  testWidgets('the week toggle holds its tap floor and the header with it', (
     tester,
   ) async {
     await withPhoneViewport(tester);
@@ -936,12 +939,22 @@ void main() {
       return tester.getSize(find.byType(AgendaHeader)).height;
     }
 
-    // The icon-only toggle is fixed at 32px, under the title line at 1x, so the
-    // row keeps the 60px it had before the toggle (18 + 10 padding plus a
-    // titleLarge line) and the pane's pinned overflow margin is untouched.
+    // The toggle is two GhostControls, so it is the 48px tap floor plus the
+    // header's own 18/10 padding — and because the floor already exceeds a
+    // titleLarge line at 2x, text scaling is ABSORBED rather than compounding
+    // with it. It was a 32px SegmentedButton, under the floor, in a 60px row.
     final atDouble = await headerHeight(2);
     final atNormal = await headerHeight(1);
-    expect(atDouble, greaterThan(atNormal));
-    expect(atNormal, lessThanOrEqualTo(60));
+    expect(atNormal, lessThanOrEqualTo(kGhostTapTarget + 28));
+    expect(atDouble, lessThanOrEqualTo(atNormal));
+
+    for (final tooltip in ['Day view', 'Week view']) {
+      // GhostControl puts the InkWell INSIDE the Tooltip, not above it.
+      final tile = find.descendant(
+        of: find.byTooltip(tooltip),
+        matching: find.byType(InkWell),
+      );
+      expect(tester.getSize(tile.first).height, greaterThanOrEqualTo(48));
+    }
   });
 }

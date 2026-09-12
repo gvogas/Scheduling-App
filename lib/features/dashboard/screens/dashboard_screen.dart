@@ -146,8 +146,7 @@ class _StatsList extends ConsumerWidget {
     final colorMap = ref.watch(employeeColorMapProvider);
     final nameMap = ref.watch(employeeNameMapProvider);
     final now = ref.watch(dashboardClockProvider)();
-    // List padding is zero so the hero bleeds edge-to-edge — the sections below
-    // add their own sp16 inset.
+    // Both the hero card and the sections below carry their own sp16 inset.
     return ListView(
       padding: EdgeInsets.zero,
       children: [
@@ -156,7 +155,13 @@ class _StatsList extends ConsumerWidget {
           DashboardHero(ops: stats.todayOps, now: now),
         ),
         Padding(
-          padding: const EdgeInsets.all(AppSpacing.sp16),
+          // No top inset: the hero's bottom margin already supplies it.
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.sp16,
+            0,
+            AppSpacing.sp16,
+            AppSpacing.sp16,
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
