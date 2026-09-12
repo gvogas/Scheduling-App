@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
@@ -16,6 +17,9 @@ Widget _harness({
   ValueChanged<ClientsFilter>? onSelect,
   String? buildingLabel,
   double textScale = 1,
+  // A real size: the unbounded path falls back to MediaQuery.sizeOf, so a bare
+  // MediaQueryData lays the bar out at zero width and asserts nothing.
+  Size size = const Size(800, 600),
   // The tour wraps this bar in a showcase, which hands its child UNBOUNDED
   // width — the shape that broke the first version of this widget.
   bool unbounded = false,
@@ -34,7 +38,10 @@ Widget _harness({
     // full-width, which is exactly what broke this bar in a Row.
     theme: lightTheme(),
     home: MediaQuery(
-      data: MediaQueryData(textScaler: TextScaler.linear(textScale)),
+      data: MediaQueryData(
+        size: size,
+        textScaler: TextScaler.linear(textScale),
+      ),
       child: Scaffold(
         body: unbounded ? Row(children: [bar]) : Column(children: [bar]),
       ),
@@ -173,6 +180,13 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('1200 Rue Sherbrooke Ouest, Montreal'), findsOneWidget);
+    // The screen is the bound there, so the row lays out at the full width
+    // minus its gutters — not at the zero a bare MediaQueryData reports.
+    final row = find.descendant(
+      of: find.byType(ClientsFilterBar),
+      matching: find.byType(Row),
+    );
+    expect(tester.getSize(row.first).width, 800 - AppSpacing.sp16 * 2);
   });
 
   testWidgets('the chips scroll rather than overflow at 260px with 2x text', (
@@ -185,6 +199,7 @@ void main() {
     await tester.pumpWidget(
       _harness(
         selected: const ClientsFilterType(ClientType.residential),
+        size: const Size(260, 640),
         textScale: 2,
       ),
     );

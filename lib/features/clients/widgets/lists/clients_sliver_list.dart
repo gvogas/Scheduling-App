@@ -37,6 +37,22 @@ class ClientsSliverList extends StatelessWidget {
   /// Gap between one group and the next.
   static const double _groupGap = 14;
 
+  /// The card's own corners, on the END rows only: [DecoratedSliver] does not
+  /// clip, and a row is a square `Material` + `InkWell`.
+  static Widget _clipEndRows(Widget row, int index, int count) {
+    final isFirst = index == 0;
+    final isLast = index == count - 1;
+    if (!isFirst && !isLast) return row;
+    const corner = Radius.circular(AppRadius.r12);
+    return ClipRRect(
+      borderRadius: BorderRadius.vertical(
+        top: isFirst ? corner : Radius.zero,
+        bottom: isLast ? corner : Radius.zero,
+      ),
+      child: row,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -61,7 +77,11 @@ class ClientsSliverList extends StatelessWidget {
                     itemBuilder: (context, index) {
                       final global = groups[g].start + index;
                       onRowBuilt?.call(global);
-                      return itemBuilder(context, global);
+                      return _clipEndRows(
+                        itemBuilder(context, global),
+                        index,
+                        groups[g].length,
+                      );
                     },
                     separatorBuilder: (context, index) => Divider(
                       height: 1,

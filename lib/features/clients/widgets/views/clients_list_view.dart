@@ -21,6 +21,7 @@ import 'package:scheduling/features/clients/widgets/sheets/add_client_flow.dart'
 import 'package:scheduling/features/clients/widgets/sheets/client_detail_sheet.dart';
 import 'package:scheduling/features/clients/widgets/views/client_actions_host.dart';
 import 'package:scheduling/features/clients/widgets/views/debounced_paged_search.dart';
+import 'package:scheduling/features/clients/widgets/views/row_cache.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/app_empty_state.dart';
 import 'package:scheduling/shared/widgets/feedback/skeleton_loader.dart';
@@ -88,6 +89,10 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
         DebouncedPagedSearch<ClientsListView>,
         PagedSliverPrefetch<ClientsListView> {
   static const int _pageSize = 50;
+
+  // PagingState.items re-flattens on every access, so the grouping memo can
+  // only hit against a list instance cached here at the source.
+  final RowCache<ClientRecord> _loadedRows = RowCache();
 
   @override
   String searchQueryOf(ClientsListView widget) => widget.searchQuery;
@@ -270,8 +275,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   // either).
   Widget _skeleton() => _carded(const SkeletonList(rows: _skeletonMaxRows));
 
-  // Grouped, the settled rows arrive inside a card — so the skeleton sits in
-  // one too, or the list jumps when the first page lands.
+  // The skeleton sits in a card too, or the list jumps when the page lands.
   Widget _carded(Widget child) {
     if (!widget.grouped) return child;
     final theme = Theme.of(context);
@@ -486,8 +490,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
         : context.l10n.common_tryADifferentSearchTerm,
   );
 
-  // The groups as rendered, memoized on the list identity plus the inputs that
-  // change the shape — this view rebuilds on every keystroke.
+  // The groups as rendered, memoized on the inputs that change their shape.
   List<ClientRecord>? _groupedSource;
   ClientsSort? _groupedSort;
   ClientsFilter? _groupedFilter;
@@ -570,13 +573,14 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
     );
   }
 
-  // Grouped, the cards and their headings are slivers, which PagedListView
-  // cannot host — so this drives the pager itself, the way the History view
-  // does for its sticky month bars.
+  // Cards and headings are slivers, which PagedListView cannot host.
   Widget _groupedPagedList() => PagingListener<int, ClientRecord>(
     controller: _pagingController,
     builder: (context, state, fetchNextPage) {
-      final loaded = state.items ?? const <ClientRecord>[];
+      final loaded = _loadedRows.of(
+        state.pages,
+        () => state.items ?? const <ClientRecord>[],
+      );
       _reportCount(loaded.length);
       if (loaded.isEmpty) {
         if (state.status == PagingStatus.loadingFirstPage) {

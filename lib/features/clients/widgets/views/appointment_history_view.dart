@@ -17,6 +17,7 @@ import 'package:scheduling/features/clients/widgets/lists/history_sliver_list.da
 import 'package:scheduling/features/clients/widgets/lists/paged_sliver_driver.dart';
 import 'package:scheduling/features/clients/widgets/sections/history_filter_bar.dart';
 import 'package:scheduling/features/clients/widgets/views/debounced_paged_search.dart';
+import 'package:scheduling/features/clients/widgets/views/row_cache.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/app_empty_state.dart';
@@ -109,9 +110,9 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
   }
 
   /// Cached row lists for loaded, filtered, and searched states.
-  final _RowCache _loadedRows = _RowCache();
-  final _RowCache _filteredRows = _RowCache();
-  final _RowCache _searchRows = _RowCache();
+  final RowCache<AppointmentRecord> _loadedRows = RowCache();
+  final RowCache<AppointmentRecord> _filteredRows = RowCache();
+  final RowCache<AppointmentRecord> _searchRows = RowCache();
 
   late final PagingController<int, AppointmentRecord> _pagingController =
       PagingController<int, AppointmentRecord>(
@@ -475,23 +476,6 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
       actionLabel: _hasChipFilter ? l10n.clients_clearFilters : null,
       onAction: _hasChipFilter ? _clearFilters : null,
     );
-  }
-}
-
-/// Caches one derived row list against its input key.
-class _RowCache {
-  Object? _key;
-  List<AppointmentRecord> _rows = const [];
-
-  List<AppointmentRecord> of(
-    Object key,
-    List<AppointmentRecord> Function() compute,
-  ) {
-    if (_key != key) {
-      _key = key;
-      _rows = compute();
-    }
-    return _rows;
   }
 }
 

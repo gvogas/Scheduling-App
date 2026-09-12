@@ -11,6 +11,7 @@ import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 import 'package:scheduling/features/clients/screens/clients_screen.dart';
+import 'package:scheduling/features/clients/widgets/sheets/clients_filter_sheet.dart';
 import 'package:scheduling/features/clients/widgets/sheets/edit_client_sheet.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
@@ -248,9 +249,11 @@ void main() {
         sort: any(named: 'sort'),
       ),
     ).thenAnswer((_) async => const []);
-    when(
-      () => repo.fetchClientsByType(any()),
-    ).thenAnswer((_) async => const []);
+    when(() => repo.fetchClientsByType(ClientType.residential)).thenAnswer(
+      (_) async => const [
+        ClientRecord(id: 'r1', name: 'Rita Home', type: ClientType.residential),
+      ],
+    );
 
     await tester.pumpWidget(_wrap(repo));
     await tester.pumpAndSettle();
@@ -261,7 +264,7 @@ void main() {
     await tester.tap(find.text('Residential').last);
     await tester.pumpAndSettle();
 
-    verify(() => repo.fetchClientsByType(ClientType.residential)).called(1);
+    expect(find.text('Rita Home'), findsOneWidget);
   });
 
   testWidgets('tapping a chip narrows the list without opening the sheet', (
@@ -274,9 +277,11 @@ void main() {
         sort: any(named: 'sort'),
       ),
     ).thenAnswer((_) async => const []);
-    when(
-      () => repo.fetchClientsByType(any()),
-    ).thenAnswer((_) async => const []);
+    when(() => repo.fetchClientsByType(ClientType.commercial)).thenAnswer(
+      (_) async => const [
+        ClientRecord(id: 'b1', name: 'Beta Co', type: ClientType.commercial),
+      ],
+    );
 
     await tester.pumpWidget(_wrap(repo));
     await tester.pumpAndSettle();
@@ -287,6 +292,7 @@ void main() {
     await tester.tap(chip);
     await tester.pumpAndSettle();
 
-    verify(() => repo.fetchClientsByType(ClientType.commercial)).called(1);
+    expect(find.text('Beta Co'), findsOneWidget);
+    expect(find.byType(ClientsFilterSheet), findsNothing);
   });
 }

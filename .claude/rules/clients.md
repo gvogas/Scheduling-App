@@ -176,6 +176,15 @@ Root context: `../../CLAUDE.md`.
   around a `Column`.** One card can hold every loaded row — the whole type
   filter's bounded window, or the paged list at scroll depth — and a `Column`
   builds all of them eagerly on every rebuild, keystrokes included.
+  **`DecoratedSliver` paints its decoration BEHIND the sliver and does not clip
+  it**, while a row is a square `Material` + `InkWell` — so the first and last
+  row of every group painted their ink splash, and a selected row's
+  `secondaryContainer` fill, square over the card's rounded corner against the
+  page colour. `ClientsSliverList._clipEndRows` rounds those two rows inside
+  the item builder; per row, because clipping the whole group would mean a box
+  around it and that is the `Column` this design exists to avoid.
+  **Both grouped paths memoize through `RowCache`** (below) — `letterGroupsOf`
+  is two regex passes and an accent fold per row.
   That is also why the grouped path drives the pager ITSELF instead of using
   `PagedListView`, which cannot host a sliver: **`PagedSliverPrefetch` +
   `PagedListFooter` (`widgets/lists/paged_sliver_driver.dart`) own the
@@ -785,8 +794,10 @@ Root context: `../../CLAUDE.md`.
   already carries the year.
   **Both O(N) passes over the rows — `tallyOf` and `monthSectionsOf` — are
   memoized on the IDENTITY of the row list, so every list handed down must be
-  a STABLE INSTANCE, and that has one owner: `_RowCache` in
-  `appointment_history_view.dart`.** Memoizing at the consumer alone is a
+  a STABLE INSTANCE, and that has one owner: `RowCache`
+  (`clients/widgets/views/row_cache.dart`, shared with `ClientsListView`, whose
+  grouped paged list needs it for exactly the same reason and silently went
+  without it until 2026-09-11).** Memoizing at the consumer alone is a
   no-op here and silently was one: `PagingState.items` re-flattens every
   loaded page on each access, and both filter passes build a new list, so the
   memos compared two freshly-allocated lists and re-ran on every rebuild — per

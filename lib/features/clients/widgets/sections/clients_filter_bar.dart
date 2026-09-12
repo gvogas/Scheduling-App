@@ -59,12 +59,6 @@ class ClientsFilterBar extends StatelessWidget {
         gutter,
         AppSpacing.sp8,
       ),
-      // This bar is laid out under BOTH kinds of constraint: normally its
-      // Column gives it a finite width, and the feature tour wraps it in a
-      // showcase that hands its child UNBOUNDED width — where a horizontal
-      // viewport cannot measure itself and any non-zero flex throws. The
-      // screen is the bound in that case, so there is ONE layout: the scroller
-      // and the flexed chip always sit inside a finite width.
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth.isFinite

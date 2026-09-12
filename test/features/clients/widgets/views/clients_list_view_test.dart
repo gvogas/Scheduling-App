@@ -9,12 +9,14 @@ import 'package:mocktail/mocktail.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
+import 'package:scheduling/features/clients/domain/client_grouping.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 import 'package:scheduling/features/clients/domain/policies/client_building.dart';
+import 'package:scheduling/features/clients/widgets/lists/clients_sliver_list.dart';
 import 'package:scheduling/features/clients/widgets/views/clients_list_view.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/skeleton_loader.dart';
@@ -468,6 +470,38 @@ void main() {
 
     expect(find.text('4450 PROM. PATON'), findsOneWidget);
     expect(find.text('A'), findsNothing);
+  });
+
+  // Grouping is an O(N) pass per row — two regex passes through displayName
+  // plus an accent fold — and PagingState.items hands back a freshly flattened
+  // list on every access, so a memo can only hit against a cached instance.
+  testWidgets('regroups nothing on a rebuild that changes none of its inputs', (
+    tester,
+  ) async {
+    when(
+      () => repo.fetchClientsPage(
+        after: any(named: 'after'),
+        limit: any(named: 'limit'),
+        sort: any(named: 'sort'),
+      ),
+    ).thenAnswer(
+      (_) async => const [
+        ClientRecord(id: 'c1', name: 'Alice Brown'),
+        ClientRecord(id: 'c2', name: 'Bob Carter'),
+      ],
+    );
+
+    List<ClientGroup> groupsNow() =>
+        tester.widget<ClientsSliverList>(find.byType(ClientsSliverList)).groups;
+
+    await tester.pumpWidget(_wrap(repo, grouped: true));
+    await tester.pumpAndSettle();
+    final grouped = groupsNow();
+
+    await tester.pumpWidget(_wrap(repo, grouped: true));
+    await tester.pumpAndSettle();
+
+    expect(identical(groupsNow(), grouped), isTrue);
   });
 
   testWidgets('reports the loaded row count to its host', (tester) async {
