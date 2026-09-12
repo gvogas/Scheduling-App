@@ -1,7 +1,7 @@
 # Open follow-ups from the 2026-09-12 session
 
 **Date:** 2026-09-12
-**Status: OPEN. Nothing here is started.** Five items, each blocked on a
+**Status: OPEN — item 4 CLOSED 2026-09-12, the other four still blocked.** Five items, each blocked on a
 different thing — a design decision, a deploy, a machine permission, a commit
 boundary, and a device. None is blocked on not knowing what to do.
 
@@ -93,7 +93,16 @@ second costs about five seconds and is the honest recommendation.
 
 ---
 
-## 4. Four Dart files are still CRLF
+## 4. Four Dart files are still CRLF — CLOSED 2026-09-12
+
+**DONE, and the premise was half wrong.** Only TWO of the four were CRLF in git:
+`appointment_form_fields.dart` (694 CRLF, 3 stray `\r\r\n`) and its test (584
+CRLF, 1 `\r\r\n`) — the stray CRs made git classify both as BINARY (`-text`),
+which is why `text=auto` never touched them. `add_appointment_sheet.dart` and
+`details_edit_body.dart` were already LF in the index; the CRLF seen was only
+the working copy under `core.autocrlf=true`. Check `git ls-files --eol`, not
+the bytes on disk. Converted in binary mode in `8ddf6bd7`, a commit touching nothing else
+(`git diff -w --ignore-cr-at-eol` empty). The text below is the original entry.
 
 **Blocked on: a commit boundary, not a decision.**
 

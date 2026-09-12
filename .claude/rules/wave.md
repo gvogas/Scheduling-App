@@ -444,3 +444,19 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   or `ClientNamePolicy`. Design:
   `docs/plans/2026-08-30-wave-validated-contract-design.md`; Phases 2-4 plan:
   `docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`.
+  **A client's contract verdict is derivable from the collection, not only
+  from the trigger.** `functions/scripts/backfill-wave-blocked.js` (Phase 3,
+  built 2026-09-12, NOT run) replays `buildCustomerPayload` over every client
+  and writes the same `verdictPatch` the trigger writes. It exists because the
+  trigger only stamps a doc that somebody EDITS, so a client that was already
+  wrong when enforcement deployed would stay invisible indefinitely. It runs
+  LAST, after the app build and the enforcement deploy. Two rules inside it are
+  load-bearing: an absent `wave.problems` and a derived empty list are EQUAL
+  (otherwise every clean client costs a write per run), and a doc reading
+  `blocked` that now passes the contract is reported and left ENTIRELY alone —
+  clearing its problems without clearing its state would show a blocked client
+  with no reason, and the non-blocked state is owned by the push, not by a
+  backfill. It does not cancel a queued job either: the dispatcher re-runs the
+  contract and refuses it. Uncapped by design (`scanByName`) — a cap would
+  silently leave the tail unrecorded. **A live run patching 0 against a
+  non-zero advisory count means the comparison is wrong, not the data.**

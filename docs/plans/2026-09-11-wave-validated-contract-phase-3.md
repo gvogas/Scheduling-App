@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: NOT STARTED, written 2026-09-11.** Supersedes Task 9 of
+**Status: TASKS 1-3 BUILT 2026-09-12 (17 jest tests, lint clean); Task 4, the live run, NOT started and still gated on the enforcement deploy.** Built as one file rather than three commits, with the plan's long comment blocks trimmed to the one-line rule; the rationale lives in `.claude/rules/wave.md`. Written 2026-09-11. Supersedes Task 9 of
 `docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`, which was a
 three-step stub. Phase 2 is built and merged to `dev` (`ca80dff5`, 1.60.0+89)
 and **not deployed**.
