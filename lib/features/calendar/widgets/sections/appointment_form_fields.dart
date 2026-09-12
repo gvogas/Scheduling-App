@@ -69,7 +69,7 @@ class AppointmentFormControllers {
 /// Required callbacks shared by add and edit appointment forms.
 class AppointmentFormCallbacks {
   const AppointmentFormCallbacks({
-    required this.onSearchClients,
+    required this.onSearchClients,
     required this.onRetryClientSearch,
     required this.onSelectClient,
     required this.onClearClient,
@@ -88,7 +88,7 @@ class AppointmentFormCallbacks {
   final ValueChanged<bool> onDayOffChanged;
   final ValueChanged<bool> onAllDayChanged;
 
-  final ValueChanged<String> onSearchClients;
+  final ValueChanged<String> onSearchClients;
   final VoidCallback onRetryClientSearch;
   final ValueChanged<ClientRecord> onSelectClient;
   final VoidCallback onClearClient;
@@ -407,7 +407,7 @@ class AppointmentFormFields extends StatelessWidget {
                   results: clientResults,
                   status: clientSearchStatus,
                   isSearching: isSearchingClient,
-                  onChanged: callbacks.onSearchClients,
+                  onChanged: callbacks.onSearchClients,
                   onSelect: _selectClient,
                   onRetry: callbacks.onRetryClientSearch,
                   errorText: _err(context, 'client'),
