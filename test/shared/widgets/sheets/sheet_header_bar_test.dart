@@ -138,6 +138,64 @@ void main() {
     expect(button.onPressed, isNull);
   });
 
+  // The regression that started this: a flat `flex: 3/4/3` left the title 40%
+  // of the bar, so "New Appointment" rendered "New Appoin..." on a plain phone
+  // while both ghost tiles sat half empty. Asserted as "the title gets every
+  // point the tiles don't", which holds in any font — the test font is fixed
+  // width, so an absolute text width here would say nothing about the device.
+  testWidgets('the title takes all the width the two verbs leave', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(393, 852);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    const title = 'New Appointment';
+    await tester.pumpWidget(
+      _wrap(
+        SheetHeaderBar(
+          title: title,
+          primaryLabel: 'Save',
+          onPrimary: () {},
+          onCancel: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final barWidth = tester.getSize(find.byType(SheetHeaderBar)).width;
+    final tiles = tester.widgetList<TextButton>(find.byType(TextButton));
+    final tileWidth = [
+      for (var i = 0; i < tiles.length; i++)
+        tester.getSize(find.byType(TextButton).at(i)).width,
+    ].reduce((a, b) => a + b);
+
+    // Expanded hands the Text a tight width, so its own size IS the slot.
+    final slot = tester.getSize(find.text(title)).width;
+    // The bar's own AppSpacing.sp8 padding, both sides.
+    expect(slot, closeTo(barWidth - tileWidth - 16, 0.5));
+  });
+
+  // Both tiles are measured to the WIDER label, so the title's Expanded is
+  // centred by construction rather than by a shared flex.
+  testWidgets('both ghost tiles take the same width', (tester) async {
+    await tester.pumpWidget(
+      _wrap(
+        SheetHeaderBar(
+          title: 'Invite person',
+          primaryLabel: 'Send invite',
+          onPrimary: () {},
+          onCancel: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final cancel = tester.getSize(find.byType(TextButton).at(0)).width;
+    final verb = tester.getSize(find.byType(TextButton).at(1)).width;
+    expect(cancel, closeTo(verb, 0.5));
+  });
+
   testWidgets('survives 260x640 at 2.0 text scale', (tester) async {
     tester.view.physicalSize = const Size(260, 640);
     tester.view.devicePixelRatio = 1.0;

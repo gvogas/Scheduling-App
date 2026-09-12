@@ -103,6 +103,13 @@ final clientBuildingsProvider =
       return await ref.watch(clientsRepositoryProvider).fetchBuildings();
     });
 
+/// How many non-archived clients exist, so the list header can say "250 of
+/// 500" rather than calling the rows it happens to have loaded "all".
+final clientsTotalCountProvider = FutureProvider.autoDispose<int>((ref) async {
+  ref.watch(clientsRefreshProvider);
+  return await ref.watch(clientsRepositoryProvider).countClients();
+});
+
 /// Archived clients, read from the same bounded cached window as search and
 /// the type filter — so the Archived chip costs no extra read inside the TTL.
 final archivedClientsProvider = FutureProvider.autoDispose<List<ClientRecord>>((

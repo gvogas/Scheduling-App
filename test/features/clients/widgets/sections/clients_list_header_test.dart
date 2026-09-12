@@ -12,9 +12,12 @@ AppLocalizations _l10n(WidgetTester tester) =>
 
 Widget _harness({
   int? count,
+  int? total,
   ClientsFilter filter = const ClientsFilterAll(),
   ClientsSort sort = ClientsSort.name,
   ValueChanged<ClientsSort>? onSortChanged,
+  VoidCallback? onClearFilter,
+  Widget? leading,
   double textScale = 1,
 }) => MaterialApp(
   localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -25,8 +28,11 @@ Widget _harness({
     child: Scaffold(
       body: ClientsListHeader(
         count: count,
+        total: total,
         filter: filter,
         sort: sort,
+        leading: leading,
+        onClearFilter: onClearFilter,
         onSortChanged: onSortChanged ?? (_) {},
       ),
     ),
@@ -124,5 +130,55 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+  });
+
+  // The list pages, so the rows it holds are not the roster until they are.
+  testWidgets('counts the loaded rows against the roster while paging', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_harness(count: 50, total: 717));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text(_l10n(tester).clients_showingSome(50, 717)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('says "all" once every page is in', (tester) async {
+    await tester.pumpWidget(_harness(count: 717, total: 717));
+    await tester.pumpAndSettle();
+
+    expect(find.text(_l10n(tester).clients_showingAll(717)), findsOneWidget);
+  });
+
+  // The Filter button shares this row rather than owning one of its own.
+  testWidgets('renders the leading control', (tester) async {
+    await tester.pumpWidget(
+      _harness(count: 3, leading: const Icon(Icons.tune)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.tune), findsOneWidget);
+  });
+
+  testWidgets('offers a clear only while a filter is on', (tester) async {
+    var cleared = 0;
+    await tester.pumpWidget(_harness(count: 3, onClearFilter: () => cleared++));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.close), findsNothing);
+
+    await tester.pumpWidget(
+      _harness(
+        count: 3,
+        filter: const ClientsFilterArchived(),
+        onClearFilter: () => cleared++,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+    expect(cleared, 1);
   });
 }

@@ -266,25 +266,22 @@ class _AddressAutocompleteFieldState
         ),
         if (_suggestions.isNotEmpty)
           AttachedDropdown(
-            child: Column(
-              children: _suggestions
-                  .map(
-                    (s) => ListTile(
-                      dense: true,
-                      leading: Icon(
-                        Icons.location_on_outlined,
-                        size: 18,
-                        color: scheme.onSurfaceVariant,
-                      ),
-                      title: Text(
-                        s.description,
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      onTap: () => _selectSuggestion(s),
-                    ),
-                  )
-                  .toList(),
-            ),
+            children: [
+              for (final s in _suggestions)
+                AttachedDropdownRow(
+                  leading: Icon(
+                    Icons.location_on_outlined,
+                    size: 18,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  headline: s.description,
+                  // An address is the whole answer and runs long; one line
+                  // ellipsised the town off the end of most of them.
+                  headlineMaxLines: 2,
+                  headlineStyle: Theme.of(context).textTheme.bodyMedium,
+                  onTap: () => _selectSuggestion(s),
+                ),
+            ],
           ),
         if (_serviceError != null)
           Padding(

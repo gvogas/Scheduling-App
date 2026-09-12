@@ -104,27 +104,38 @@ Root context: `../../CLAUDE.md`.
   CLI-ARCH/CLI-DEL tags and the confirm copy can't drift; its two hooks are
   separate because the detail view must STAY OPEN after archiving (to offer
   Unarchive) and dismiss after deleting.
-- **The Filter button is pinned outside the scroller, and the chips came BACK
-  beside it** (2026-09-11, the fresh redesign, narrowing the 2026-09-04 call).
-  What was unsurvivable in the five-control 48px row that went on 2026-09-04
-  was that the BUTTON scrolled with everything else, so at large text scale the
-  one control that reaches the addresses and the full sheet was off-screen on
-  arrival. That half stands: the button is pinned FIRST and outside any
-  scroller. The chips beside it are the fixed vocabulary only —
-  `ClientType.pickable` plus All and Archived — and they scroll, because an
-  address is discovered from the data and there can be dozens, so a
-  `ClientsFilterBuilding` still shows as ONE removable tinted chip rather than
-  earning a chip of its own.
+- **The Filter button lives IN the list header row, and there are no chips**
+  (2026-09-11 PM, owner call, reversing the "chips came BACK" call made
+  earlier the same day). The row is one line: the round Filter button, the
+  count sentence, and the sort control pinned to the end. What the chips were
+  for — saying which filter is on — the SENTENCE already does
+  (`clients_showingType` reads "45 Commercial clients"), so they were a second
+  copy of the sheet's vocabulary that could only ever show a subset of it; and
+  the separate chip row cost a whole line of list. Clearing is a ✕ beside the
+  sentence, rendered only while a filter is on. `ClientsFilterBar` is now just
+  that button — it keeps the name because `TourStepId.clientsFilter` targets
+  it. The half of the 2026-09-04 call that STANDS: the button never scrolls,
+  because it is the only way to the addresses and the full sheet.
+  **The tour is why the header takes `leading` and `sortWrap` rather than
+  being wrapped itself**: `clientsFilter` and `clientsSort` are two steps in
+  one row now, and a showcase nested inside another showcase does not resolve.
+  The screen passes the pre-wrapped button in and a wrapper function for the
+  sort control.
+  **The sort control is BOUNDED, not `Flexible`.** It sat in a `Flexible`
+  beside the sentence's `Expanded` — two flex children with flex 1, so they
+  split the free space 50/50, which truncated the sentence AND left the
+  control floating mid-row instead of pinned to the end. It is a
+  `ConstrainedBox` at 55% of the row now; the cap is what keeps a long label
+  ("Recently added" at 2× text) from taking the whole row.
   `ClientsFilter` stays a sealed one-of, so the sheet is a SINGLE radio group
   across its two labelled sections — picking an address clears a type. That
-  reads as a bug and is not one; it is the constraint the chip row hid.
-  Reopening multi-select means changing the sealed model, how the type and
-  address queries compose, and the `firestore.rules` read clauses.
-  Its rows are the CHIP ROW's vocabulary at row width (2026-09-11): a ghost
-  `rFull` pill — `scheme.surface` fill, `outlineVariant` border — that fills
-  with `scheme.onSurface` and flips its label to the page colour when picked.
-  **The radio glyph stays**, because fill and label colour alone would make
-  colour the only cue for which of a one-of group is on.
+  reads as a bug and is not one. Reopening multi-select means changing the
+  sealed model, how the type and address queries compose, and the
+  `firestore.rules` read clauses.
+  Its rows are a ghost `rFull` pill — `scheme.surface` fill, `outlineVariant`
+  border — that fills with `scheme.onSurface` and flips its label to the page
+  colour when picked. **The radio glyph stays**, because fill and label colour
+  alone would make colour the only cue for which of a one-of group is on.
   **`ClientsFilterSheet` is the ONLY watcher of `clientBuildingsProvider`.**
   `ClientsListView` used to watch it and `clientBuildingKeysProvider` before
   the filter switch, so opening the tab paid the paged `orderBy('name')` scan
@@ -133,31 +144,35 @@ Root context: `../../CLAUDE.md`.
   path everyone walks onto one almost nobody opens; it does NOT remove the
   scan, which still needs the server-maintained `buildings` aggregate. Don't
   watch either provider from a list row or from `ClientsListView` again.
-  **`ClientsListView` carries no chrome.** The Filter button, the active chip
-  and the list header live in `clients_screen.dart`. **The reason given here
+- **The count line says what it can actually prove.** The list pages, so
+  `onCountChanged` reports ROWS LOADED — which read "Showing all 500 clients"
+  while 500 was just how far someone had scrolled, and said 50 on arrival. The
+  header now also takes `total`, the roster size from
+  `clientsTotalCountProvider` (a `count()` aggregate, `ClientsRepository.countClients`
+  — not a scan: reading the roster to count it would cost more than the list),
+  and renders `clients_showingSome` ("50 of 717 clients") until the two agree,
+  then `clients_showingAll`. **`total` is passed ONLY under `ClientsFilterAll`**:
+  every filtered slice loads whole, so there its shown count IS its total.
+  **Page size is 50 under EVERY sort** (owner call — a 250-row first page was
+  tried and rejected the same day).
+- **`ClientsListView` carries no chrome.** The Filter button, the ✕ and the
+  list header live in `clients_screen.dart`. **The reason given here
   was that the view is ALSO the booking flow's client picker — it is not**
   (verified 2026-09-11: its only caller in `lib/` is `clients_screen.dart`).
   Keep the split anyway, because chrome in the screen is what lets the list be
   dropped into a second host without carrying a filter bar it cannot wire —
   but that is now a design margin, not a live constraint, so don't cite a
-  second caller to justify contorting the list. The header's count
-  arrives through `onCountChanged`, the same shape as `onFirstPageSettled`, and
-  it takes the `ClientsFilter` too — the sentence names the slice
-  (`clients_showingAll` / `clients_showingType` / `clients_inThisBuilding`), so
-  the old filter-blind `clients_countLabel` is RETIRED from both ARBs. A null
-  count still renders nothing rather than a zero.
-  **The bar renders under BOTH bounded and UNBOUNDED width** — the feature tour
-  wraps it in a showcase that hands its child unbounded constraints, where any
-  non-zero flex throws AND a horizontal viewport cannot measure itself. It no
-  longer BRANCHES on that: when `constraints.maxWidth` is infinite it falls
-  back to `MediaQuery.sizeOf(context).width` minus the gutters and lays out at
-  that, so there is ONE layout and the scroller always sits inside a finite
-  width. The branch that shipped first dropped the scroller under unbounded
-  width and laid the chips out inline instead — which overflows the row by
-  however much the vocabulary grew, and did. A widget test for anything in a
-  Row must use `lightTheme()`, not the Material default: the app theme makes
-  every `OutlinedButton` full-width, which is right for a stacked action bar
-  and wrong in a row, and it is what broke the first version of this bar.
+  second caller to justify contorting the list. A null count still renders
+  nothing rather than a zero.
+- **The list leaves `kFloatingControlsClearance` at the bottom, on all three
+  paths** — the paged list, the grouped card list's tail and the filtered /
+  search results. The screen floats a FAB and a `ScrollToTopButton` over it, so
+  without it the last row rests underneath them and can neither be read nor
+  tapped. The constant moved to `core/layout/floating_controls.dart` from the
+  calendar's `agenda_sliver_list.dart` (where it was
+  `kAgendaFloatingControlsClearance`) when the second feature needed it — one
+  number, not two.
+
 - **Grouping is OPT-IN: `ClientsListView(grouped:)`, default false**
   (2026-09-11). Grouped, the rows arrive in white cards under letter headings
   (`letterGroupsOf` / `singleGroupOf` in `domain/client_grouping.dart`, rendered by

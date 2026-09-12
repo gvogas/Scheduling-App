@@ -235,4 +235,19 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('drawer-content'), findsOneWidget);
   });
+
+  // The pill's gesture box abuts the menu either way; what drifted is the
+  // PAINTED tile, which a bare Center floated into the middle of the row.
+  testWidgets('the calendar tile sits beside the menu, not adrift in the row', (
+    tester,
+  ) async {
+    const bar = AppTopBar(title: 'Clients', actions: [AppHeaderPair()]);
+    await _pump(tester, bar);
+
+    final tile = tester.getRect(
+      find.ancestor(of: find.text('Calendar'), matching: find.byType(Ink)),
+    );
+    final menu = tester.getRect(find.byTooltip('Open menu'));
+    expect(menu.left - tile.right, lessThan(12));
+  });
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:scheduling/core/layout/floating_controls.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/clients/domain/client_grouping.dart';
 
@@ -96,7 +97,10 @@ class ClientsSliverList extends StatelessWidget {
             ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sp16),
+              // The host floats a FAB and a back-to-top button over this list.
+              padding: const EdgeInsets.only(
+                bottom: kFloatingControlsClearance,
+              ),
               child: footer ?? const SizedBox.shrink(),
             ),
           ),

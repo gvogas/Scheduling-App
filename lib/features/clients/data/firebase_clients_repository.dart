@@ -137,6 +137,15 @@ class FirebaseClientsRepository implements ClientsRepository {
     return docs.map((doc) => ClientRecord.fromMap(doc.id, doc.data())).toList();
   }
 
+  @override
+  Future<int> countClients() async {
+    final snapshot = await _clients
+        .where('archived', isEqualTo: false)
+        .count()
+        .get();
+    return snapshot.count ?? 0;
+  }
+
   // Only reached when the boundary cache has evicted the entry — the record's
   // own value is a good enough cursor for every sort except `name`, which is
   // composed rather than stored.

@@ -4,6 +4,7 @@ import 'package:flutter_slidable/flutter_slidable.dart';
 import 'package:infinite_scroll_pagination/infinite_scroll_pagination.dart';
 import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
+import 'package:scheduling/core/layout/floating_controls.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
@@ -86,6 +87,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
         ClientActionsHost<ClientsListView>,
         DebouncedPagedSearch<ClientsListView>,
         PagedSliverPrefetch<ClientsListView> {
+  // Every page, under every sort, is the same size (owner call 2026-09-11).
   static const int _pageSize = 50;
 
   // PagingState.items re-flattens on every access, so the grouping memo can
@@ -526,7 +528,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
       );
     }
     return ListView.separated(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sp16),
+      padding: const EdgeInsets.only(bottom: kFloatingControlsClearance),
       itemCount: items.length,
       separatorBuilder: (context, index) =>
           const Divider(height: 1, indent: 64),
@@ -612,7 +614,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
       return PagedListView<int, ClientRecord>.separated(
         state: state,
         fetchNextPage: fetchNextPage,
-        padding: const EdgeInsets.only(bottom: AppSpacing.sp16),
+        padding: const EdgeInsets.only(bottom: kFloatingControlsClearance),
         separatorBuilder: (context, index) =>
             const Divider(height: 1, indent: 64),
         builderDelegate: PagedChildBuilderDelegate<ClientRecord>(

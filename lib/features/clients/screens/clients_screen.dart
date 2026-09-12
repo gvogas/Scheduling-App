@@ -7,6 +7,7 @@ import 'package:scheduling/core/layout/master_detail_scaffold.dart';
 import 'package:scheduling/core/navigation/app_destination.dart';
 import 'package:scheduling/core/navigation/hub_shell_scope.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
+import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
@@ -27,6 +28,7 @@ import 'package:scheduling/shared/widgets/app_bars/app_header_pair.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_top_bar.dart';
 import 'package:scheduling/shared/widgets/feedback/app_empty_state.dart';
 import 'package:scheduling/shared/widgets/fields/app_search_bar.dart';
+import 'package:scheduling/shared/widgets/primitives/scroll_to_top_button.dart';
 
 class ListInformation extends ConsumerStatefulWidget {
   const ListInformation({
@@ -176,56 +178,73 @@ class _ListInformationState extends ConsumerState<ListInformation> {
         body: MasterDetailScaffold(
           master: Column(
             children: [
-              _tour.stepIf(
-                TourStepId.clientsFilter,
-                ClientsFilterBar(
-                  selected: _filter,
-                  onOpen: _openFilterSheet,
-                  onClear: () => _applyFilter(const ClientsFilterAll()),
-                  onSelect: _applyFilter,
-                  activeBuildingLabel: _activeBuildingLabel,
+              // One row: Filter, what the list is showing, and the order.
+              ClientsListHeader(
+                leading: _tour.stepIf(
+                  TourStepId.clientsFilter,
+                  ClientsFilterBar(selected: _filter, onOpen: _openFilterSheet),
                 ),
-              ),
-              _tour.stepIf(
-                TourStepId.clientsSort,
-                ClientsListHeader(
-                  count: _visibleCount,
-                  filter: _filter,
-                  sort: _sort,
-                  onSortChanged: (next) {
-                    ref
-                        .read(analyticsServiceProvider)
-                        .logFilterUsed(
-                          surface: AnalyticsSurfaces.clients,
-                          filterName: AnalyticsFilters.sort,
-                          filterValue: next.name,
-                        );
-                    setState(() => _sort = next);
-                  },
-                ),
+                sortWrap: (child) =>
+                    _tour.stepIf(TourStepId.clientsSort, child),
+                onClearFilter: () => _applyFilter(const ClientsFilterAll()),
+                count: _visibleCount,
+                // Only the unfiltered list pages; every filtered slice loads
+                // whole, so its shown count IS its total.
+                total: _filter is ClientsFilterAll
+                    ? ref.watch(clientsTotalCountProvider).value
+                    : null,
+                filter: _filter,
+                sort: _sort,
+                onSortChanged: (next) {
+                  ref
+                      .read(analyticsServiceProvider)
+                      .logFilterUsed(
+                        surface: AnalyticsSurfaces.clients,
+                        filterName: AnalyticsFilters.sort,
+                        filterValue: next.name,
+                      );
+                  setState(() => _sort = next);
+                },
               ),
               Expanded(
-                child: ListenableBuilder(
-                  listenable: _searchController,
-                  builder: (context, _) => ClientsListView(
-                    searchQuery: _searchController.text,
-                    isAdmin: widget.isAdmin,
-                    filter: _filter,
-                    grouped: true,
-                    buildingLabel: _activeBuildingLabel,
-                    // Only highlight the selected row when the detail pane is shown (two-pane).
-                    selectedClientId: context.isTwoPane
-                        ? _selectedClient?.id
-                        : null,
-                    onClientTap: _onClientTap,
-                    firstRowTourWrap: (child) =>
-                        _tour.stepIf(TourStepId.clientsRow, child),
-                    onFirstPageSettled: _onListSettled,
-                    sort: _sort,
-                    onCountChanged: (count) {
-                      if (_visibleCount == count) return;
-                      setState(() => _visibleCount = count);
-                    },
+                // The floating controls and the list's bottom clearance are
+                // both measured from here, so this has to end ABOVE the home
+                // indicator — the same wrap the calendar's agenda uses.
+                child: SafeArea(
+                  top: false,
+                  child: Stack(
+                    children: [
+                      ListenableBuilder(
+                        listenable: _searchController,
+                        builder: (context, _) => ClientsListView(
+                          searchQuery: _searchController.text,
+                          isAdmin: widget.isAdmin,
+                          filter: _filter,
+                          grouped: true,
+                          buildingLabel: _activeBuildingLabel,
+                          // Only highlight the selected row when the detail pane is shown (two-pane).
+                          selectedClientId: context.isTwoPane
+                              ? _selectedClient?.id
+                              : null,
+                          onClientTap: _onClientTap,
+                          firstRowTourWrap: (child) =>
+                              _tour.stepIf(TourStepId.clientsRow, child),
+                          onFirstPageSettled: _onListSettled,
+                          sort: _sort,
+                          onCountChanged: (count) {
+                            if (_visibleCount == count) return;
+                            setState(() => _visibleCount = count);
+                          },
+                        ),
+                      ),
+                      // Bottom LEFT: the add FAB owns the right corner, the same
+                      // split the calendar's Today pill keeps.
+                      const Positioned(
+                        left: AppSpacing.sp16,
+                        bottom: AppSpacing.sp16,
+                        child: ScrollToTopButton(),
+                      ),
+                    ],
                   ),
                 ),
               ),

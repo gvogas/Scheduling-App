@@ -15,6 +15,7 @@ import 'package:scheduling/core/utils/debouncer.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/application/event_details_controller.dart';
 import 'package:scheduling/features/calendar/application/event_series_helpers.dart';
+import 'package:scheduling/features/calendar/domain/appointment_time_step.dart';
 import 'package:scheduling/features/calendar/domain/assignee_resolver.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/domain/policies/appointment_form_validator.dart';
@@ -29,7 +30,8 @@ import 'package:scheduling/features/calendar/widgets/fields/repeat_interval_pick
 import 'package:scheduling/features/calendar/widgets/sections/appointment_form_fields.dart';
 import 'package:scheduling/features/calendar/widgets/sections/photo_picker_section.dart';
 import 'package:scheduling/features/calendar/widgets/sheets/image_source_picker.dart';
-import 'package:scheduling/features/calendar/widgets/sheets/inline_add_client_host.dart';
+import 'package:scheduling/features/calendar/widgets/sheets/inline_add_client_host.dart';
+
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/maps/domain/address_parser.dart';
 import 'package:scheduling/l10n/l10n.dart';
@@ -212,7 +214,8 @@ class _DetailsEditBodyState extends ConsumerState<DetailsEditBody>
     EventDetailsState state,
     EventDetailsController notifier,
   ) => AppointmentFormCallbacks(
-    onSearchClients: _onClientSearchChanged,
+    onSearchClients: _onClientSearchChanged,
+
     onRetryClientSearch: _onRetryClientSearch,
     onSelectClient: notifier.selectClient,
     onClearClient: notifier.clearClient,
@@ -258,6 +261,7 @@ class _DetailsEditBodyState extends ConsumerState<DetailsEditBody>
     final picked = await showAdaptiveTimePicker(
       context,
       initialTime: state.selectedStartTime,
+      minuteInterval: appointmentMinuteStep,
     );
     if (picked == null || !context.mounted) return;
     widget.controllers.startTime.text = picked.format(context);
@@ -272,6 +276,7 @@ class _DetailsEditBodyState extends ConsumerState<DetailsEditBody>
     final picked = await showAdaptiveTimePicker(
       context,
       initialTime: state.selectedEndTime,
+      minuteInterval: appointmentMinuteStep,
     );
     if (picked == null || !context.mounted) return;
     widget.controllers.endTime.text = picked.format(context);

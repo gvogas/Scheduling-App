@@ -188,7 +188,7 @@ class _JobCount extends StatelessWidget {
         Text('$count', style: theme.monoType.micro),
         const SizedBox(width: AppSpacing.sp4),
         Text(
-          context.l10n.clients_jobsCountLabel,
+          context.l10n.clients_jobsCountLabel(count),
           style: theme.monoType.micro.copyWith(color: theme.palette.textMuted),
         ),
       ],

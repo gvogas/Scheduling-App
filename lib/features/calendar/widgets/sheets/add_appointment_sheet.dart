@@ -12,6 +12,7 @@ import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/utils/date_utils_helper.dart';
 import 'package:scheduling/core/utils/debouncer.dart';
 import 'package:scheduling/features/calendar/application/add_event_controller.dart';
+import 'package:scheduling/features/calendar/domain/appointment_time_step.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_prefill.dart';
 import 'package:scheduling/features/calendar/domain/models/job_template.dart';
 import 'package:scheduling/features/calendar/domain/policies/appointment_form_validator.dart';
@@ -23,7 +24,8 @@ import 'package:scheduling/features/calendar/widgets/fields/employee_picker.dart
 import 'package:scheduling/features/calendar/widgets/sections/appointment_form_fields.dart';
 import 'package:scheduling/features/calendar/widgets/sections/photo_picker_section.dart';
 import 'package:scheduling/features/calendar/widgets/sheets/image_source_picker.dart';
-import 'package:scheduling/features/calendar/widgets/sheets/inline_add_client_host.dart';
+import 'package:scheduling/features/calendar/widgets/sheets/inline_add_client_host.dart';
+
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
@@ -155,6 +157,7 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
     final picked = await showAdaptiveTimePicker(
       context,
       initialTime: stateBefore.selectedStartTime,
+      minuteInterval: appointmentMinuteStep,
     );
     if (picked == null || !mounted) return;
     _controllers.startTime.text = picked.format(context);
@@ -173,6 +176,7 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
     final picked = await showAdaptiveTimePicker(
       context,
       initialTime: state.selectedEndTime,
+      minuteInterval: appointmentMinuteStep,
     );
     if (picked == null || !mounted) return;
     _controllers.endTime.text = picked.format(context);
@@ -359,7 +363,8 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
             isOvernight: _isOvernight(state),
             spanLength: spanLength,
             callbacks: AppointmentFormCallbacks(
-              onSearchClients: _onClientSearchChanged,
+              onSearchClients: _onClientSearchChanged,
+
               onRetryClientSearch: _onRetryClientSearch,
               onSelectClient: _notifier.selectClient,
               onClearClient: _notifier.clearClient,

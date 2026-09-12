@@ -108,7 +108,9 @@ class GhostControl extends StatelessWidget {
               )
             : ConstrainedBox(
                 constraints: const BoxConstraints(minHeight: kGhostTapTarget),
-                child: Center(child: _tile(theme, content)),
+                // widthFactor pins the box to the tile: a bare Center fills
+                // the width it is offered, which floated the pill mid-row.
+                child: Center(widthFactor: 1, child: _tile(theme, content)),
               ),
       ),
     );

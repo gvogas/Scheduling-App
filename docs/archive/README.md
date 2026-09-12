@@ -16,8 +16,14 @@ documents in: six plans whose work had shipped (the multi-day trio, the
 closed-jobs agenda, the photo cue, the History restyle), six superseded audit
 snapshots, and the pre-redesign `WORKFLOW.md`.
 
-**Overwriting the rolling `docs/audits/CODEBASE_AUDIT.md` with the next sweep is
-how a snapshot goes missing.** Copy the outgoing one here first.
+**There is no rolling `docs/audits/CODEBASE_AUDIT.md` any more** (confirmed
+2026-09-12: `docs/audits/` holds dated snapshots — `CODEBASE_AUDIT_2026-09-07.md`
+— plus `AUDIT_FOLLOWUPS.md`, `SECURITY_ASSESSMENT_2026-08-04.md` and the two
+repair scripts). Dated filenames are what removed the hazard this paragraph was
+written for: overwriting the rolling file was how a snapshot went missing, twice.
+If a rolling file ever comes back, copy the outgoing one here before overwriting
+it. Note `.claude/skills/codebase-audit/` still tells a new audit to write the
+rolling path — that is a skill to fix, not a doc.
 
 **Do not treat these as accurate references.** For current state see
 `docs/ARCHITECTURE.md`, `docs/CLOUD_FUNCTIONS.md`, and the active plans in
@@ -273,15 +279,47 @@ row; each is the companion design or task-list half of a document listed above.
   and as the record of what the redesign was answering. Current sources of
   truth: `CLAUDE.md`, `docs/ARCHITECTURE.md`.
 
+### Added by the 2026-09-12 sweep
+
+Six implementation plans and one audit snapshot were on disk but had never been
+listed. Every one is a twin of something already indexed — the earlier sweeps
+picked up the design half and left the implementation half — so nothing here is
+a new verdict, only a missing row. A file moved but not indexed is lost.
+
+- `2026-08-21-simplified-auth-implementation.md` — the task list for
+  `2026-08-21-simplified-auth-design.md` (already indexed). SHIPPED and
+  deployed 2026-08-21 (`1c89892a`, `229b6e24`), released 1.48.0+77. Its
+  unticked boxes are the execution record, not outstanding work.
+- `2026-08-27-per-day-appointments-plan.md` — the task list for
+  `2026-08-27-per-day-appointments.md` (already indexed). SHIPPED 2026-08-27,
+  released 1.53.0+82, rules deployed 2026-08-29 (`77c6a66f`).
+- `2026-09-04-clients-page-search-first-implementation.md` — SHIPPED 2026-09-05
+  (`767ec99e`, `b2adc705`), released 1.58.0+87; both new `clients` composite
+  indexes are READY and the deploy gate its banner carried is closed.
+- `2026-09-04-feature-tour-1-57-update-implementation.md` — SHIPPED 2026-09-05
+  (`4c82eb60` -> `4ab95819`), released 1.58.0+87. App-side only, nothing to
+  deploy. This is the change that took the tour to 52 steps across 12 scopes
+  with per-STEP seen flags (`tour_seen_steps`).
+- `2026-09-05-add-job-client-picker-implementation.md` — SHIPPED 2026-09-05,
+  released 1.58.0+87 (`101d0c0a`), boxes ticked in `394d67af`; the
+  `searchClients` backend behind it went live 2026-09-06 at 29 functions.
+- `2026-09-06-crew-record-and-role-gates-implementation.md` — the task list for
+  the crew record and role gates. Note its provenance header: the untracked
+  original was deleted mid-run by an agent cleanup on 2026-09-07 and the file
+  was reconstructed from the executing session's own reads, then committed.
+
 ## Superseded audit snapshots
 Point-in-time whole-repo audits; each run's findings were implemented at the
-time. Superseded by later audits. The active
-`docs/audits/CODEBASE_AUDIT.md` file is now a cleaned current action list, not a
-full historical snapshot. `docs/audits/` also keeps
+time. Superseded by later audits. `docs/audits/` now holds
+DATED snapshots rather than one rolling action list — the newest is
+`CODEBASE_AUDIT_2026-09-07.md` — and also keeps
 `SECURITY_ASSESSMENT_2026-08-04.md` and `AUDIT_FOLLOWUPS.md` (the owner-only
 Maps budget cap), plus two read-only repair-audit scripts for the client-rename
 damage (`audit-renamed-client-names.js` and the earlier
 `audit-client-phone-backfill-damage.js`).
+- `CODEBASE_AUDIT_2026-09-05.md` — the whole-repo audit run against `394d67af`
+  on branch `redesgin`, superseded by later passes. Indexed by the 2026-09-12
+  sweep, which found it unlisted.
 - `CODEBASE_AUDIT_2026-09-03-rolling.md` — the outgoing rolling file, copied
   here 2026-09-05 before the 2026-09-05 audit overwrote it. Its still-open
   items (the Maps billing cap, the Crashlytics re-check needing a shipped
@@ -327,9 +365,9 @@ damage (`audit-renamed-client-names.js` and the earlier
   reported findings were closed, with the index lesson later corrected in the
   2026-09-01 deploy log.
 - `CODEBASE_AUDIT_2026-09-01.md` — the full audit snapshot that produced the
-  current rolling action list. Most findings were closed in-tree; the remaining
-  owner-only, product and refactor work is tracked in
-  `docs/audits/CODEBASE_AUDIT.md`.
+  rolling action list that `docs/audits/` used to carry. Most findings were
+  closed in-tree; the remaining owner-only, product and refactor work moved into
+  the dated snapshots and `AUDIT_FOLLOWUPS.md` when the rolling file went away.
 - `MOBILE_AUDIT_2026-07-13.md` — a mobile-optimization-lens pass (perf, memory,
   battery, network, mobile UX) rather than a general audit. Nothing mechanical
   to fix; its verdict was that the hot paths already implement the mitigations

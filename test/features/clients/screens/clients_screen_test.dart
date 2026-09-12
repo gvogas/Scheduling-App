@@ -203,7 +203,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('pins the Filter button beside the scrolling chips', (
+  // The per-type chips were removed 2026-09-11 (owner call): the sheet the
+  // button opens already offers every one of them.
+  testWidgets('offers the Filter button alone, with no type chips', (
     tester,
   ) async {
     when(
@@ -217,11 +219,9 @@ void main() {
     await tester.pumpWidget(_wrap(repo));
     await tester.pumpAndSettle();
 
-    // The button reaches the sheet, which is where the addresses live; the
-    // fixed vocabulary is on the chips beside it.
     expect(find.byIcon(Icons.tune), findsOneWidget);
-    expect(find.text('Residential'), findsOneWidget);
-    expect(find.text('Commercial'), findsOneWidget);
+    expect(find.text('Residential'), findsNothing);
+    expect(find.text('Commercial'), findsNothing);
   });
 
   testWidgets('the search hint names every matched field', (tester) async {
@@ -267,9 +267,9 @@ void main() {
     expect(find.text('Rita Home'), findsOneWidget);
   });
 
-  testWidgets('tapping a chip narrows the list without opening the sheet', (
-    tester,
-  ) async {
+  // With the chips gone the sheet is the only way in, so it is what the
+  // button has to reach.
+  testWidgets('the Filter button opens the filter sheet', (tester) async {
     when(
       () => repo.fetchClientsPage(
         after: any(named: 'after'),
@@ -277,22 +277,14 @@ void main() {
         sort: any(named: 'sort'),
       ),
     ).thenAnswer((_) async => const []);
-    when(() => repo.fetchClientsByType(ClientType.commercial)).thenAnswer(
-      (_) async => const [
-        ClientRecord(id: 'b1', name: 'Beta Co', type: ClientType.commercial),
-      ],
-    );
+    when(repo.fetchBuildings).thenAnswer((_) async => const []);
 
     await tester.pumpWidget(_wrap(repo));
     await tester.pumpAndSettle();
 
-    final chip = find.text('Commercial');
-    await tester.ensureVisible(chip);
-    await tester.pumpAndSettle();
-    await tester.tap(chip);
+    await tester.tap(find.byIcon(Icons.tune));
     await tester.pumpAndSettle();
 
-    expect(find.text('Beta Co'), findsOneWidget);
-    expect(find.byType(ClientsFilterSheet), findsNothing);
+    expect(find.byType(ClientsFilterSheet), findsOneWidget);
   });
 }

@@ -96,6 +96,10 @@
   "@settings_logOut": {
     "description": "Log out"
   },
+  "common_backToTop": "Back to top",
+  "@common_backToTop": {
+    "description": "Tooltip and screen-reader label on the button that scrolls a long list back to its first row."
+  },
   "common_cancel": "Cancel",
   "@common_cancel": {
     "description": "Cancel"
@@ -156,10 +160,6 @@
         "type": "int"
       }
     }
-  },
-  "calendar_sectionTemplates": "TEMPLATES",
-  "@calendar_sectionTemplates": {
-    "description": "Mono all-caps section label above the job-template chips in the job form. Already uppercase in source."
   },
   "calendar_sectionWho": "WHO",
   "@calendar_sectionWho": {
@@ -741,11 +741,11 @@
   "@calendar_endDate": {
     "description": "Label of the last day of a job's run, in the appointment form's schedule panel."
   },
-  "calendar_startTime": "Start Time",
+  "calendar_startTime": "Start time",
   "@calendar_startTime": {
     "description": "Start Time"
   },
-  "calendar_endTime": "End Time",
+  "calendar_endTime": "End time",
   "@calendar_endTime": {
     "description": "End Time"
   },
@@ -1735,6 +1735,10 @@
     "description": "Assign Employee"
   },
   "calendar_serviceTitle": "Service / Title",
+  "calendar_templateHint": "Tap one to fill the title and duration",
+  "@calendar_templateHint": {
+    "description": "Hint under the job-template chips in the job form, saying what tapping a chip does."
+  },
   "@calendar_serviceTitle": {
     "description": "Service / Title"
   },
@@ -3184,9 +3188,14 @@
   "@clients_since": {
     "description": "Read-only key for the date the client was first added"
   },
-  "clients_jobsCountLabel": "JOBS",
+  "clients_jobsCountLabel": "{count, plural, =1{JOB} other{JOBS}}",
   "@clients_jobsCountLabel": {
-    "description": "Mono micro-label under the job count on a client row. The count EXCLUDES cancelled visits and counts a multi-day run once."
+    "description": "Mono micro-label beside the job count on a client row, which renders the number itself in a separate span — so this is the WORD alone, not the count. The count EXCLUDES cancelled visits and counts a multi-day run once.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "clients_onSiteManager": "On-site manager",
   "@clients_onSiteManager": {
@@ -3992,6 +4001,18 @@
       }
     }
   },
+  "clients_showingSome": "{count} of {total} clients",
+  "@clients_showingSome": {
+    "description": "How many clients the unfiltered list is showing while more pages remain. The list pages, so the rows it holds are not the roster — once every page is in, it says clients_showingAll instead.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
   "clients_showingType": "{count, plural, =0{No {type} clients} =1{1 {type} client} other{{count} {type} clients}}",
   "@clients_showingType": {
     "description": "How many clients the list is showing under a type or archived filter.",
@@ -4048,10 +4069,6 @@
   "clients_noExactMatchClosest": "NO EXACT MATCH · CLOSEST NUMBERS",
   "@clients_noExactMatchClosest": {
     "description": "Caption inside the client search dropdown when the results are a fallback rung rather than hits. They answer a query nobody typed, so they must never read as matches. Already uppercase in source."
-  },
-  "clients_attach": "Attach",
-  "@clients_attach": {
-    "description": "Button on a client result row that attaches that client to the job."
   },
   "clients_searchFailed": "Couldn't check that number",
   "@clients_searchFailed": {

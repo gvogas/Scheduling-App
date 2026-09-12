@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
-import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/policies/client_building.dart';
 import 'package:scheduling/features/clients/widgets/sections/clients_filter_bar.dart';
@@ -25,12 +24,7 @@ Widget _barHarness({ClientsFilter selected = const ClientsFilterAll()}) =>
       home: Scaffold(
         body: Column(
           children: [
-            ClientsFilterBar(
-              selected: selected,
-              onOpen: () {},
-              onClear: () {},
-              onSelect: (_) {},
-            ),
+            ClientsFilterBar(selected: selected, onOpen: () {}),
           ],
         ),
       ),
@@ -68,30 +62,31 @@ void main() {
     expect(size.height, greaterThanOrEqualTo(kGhostTapTarget));
   });
 
-  testWidgets('a clients filter chip taps at the 48px floor', (tester) async {
-    await tester.pumpWidget(_barHarness());
-    await tester.pumpAndSettle();
+  testWidgets('a pill taps at the 48px floor in every tone', (tester) async {
+    for (final tone in GhostTone.values) {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: lightTheme(),
+          home: Scaffold(
+            body: Align(
+              child: GhostControl.pill(
+                onTap: () {},
+                label: 'Calendar',
+                tone: tone,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
 
-    final l10n = AppLocalizations.of(
-      tester.element(find.byType(ClientsFilterBar)),
-    );
-    final chip = _gestureAreaAround(find.text(l10n.clients_filterAll));
-    expect(tester.getSize(chip).height, greaterThanOrEqualTo(kGhostTapTarget));
-  });
-
-  testWidgets('a SELECTED filter chip keeps the floor', (tester) async {
-    await tester.pumpWidget(
-      _barHarness(selected: const ClientsFilterType(ClientType.commercial)),
-    );
-    await tester.pumpAndSettle();
-
-    final l10n = AppLocalizations.of(
-      tester.element(find.byType(ClientsFilterBar)),
-    );
-    final chip = _gestureAreaAround(
-      find.text(clientTypeLabel(l10n, ClientType.commercial)),
-    );
-    expect(tester.getSize(chip).height, greaterThanOrEqualTo(kGhostTapTarget));
+      final pill = _gestureAreaAround(find.text('Calendar'));
+      expect(
+        tester.getSize(pill).height,
+        greaterThanOrEqualTo(kGhostTapTarget),
+        reason: '$tone',
+      );
+    }
   });
 
   testWidgets('the filter sheet back tile taps at 48x48', (tester) async {
@@ -116,5 +111,37 @@ void main() {
       matching: find.byType(Ink),
     );
     expect(tester.getSize(tile), const Size(kGhostTile, kGhostTile));
+  });
+
+  // A bare `Center` fills the width it is offered, which floated the Calendar
+  // pill into the middle of the header row instead of beside the hamburger.
+  testWidgets('a pill hugs its tile rather than the width it is offered', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: lightTheme(),
+        home: Scaffold(
+          body: Row(
+            children: [
+              Flexible(
+                child: GhostControl.pill(
+                  onTap: () {},
+                  label: 'Calendar',
+                  icon: Icons.calendar_today_rounded,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    final gesture = _gestureAreaAround(find.text('Calendar'));
+    final tile = find.ancestor(
+      of: find.text('Calendar'),
+      matching: find.byType(Ink),
+    );
+    expect(tester.getSize(gesture).width, tester.getSize(tile).width);
   });
 }

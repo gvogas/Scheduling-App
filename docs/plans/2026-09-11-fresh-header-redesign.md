@@ -15,6 +15,23 @@ the group card's corners under a row's ink splash, and the filter bar under
 the feature tour on a TABLET, where the unbounded-width fallback resolves to
 the screen rather than the master pane.
 
+**A simulator pass on the Add Appointment sheet (2026-09-12) found four more**,
+all fixed and pinned. One belongs to Phase 4 and reached every sheet in the
+app: `SheetHeaderBar` split the bar `flex: 3/4/3`, so the title got 40% and
+"New Appointment" rendered "New Appoin..." on the WIDEST iPhone at default text
+size while both ghost tiles sat half empty — the tiles are measured to the
+wider label now, which keeps the centring the two existing tests pin and hands
+the title the remainder. The other three predate this branch: an
+`EmployeePicker` chip carried `alignment: Alignment.center` beside its 44pt tap
+floor (added 2026-08-22 in `cc008388`), and a `Container` with an alignment
+expands to its parent's bounded width, so every chip took a whole row of the
+`Wrap`; the appointment form labelled the address block itself AND let
+`AddressAutocompleteField` default its own label, reading "Job address /
+Address / Address" down three lines; and EN alone had "Start Time"/"End Time"
+beside "Start date"/"End date" in the same panel, where the multi-day variants
+were already lowercase. Together they returned about 150pt to the form — the
+`SCHEDULE` panel is now on the first screen instead of below the fold.
+
 **A review after the build found five defects the green suite was hiding**, all
 since fixed and pinned: three ghost controls whose 48px box sat OUTSIDE the
 `InkWell` (the Clients Filter button measured 38x34, and the filter sheet's

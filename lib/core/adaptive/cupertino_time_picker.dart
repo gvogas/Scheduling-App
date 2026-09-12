@@ -3,12 +3,33 @@ import 'package:flutter/material.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
+/// [time] moved to the nearest multiple of [interval] minutes.
+///
+/// Nearest, not floor, so 10:08 opens the wheel on 10:15 — except where
+/// rounding up would leave the day (23:53 with a 15-minute step), which floors
+/// instead rather than producing an hour of 24.
+TimeOfDay snapToMinuteInterval(TimeOfDay time, int interval) {
+  if (interval <= 1) return time;
+  final total = time.hour * 60 + time.minute;
+  var snapped = ((total + interval ~/ 2) ~/ interval) * interval;
+  if (snapped >= Duration.minutesPerDay) {
+    snapped = (total ~/ interval) * interval;
+  }
+  return TimeOfDay(hour: snapped ~/ 60, minute: snapped % 60);
+}
+
 Future<TimeOfDay?> showCupertinoTimePicker(
   BuildContext context, {
   TimeOfDay? initialTime,
+  int minuteInterval = 1,
 }) {
   final now = DateTime.now();
-  final init = initialTime ?? TimeOfDay.now();
+  // CupertinoDatePicker ASSERTS that the initial minute is a multiple of the
+  // interval, so a caller's arbitrary time has to be snapped before it opens.
+  final init = snapToMinuteInterval(
+    initialTime ?? TimeOfDay.now(),
+    minuteInterval,
+  );
   var tempPicked = DateTime(
     now.year,
     now.month,
@@ -17,11 +38,12 @@ Future<TimeOfDay?> showCupertinoTimePicker(
     init.minute,
   );
 
-  return _showCupertinoWheelSheet<TimeOfDay>(
+  return showPickerSheet<TimeOfDay>(
     context,
     onDone: () => TimeOfDay(hour: tempPicked.hour, minute: tempPicked.minute),
-    wheelBuilder: (ctx) => CupertinoDatePicker(
+    bodyBuilder: (ctx) => CupertinoDatePicker(
       mode: CupertinoDatePickerMode.time,
+      minuteInterval: minuteInterval,
       initialDateTime: tempPicked,
       use24hFormat: MediaQuery.alwaysUse24HourFormatOf(ctx),
       onDateTimeChanged: (dateTime) {
@@ -47,10 +69,10 @@ Future<DateTime?> showCupertinoDatePickerSheet(
   if (tempPicked.isAfter(lastDate)) tempPicked = lastDate;
   final initial = tempPicked;
 
-  return _showCupertinoWheelSheet<DateTime>(
+  return showPickerSheet<DateTime>(
     context,
     onDone: () => tempPicked,
-    wheelBuilder: (ctx) => CupertinoDatePicker(
+    bodyBuilder: (ctx) => CupertinoDatePicker(
       mode: CupertinoDatePickerMode.date,
       initialDateTime: initial,
       minimumDate: firstDate,
@@ -62,11 +84,13 @@ Future<DateTime?> showCupertinoDatePickerSheet(
   );
 }
 
-/// Shared bottom-sheet chrome for the Cupertino wheels with Cancel/Done header.
-Future<T?> _showCupertinoWheelSheet<T>(
+/// Shared bottom-sheet chrome for the pickers: a Cancel/Done header over a
+/// body. Used by the Cupertino wheels and by the quarter-hour step picker.
+Future<T?> showPickerSheet<T>(
   BuildContext context, {
-  required Widget Function(BuildContext) wheelBuilder,
+  required Widget Function(BuildContext) bodyBuilder,
   required T Function() onDone,
+  double height = 300,
 }) {
   return showModalBottomSheet<T>(
     context: context,
@@ -77,7 +101,7 @@ Future<T?> _showCupertinoWheelSheet<T>(
     ),
     builder: (ctx) {
       return SizedBox(
-        height: 300 + MediaQuery.viewPaddingOf(ctx).bottom,
+        height: height + MediaQuery.viewPaddingOf(ctx).bottom,
         child: SafeArea(
           top: false,
           child: Column(
@@ -115,7 +139,7 @@ Future<T?> _showCupertinoWheelSheet<T>(
                 ),
               ),
               const Divider(height: 1),
-              Expanded(child: wheelBuilder(ctx)),
+              Expanded(child: bodyBuilder(ctx)),
             ],
           ),
         ),

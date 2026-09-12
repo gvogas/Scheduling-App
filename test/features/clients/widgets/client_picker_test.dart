@@ -6,6 +6,7 @@ import 'package:scheduling/features/clients/domain/models/client_search_status.d
 import 'package:scheduling/features/clients/domain/policies/phone_query_policy.dart';
 import 'package:scheduling/features/clients/widgets/fields/client_picker.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/fields/attached_dropdown.dart';
 
 void main() {
   const marie = ClientRecord(
@@ -88,7 +89,7 @@ void main() {
     expect(find.text('Search results'), findsNothing);
   });
 
-  testWidgets('an exact match carries an Attach button', (tester) async {
+  testWidgets('an exact match renders one tappable result row', (tester) async {
     await tester.pumpWidget(
       harness(
         controller: TextEditingController(text: '(514) 562-8332'),
@@ -99,7 +100,12 @@ void main() {
         ),
       ),
     );
-    expect(find.text('Attach'), findsOneWidget);
+    // The "Attach" verb was dropped 2026-09-12 (owner call) — the row itself
+    // is the whole control, so the match is what proves it rendered. The
+    // formatted number is NOT the assertion: the field's own text carries it
+    // too, so it matches twice and says nothing about the row.
+    expect(find.byType(AttachedDropdownRow), findsOneWidget);
+    expect(find.text('Marie Tremblay'), findsOneWidget);
   });
 
   testWidgets('tapping the row attaches, and nothing attaches on its own', (
@@ -118,7 +124,7 @@ void main() {
       ),
     );
     expect(attached, isNull, reason: 'never auto-attach');
-    await tester.tap(find.text('Attach'));
+    await tester.tap(find.text('Marie Tremblay'));
     await tester.pump();
     expect(attached, marie);
   });

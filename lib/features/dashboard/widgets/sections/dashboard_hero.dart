@@ -26,7 +26,9 @@ class DashboardHero extends StatelessWidget {
     final statusColors = theme.statusColors;
     final l10n = context.l10n;
     final segments = [
-      (AppointmentStatus.inProgress, statusColors.accent),
+      // In progress is `statusColors.accent`, which IS `scheme.primary` — the
+      // colour this hero's gradient starts from, so it paints invisible here.
+      (AppointmentStatus.inProgress, scheme.onPrimary),
       (AppointmentStatus.overdue, statusColors.overdue),
       (AppointmentStatus.pending, statusColors.warning),
       (AppointmentStatus.done, statusColors.success),
@@ -132,6 +134,10 @@ class _StatusBar extends StatelessWidget {
         child: total == 0
             ? ColoredBox(color: scheme.onPrimary.withValues(alpha: 0.18))
             : Row(
+                // A childless ColoredBox takes `constraints.smallest`, and a
+                // Row's default centre alignment passes a LOOSE height — so
+                // every segment laid out 0 tall and the bar painted nothing.
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   for (final (_, color, count) in visible)
                     Expanded(

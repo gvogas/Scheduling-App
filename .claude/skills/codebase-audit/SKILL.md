@@ -127,8 +127,8 @@ judgment call does NOT get applied here — it goes in the report (step 4).
 Write the report using `references/report-template.md`. It covers: what you
 auto-fixed (point at the diff), then severity-ranked **security** and **bug**
 findings, then impact-ranked **areas to improve** (refactor / test-coverage /
-performance opportunities) and optional code-quality suggestions. Save it to
-`docs/audits/CODEBASE_AUDIT.md` (the project keeps audit docs in `docs/audits/`) and give the
+performance opportunities) and optional code-quality suggestions. Save it to the dated
+file named below (the project keeps audit docs in `docs/audits/`) and give the
 user a tight inline summary — counts per severity and the top 3 things to look
 at first. Never paste secrets, tokens, or PII into the report.
 
