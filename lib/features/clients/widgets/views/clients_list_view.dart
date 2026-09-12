@@ -64,14 +64,12 @@ class ClientsListView extends ConsumerStatefulWidget {
   /// results are relevance-ranked, and re-sorting them destroys that ranking.
   final ClientsSort sort;
 
-  /// Fires with however many rows are currently rendered, so the screen's
-  /// header can show a count without this view owning any chrome — it is also
-  /// the booking flow's client picker, which must stay chrome-free.
+  /// Fires with the rendered row count, so the screen's header can show a
+  /// count without this view owning chrome.
   final void Function(int count)? onCountChanged;
 
-  /// Opt-in: letter headings and one card per run. Off by default so a host
-  /// that only wants rows — a picker dropped into a sheet — gets today's flat
-  /// list without passing anything.
+  /// Opt-in letter headings and one card per run; off by default so a host
+  /// that wants bare rows gets the flat list.
   final bool grouped;
 
   /// Street of the active [ClientsFilterBuilding], which heads that filter's
@@ -182,8 +180,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   @override
   void onClientDeleted(ClientRecord client) => _pagingController.refresh();
 
-  // The Slidable wraps the tile HERE, not inside ClientTile — the booking
-  // flow's client picker reuses that tile and must not gain archive/delete.
+  // The Slidable wraps the tile HERE so ClientTile itself can never archive.
   Widget _clientTile(ClientRecord client, int index) {
     final tile = _slidableTile(client, index);
     final wrap = widget.firstRowTourWrap;
