@@ -70,6 +70,16 @@ describe("placesAutocomplete response shaping", () => {
     expect(result).toEqual({suggestions: []});
   });
 
+  test("repairs upstream mojibake in a prediction", async () => {
+    global.fetch = jest.fn().mockResolvedValue(okResponse({suggestions: [
+      {placePrediction: {placeId: "p1", text: {text: "Saint-Jã©Rã´Me, QC"}}},
+    ]}));
+
+    const result = await runAutocomplete({input: "saint-j"});
+    expect(result.suggestions[0].placePrediction.text.text)
+        .toBe("Saint-Jérôme, QC");
+  });
+
   test("rejects a missing input before any upstream call", async () => {
     global.fetch = jest.fn();
     await expect(runAutocomplete({})).rejects.toThrow();
@@ -99,6 +109,23 @@ describe("placesGetDetails response shaping", () => {
 
     const result = await runDetails({placeId: "ChIJ_abc123"});
     expect(result).toEqual({formattedAddress: "", addressComponents: []});
+  });
+
+  test("repairs upstream mojibake in the address it hands back", async () => {
+    global.fetch = jest.fn().mockResolvedValue(okResponse({
+      formattedAddress: "774 Rang Lamontagne, Calixa-Lavallã©E, QC",
+      addressComponents: [
+        {longText: "Calixa-Lavallã©E", types: ["locality"]},
+      ],
+    }));
+
+    const result = await runDetails({placeId: "ChIJ_abc123"});
+    expect(result).toEqual({
+      formattedAddress: "774 Rang Lamontagne, Calixa-Lavallée, QC",
+      addressComponents: [
+        {longText: "Calixa-Lavallée", types: ["locality"]},
+      ],
+    });
   });
 
   test("rejects a placeId that fails the id pattern", async () => {

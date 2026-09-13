@@ -233,14 +233,23 @@ class EmployeePicker extends StatelessWidget {
         (false, true) => l10n.calendar_assigneeBookedStillOnJob(name),
         (false, false) => l10n.calendar_assigneeOnAnotherJob(name),
       },
-      figure: clash.isTimeOff
-          ? DateUtilsHelper.formatDayRange(
-              clash.startTime,
-              lastWorkDayOf(clash),
-            )
-          : '${DateUtilsHelper.formatTime(clash.startTime)} – '
-                '${DateUtilsHelper.formatTime(clash.endTime)}',
+      figure: _figureFor(l10n, clash),
     );
+  }
+
+  /// The clash's own when-line: a day range for time off, the all-day label
+  /// for a block whose stored midnight → 23:59 span would otherwise read as
+  /// a suspiciously precise workday, the clock window for anything else.
+  String _figureFor(AppLocalizations l10n, AppointmentRecord clash) {
+    if (clash.isTimeOff) {
+      return DateUtilsHelper.formatDayRange(
+        clash.startTime,
+        lastWorkDayOf(clash),
+      );
+    }
+    if (clash.isAllDay) return l10n.calendar_allDay;
+    return '${DateUtilsHelper.formatTime(clash.startTime)} – '
+        '${DateUtilsHelper.formatTime(clash.endTime)}';
   }
 }
 

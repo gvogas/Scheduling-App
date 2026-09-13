@@ -256,6 +256,24 @@ void main() {
       expect(find.text('Ada is off'), findsOneWidget);
       expect(find.textContaining('Nobody is free'), findsNothing);
     });
+
+    testWidgets('an all-day job reads "All day", not its stored span', (
+      tester,
+    ) async {
+      // The instants really are midnight to 23:59, which rendered as a
+      // suspiciously precise workday nobody books.
+      await _pump(
+        tester,
+        // A free colleague, or the lines give way to the "nobody free"
+        // sentence and there is no figure to read.
+        allEmployees: [active, _employee('e3', 'Alan Turing')],
+        selectedEmployees: const [],
+        availability: fixtures().allDayToday(active.id),
+      );
+
+      expect(find.text('All day'), findsOneWidget);
+      expect(find.textContaining('11:59'), findsNothing);
+    });
   });
 }
 
@@ -284,6 +302,17 @@ class AppointmentClashFixtures {
         id: 'job',
         startTime: DateTime(2026, 8, 26, 8),
         endTime: DateTime(2026, 8, 26, 12),
+      ),
+    },
+  );
+
+  AssigneeAvailability allDayToday(String id) => AssigneeAvailability(
+    clashes: {
+      id: AppointmentRecord(
+        id: 'job',
+        startTime: _day,
+        endTime: DateTime(2026, 8, 26, 23, 59),
+        isAllDay: true,
       ),
     },
   );
