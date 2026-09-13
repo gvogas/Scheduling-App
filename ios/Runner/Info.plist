@@ -69,7 +69,7 @@
 		<false/>
 	</dict>
 	<key>NSCameraUsageDescription</key>
-	<string>This app uses the camera to take appointment photos and profile pictures.</string>
+	<string>This app uses the camera to take appointment photos.</string>
 	<key>NSContactsUsageDescription</key>
 	<string>This app saves a client you choose to your phone contacts, and keeps that one contact up to date when you edit the client. It does not read the rest of your contacts.</string>
 	<key>NSFaceIDUsageDescription</key>
@@ -79,7 +79,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>While you have the app open, your location tells you when it is time to leave for your next appointment and shows your position on the staff map.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app accesses your photo library to attach images to appointments and profiles.</string>
+	<string>This app accesses your photo library to attach images to appointments.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>This app saves appointment photos to your photo library when you choose to save them.</string>
 	<key>NSSupportsLiveActivities</key>

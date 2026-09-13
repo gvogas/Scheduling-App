@@ -11,10 +11,10 @@
    and a key MISSING here silently falls back, which is the failure mode worth
    knowing about — it looks like nothing is wrong. */
 
-"NSCameraUsageDescription" = "This app uses the camera to take appointment photos and profile pictures.";
+"NSCameraUsageDescription" = "This app uses the camera to take appointment photos.";
 "NSContactsUsageDescription" = "This app saves a client you choose to your phone contacts, and keeps that one contact up to date when you edit the client. It does not read the rest of your contacts.";
 "NSFaceIDUsageDescription" = "This app uses Face ID to unlock the app lock you enabled in Settings.";
 "NSLocationAlwaysAndWhenInUseUsageDescription" = "Your location tells you when it is time to leave for your next appointment and shows your position on the staff map. This app only uses your location while you have it open.";
 "NSLocationWhenInUseUsageDescription" = "While you have the app open, your location tells you when it is time to leave for your next appointment and shows your position on the staff map.";
-"NSPhotoLibraryUsageDescription" = "This app accesses your photo library to attach images to appointments and profiles.";
+"NSPhotoLibraryUsageDescription" = "This app accesses your photo library to attach images to appointments.";
 "NSPhotoLibraryAddUsageDescription" = "This app saves appointment photos to your photo library when you choose to save them.";

@@ -61,7 +61,7 @@ Crashlytics / Cloud Messaging). There are **no advertising or analytics SDKs**
 | Client contact records (name, business, phone, mobile, email, street/city/province/postal/country, contacts array) | `clients/{id}`, entered by admins | Yes |
 | Appointment content (date/time, assignees, status, notes, address) | `appointments/{id}` | Yes |
 | Appointment photos | Storage `appointments/*/images/*` (JPEG/PNG, validated) | Yes |
-| **Precise background location** of active staff + assigned admins | `users/{docId}/presence/location` (`geolocator` background stream) | Yes |
+| **Precise location**, while the app is open, of active staff and admins who turned on Staff map location | `users/{docId}/presence/location` (`geolocator` foreground stream; latest position only) | Yes |
 | FCM push token + per-device locale | `users/{docId}/fcmTokens/{token}` | Yes |
 | APNs Live Activity tokens | `users/{docId}/liveActivityTokens/{token}` | Yes |
 | Crash diagnostics | Firebase Crashlytics | Yes |
@@ -343,9 +343,9 @@ signed-in user's account.
 
 Notes:
 - Precise Location is the one type most likely to draw a follow-up. It is **App
-  Functionality**, **not** tracking or advertising. It is background location
-  (the app has `UIBackgroundModes: location`). Justification is in the Part 11
-  review notes.
+  Functionality**, **not** tracking or advertising. It is **foreground-only**:
+  the `location` background mode was removed 2026-07-27 after a guideline 2.5.4
+  rejection. Justification is in the Part 12 review notes.
 - Crash Data is declared **not linked to identity** — the app does not call
   Crashlytics `setUserId` with PII. No Performance Data is declared (no Firebase
   Performance SDK ships).
@@ -867,10 +867,11 @@ reference in case it needs re-answering.
 - **Sign-in required:** Yes.
 - **Contact:** George Vogas · george@vogas.net · (phone as required by ASC).
 
-**Demo account** — created 2026-07-14. Signup is invite-only (one-time codes),
-so Review cannot self-register. Still to do at submission: **paste the email +
-password into ASC → App Review Information → Sign-In Required.** Credentials
-live there, **not in this repo**.
+**Demo account** — created 2026-07-14. There is no self-registration — an admin
+creates each account in the app and hands over a generated starting password —
+so Review cannot sign up on its own. Still to do at submission: **paste the
+email + password into ASC → App Review Information → Sign-In Required.**
+Credentials live there, **not in this repo**.
 
 **[was contradictory]** the materials doc still carried unfilled placeholder
 blocks (`demo-admin@vogas.net` / `__________`) as if the account didn't exist;
@@ -883,48 +884,37 @@ and no real customer data is exposed. The admin role shows the full app
 account, supply the admin. An optional employee demo account shows the
 field-worker view.
 
-**Review notes (paste into the Notes field):**
+**Review notes (paste into the Notes field)** — v1.61.0+90 (2026-09-12), 3,857 of 4,000 chars by `wc -m`:
 ```
-ES Pro is a private scheduling tool for a Quebec plumbing company and its
-employees. Accounts are created by invitation only (one-time codes issued by an
-administrator), so there is no public self-registration. Please use the demo
-credentials above.
+This app is for unlisted distribution. ES Pro is a private scheduling tool for a Quebec plumbing company and its staff, so there is no public sign-up — the sign-in screen offers only sign in and forgot password. An administrator creates each employee account in the app and hands the person their email and a starting password in person. On first sign-in the app makes them choose their own password, enter their name and phone, and accept the terms and location consent before the account works. Please use the demo credentials above.
 
-Roles: an "admin" account manages the schedule, clients, employees, the live
-staff map, and dashboard. An "employee" account sees only the jobs assigned to
-them. The demo admin account shows the full app.
+Roles: an admin manages the schedule, clients, team, live map, dashboard and job history. An employee sees only the jobs assigned to them. The demo account is an admin, so it shows everything.
 
-Background location: the app collects the signed-in staff member's location in
-the background for two features only: (1) timing a "time to leave" reminder
-using live traffic to the next job, and (2) an admin-only live map of where the
-crew currently is. It is App Functionality, not tracking or advertising, and is
-tied to the user's own account. Location can be denied or limited to "while
-using" and the app still works (it falls back to a fixed 30-minute reminder).
+Location: collected only while the app is open on screen. There is no location background mode — iOS suspends updates when the app is backgrounded — and we ask only for "While Using the App", never "Always". It does two things: times a "time to leave" alert using live traffic to the next job, and shows the crew on an admin-only map. That is App Functionality, not tracking or advertising. We keep only the latest position (one record per user, no history), deleted when the account is disabled or deleted. Settings › "Staff map location" turns it off, and "Clear and pause location" deletes the stored position. If location is denied the app still works: the alert falls back to the drive from the previous job's address, or a flat 30-minute heads-up.
 
-Contacts: the app requests Contacts access only to save a client the admin
-already has into the device address book (a "save to contacts" action) and to
-keep that one created contact in sync. It never reads or uploads the device's
-address book.
+Contacts: requested only when an admin taps "Save to contacts" on a client, to create and keep that one contact up to date. We never read or upload the address book.
 
-App Check uses Apple App Attest, which only produces valid tokens on real
-hardware. On the Simulator, network calls to our Cloud Functions may fail. Please
-test on a physical device (this is a TestFlight/store-signed build, so App Attest
-works there).
+Camera and Photos: only to attach photos to a job, and to save a job photo back to the device ("Save to Photos"). Optional.
 
-Account deletion is available in-app: Settings has a delete-account action that
-removes the user's account and data server-side.
+Face ID: an optional "App Lock" in Settings. Nothing biometric leaves the phone.
 
-Notifications and the home-screen widget: the app requests notification
-permission to alert staff when a job is assigned, moved, or cancelled, and for
-reminders. These are optional.
+App Check uses Apple App Attest, which only issues valid tokens on real hardware. Client search, history search and the booking conflict check run through our Cloud Functions, so on the Simulator they may fail or return nothing. Please test on a device; this build is store-signed, so App Attest works there.
 
-Siri: the app exposes read-only Siri shortcuts (e.g. "what's on my schedule
-today", "what's my next appointment") that speak back the signed-in user's own
-appointments. No data leaves the device for these.
+Deleting an account: Settings › "Delete account". The user re-enters their password, then a server function removes the account and its data. It is immediate and permanent: a deleted demo account cannot sign in again.
 
-Live Activity: a "time to leave" card may appear on the Lock Screen / Dynamic
-Island near a scheduled job, showing travel/on-site status. It is optional and
-can be turned off in Settings (Live job card).
+Notifications: asked only when the user turns on Settings › "Notifications". They cover jobs assigned, moved or cancelled, "time to leave" alerts and a daily summary. Only the "time to leave" alert is sent as Time Sensitive, so a departure alert is not held behind Focus. Optional, as is the home-screen widget.
+
+Siri: read-only shortcuts for today's schedule, tomorrow's, a chosen day, the next appointment, an appointment by number and today's count. They read the signed-in user's own jobs from an on-device snapshot; nothing leaves the device.
+
+Live Activity: an optional "time to leave" card on the Lock Screen / Dynamic Island near a job, showing travel and on-site status. Settings › "Live job card".
+
+CarPlay (Driving Task): the signed-in user's own jobs in a Today tab (next job first) and a Week tab. A job offers Directions (handed to the car's navigation app), Start job, Mark complete and Call. It reads the same on-device schedule as Siri. Sign in on the iPhone first; signed out, CarPlay shows "Sign in on your iPhone".
+
+Analytics: Firebase Analytics and Crashlytics record screen and feature usage counts and crash reports. No name, phone, address or note is sent, no user ID is set, and the app is built without the advertising identifier. No tracking, so no ATT prompt.
+
+Wave, in Settings for admins only, links the company's own accounting service. It is already set up and needs nothing from you.
+
+The app is fully localized in English and French.
 ```
 
 ---
