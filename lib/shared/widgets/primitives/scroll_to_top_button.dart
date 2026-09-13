@@ -2,15 +2,14 @@ import 'package:flutter/material.dart';
 
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/primitives/floating_pill.dart';
 import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 
 /// Floating "back to top" control for a long list.
 ///
 /// It rides the enclosing [PrimaryScrollController] — every list surface here
 /// already sits in a `PrimaryScrollScope` — so a host adds it by stacking it
-/// over the list rather than by threading a controller down. It scales and
-/// fades out while the list is near the top, staying mounted so the
-/// transition animates both ways, the way the calendar's Today pill does.
+/// over the list rather than by threading a controller down.
 class ScrollToTopButton extends StatefulWidget {
   const ScrollToTopButton({super.key, this.threshold = 400});
 
@@ -76,44 +75,17 @@ class _ScrollToTopButtonState extends State<ScrollToTopButton> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final instant = MediaQuery.disableAnimationsOf(context);
-    final radius = BorderRadius.circular(AppRadius.rFull);
-    return IgnorePointer(
-      ignoring: !_visible,
-      child: AnimatedScale(
-        scale: _visible ? 1 : 0.85,
-        duration: instant ? Duration.zero : AppMotion.popIn,
-        curve: AppMotion.emphasized,
-        child: AnimatedOpacity(
-          opacity: _visible ? 1 : 0,
-          duration: instant ? Duration.zero : AppMotion.popIn,
-          child: Tooltip(
-            message: context.l10n.common_backToTop,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                borderRadius: radius,
-                boxShadow: theme.cardStyle.pillShadow,
-              ),
-              child: Material(
-                color: theme.colorScheme.surface,
-                borderRadius: radius,
-                clipBehavior: Clip.antiAlias,
-                child: InkWell(
-                  onTap: _toTop,
-                  child: SizedBox(
-                    width: kGhostTapTarget,
-                    height: kGhostTapTarget,
-                    child: Icon(
-                      Icons.arrow_upward_rounded,
-                      size: 20,
-                      color: theme.palette.primaryAccent,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+    return FloatingPill(
+      visible: _visible,
+      tooltip: context.l10n.common_backToTop,
+      onTap: _toTop,
+      child: SizedBox(
+        width: kGhostTapTarget,
+        height: kGhostTapTarget,
+        child: Icon(
+          Icons.arrow_upward_rounded,
+          size: 20,
+          color: Theme.of(context).palette.primaryAccent,
         ),
       ),
     );

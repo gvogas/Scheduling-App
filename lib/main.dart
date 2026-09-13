@@ -27,6 +27,7 @@ import 'package:scheduling/core/app/appointment_link_opener.dart';
 import 'package:scheduling/core/app/carplay_bridge.dart';
 import 'package:scheduling/core/connectivity/offline_banner.dart';
 import 'package:scheduling/core/deep_links/deep_link_dispatcher.dart';
+import 'package:scheduling/core/layout/breakpoints.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/logging/unhandled_error_severity.dart';
 import 'package:scheduling/core/navigation/top_route_observer.dart';
@@ -403,9 +404,12 @@ class _PaulAppState extends ConsumerState<PaulApp> {
             onGenerateRoute: AppRoutes.onGenerateRoute,
             builder: (context, child) {
               final media = MediaQuery.of(context);
-              // Compose in-app text scale with the OS scale, capped at 2.2.
+              // Compose in-app text scale with the OS scale, capped app-wide.
               final systemFactor = media.textScaler.scale(14) / 14;
-              final effectiveScale = math.min(_textScale * systemFactor, 2.2);
+              final effectiveScale = math.min(
+                _textScale * systemFactor,
+                Breakpoints.maxTextScale,
+              );
               // iOS "Bold Text". Flutter exposes the flag and applies it to
               // nothing, so the weight bump is ours to make — here, where the
               // RESOLVED theme is in scope, so it composes with light/dark and

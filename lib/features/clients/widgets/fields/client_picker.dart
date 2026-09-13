@@ -10,8 +10,8 @@ import 'package:scheduling/shared/widgets/fields/attached_dropdown.dart';
 import 'package:scheduling/shared/widgets/fields/form_helpers.dart';
 import 'package:scheduling/shared/widgets/primitives/app_avatar.dart';
 
-/// The add-job client step: a mode switch, one field, and whatever the current
-/// search has to say about it.
+/// The add-job client step: one search field and whatever the current search
+/// has to say about it.
 ///
 /// Never attaches on its own — every row needs a tap — and never dismisses the
 /// keyboard except from that tap.

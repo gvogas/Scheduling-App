@@ -394,7 +394,9 @@ void main() {
 
   // Grouping is opt-in so a host that only wants rows — a picker dropped into
   // a sheet — keeps the flat list without passing anything.
-  testWidgets('groups by initial under Name sort only when asked', (
+  // The paged list is server-ordered by the STORED name — a person's phone —
+  // so letters over it would head runs that are not runs.
+  testWidgets('keeps the unfiltered paged list in one card, even grouped', (
     tester,
   ) async {
     when(
@@ -410,15 +412,39 @@ void main() {
       ],
     );
 
-    await tester.pumpWidget(_wrap(repo));
-    await tester.pumpAndSettle();
-    expect(find.text('A'), findsNothing);
-
     await tester.pumpWidget(_wrap(repo, grouped: true));
     await tester.pumpAndSettle();
 
+    expect(find.text('A'), findsNothing);
+    expect(find.text('B'), findsNothing);
+    expect(find.text('Alice Brown'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('letters a type filter in folded name order, one card each', (
+    tester,
+  ) async {
+    when(() => repo.fetchClientsByType(any())).thenAnswer(
+      (_) async => const [
+        ClientRecord(id: 'c1', name: 'Zoe Tremblay'),
+        ClientRecord(id: 'c2', name: 'Émile Roy'),
+        ClientRecord(id: 'c3', name: 'Alice Brown'),
+        ClientRecord(id: 'c4', name: 'Eric Gagnon'),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _wrap(
+        repo,
+        grouped: true,
+        filter: const ClientsFilterType(ClientType.commercial),
+      ),
+    );
+    await tester.pumpAndSettle();
+
     expect(find.text('A'), findsOneWidget);
-    expect(find.text('B'), findsOneWidget);
+    expect(find.text('E'), findsOneWidget);
+    expect(find.text('Z'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

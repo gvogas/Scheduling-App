@@ -10,6 +10,57 @@ All notable changes to this project are documented here.
 The `+N` build number after the version (e.g. `1.1.0+5`) is the store version
 code; it increments by one on every store upload regardless of the semver part.
 
+## [1.61.0+90] - 2026-09-12
+
+A fresh look for every screen header and the Clients list, a quicker booking
+form, and a client's job count that finally ignores visits that were called
+off.
+
+### Added
+- **A "back to top" button on the Clients list.** It appears once you have
+  scrolled a long way down and takes you straight back to the first client.
+
+### Changed
+- **Screen headers have a new, lighter look.** The coloured bar is gone:
+  each screen opens with a large title on the page itself, with round
+  controls beside it. Every one of those controls, and the Cancel and Save
+  buttons on every form, now responds to a full-size tap. Several used to
+  react only to the small painted button in the middle.
+- **The Clients list sits in cards.** Filtering by a client type or to
+  archived clients, sorted by name, splits them into cards under each first
+  letter. Each row shows the name with its client type, the
+  address, then the phone number beside the job count. The line above the
+  list says exactly what you are looking at, like "50 of 717 clients" or
+  "45 Commercial clients", and the sort shows as an icon with its name.
+- **Booking a job has one search box for the client.** Type a name or a
+  phone number into the same field. There is no Phone / Name switch to find
+  first.
+- **The job-type shortcuts sit right under the job title**, with a hint that
+  tapping one fills in the title and the length. The title is now the first
+  thing on the form.
+- **Appointment start and end times move in quarter hours** — :00, :15, :30
+  and :45. Working hours in availability still offer every minute.
+- **Client and address suggestions look the same, and are easier to tap.**
+  Both lists float clearly above the form, every row is a full-size target,
+  client rows show the client's avatar, and addresses use two lines so the
+  town is no longer cut off.
+- **Finished jobs in the calendar are easier to read.** A done or cancelled
+  job still takes less room than an open one, but it shows the crew again,
+  and its time has its own line so "Day 3 of 5" is no longer cut off.
+- **The notes field no longer shows a "0/4000" character counter.**
+
+### Fixed
+- **A client's job count no longer includes cancelled visits.** Cancelling a
+  job now lowers the count, which also affects where that client appears
+  under "Most jobs".
+- **Changing the sort while a filter is on now re-sorts the list.** It used to
+  do nothing until the filter was cleared.
+- **"New Appointment" no longer shows as "New Appoin…"** in the form header.
+  The job address is labelled once instead of three times, and each crew
+  member in the picker no longer takes a whole row.
+- **The calendar's day title shortens to "Fri, Sep 11"** when there isn't
+  room, instead of trailing off mid-word.
+
 ## [1.60.0+89] - 2026-09-10
 
 A client Wave will not accept is now something you can fix, instead of a
@@ -23,17 +74,6 @@ is used — in buckets and counts, never names, numbers or addresses.
   number, address or job note is ever sent, and searches are reported as a
   length rather than as what was typed. Nothing identifies a person: the only
   thing attached is whether the account is an admin or a technician.
-
-### Changed
-- **Wave sync now says which client can't sync, and why.** A customer Wave
-  would refuse is caught before it is ever queued, so instead of failing over
-  and over with nothing but a number in Settings, it shows up as a named
-  client with the field to fix — on the client's own page and in a list under
-  the Wave section. Fixing the field puts it back in the queue by itself, with
-  no button to press. "Retry failed" no longer offers to retry the ones that
-  can only fail again; it clears them out and tells you how many need
-  attention.
-### Added
 - **CarPlay.** ES Pro now has a native CarPlay screen: the day's jobs
   ranked around the one you're driving to, a week view, and directions
   handed off to the car's own navigation app. It reads from the same
@@ -44,6 +84,16 @@ is used — in buckets and counts, never names, numbers or addresses.
   to the list, and the job screen shows only when, where and the crew.
   Not yet visible on any device — Apple's CarPlay entitlement reaches the
   development profile but has not been proved on an App Store one.
+
+### Changed
+- **Wave sync now says which client can't sync, and why.** A customer Wave
+  would refuse is caught before it is ever queued, so instead of failing over
+  and over with nothing but a number in Settings, it shows up as a named
+  client with the field to fix — on the client's own page and in a list under
+  the Wave section. Fixing the field puts it back in the queue by itself, with
+  no button to press. "Retry failed" no longer offers to retry the ones that
+  can only fail again; it clears them out and tells you how many need
+  attention.
 
 ### Fixed
 - **"Time to leave" alerts now break through Focus and Do Not Disturb.** They

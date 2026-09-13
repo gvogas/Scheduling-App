@@ -640,10 +640,6 @@
   "@clients_typeCommercial": {
     "description": "Client type chip for a business customer"
   },
-  "clients_filterByAddress": "Address",
-  "@clients_filterByAddress": {
-    "description": "Label on the clients list menu that filters to one shared street address"
-  },
   "clients_noClientsAtAddress": "No clients at this address.",
   "@clients_noClientsAtAddress": {
     "description": "Empty state when the address filter matches nothing"
@@ -4009,6 +4005,15 @@
         "type": "int"
       },
       "total": {
+        "type": "int"
+      }
+    }
+  },
+  "clients_searchMatches": "{count, plural, =0{No matching clients} =1{1 matching client} other{{count} matching clients}}",
+  "@clients_searchMatches": {
+    "description": "How many clients match the search typed above the unfiltered Clients list.",
+    "placeholders": {
+      "count": {
         "type": "int"
       }
     }

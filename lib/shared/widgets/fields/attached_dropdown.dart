@@ -2,18 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:scheduling/core/theme/design_tokens.dart';
 
-/// The suggestion list that attaches under a text field — the client picker's
-/// and the address field's, which are the same control and have to read as one.
-///
-/// It owns the panel, the caption band, the dividers AND the row
-/// ([AttachedDropdownRow]). The panel was already shared; the ROWS were not —
-/// the client's were hand-built and divided, the address's were bare
-/// `ListTile(dense: true)` with no dividers and a different vertical rhythm, so
-/// one form showed two different controls doing the same job.
-///
-/// The panel carries its own surface and lift deliberately: it floats OVER the
-/// form, and with no fill it borrowed the sheet's colour and read as part of
-/// the field above it, separated only by a 6%-white hairline in dark.
+/// The suggestion list under a text field, shared by the client picker and the
+/// address field (rules: `.claude/rules/frontend.md`, Forms & sheets).
 class AttachedDropdown extends StatelessWidget {
   const AttachedDropdown({required this.children, super.key, this.caption});
 
@@ -67,14 +57,8 @@ class AttachedDropdown extends StatelessWidget {
   }
 }
 
-/// One tappable suggestion.
-///
-/// It holds the 48px tap floor itself. The client row this replaces painted
-/// about 36 and hung a `tapTargetSize.shrinkWrap` TextButton inside the
-/// `InkWell` that already did the same thing — a second, smaller target for
-/// the action the whole row performs. The chevron is the whole affordance now
-/// (owner call, 2026-09-12): the "Attach" verb that button carried was dropped
-/// with it, so don't reintroduce a trailing label here.
+/// One tappable suggestion: holds the 48px tap floor, and the chevron is its
+/// whole affordance (no trailing verb, by owner call).
 class AttachedDropdownRow extends StatelessWidget {
   const AttachedDropdownRow({
     required this.headline,

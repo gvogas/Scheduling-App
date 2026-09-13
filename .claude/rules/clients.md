@@ -184,9 +184,17 @@ Root context: `../../CLAUDE.md`.
   screen hands down as `buildingLabel` (this view still must never watch the
   building scan), and a SEARCH is one card because those results are
   relevance-ranked — letters over them would head runs that are not runs.
-  **It never re-sorts.** The page is `orderBy('name')` server-side, so the runs
-  are read off the order as given; `letterGroupsOf` opens a SECOND `A` group
-  rather than merging a later one, which is the shape that proves it.
+  **Letters head ONLY rows Dart sorted, so the UNFILTERED paged list is one
+  card** (release review, 2026-09-12, owner pick). The page is
+  `orderBy('name')` on the STORED name, and for a person that IS their bare
+  phone number while the heading reads `displayName` (first + last) — so under
+  letters the main list rendered a card per row, M · A · M…, in phone order.
+  Letters survive on the Type and Archived filters, whose bounded windows
+  `sortClients` orders by the SAME accent-folded `displayName` key
+  `clientInitialOf` reads; keep those two keys identical or a run splits (an
+  unfolded sort put "Émile" after "Zoé" under a second E card). Re-sorting the
+  loaded pages client-side was rejected: rows jump into earlier cards as
+  pages arrive. `letterGroupsOf` still never re-orders.
   **The card is a `DecoratedSliver` around a `SliverList`, never a `Container`
   around a `Column`.** One card can hold every loaded row — the whole type
   filter's bounded window, or the paged list at scroll depth — and a `Column`

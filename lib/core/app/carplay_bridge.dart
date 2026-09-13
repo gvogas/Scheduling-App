@@ -88,12 +88,7 @@ class CarPlayBridge {
     final snapshot = _ref.read(scheduleSnapshotProvider);
     final service = _ref.read(scheduleSnapshotServiceProvider);
     if (AppSyncListeners.isUnsettled(snapshot)) return;
-    final payload = snapshot.value;
-    if (payload == null) {
-      await service.clearSnapshot();
-      return;
-    }
-    await service.writeSnapshot(payload);
+    await service.apply(snapshot.value);
   }
 
   /// Fails fast offline, the same guard the in-app submit controllers carry.

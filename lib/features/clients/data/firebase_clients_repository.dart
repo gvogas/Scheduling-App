@@ -256,21 +256,21 @@ class FirebaseClientsRepository implements ClientsRepository {
   Future<List<ClientRecord>> fetchArchivedClients() async {
     final window = await _clientScanWindow();
     if (window == null) return const [];
-    return _byDisplayName([
+    return sortClients([
       for (final doc in window.docs)
         if (doc.data['archived'] == true)
           ClientRecord.fromMap(doc.id, doc.data),
-    ]);
+    ], ClientsSort.name);
   }
 
   @override
   Future<List<ClientRecord>> fetchClientsByType(ClientType type) async {
     if (type == ClientType.unset) return const [];
     final records = await _windowRecords();
-    return _byDisplayName([
+    return sortClients([
       for (final record in records)
         if (record.type == type) record,
-    ]);
+    ], ClientsSort.name);
   }
 
   @override
@@ -284,7 +284,7 @@ class FirebaseClientsRepository implements ClientsRepository {
       for (final record in window.records)
         if (window.buildingKeys[record.id] == key) record,
     ];
-    return _byDisplayName(matches);
+    return sortClients(matches, ClientsSort.name);
   }
 
   @override
@@ -295,15 +295,6 @@ class FirebaseClientsRepository implements ClientsRepository {
   /// shape the type filter and the Building menu both reduce over.
   Future<List<ClientRecord>> _windowRecords() async =>
       (await _clientScanWindow())?.records ?? const [];
-
-  /// The list order every filtered client view uses.
-  List<ClientRecord> _byDisplayName(List<ClientRecord> records) {
-    final keyed = [
-      for (final record in records)
-        (sortKey: record.displayName.toLowerCase(), record: record),
-    ]..sort((a, b) => a.sortKey.compareTo(b.sortKey));
-    return [for (final entry in keyed) entry.record];
-  }
 
   @override
   Future<List<ClientRecord>> searchClients(String query) async {
@@ -331,23 +322,24 @@ class FirebaseClientsRepository implements ClientsRepository {
     // 25 come back is still the server's alphabetical read cap.
     final queryText = ClientSearchPolicy.normalize(query);
     final queryDigits = ClientSearchPolicy.digitsOnly(query);
-    // Decorate-sort-undecorate, like `_byDisplayName` above: scoring inside the
+    // Decorate-sort-undecorate, like `sortClients`: scoring inside the
     // comparator re-normalizes both operands on every comparison.
-    final ranked = [
-      for (final record in records)
-        (
-          score: ClientSearchPolicy.scoreRecord(
-            record,
-            queryText: queryText,
-            queryDigits: queryDigits,
-          ),
-          sortKey: record.displayName.toLowerCase(),
-          record: record,
-        ),
-    ]..sort((a, b) {
-      final byScore = a.score.compareTo(b.score);
-      return byScore != 0 ? byScore : a.sortKey.compareTo(b.sortKey);
-    });
+    final ranked =
+        [
+          for (final record in records)
+            (
+              score: ClientSearchPolicy.scoreRecord(
+                record,
+                queryText: queryText,
+                queryDigits: queryDigits,
+              ),
+              sortKey: record.displayName.toLowerCase(),
+              record: record,
+            ),
+        ]..sort((a, b) {
+          final byScore = a.score.compareTo(b.score);
+          return byScore != 0 ? byScore : a.sortKey.compareTo(b.sortKey);
+        });
     return [for (final entry in ranked) entry.record];
   }
 

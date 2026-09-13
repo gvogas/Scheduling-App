@@ -46,15 +46,7 @@ function clientIdOf(data) {
 /**
  * Which client docs need their `jobCount` recomputed after this write.
  *
- * Creates and deletes touch one client; a reassignment touches both. Personal
- * jobs carry no `clientId` and are skipped.
- *
- * An unchanged `clientId` ALSO recounts when the job's cancelled-ness flipped,
- * because the aggregate excludes cancelled jobs — without this the count only
- * corrects itself on some later write that happens to move `clientId`, so a
- * cancellation left the client reading one job too many indefinitely. The gate
- * is cancelled-ness and NOT "the status changed", so an ordinary
- * `pending -> done` edit still costs zero reads.
+ * Creates, deletes, reassignments and cancelled-ness flips; not personal jobs.
  *
  * @param {?Object} beforeData Appointment fields before the write, or null.
  * @param {?Object} afterData Appointment fields after the write, or null.
@@ -76,13 +68,7 @@ function clientsToRecount(beforeData, afterData) {
 }
 
 /**
- * The `jobCount` this client's appointments add up to.
- *
- * Exported because `scripts/recount-client-jobs.js` has to answer exactly the
- * same question for the backfill, and a second spelling of the
- * inclusion-exclusion below is a backfill that disagrees with the trigger —
- * which would look like the trigger being broken, on whichever clients the
- * script had touched most recently.
+ * The `jobCount` a client's appointments add up to; shared with the recount.
  *
  * @param {!Object} db Firestore instance.
  * @param {string} clientId Client doc id.
@@ -97,17 +83,7 @@ async function countJobsFor(db, clientId) {
   // 1, and an inequality filter excludes a document missing the field, so this
   // subtraction needs no backfill and no per-document read. Served by the
   // (clientId ASC, dayIndex ASC) composite.
-  // Cancelled visits are not jobs. Subtracting them — rather than filtering to
-  // an allowlist of live statuses — is what keeps a legacy `confirmed` or a
-  // doc with no status counted, which fails in the safe direction.
-  //
-  // The fourth term is the inclusion-exclusion correction, not a guard: one
-  // live 5-day run plus one cancelled 5-day run is 10 - 8 - 5 = -3 without it,
-  // and the right answer is 1, so clamping at 0 would also be wrong.
-  //
-  // Accepted limitation: a Firestore `where` cannot lowercase, so a
-  // console- or Admin-SDK-written "Cancelled" still counts.
-  // `isValidAppointmentStatus` holds every CLIENT write to the lowercase set.
+  // Minus cancelled, plus cancelled later run days (inclusion-exclusion).
   const laterRunDaysOf = (q) => q.where("dayIndex", ">", 1);
   const cancelledOf = (q) => q.where("status", "==", "cancelled");
   const [total, laterRunDays, cancelled, cancelledLaterRunDays] =

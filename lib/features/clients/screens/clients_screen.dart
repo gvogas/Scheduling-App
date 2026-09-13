@@ -142,6 +142,8 @@ class _ListInformationState extends ConsumerState<ListInformation> {
       controller: _searchController,
       hintText: context.l10n.clients_searchAllFields,
     );
+    // Watched under every filter so a round trip through one re-counts nothing.
+    final total = ref.watch(clientsTotalCountProvider).value;
     return FeatureTourHost(
       scope: _tour.scope,
       isAdmin: widget.isAdmin,
@@ -179,32 +181,37 @@ class _ListInformationState extends ConsumerState<ListInformation> {
           master: Column(
             children: [
               // One row: Filter, what the list is showing, and the order.
-              ClientsListHeader(
-                leading: _tour.stepIf(
-                  TourStepId.clientsFilter,
-                  ClientsFilterBar(selected: _filter, onOpen: _openFilterSheet),
+              ListenableBuilder(
+                listenable: _searchController,
+                builder: (context, _) => ClientsListHeader(
+                  leading: _tour.stepIf(
+                    TourStepId.clientsFilter,
+                    ClientsFilterBar(
+                      selected: _filter,
+                      onOpen: _openFilterSheet,
+                    ),
+                  ),
+                  sortWrap: (child) =>
+                      _tour.stepIf(TourStepId.clientsSort, child),
+                  onClearFilter: () => _applyFilter(const ClientsFilterAll()),
+                  count: _visibleCount,
+                  isSearching: _searchController.text.trim().isNotEmpty,
+                  // Only the unfiltered list pages; every filtered slice loads
+                  // whole, so its shown count IS its total.
+                  total: _filter is ClientsFilterAll ? total : null,
+                  filter: _filter,
+                  sort: _sort,
+                  onSortChanged: (next) {
+                    ref
+                        .read(analyticsServiceProvider)
+                        .logFilterUsed(
+                          surface: AnalyticsSurfaces.clients,
+                          filterName: AnalyticsFilters.sort,
+                          filterValue: next.name,
+                        );
+                    setState(() => _sort = next);
+                  },
                 ),
-                sortWrap: (child) =>
-                    _tour.stepIf(TourStepId.clientsSort, child),
-                onClearFilter: () => _applyFilter(const ClientsFilterAll()),
-                count: _visibleCount,
-                // Only the unfiltered list pages; every filtered slice loads
-                // whole, so its shown count IS its total.
-                total: _filter is ClientsFilterAll
-                    ? ref.watch(clientsTotalCountProvider).value
-                    : null,
-                filter: _filter,
-                sort: _sort,
-                onSortChanged: (next) {
-                  ref
-                      .read(analyticsServiceProvider)
-                      .logFilterUsed(
-                        surface: AnalyticsSurfaces.clients,
-                        filterName: AnalyticsFilters.sort,
-                        filterValue: next.name,
-                      );
-                  setState(() => _sort = next);
-                },
               ),
               Expanded(
                 // The floating controls and the list's bottom clearance are

@@ -1,4 +1,5 @@
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
+import 'package:scheduling/features/clients/domain/policies/client_search_policy.dart';
 
 /// How the unfiltered client list is ordered.
 ///
@@ -39,9 +40,12 @@ enum ClientsSort {
 List<ClientRecord> sortClients(List<ClientRecord> records, ClientsSort sort) {
   final keyed = [
     for (final record in records)
-      (nameKey: record.displayName.toLowerCase(), record: record),
+      (
+        nameKey: ClientSearchPolicy.normalize(record.displayName),
+        record: record,
+      ),
   ];
-  // Every arm tie-breaks on the name key, so the order is total and stable.
+  // Accent-folded like `clientInitialOf`, so a letter heading's run stays whole.
   switch (sort) {
     case ClientsSort.name:
       keyed.sort((a, b) => a.nameKey.compareTo(b.nameKey));

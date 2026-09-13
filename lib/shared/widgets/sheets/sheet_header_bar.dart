@@ -6,10 +6,7 @@ import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
 import 'package:scheduling/core/layout/text_measure.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/l10n/l10n.dart';
-
-/// Painted height of a ghost control; `tapTargetSize.padded` lifts the hit area
-/// to the 48px floor around it.
-const double _kGhostTile = 38;
+import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 
 /// The ghost style's 14px side padding plus its 1px border, both sides.
 const double _kGhostChrome = 30;
@@ -18,32 +15,8 @@ const double _kGhostChrome = 30;
 /// entirely at a large text scale.
 const double _kSideSlotMax = 0.34;
 
-/// The one sheet header: **Cancel · title · primary verb**, sitting directly on
-/// the sheet surface with ghost controls either side.
-///
-/// Every add/edit sheet in the app renders this — appointments, clients and
-/// people — so the dismiss affordance, the title and the commit verb sit in
-/// the same place on every form. `FormSheetFrame` composes it; use it directly
-/// only for a sheet that needs different chrome around the same bar.
-///
-/// It carries the same vocabulary as `AppTopBar`: no coloured band and no
-/// divider, a headline title, and controls painted as `scheme.surface` tiles
-/// behind a 1px `scheme.outlineVariant` border.
-///
-/// Layout notes, all three load-bearing:
-///
-/// * The two side slots are MEASURED to the wider of the two labels and given
-///   that same width, so the title's `Expanded` is centred on the bar by
-///   construction — an asymmetric pair ("Send invite" vs "Cancel") cannot drag
-///   it off centre.
-/// * They are measured rather than shared as a flex. A flat `flex: 3/4/3` left
-///   the title 40% of the bar, which truncated "New Appointment" to
-///   "New Appoin..." on the WIDEST iPhone at default text size, while both
-///   ghost tiles sat half empty. The title now gets every point the verbs
-///   don't need.
-/// * The slot is capped at [_kSideSlotMax], so the bar still cannot overflow:
-///   two intrinsic label widths exceed a 260px viewport once text is scaled
-///   up, and an uncapped slot would have nothing to give.
+/// The one sheet header, **Cancel · title · primary verb**, with measured equal
+/// side slots so the title stays centred (see `.claude/rules/frontend.md`).
 class SheetHeaderBar extends StatelessWidget {
   const SheetHeaderBar({
     required this.title,
@@ -78,7 +51,7 @@ class SheetHeaderBar extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.rFull),
       ),
-      minimumSize: const Size(0, _kGhostTile),
+      minimumSize: const Size(0, kGhostTile),
       padding: const EdgeInsets.symmetric(horizontal: 14),
     );
   }
@@ -122,7 +95,9 @@ class SheetHeaderBar extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: isBusy ? theme.palette.textMuted : scheme.onSurface,
+                      color: isBusy
+                          ? theme.palette.textMuted
+                          : scheme.onSurface,
                     ),
                   ),
                 ),

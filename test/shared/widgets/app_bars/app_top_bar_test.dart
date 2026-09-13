@@ -113,32 +113,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('a count rides beside the title without growing the header', (
-    tester,
-  ) async {
-    const bare = AppTopBar(title: 'Clients', actions: [AppHeaderPair()]);
-    await _pump(tester, bare);
-    final withoutCount = _renderedHeight(tester);
-
-    const counted = AppTopBar(
-      title: 'Clients',
-      count: 42,
-      actions: [AppHeaderPair()],
-    );
-    await _pump(tester, counted);
-
-    expect(find.text('42'), findsOneWidget);
-    expect(_renderedHeight(tester), withoutCount);
-    expect(counted.preferredSize.height, bare.preferredSize.height);
-    expect(tester.takeException(), isNull);
-  });
-
   testWidgets('the header still fits at 2x text on a 260px view', (
     tester,
   ) async {
     const bar = AppTopBar(
       title: 'Clients',
-      count: 42,
       actions: [AppHeaderPair()],
       // What a call site passes: MediaQuery.textScalerOf(context).
       bottom: AppSearchBar(textScaler: TextScaler.linear(2)),

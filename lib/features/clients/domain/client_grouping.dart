@@ -19,8 +19,8 @@ String clientInitialOf(ClientRecord client) {
 
 /// One group per run of clients sharing an initial.
 ///
-/// It never re-orders: the page arrives `orderBy('name')` from the server, so
-/// the runs are read off the order as given rather than sorted into existence.
+/// It never re-orders: [clients] must already be in `sortClients` Name order,
+/// the same folded key the heading reads.
 List<ClientGroup> letterGroupsOf(List<ClientRecord> clients) {
   final groups = <ClientGroup>[];
   var start = 0;

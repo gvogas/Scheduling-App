@@ -181,7 +181,8 @@ alwaysApply: true
     `WIDGET-TAP`, `SIRI`
   - OS permissions: `PERM-LOCATION`, `PERM-MEDIA`
   - Wave: `WAVE-BOOT`, `WAVE-CONN`, `WAVE-CUST`, `WAVE-RETRY`, `WAVE-SCHED`
-    (all `wave_service.dart`), `WAVE-BADGE` (`wave_sync_badge.dart`), plus the
+    (all `wave_service.dart`), `WAVE-BADGE` (`wave_sync_badge.dart`),
+    `WAVE-BLOCKED` (`firebase_clients_repository.dart`'s `watchBlockedClients`), plus the
     four `WaveSettingsSection` composes by interpolation — `WAVE-CONNECT`,
     `WAVE-SYNC`, `WAVE-RETRY`, `WAVE-SCHEDULE`. Note `WAVE-RETRY` is spelled at
     two layers and `WAVE-SCHED`/`WAVE-SCHEDULE` are two DIFFERENT tags for the

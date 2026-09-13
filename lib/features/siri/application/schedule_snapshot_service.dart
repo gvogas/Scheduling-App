@@ -72,6 +72,12 @@ class ScheduleSnapshotService {
       _signatureOf(payload);
 }
 
+/// The one clear-or-write rule for a settled snapshot: null clears it.
+extension ScheduleSnapshotApply on ScheduleSnapshotService {
+  Future<void> apply(Map<String, dynamic>? payload) =>
+      payload == null ? clearSnapshot() : writeSnapshot(payload);
+}
+
 final scheduleSnapshotServiceProvider = Provider<ScheduleSnapshotService>(
   (ref) => ScheduleSnapshotService(logger: ref.watch(loggerProvider)),
 );

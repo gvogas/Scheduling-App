@@ -15,7 +15,6 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
     this.onBack,
     this.actions,
     this.bottom,
-    this.count,
     this.compact = false,
   });
 
@@ -27,9 +26,6 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
 
   /// Optional row rendered beneath the header.
   final PreferredSizeWidget? bottom;
-
-  /// Optional tally rendered beside the title.
-  final int? count;
 
   /// Drops the title onto the controls row for short (landscape) viewports.
   final bool compact;
@@ -43,17 +39,16 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
 
   static const double _displayTitleLine = 28.6; // displayLarge, 26 / 1.1
 
-  /// `main()` caps the composed text scale here.
-  static const double _maxTextScale = 2.2;
-
   /// An upper bound, not the rendered height: `Scaffold` takes its content top
   /// from the laid-out header and only ever CLIPS what this understates, and it
   /// adds `padding.top` itself, so the safe-area inset is deliberately absent.
   @override
   Size get preferredSize => Size.fromHeight(
     _topGap +
-        _controlsRow * _maxTextScale +
-        (compact ? 0 : _titleGap + _displayTitleLine * _maxTextScale) +
+        _controlsRow * Breakpoints.maxTextScale +
+        (compact
+            ? 0
+            : _titleGap + _displayTitleLine * Breakpoints.maxTextScale) +
         _bottomGap +
         (bottom?.preferredSize.height ?? 0),
   );
@@ -68,13 +63,9 @@ class AppTopBar extends StatelessWidget implements PreferredSizeWidget {
     final theme = Theme.of(context);
     final surface = theme.scaffoldBackgroundColor;
     // No AppBar means nothing sets the system overlay style for this screen.
-    final overlay =
-        ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
-        ? SystemUiOverlayStyle.light
-        : SystemUiOverlayStyle.dark;
+    final overlay = overlayStyleFor(surface);
     final titleLine = _TitleLine(
       title: title,
-      count: count,
       style: compact
           ? theme.textTheme.titleLarge
           : theme.textTheme.displayLarge,
@@ -194,36 +185,12 @@ class _BackChevron extends StatelessWidget {
 }
 
 class _TitleLine extends StatelessWidget {
-  const _TitleLine({required this.title, required this.style, this.count});
+  const _TitleLine({required this.title, required this.style});
 
   final String title;
   final TextStyle? style;
-  final int? count;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final label = Text(
-      title,
-      style: style,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-    );
-    if (count == null) return label;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.baseline,
-      textBaseline: TextBaseline.alphabetic,
-      children: [
-        Flexible(child: label),
-        const SizedBox(width: 10),
-        Text(
-          '$count',
-          style: theme.monoType.metric.copyWith(
-            color: theme.palette.textTertiary,
-          ),
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) =>
+      Text(title, style: style, maxLines: 1, overflow: TextOverflow.ellipsis);
 }

@@ -44,10 +44,7 @@ class CalendarHeaderBlock extends StatelessWidget {
     final topInset = MediaQuery.paddingOf(context).top;
 
     // No AppBar means nothing sets the system overlay style for this screen.
-    final overlay =
-        ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
-        ? SystemUiOverlayStyle.light
-        : SystemUiOverlayStyle.dark;
+    final overlay = overlayStyleFor(surface);
 
     final title = _TitleColumn(
       monthLabel: monthLabel,
@@ -199,7 +196,10 @@ class _MonthRow extends StatelessWidget {
         // Everything the month has to share the row with: the gap, the year,
         // the gap before the chevron, and the chevron.
         final reserved =
-            AppSpacing.sp8 + measureTextWidth(context, yearLabel, yearStyle) + 6 + 18;
+            AppSpacing.sp8 +
+            measureTextWidth(context, yearLabel, yearStyle) +
+            6 +
+            18;
         final available = constraints.maxWidth - reserved;
         final label =
             !constraints.hasBoundedWidth ||

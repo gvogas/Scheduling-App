@@ -38,7 +38,7 @@ Future<TimeOfDay?> showCupertinoTimePicker(
     init.minute,
   );
 
-  return showPickerSheet<TimeOfDay>(
+  return _showPickerSheet<TimeOfDay>(
     context,
     onDone: () => TimeOfDay(hour: tempPicked.hour, minute: tempPicked.minute),
     bodyBuilder: (ctx) => CupertinoDatePicker(
@@ -69,7 +69,7 @@ Future<DateTime?> showCupertinoDatePickerSheet(
   if (tempPicked.isAfter(lastDate)) tempPicked = lastDate;
   final initial = tempPicked;
 
-  return showPickerSheet<DateTime>(
+  return _showPickerSheet<DateTime>(
     context,
     onDone: () => tempPicked,
     bodyBuilder: (ctx) => CupertinoDatePicker(
@@ -84,13 +84,11 @@ Future<DateTime?> showCupertinoDatePickerSheet(
   );
 }
 
-/// Shared bottom-sheet chrome for the pickers: a Cancel/Done header over a
-/// body. Used by the Cupertino wheels and by the quarter-hour step picker.
-Future<T?> showPickerSheet<T>(
+/// Shared bottom-sheet chrome for the Cupertino wheels with Cancel/Done header.
+Future<T?> _showPickerSheet<T>(
   BuildContext context, {
   required Widget Function(BuildContext) bodyBuilder,
   required T Function() onDone,
-  double height = 300,
 }) {
   return showModalBottomSheet<T>(
     context: context,
@@ -101,7 +99,7 @@ Future<T?> showPickerSheet<T>(
     ),
     builder: (ctx) {
       return SizedBox(
-        height: height + MediaQuery.viewPaddingOf(ctx).bottom,
+        height: 300 + MediaQuery.viewPaddingOf(ctx).bottom,
         child: SafeArea(
           top: false,
           child: Column(

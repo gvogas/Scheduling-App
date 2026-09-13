@@ -368,54 +368,60 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
         );
   }
 
-  // Pre-normalized index over the filtered list, memoized on the list identity
-  // for the same reason _loadedSearchIndex is — this view rebuilds on every
-  // keystroke, and re-indexing the whole filtered slice each time is the
-  // expensive half of matching.
+  // The filtered slice in sort order, memoized on the list identity and the
+  // sort — never the query, so a keystroke re-sorts nothing.
+  List<ClientRecord>? _sortedSource;
+  ClientsSort? _sortedBy;
+  List<ClientRecord> _sorted = const [];
+
+  List<ClientRecord> _sortedFilter(List<ClientRecord> all) {
+    if (!identical(all, _sortedSource) || widget.sort != _sortedBy) {
+      _sortedSource = all;
+      _sortedBy = widget.sort;
+      _sorted = sortClients(all, widget.sort);
+    }
+    return _sorted;
+  }
+
+  // Pre-normalized index over the sorted slice, memoized on its identity for
+  // the same reason _loadedSearchIndex is: re-indexing is the expensive half.
   List<ClientRecord>? _filterIndexSource;
   List<ClientSearchEntry> _filterIndex = const [];
 
-  List<ClientSearchEntry> _filterSearchIndex(List<ClientRecord> all) {
-    if (!identical(all, _filterIndexSource)) {
-      _filterIndexSource = all;
+  List<ClientSearchEntry> _filterSearchIndex(List<ClientRecord> sorted) {
+    if (!identical(sorted, _filterIndexSource)) {
+      _filterIndexSource = sorted;
       _filterIndex = [
-        for (final client in all) ClientSearchPolicy.index(client),
+        for (final client in sorted) ClientSearchPolicy.index(client),
       ];
     }
     return _filterIndex;
   }
 
-  // The filtered slice as rendered: narrowed by the query, then ordered by the
-  // sort. Memoized on its inputs — the list by identity, the query and the sort
-  // by value — so a keystroke rebuild re-sorts nothing.
+  // Matching preserves order, so filtering the sorted slice needs no re-sort.
   List<ClientRecord>? _visibleSource;
   String? _visibleQuery;
-  ClientsSort? _visibleSort;
   List<ClientRecord> _visibleItems = const [];
 
   List<ClientRecord> _filteredAndSorted(List<ClientRecord> all, String query) {
-    if (identical(all, _visibleSource) &&
-        query == _visibleQuery &&
-        widget.sort == _visibleSort) {
+    final sorted = _sortedFilter(all);
+    if (identical(sorted, _visibleSource) && query == _visibleQuery) {
       return _visibleItems;
     }
+    _visibleSource = sorted;
+    _visibleQuery = query;
+    if (query.isEmpty) return _visibleItems = sorted;
     final q = ClientSearchPolicy.normalize(query);
     final qDigits = ClientSearchPolicy.digitsOnly(query);
-    final matched = query.isEmpty
-        ? all
-        : [
-            for (final entry in _filterSearchIndex(all))
-              if (ClientSearchPolicy.entryMatches(
-                entry,
-                queryText: q,
-                queryDigits: qDigits,
-              ))
-                entry.client,
-          ];
-    _visibleSource = all;
-    _visibleQuery = query;
-    _visibleSort = widget.sort;
-    return _visibleItems = sortClients(matched, widget.sort);
+    return _visibleItems = [
+      for (final entry in _filterSearchIndex(sorted))
+        if (ClientSearchPolicy.entryMatches(
+          entry,
+          queryText: q,
+          queryDigits: qDigits,
+        ))
+          entry.client,
+    ];
   }
 
   // Every non-All filter is a bounded, already-in-memory list, so searching
@@ -511,9 +517,11 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
     if (widget.filter is ClientsFilterBuilding) {
       return _groups = singleGroupOf(items, heading: widget.buildingLabel);
     }
-    // Search results are relevance-ranked, not alphabetical, so letters over
-    // them would head runs that are not runs.
-    if (query.isNotEmpty || widget.sort != ClientsSort.name) {
+    // Letters only over rows Dart sorted by the folded name: the paged list is
+    // server-ordered by the stored name (a person's phone) and search by rank.
+    if (query.isNotEmpty ||
+        widget.sort != ClientsSort.name ||
+        widget.filter is ClientsFilterAll) {
       return _groups = singleGroupOf(items);
     }
     return _groups = letterGroupsOf(items);

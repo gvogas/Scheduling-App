@@ -17,6 +17,7 @@ class ClientsListHeader extends StatelessWidget {
     super.key,
     this.filter = const ClientsFilterAll(),
     this.total,
+    this.isSearching = false,
     this.leading,
     this.onClearFilter,
     this.sortWrap,
@@ -31,6 +32,9 @@ class ClientsListHeader extends StatelessWidget {
   /// pages, so the rows it holds are not "all" of anything until they are.
   /// Null for the filtered slices, which load whole.
   final int? total;
+
+  /// True while a search narrows the unfiltered list: [count] is its matches.
+  final bool isSearching;
 
   /// Which slice the count is describing, so the sentence can name it.
   final ClientsFilter filter;
@@ -62,6 +66,7 @@ class ClientsListHeader extends StatelessWidget {
     if (shown == null) return '';
     final roster = total;
     return switch (filter) {
+      ClientsFilterAll() when isSearching => l10n.clients_searchMatches(shown),
       ClientsFilterAll() when roster != null && shown < roster =>
         l10n.clients_showingSome(shown, roster),
       ClientsFilterAll() => l10n.clients_showingAll(shown),
@@ -94,9 +99,7 @@ class ClientsListHeader extends StatelessWidget {
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final width = constraints.maxWidth.isFinite
-              ? constraints.maxWidth
-              : MediaQuery.sizeOf(context).width;
+          final width = constraints.maxWidth;
           return Row(
             children: [
               if (leading != null) ...[

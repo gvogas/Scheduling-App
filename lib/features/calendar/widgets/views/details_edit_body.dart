@@ -31,7 +31,6 @@ import 'package:scheduling/features/calendar/widgets/sections/appointment_form_f
 import 'package:scheduling/features/calendar/widgets/sections/photo_picker_section.dart';
 import 'package:scheduling/features/calendar/widgets/sheets/image_source_picker.dart';
 import 'package:scheduling/features/calendar/widgets/sheets/inline_add_client_host.dart';
-
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/maps/domain/address_parser.dart';
 import 'package:scheduling/l10n/l10n.dart';
@@ -215,7 +214,6 @@ class _DetailsEditBodyState extends ConsumerState<DetailsEditBody>
     EventDetailsController notifier,
   ) => AppointmentFormCallbacks(
     onSearchClients: _onClientSearchChanged,
-
     onRetryClientSearch: _onRetryClientSearch,
     onSelectClient: notifier.selectClient,
     onClearClient: notifier.clearClient,

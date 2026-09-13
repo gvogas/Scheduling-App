@@ -22,7 +22,7 @@ inside the same block.
 | 3 — Done row shape in the agenda | Dart UI only | No | **BUILT** |
 | 4 — filters don't re-apply | Dart UI only | No | **BUILT** |
 
-**Deploy progress, 2026-09-12:** the index is DEPLOYED (`CICAgNiZnYEK`, `CREATING` at deploy time - confirm `READY`). The function is HELD: `dev` also carries Wave Phase 2 enforcement, which must not deploy before the 1.60.0+89 app build ships, so a `functions` deploy from this tree waits for that build. See the 2026-09-12 row in `docs/DEPLOYMENT.md`.
+**Deploy progress, 2026-09-12:** the index is DEPLOYED (`CICAgNiZnYEK`, `CREATING` at deploy time - confirm `READY`). The function is HELD: `dev` also carries Wave Phase 2 enforcement, which must not deploy before the app build ships (1.60.0+89 never uploaded; the build is now 1.61.0+90), so a `functions` deploy from this tree waits for that build. See the 2026-09-12 row in `docs/DEPLOYMENT.md`.
 
 **What Issue 2 still needs, in this order** (§2 and §6 step 5 are the
 authority): deploy `firestore:indexes` ALONE and wait for

@@ -2,7 +2,15 @@
 
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
-refreshed 2026-09-10 (release 1.60.0+89 — **the export list is unchanged at 29**
+refreshed 2026-09-12 (release 1.61.0+90 — **the export list is unchanged at 29**,
+and nothing in it is deployed yet. 1.60.0+89 never shipped, so this build
+carries the Wave Phase 2 Dart below and inherits its INVERTED order: app build
+first, then `functions`. One body changed: `recountClientJobs` stops counting
+cancelled visits and now also fires on a cancelled-ness flip, served by a new
+`appointments (clientId, status, dayIndex)` composite that was deployed
+2026-09-12 ahead of the function. Two new one-off scripts, `recount-client-jobs.js`
+and `backfill-wave-blocked.js`, run after that deploy. No signature, allowlist or
+guard moved. Previously refreshed 2026-09-10 (release 1.60.0+89 — **the export list is unchanged at 29**
 and NOT yet deployed; this release inverts the usual order and must ship the APP
 BUILD FIRST, because an older build renders no badge at all for the `blocked`
 state the backend starts writing. The Wave customer contract stops recording and
@@ -352,7 +360,7 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
 | `deleteClient` | callable | `onCall` | `clients.js` | `firebase_clients_repository.dart` | — | App Check ✓ · admin · durable 20/hr |
 | `syncUsersByUid` | trigger | `onDocumentWritten users/{id}` | `bridge.js` | any `users` doc write | — | `retry: true` |
 | `propagateClientEdits` | trigger | `onDocumentUpdated clients/{id}` | `client_propagation.js` | any `clients` doc edit | — | `retry: true` |
-| `recountClientJobs` | trigger | `onDocumentWritten appointments/{id}` | `client_job_count.js` | a write that changes `clientId` | — | `retry: true` |
+| `recountClientJobs` | trigger | `onDocumentWritten appointments/{id}` | `client_job_count.js` | a write that changes `clientId`, or flips a job's cancelled-ness | — | `retry: true` |
 | `waveUpsertCustomer` | trigger | `onDocumentWritten clients/{id}` | `wave/triggers.js` | any `clients` doc write | `WAVE_FULL_ACCESS_TOKEN` | `retry: true` · 300s · enqueues **and pushes** |
 | `validateUploadedImage` | trigger | `onObjectFinalized` (Storage) | `maintenance.js` | `appointments/*/images/*` upload | — | region `us-east1` |
 | `notifyAppointmentChanges` | trigger | `onDocumentWritten appointments/{id}` | `notifications.js` | any appointment write | `APNS_AUTH_KEY` · `APNS_KEY_ID` · `APNS_TEAM_ID` | no `retry` (dupe push worse than missed); since 2026-09-01 also stamps `startedAt`/`completedAt` on the status transition (best-effort Admin-SDK update, its own re-fire is silent) and pushes the crew's On-my-way / Running-late signal to active admins not on the job |
@@ -1090,16 +1098,34 @@ edit. **Deployed** (verified live 2026-07-10).
 `appointments/{id}` write trigger that maintains the denormalized `jobCount` on
 the client doc. Recomputes with a `count()` aggregate and writes the value
 **absolutely** — never `FieldValue.increment`, because `retry: true` means a
-retried event would double-count. Fires only when `clientId` actually changes
-(create, delete, reassignment), so an ordinary title or time edit costs zero
-reads; personal jobs carry no `clientId` and are skipped. Writes with `update()`
+retried event would double-count. Fires when `clientId` changes (create,
+delete, reassignment) **or when the job's cancelled-ness flips with `clientId`
+unchanged** (2026-09-11) — cancelling leaves `clientId` alone, so without that
+branch a cancellation left the client one job too many until some unrelated
+reassignment. The gate is cancelled-ness, not "status changed", so an ordinary
+`pending → done` or title/time edit still costs zero reads; personal jobs carry
+no `clientId` and are skipped. Writes with `update()`
 rather than `set({merge: true})` so a client removed out-of-band is never
 resurrected as a count-only stub, and swallows Firestore `NOT_FOUND` for the same
-case. The pure `clientsToRecount(before, after)` is exported for jest. Served by the
-`(clientId ASC, dayIndex ASC)` composite — the run subtraction is a second
-`count()` over `dayIndex > 1`, which the automatic single-field index on
-`clientId` cannot serve. That index is deployed and LIVE; do not delete it.
-**Deployed 2026-08-01** (`16332b3`).
+case. The pure `clientsToRecount(before, after)` is exported for jest.
+
+**The count is FOUR `count()` aggregates, run in parallel, owned by the exported
+`countJobsFor(db, clientId)`**: total − run days after the first (`dayIndex > 1`)
+− cancelled + cancelled run days after the first. The fourth term is the
+inclusion-exclusion correction, not a guard — one live and one cancelled 5-day
+run is −3 without it, where the answer is 1. Cancelled is SUBTRACTED rather than
+filtered to a live-status allowlist, so a legacy or status-less doc still
+counts; a console-written `"Cancelled"` still counts too, since a `where` cannot
+lowercase. `scripts/recount-client-jobs.js` (the backfill for clients whose
+count predates the change) imports `countJobsFor`, so the script cannot disagree
+with the trigger. Served by two composites: `(clientId ASC, dayIndex ASC)` for
+the run subtraction and `(clientId ASC, status ASC, dayIndex ASC)` for the
+cancelled run days — the automatic single-field index on `clientId` serves
+neither. The first is LIVE; the second was deployed 2026-09-12
+(`CICAgNiZnYEK`) and must be `READY` before this function deploys, because
+`retry: true` turns a missing index into a redelivery loop. **The two-term
+version is Deployed** (2026-08-01, `16332b3`); **the cancelled-job change is
+NOT deployed** — it is held behind the 1.61.0+90 app build with Wave Phase 2.
 
 A booking batch can land up to 16 writes carrying one `clientId` at once (a
 multi-day run's day-documents, a repeat series' occurrences), so those are

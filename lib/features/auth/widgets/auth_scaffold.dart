@@ -54,11 +54,7 @@ class AuthScaffold extends StatelessWidget {
     // app bar, so nothing else sets the overlay style. Derived from the colour
     // actually behind the bar, not the theme brightness.
     final statusBarSurface = hero == null ? scheme.surface : heroInk;
-    final overlay =
-        ThemeData.estimateBrightnessForColor(statusBarSurface) ==
-            Brightness.dark
-        ? SystemUiOverlayStyle.light
-        : SystemUiOverlayStyle.dark;
+    final overlay = overlayStyleFor(statusBarSurface);
 
     var card = child;
     if (hero != null) {
@@ -172,9 +168,7 @@ class _AuthHeroBlock extends StatelessWidget {
             ],
             Text(
               hero.title,
-              style: theme.textTheme.headlineLarge?.copyWith(
-                color: foreground,
-              ),
+              style: theme.textTheme.headlineLarge?.copyWith(color: foreground),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: AppSpacing.sp4),

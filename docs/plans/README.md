@@ -33,7 +33,7 @@ at the top of each file, not its boxes.
 
 | Doc | State |
 |---|---|
-| `2026-09-11-four-bug-fixes.md` | **ALL FOUR BUILT 2026-09-11 — only Issue 2's index deployed (2026-09-12), no prod script run.** Four fixes: one search bar in the Add Appointment client picker, cancelled jobs excluded from `clients.jobCount`, the agenda's collapsed Done row restored to ~90 px, and the Clients filter path finally honouring the sort. Issues 1/3/4 are Dart-only and complete. **Issue 2's code is done; its INDEX was deployed 2026-09-12 (`CICAgNiZnYEK`) but its FUNCTION is held** until the 1.60.0+89 app build ships, because `dev` also carries Wave Phase 2 enforcement. Remaining order: the new `appointments (clientId, status, dayIndex)` composite must be `READY` before the function deploys (the trigger is `retry: true` and rethrows, so a missing index is a redelivery loop), then `recount-client-jobs.js` — dry run, then live — as a release prerequisite. Verified at build time: analyzer clean, **3626 flutter**, **1896 jest / 88 suites**, eslint clean. |
+| `2026-09-11-four-bug-fixes.md` | **ALL FOUR BUILT 2026-09-11 — only Issue 2's index deployed (2026-09-12), no prod script run.** Four fixes: one search bar in the Add Appointment client picker, cancelled jobs excluded from `clients.jobCount`, the agenda's collapsed Done row restored to ~90 px, and the Clients filter path finally honouring the sort. Issues 1/3/4 are Dart-only and complete. **Issue 2's code is done; its INDEX was deployed 2026-09-12 (`CICAgNiZnYEK`) but its FUNCTION is held** until the app build ships (1.60.0+89 was never uploaded; `/release` 2026-09-12 re-cut it as **1.61.0+90**, which carries both), because `dev` also carries Wave Phase 2 enforcement. Remaining order: the new `appointments (clientId, status, dayIndex)` composite must be `READY` before the function deploys (the trigger is `retry: true` and rethrows, so a missing index is a redelivery loop), then `recount-client-jobs.js` — dry run, then live — as a release prerequisite. Verified at build time: analyzer clean, **3626 flutter**, **1896 jest / 88 suites**, eslint clean. |
 | `2026-09-07-analytics-followups.md` | **Code COMPLETE and verified** (analyzer clean, 3547 tests). Every open item is off-repo: Google Analytics must be ENABLED on the project or the SDK reports nothing silently; custom dimensions must be registered or `user_role` and `source` are uncollectable in reports; App Store Connect privacy labels and the `FIREBASE_ANALYTICS_WITHOUT_ADID=true` release build are submission-gating. |
 | `2026-07-10-siri-app-intents-design.md` | Design, 6 phases. Phases 5–6 unscoped. |
 | `2026-07-19-siri-app-intents-implementation.md` | Phases 1–3 built; **no device pass ever run** — the one feature here that has never been exercised on hardware at all. (CarPlay has since been driven in the Simulator, so it is no longer in this category; its remaining checks are behavioural, see §4.) Six read intents in `ios/SiriIntents/`, never exercised by voice. |
@@ -75,12 +75,13 @@ runs — never this file.
 
 What is left:
 
-- **Cut the build.** The version bump is DONE — `ae38540a` took `pubspec.yaml`
-  to **1.60.0+89** and wrote the `## [1.60.0+89] - 2026-09-10` `CHANGELOG.md`
-  entry (superseding `47d7abc4`'s 1.59.0+88, which was never uploaded), and it
-  sits above the deployed `462a1907`. What is left is the upload itself.
-  Everything shipped since — the crew record, the role gates, the analytics and
-  Wave Phase 2's UI — reaches users only through it. `/release` owns the
+- **Cut the build.** The version bump is DONE — `/release` on 2026-09-12 took
+  `pubspec.yaml` to **1.61.0+90** and wrote its `CHANGELOG.md` entry, on top of
+  `ae38540a`'s 1.60.0+89, which was never uploaded (nor was `47d7abc4`'s
+  1.59.0+88). It sits above the deployed `462a1907`. What is left is the upload
+  itself. Everything shipped since — the crew record, the role gates, the
+  analytics, Wave Phase 2's UI, the new header and Clients list, and the
+  cancelled-job count — reaches users only through it. `/release` owns the
   sequence, and `docs/IOS_MAC_BUILD.md` Phase G owns the Mac half. Note the
   archive is also what proves **distribution** signing with the CarPlay
   entitlement, which has never been minted (§4).

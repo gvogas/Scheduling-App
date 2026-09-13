@@ -146,14 +146,11 @@ class AppSyncListeners {
       final payload = next.value;
       final service = ref.read(scheduleSnapshotServiceProvider);
       final bridge = ref.read(carPlayBridgeProvider);
-      final (String tag, Future<void> Function() rewrite) = payload == null
-          ? ('APP-SYNC snapshot clear failed', service.clearSnapshot)
-          : (
-              'APP-SYNC snapshot write failed',
-              () => service.writeSnapshot(payload),
-            );
+      final tag = payload == null
+          ? 'APP-SYNC snapshot clear failed'
+          : 'APP-SYNC snapshot write failed';
       unawaited(
-        _guarded(logger, tag, rewrite).then(
+        _guarded(logger, tag, () => service.apply(payload)).then(
           (_) => _guarded(
             logger,
             'APP-SYNC carplay ping failed',

@@ -25,7 +25,6 @@ import 'package:scheduling/features/calendar/widgets/sections/appointment_form_f
 import 'package:scheduling/features/calendar/widgets/sections/photo_picker_section.dart';
 import 'package:scheduling/features/calendar/widgets/sheets/image_source_picker.dart';
 import 'package:scheduling/features/calendar/widgets/sheets/inline_add_client_host.dart';
-
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
@@ -364,7 +363,6 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
             spanLength: spanLength,
             callbacks: AppointmentFormCallbacks(
               onSearchClients: _onClientSearchChanged,
-
               onRetryClientSearch: _onRetryClientSearch,
               onSelectClient: _notifier.selectClient,
               onClearClient: _notifier.clearClient,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:scheduling/core/theme/extensions/app_card_style.dart';
 import 'package:scheduling/core/theme/extensions/app_palette.dart';
@@ -284,6 +285,12 @@ Color contrastingForegroundFor(Color background) =>
     ThemeData.estimateBrightnessForColor(background) == Brightness.dark
     ? Colors.white
     : Colors.black;
+
+/// Status-bar icon style for a screen with no `AppBar`, read off [surface].
+SystemUiOverlayStyle overlayStyleFor(Color surface) =>
+    ThemeData.estimateBrightnessForColor(surface) == Brightness.dark
+    ? SystemUiOverlayStyle.light
+    : SystemUiOverlayStyle.dark;
 
 /// Surface-card decoration shared across settings. Light/dark treatment
 /// comes from [AppCardStyle].

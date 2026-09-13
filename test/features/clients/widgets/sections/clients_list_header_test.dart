@@ -14,6 +14,7 @@ Widget _harness({
   int? count,
   int? total,
   ClientsFilter filter = const ClientsFilterAll(),
+  bool isSearching = false,
   ClientsSort sort = ClientsSort.name,
   ValueChanged<ClientsSort>? onSortChanged,
   VoidCallback? onClearFilter,
@@ -29,6 +30,7 @@ Widget _harness({
       body: ClientsListHeader(
         count: count,
         total: total,
+        isSearching: isSearching,
         filter: filter,
         sort: sort,
         leading: leading,
@@ -143,6 +145,16 @@ void main() {
       find.text(_l10n(tester).clients_showingSome(50, 717)),
       findsOneWidget,
     );
+  });
+
+  testWidgets('counts matches, never "of the roster", while searching', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_harness(count: 3, total: 717, isSearching: true));
+    await tester.pumpAndSettle();
+
+    expect(find.text(_l10n(tester).clients_searchMatches(3)), findsOneWidget);
+    expect(find.text(_l10n(tester).clients_showingSome(3, 717)), findsNothing);
   });
 
   testWidgets('says "all" once every page is in', (tester) async {
