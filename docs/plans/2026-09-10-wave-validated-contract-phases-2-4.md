@@ -2,11 +2,14 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: PHASE 2 BUILT 2026-09-10 — NOT YET DEPLOYED. Phases 3-4 planned,
-not started.** Phase 1 was complete, deployed (`fe9edc51`, report-only) and
+**Status (2026-09-13): PHASE 2 COMPLETE — shipped in 1.61.0+90 and deployed
+2026-09-13 02:07Z (`38c8225b`), in the inverted order below. Phase 3 COMPLETE
+(its own plan, archived at `docs/archive/2026-09-11-wave-validated-contract-phase-3.md`). Phase 4
+planned, not started.** The "nothing deployed" paragraph below is the
+build-time state. Phase 1 was complete, deployed (`fe9edc51`, report-only) and
 prod-replayed 2026-09-09 (**724 clients, 0 blocking, 1 advisory**). Design:
 `docs/plans/2026-08-30-wave-validated-contract-design.md` §3-§7. Phase 1 plan:
-`docs/plans/2026-08-30-wave-validated-contract-implementation.md`.
+`docs/archive/2026-08-30-wave-validated-contract-implementation.md`.
 
 **Verified at build time:** analyzer clean, **1872 jest** (from 1848), eslint
 clean, **139 Dart Wave tests** (from 115). Nothing here has been deployed and

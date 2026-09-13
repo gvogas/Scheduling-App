@@ -1,8 +1,9 @@
 # Fresh header and Clients list redesign
 
 **Date:** 2026-09-11
-**Status: ALL FOUR PHASES BUILT 2026-09-11 on branch `fresh-header`, NOT
-merged, NOT shipped.** App-only — nothing here touches `functions/`, the rules
+**Status: ALL FOUR PHASES BUILT 2026-09-11, merged to `dev` and SHIPPED in
+1.61.0+90** (`fresh-header` is an ancestor of release commit `dd8c4863`;
+corrected 2026-09-13). App-only — nothing here touches `functions/`, the rules
 or the indexes, so there is no deploy step. Verified at build time:
 `flutter analyze` **No issues found!** · `flutter test` **3661 passing** ·
 `flutter gen-l10n` clean with an empty `untranslated.json`.

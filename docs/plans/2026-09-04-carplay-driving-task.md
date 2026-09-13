@@ -1,6 +1,7 @@
 # Apple CarPlay for ES Pro — driving-task job list
 
-Status: **BUILT AND COMPILED.** Written 2026-09-04; UI design finalised
+Status: **BUILT, COMPILED, DRIVEN and SHIPPED in 1.61.0+90** (release commit
+`dd8c4863`; banner corrected 2026-09-13). Written 2026-09-04; UI design finalised
 2026-09-09 (decisions 9-14 below); implementation followed the same day.
 **Dart is verified**: `flutter analyze` clean, full suite 3590 passed
 (including `test/core/app/carplay_bridge_test.dart` and the schema-v4 coverage
@@ -22,9 +23,10 @@ deleted with the gating scheme it existed for. A device build signs against
 entitlement. **Note the order inverts under AUTOMATIC signing**: Xcode cannot
 request CarPlay in a profile until the entitlement is already in the file, so
 "regenerate profiles, then move the key" is a MANUAL-signing instruction and
-following it literally deadlocks. Still unproven: **distribution** signing,
-because this Mac holds only an Apple Development certificate — archive once
-before shipping.
+following it literally deadlocks. **Distribution** signing is proven by the
+shipped 1.61.0+90 build, which carries the key in `Runner.entitlements` at the
+release commit (unproven until then — the Mac held only an Apple Development
+certificate).
 
 **Simulator entitlement behaviour — what is and is not established.** The
 CarPlay scene connects in the Simulator with the key present in
@@ -49,9 +51,9 @@ signed-out empty state is correct. Five UI decisions came out of that session
 — see *Decisions taken (owner, 2026-09-10)* below; they outrank the design
 sections above wherever the two disagree.
 
-Still behavioural and still open: the three ACTIONS (Directions, Start,
-Complete, Call) have not been exercised, the App Lock question is unanswered,
-and distribution signing wants one archive. **The TECHNICIAN view has never
+Still behavioural and still open: the four ACTIONS (Directions, Start,
+Complete, Call) have not been exercised and the App Lock question is
+unanswered. **The TECHNICIAN view has never
 been on a screen at all** — every drive was an admin snapshot — and decisions
 22-23 changed it structurally, so it is the least-verified surface here.
 
@@ -838,7 +840,8 @@ old text now would waste an afternoon:
 
 Still open: **distribution** signing is unproven — the Mac this ran on holds
 only an Apple Development certificate, so the App Store profile has never been
-minted with the entitlement. Archive once before shipping.
+minted with the entitlement. Archive once before shipping. (Closed 2026-09-13:
+the shipped 1.61.0+90 build proves it — see the status header.)
 
 ---
 

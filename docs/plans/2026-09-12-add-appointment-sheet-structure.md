@@ -4,8 +4,9 @@
 **Status: OPTION C BUILT 2026-09-12** on branch `fresh-header`, with the tour
 retargeted. Analyzer clean, l10n clean (`untranslated.json` empty), and the
 calendar / feature-tour / shared suites green at 1250. Verified on the
-simulator. NOT merged, NOT shipped.
-Branch context: `fresh-header`, on top of the four simulator fixes below.
+simulator. Merged to `dev` and SHIPPED in 1.61.0+90 (release commit
+`dd8c4863`; corrected 2026-09-13).
+Built on `fresh-header`, on top of the four simulator fixes below.
 
 **Mockup:** https://claude.ai/code/artifact/b004fc2a-6638-4a37-951b-e5ef6700020b
 Version 1 held the three-way comparison (three phone frames with the scroll fold

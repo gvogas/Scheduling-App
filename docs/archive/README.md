@@ -2,7 +2,10 @@
 
 Completed plans/specs and superseded audit snapshots — kept for history, not
 maintained against the current code. Started 2026-07-10; last updated
-**2026-09-06**, when the docs sweep moved in fourteen documents whose work had
+**2026-09-13**, when the docs sweep moved in four finished plans (listed under
+their own heading below). Before that the 2026-09-12 sweep indexed seven files
+already on disk, the 2026-09-09 sweep moved in six plans plus the redesign
+program, and on **2026-09-06** the docs sweep moved in fourteen documents whose work had
 shipped (the simplified-auth pair, the four August calendar/day-off designs, the
 per-day appointments pair, client-building grouping, the calendar holidays, the
 superseded clients address filter, the feature-tour 1.57 pair and the 2026-09-03
@@ -121,7 +124,7 @@ this one".
   `firestore.rules` span bound) was **closed and built 2026-08-11**
   (`isValidAppointmentSpan`). **One open item was carried out of §10 rather than
   archived with it** — what a Live Activity for a multi-day job should look like
-  — and now lives in `docs/plans/README.md` §5; the containment (skip multi-day
+  — and now lives in `docs/plans/README.md` §8; the containment (skip multi-day
   jobs outright) is built. The rules bound and the skip are **not deployed**.
   Both Swift halves are Xcode/device-unverified. Every invariant is in
   `CLAUDE.md`; the unticked checkboxes in both plans are an artifact of how they
@@ -142,6 +145,35 @@ this one".
   `clients/domain/history_grouping.dart`. Its build record is P7 phase D in
   `docs/plans/redesign-subdocs/2026-08-11-p7-dashboard-history.md`, which stays
   active-adjacent with the rest of the redesign sub-docs.
+
+### Added by the 2026-09-13 sweep
+
+Four plans whose work had shipped and deployed. Three were already marked
+complete with nothing outstanding; the fourth carries one unrecorded in-app
+check, which moved to `docs/plans/README.md` §3 rather than keeping the plan
+live.
+
+- `2026-08-28-address-street-locality-split.md` — `clients.address` narrowed to
+  the street line, with the locality in its own fields, plus the
+  `backfill-client-address-street.js` cleanup. App, backend and script shipped
+  and deployed 2026-08-28. The live backfill was **withdrawn, not skipped**: the
+  2026-09-09 prod dry run read 724 scanned, 0 reduced (the 2026-08-28 count of
+  114 predated the segment-removal guard). Don't run it.
+- `2026-08-30-wave-validated-contract-implementation.md` — Phase 1's task list:
+  `functions/wave/customer_contract.js` in report-only mode, deployed 2026-08-30
+  (`fe9edc51`), prod replay 2026-09-09 (724 clients, 0 blocking, 1 advisory).
+  The design doc and the phases-2-4 plan stay in `docs/plans/` for Phase 4.
+- `2026-09-11-four-bug-fixes.md` — one search bar in the Add Appointment client
+  picker, cancelled jobs excluded from `clients.jobCount`, the agenda's
+  collapsed Done row restored, and the Clients filter path honouring the sort.
+  Shipped in 1.61.0+90; Issue 2's index `CICAgNiZnYEK` deployed 2026-09-12, its
+  function 2026-09-13 (`38c8225b`), and `recount-client-jobs.js` ran live
+  2026-09-13 (726 scanned, 9 patched).
+- `2026-09-11-wave-validated-contract-phase-3.md` — the `backfill-wave-blocked.js`
+  verdict backfill, run live 2026-09-13 after the enforcement deploy: 726
+  scanned, 1 patched, 0 blocked, 1 advisory; idempotence re-run 0. **Step 4.5
+  (confirm the advisory on the client's own page in the app) was unrecorded at
+  archive time.**
 
 ### Added by the 2026-09-09 sweep
 
@@ -170,9 +202,7 @@ this one".
   passed on the broken versions too** — check installed versions directly after
   any dependency change there).
 
-### Added by the 2026-09-09 sweep
-
-All six shipped **and** deployed; the deploy gate each banner still cited was
+**Also added by the 2026-09-09 sweep — six plans.** All six shipped **and** deployed; the deploy gate each banner still cited was
 closed by the 2026-09-06/09-07 backend deploys (25 -> 29 functions, all 19
 composites `READY`, both prod backfills run, the crew-notes rules grant live).
 
@@ -228,9 +258,9 @@ composites `READY`, both prod backfills run, the crew-notes rules grant live).
 - `2026-08-28-client-building-grouping.md` — grouping clients by building, made
   the case by the address backfill's prod dry run (32 clients across 7 Prom.
   Paton buildings). Shipped; `client_building.dart` and the filter sheet. Its
-  dependency, `2026-08-28-address-street-locality-split.md`, is **still in
-  `docs/plans/`** — that doc's live prod backfill has never been run — so the
-  bare-filename link in here does not resolve inside this folder.
+  dependency, `2026-08-28-address-street-locality-split.md`, joined it here on
+  2026-09-13 (its backfill turned out to have nothing to do), so the
+  bare-filename link in here now resolves inside this folder.
 - `2026-08-29-calendar-holidays.md` — display-only Québec statutory, Greek
   Orthodox and CCQ construction holiday markers, computed in Dart with no I/O.
   Built 2026-08-29, shipped 1.54.0+83; `calendar/domain/holidays.dart`.

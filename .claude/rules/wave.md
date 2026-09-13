@@ -446,7 +446,7 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   `docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`.
   **A client's contract verdict is derivable from the collection, not only
   from the trigger.** `functions/scripts/backfill-wave-blocked.js` (Phase 3,
-  built 2026-09-12, NOT run) replays `buildCustomerPayload` over every client
+  built 2026-09-12, run live 2026-09-13: 726 scanned, 1 patched) replays `buildCustomerPayload` over every client
   and writes the same `verdictPatch` the trigger writes. It exists because the
   trigger only stamps a doc that somebody EDITS, so a client that was already
   wrong when enforcement deployed would stay invisible indefinitely. It runs

@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: TASKS 1-3 BUILT 2026-09-12 (17 jest tests, lint clean); Task 4, the live run, NOT started and still gated on the enforcement deploy.** Built as one file rather than three commits, with the plan's long comment blocks trimmed to the one-line rule; the rationale lives in `.claude/rules/wave.md`. Written 2026-09-11. Supersedes Task 9 of
+**Status: COMPLETE 2026-09-13 except Step 4.5** — the owner's in-app look at the advisory client's own page, still listed as standing in the `docs/DEPLOYMENT.md` 2026-09-13 row and carried in `docs/plans/README.md` §3, since this plan was archived the same day. Tasks 1-3 built 2026-09-12 (17 jest tests, lint clean). Task 4 run live by the owner after the enforcement deploy: audit 726 / 0 blocking / 1 advisory; backfill **726 scanned, 1 patched, 0 blocked, 1 advisory**; idempotence re-run 0 patched. Step 4.5 was corrected in place (the advisory shows on the client page, not in Settings). The "not deployed" note two lines down is the state when this was written. Built as one file rather than three commits, with the plan's long comment blocks trimmed to the one-line rule; the rationale lives in `.claude/rules/wave.md`. Written 2026-09-11. Supersedes Task 9 of
 `docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`, which was a
 three-step stub. Phase 2 is built and merged to `dev` (`ca80dff5`, 1.60.0+89)
 and **not deployed**.
@@ -882,8 +882,12 @@ run forever.
 
 - [ ] **Step 4.5: Verify in the app**
 
-Open Settings → Wave. The advisory client appears in the problem list with its
-field named, and the client's own page shows the same. That is the whole point
+Open the advisory client's own page: under its "Synced with Wave" badge it
+reads "Phone has no digits to dial". **Settings → Wave does NOT list it** —
+`WaveBlockedList` watches `wave.syncState == 'blocked'` only and renders
+nothing when that is empty, so with 0 blocked the Settings list is correctly
+absent and "Sync with Wave" correctly reports everything up to date
+(corrected 2026-09-13; this step originally claimed Settings shows it). That is the whole point
 of the phase: a client nobody could ring was invisible, and is not any more.
 
 - [ ] **Step 4.6: Record the run in the deploy log**

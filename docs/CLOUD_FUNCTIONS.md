@@ -3,14 +3,15 @@
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
 refreshed 2026-09-12 (release 1.61.0+90 — **the export list is unchanged at 29**,
-and nothing in it is deployed yet. 1.60.0+89 never shipped, so this build
-carries the Wave Phase 2 Dart below and inherits its INVERTED order: app build
-first, then `functions`. One body changed: `recountClientJobs` stops counting
-cancelled visits and now also fires on a cancelled-ness flip, served by a new
-`appointments (clientId, status, dayIndex)` composite that was deployed
-2026-09-12 ahead of the function. Two new one-off scripts, `recount-client-jobs.js`
-and `backfill-wave-blocked.js`, run after that deploy. No signature, allowlist or
-guard moved. Previously refreshed 2026-09-10 (release 1.60.0+89 — **the export list is unchanged at 29**
+and all of it is DEPLOYED: the app build shipped first and the full `functions`
+deploy followed 2026-09-13 02:07Z (`38c8225b`), the INVERTED order Wave Phase 2
+needs — 1.60.0+89 never shipped, so this build carries its Dart. One body
+changed: `recountClientJobs` stops counting cancelled visits and now also fires
+on a cancelled-ness flip, served by a new `appointments (clientId, status,
+dayIndex)` composite deployed 2026-09-12 ahead of the function. Both one-off
+scripts behind it ran live 2026-09-13: `recount-client-jobs.js` (726 scanned,
+9 patched) and `backfill-wave-blocked.js` (726 scanned, 1 patched). No signature,
+allowlist or guard moved. Deploy status corrected 2026-09-13. Previously refreshed 2026-09-10 (release 1.60.0+89 — **the export list is unchanged at 29**
 and NOT yet deployed; this release inverts the usual order and must ship the APP
 BUILD FIRST, because an older build renders no badge at all for the `blocked`
 state the backend starts writing. The Wave customer contract stops recording and
@@ -35,60 +36,9 @@ resolves the caller's uid so a bridge-row field cannot shadow it,
 `matchPhoneInName` gained the whole-field branch its Dart twin already had (a
 Wave customer named by a 7- or 11-digit number was importing undialable), and
 the callables that log a caller now log `shortHash(uid)` rather than the raw
-Auth uid. Previously refreshed 2026-09-04 (release 1.57.0+86 — **the export list GREW 25 -> 29**,
-the first change since 2026-08-13. Four callables were added: `searchClients`,
-`searchHistory` and `findAppointmentConflicts` (`indexed_search.js`), which move
-client search, appointment-history search and the pre-save conflict check off
-capped client-side scans onto indexed queries; and `restoreAppointmentStatus`
-(`appointment_actions.js`), the Undo behind the mobile "mark complete". Two new
-composite indexes serve them (`clients` searchTokens+name, `appointments`
-historySearchScopes+status+startTime) and **both must be READY, and
-`functions/scripts/backfill-search-tokens.js` must have run, before the app
-build that calls them ships** — an unbackfilled document is invisible to the
-search that replaced the scan. Also here: `placesAutocomplete` moved from the
-in-memory limiter to `enforceDurableRateLimit`, and a self-service composed
-guard `assertActiveCall` joined `assertAdminCall` in `security.js`. Rules gained
-bounded `searchTokens` / `historySearchScopes` list fields and a
-`locationSharingEnabled` bool on `/users`; the crew-signal rules removed on
-2026-09-03 stay removed.)
-Previously refreshed 2026-09-02 (release 1.56.0+85 — **the export list is unchanged at 25
-and no row below moved**. The security-relevant change is that every ADMIN-ONLY
-callable now opens with the composed `assertAdminCall(req, allowedKeys)`
-(`security.js`) instead of re-deciding auth → `assertAdmin` →
-`assertPayloadShape` at each site — `deleteClient`, `createEmployeeAccount`,
-`deleteEmployeeAccount` and all three `places.js` callables, six in all.
-It returns the caller's uid, which every one of them needs next for its
-rate limiter. It exists because on 2026-09-01 three of those `assertAdmin` gates
-turned out to be DELETABLE with the whole suite green — on the callables that
-mint and delete real Firebase Auth accounts. The composition and its ORDER are
-proved against the real `assertAdmin` in `assert_admin.test.js`; the callable
-suites stub the COMPOSER, because stubbing `assertAdmin` alone intercepts
-nothing (the composer holds a module-internal reference) and every gate
-assertion would pass vacuously — the same shape that hid the original gap. NOT
-for a self-service callable: `changeEmployeeEmail` keeps
-`resolveEmailChangeCaller`. Two other server-side changes:
-`assertPayloadShape`'s 4 KB cap now measures BYTES
-(`Buffer.byteLength`) rather than UTF-16 code units, which accented and CJK
-text could exceed by 3-4x under a constant and an error code that both said
-bytes; and `notifyAppointmentChanges` additionally stamps the server-owned
-`startedAt`/`completedAt` job time record on the status transition and pushes
-an assignee's On-my-way / Running-late signal to active admins not on the job.
-Rules WIDENED — the crew branches now admit an assignee's `fieldNotes` and
-their photo writes to the `images` subcollection.)
-Previously refreshed 2026-09-01 (release 1.55.0+84 — **the export list is unchanged at 25
-and no row below moved**. Three server-side changes, all inside existing
-functions: `waveUpsertCustomer` now records `wave.problems` from the new
-customer contract (report-only — see below the summary table);
-`notifyAppointmentChanges` wraps its per-recipient loop so one transient
-failure no longer drops recipients 2..N on a function registered WITHOUT
-`retry: true`; and all three `places.js` callables abort their upstream
-request at 8 s, deliberately under the client's own 10 s callable timeout, so
-an abandoned lookup stops burning a billed Places call and its rate-limit
-slot. `runWaveDaily` also guards its connection read, making its documented
-"never throws" contract true on its own terms. Rules unchanged; one composite
-index RESTORED — see `sendUpcomingJobReminders`.)
-Refresh entries older than 2026-09-01 were moved to
-`docs/archive/CLOUD_FUNCTIONS_refresh_history.md` on 2026-09-06.
+Auth uid.
+Refresh entries older than 2026-09-05 were moved to
+`docs/archive/CLOUD_FUNCTIONS_refresh_history.md` (2026-09-06 and 2026-09-13).
 
 **Every callable now enforces App Check** (`enforceAppCheck: true`); the
 earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
@@ -233,8 +183,9 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
   looked clean for three days while prod ran older bodies — check the deploy
   log, not the count.
 - **29 functions defined and 29 DEPLOYED**, verified by NAME rather than by
-  count on 2026-09-07 (`functions_list_functions` diffed against the 29
-  `exports.` in `index.js`: zero missing, zero orphans). The 25 -> 29 deploy ran
+  count on 2026-09-07 and again on 2026-09-13 after `38c8225b`
+  (`functions_list_functions` diffed against the 29 `exports.` in `index.js`:
+  zero missing, zero orphans). The 25 -> 29 deploy ran
   2026-09-06 with its `firestore:indexes` prerequisite READY and the
   `searchTokens`/`historySearchScopes` backfill already run; 2026-09-07 then
   redeployed all 29 unchanged alongside the `fieldNotes` rules grant. **The
@@ -242,7 +193,7 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
   `docs/DEPLOYMENT.md`, which is the authority for what prod actually runs.
   Note the rollback asymmetry this creates: the old client-side scan path is
   unreachable in a shipped build (`firebaseFunctionsProvider` is non-nullable),
-  so once the app build ships, roll back the APP, never the backend.
+  and 1.61.0+90 has shipped, so roll back the APP, never the backend.
   Previously **25 defined and 25 deployed**, verified against
   `functions_list_functions` on 2026-08-22 (the CONTRACT deploy reported 25
   updates, 0 creates, 0 deletions) — an exact match, no orphans and no
@@ -1121,11 +1072,13 @@ count predates the change) imports `countJobsFor`, so the script cannot disagree
 with the trigger. Served by two composites: `(clientId ASC, dayIndex ASC)` for
 the run subtraction and `(clientId ASC, status ASC, dayIndex ASC)` for the
 cancelled run days — the automatic single-field index on `clientId` serves
-neither. The first is LIVE; the second was deployed 2026-09-12
-(`CICAgNiZnYEK`) and must be `READY` before this function deploys, because
-`retry: true` turns a missing index into a redelivery loop. **The two-term
-version is Deployed** (2026-08-01, `16332b3`); **the cancelled-job change is
-NOT deployed** — it is held behind the 1.61.0+90 app build with Wave Phase 2.
+neither. Both are LIVE (the second, `CICAgNiZnYEK`, `READY` since 2026-09-12),
+and the second must stay ahead of this function, because `retry: true` turns a
+missing index into a redelivery loop. The equality-only `clientId ==` +
+`status ==` count needs no third composite: merging the single-field indexes
+serves it, proven by the 2026-09-13 prod recount. **Deployed:** the two-term
+version 2026-08-01 (`16332b3`), the cancelled-job change 2026-09-13
+(`38c8225b`).
 
 A booking batch can land up to 16 writes carrying one `clientId` at once (a
 multi-day run's day-documents, a repeat series' occurrences), so those are

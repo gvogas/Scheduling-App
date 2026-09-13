@@ -1,6 +1,11 @@
 # Four bug fixes — client search, cancelled job counts, Done row badge, filter re-apply
 
-**State: ALL FOUR BUILT 2026-09-11. Nothing deployed, no prod script run.**
+**State: COMPLETE 2026-09-13 — nothing outstanding.** All four built 2026-09-11 and
+shipped in 1.61.0+90. Issue 2's backend is live: index `CICAgNiZnYEK` `READY`
+(deployed 2026-09-12), function deployed 2026-09-13 02:07Z (`38c8225b`), and
+`recount-client-jobs.js` ran live the same day (726 scanned, 9 patched). The
+verification numbers, the §6 step list and the Issue 2 ordering below are the
+build-time record.
 Written 2026-09-11 from four parallel read-only investigations plus one
 follow-up pass; implemented the same day.
 
@@ -18,19 +23,19 @@ inside the same block.
 | Issue | Layer | Deploy needed? | State |
 |---|---|---|---|
 | 1 — one search bar in Add Appointment | Dart UI only | **No** | **BUILT** |
-| 2 — cancelled jobs counted as jobs | Cloud Function + index + backfill | **Yes** | **BUILT, NOT DEPLOYED** |
+| 2 — cancelled jobs counted as jobs | Cloud Function + index + backfill | **Yes** | **DEPLOYED 2026-09-13** |
 | 3 — Done row shape in the agenda | Dart UI only | No | **BUILT** |
 | 4 — filters don't re-apply | Dart UI only | No | **BUILT** |
 
-**Deploy progress, 2026-09-12:** the index is DEPLOYED (`CICAgNiZnYEK`, `CREATING` at deploy time - confirm `READY`). The function is HELD: `dev` also carries Wave Phase 2 enforcement, which must not deploy before the app build ships (1.60.0+89 never uploaded; the build is now 1.61.0+90), so a `functions` deploy from this tree waits for that build. See the 2026-09-12 row in `docs/DEPLOYMENT.md`.
-
-**What Issue 2 still needs, in this order** (§2 and §6 step 5 are the
-authority): deploy `firestore:indexes` ALONE and wait for
+**The order Issue 2 was deployed in — all done 2026-09-12/13** (§2 and §6
+step 5 are the authority): deploy `firestore:indexes` ALONE and wait for
 `appointments (clientId ASC, status ASC, dayIndex ASC)` to reach `READY` — the
 trigger is `retry: true` and rethrows, so a missing index is a
 `FAILED_PRECONDITION` redelivery loop, not a silent no-op — then `functions`,
 then `recount-client-jobs.js --dry-run`, then the live run. **One thing was
-NOT verified and must be checked before deploying:** whether `clientId ==` +
+NOT verified at build time — SETTLED 2026-09-13: the prod recount dry run ran
+every aggregate without `FAILED_PRECONDITION`, so no second composite was
+needed:** whether `clientId ==` +
 `status ==` alone is served by index merge. Equality-only filters normally are,
 which is why no second composite was added; confirm against the emulator or
 the console's index suggestion, and add

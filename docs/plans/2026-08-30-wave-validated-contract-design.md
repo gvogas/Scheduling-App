@@ -1,8 +1,12 @@
 # Wave sync: the validated contract
 
-**State: PHASE 1 COMPLETE — BUILT, DEPLOYED AND CONFORMANCE-REPLAYED.
-PHASE 2 IS NOW UNBLOCKED and is the next thing to write.** Owner-approved
-through three review sections. Phase 1 is
+**State (2026-09-13): PHASES 1-3 COMPLETE, PHASE 4 PLANNED, NOT STARTED.**
+Phase 2 (enforce) shipped in 1.61.0+90 and deployed 2026-09-13 (`38c8225b`);
+Phase 3's backfill ran live the same day (726 scanned, 1 patched, 0 blocked,
+1 advisory). Phases 2 and 4 are tasked in
+`2026-09-10-wave-validated-contract-phases-2-4.md`; the Phase 1 and Phase 3
+plans are archived in `docs/archive/`. The replay record below is Phase 1's, as
+written. Owner-approved through three review sections. Phase 1 is
 `functions/wave/customer_contract.js`, recording `wave.problems` without
 changing what enqueues; deployed 2026-08-30 (`fe9edc51`, report-only).
 

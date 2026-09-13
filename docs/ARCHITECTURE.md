@@ -1781,9 +1781,9 @@ not default it off.
   `core/platform/`) rather than a bare `Platform.isIOS`, which on the host
   returns before anything injectable and writes the branch off as device-only.
 
-Run: `flutter test` (3685 passing as of 2026-09-12, release 1.61.0+90 — that is the runner's count;
-`grep`ing for `test(`/`testWidgets(` gives fewer (3564), since some cases are
-generated inside loops; `functions` adds 1896 jest tests across 88 suites in
+Run: `flutter test` (3686 passing as of 2026-09-13, tree `38c8225b` — that is the runner's count;
+`grep`ing for `test(`/`testWidgets(` gives fewer (3565), since some cases are
+generated inside loops; `functions` adds 1935 jest tests across 91 suites in
 `functions/__tests__/` — the parallel `functions/test/` directory was
 merged away). **`functions/node_modules` must be installed before `npx jest`
 means anything**: on an empty install it resolves a throwaway jest from the npx
