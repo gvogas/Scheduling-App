@@ -5,10 +5,10 @@
    lorsqu’une clé manque ici — silencieusement, ce qui est précisément le
    mode d’échec à connaître. Gardez les deux fichiers alignés sur le plist. */
 
-"NSCameraUsageDescription" = "Cette application utilise l’appareil photo pour prendre des photos de rendez-vous et des photos de profil.";
+"NSCameraUsageDescription" = "Cette application utilise l’appareil photo pour prendre des photos de rendez-vous.";
 "NSContactsUsageDescription" = "Cette application enregistre le client de votre choix dans vos contacts et tient ce contact à jour lorsque vous modifiez le client. Elle ne lit pas le reste de vos contacts.";
 "NSFaceIDUsageDescription" = "Cette application utilise Face ID pour déverrouiller le verrouillage que vous avez activé dans les réglages.";
 "NSLocationAlwaysAndWhenInUseUsageDescription" = "Votre position vous indique quand partir pour votre prochain rendez-vous et affiche votre position sur la carte du personnel. Cette application n’utilise votre position que lorsqu’elle est ouverte.";
 "NSLocationWhenInUseUsageDescription" = "Lorsque l’application est ouverte, votre position vous indique quand partir pour votre prochain rendez-vous et affiche votre position sur la carte du personnel.";
-"NSPhotoLibraryUsageDescription" = "Cette application accède à votre photothèque pour joindre des images aux rendez-vous et aux profils.";
+"NSPhotoLibraryUsageDescription" = "Cette application accède à votre photothèque pour joindre des images aux rendez-vous.";
 "NSPhotoLibraryAddUsageDescription" = "Cette application enregistre les photos de rendez-vous dans votre photothèque lorsque vous choisissez de les enregistrer.";
