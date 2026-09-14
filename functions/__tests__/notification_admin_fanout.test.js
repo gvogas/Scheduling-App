@@ -113,7 +113,7 @@ describe("sendToActiveAdmins", () => {
             return 1;
           },
         }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual(expect.any(Number));
 
     expect(sent).toEqual(["a2"]);
     expect(logged.length).toBe(1);
@@ -138,7 +138,7 @@ describe("sendToActiveAdmins", () => {
         sendToActiveAdmins(deps, {kind: "x"}, () => ({title: "t", body: "b"}), {
           sendToEmployee: async () => 1,
         }),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual(expect.any(Number));
 
     expect(logged.length).toBe(1);
   });
@@ -190,6 +190,6 @@ describe("sendToActiveAdmins", () => {
 
     await expect(
         sendToActiveAdmins(deps, {kind: "x"}, () => ({title: "t", body: "b"})),
-    ).resolves.toBeUndefined();
+    ).resolves.toEqual(expect.any(Number));
   });
 });

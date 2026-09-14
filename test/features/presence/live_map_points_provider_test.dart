@@ -16,11 +16,13 @@ EmployeeRecord _employee(String id) => EmployeeRecord(
   status: 'active',
 );
 
-PresenceFix _fix(String id) => PresenceFix(
+final _now = DateTime(2026, 7, 8, 12);
+
+PresenceFix _fix(String id, {Duration age = Duration.zero}) => PresenceFix(
   userDocId: id,
   lat: 45.5,
   lng: -73.6,
-  updatedAt: DateTime(2026, 7, 8, 12),
+  updatedAt: _now.subtract(age),
 );
 
 ProviderContainer _container({
@@ -33,6 +35,11 @@ ProviderContainer _container({
   // as an error instead of respinning forever.
   retry: (retryCount, error) => null,
   overrides: [
+    liveMapClockProvider.overrideWith(
+      (_) =>
+          () => _now,
+    ),
+    liveMapTickProvider.overrideWith((_) => const Stream<int>.empty()),
     allPresenceStreamProvider.overrideWith(
       (_) => fixesError != null
           ? Stream<List<PresenceFix>>.error(fixesError)
@@ -85,6 +92,31 @@ void main() {
 
     expect(
       container.read(liveMapPointsProvider).requireValue.single.userDocId,
+      'e1',
+    );
+  });
+
+  test('a fix older than two hours is not a point on the map', () async {
+    final container = _container(
+      fixes: [_fix('e1', age: const Duration(hours: 3))],
+      users: [_employee('e1')],
+    );
+    addTearDown(container.dispose);
+    await _settle();
+
+    expect(container.read(liveMapPointsProvider).requireValue, isEmpty);
+  });
+
+  test('the team groups the same fix under NOT SEEN', () async {
+    final container = _container(
+      fixes: [_fix('e1', age: const Duration(hours: 3))],
+      users: [_employee('e1')],
+    )..listen(liveMapTeamProvider, (_, _) {});
+    addTearDown(container.dispose);
+    await _settle();
+
+    expect(
+      container.read(liveMapTeamProvider).requireValue.notSeen.single.userDocId,
       'e1',
     );
   });

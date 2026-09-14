@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:scheduling/core/adaptive/adaptive_action_sheet.dart';
 import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
 import 'package:scheduling/core/animations/animated_loading_button.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
@@ -10,20 +9,10 @@ import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/wave/application/wave_providers.dart';
 import 'package:scheduling/features/wave/domain/models/wave_connection.dart';
-import 'package:scheduling/features/wave/domain/models/wave_import_schedule.dart';
 import 'package:scheduling/features/wave/domain/wave_failure.dart';
 import 'package:scheduling/features/wave/domain/wave_sync_notice.dart';
 import 'package:scheduling/features/wave/widgets/wave_blocked_list.dart';
 import 'package:scheduling/l10n/l10n.dart';
-
-/// Localized label for an automatic-import cadence — used by the picker row and
-/// the action sheet.
-String _scheduleLabel(BuildContext context, WaveImportSchedule schedule) =>
-    switch (schedule) {
-      WaveImportSchedule.off => context.l10n.wave_autoImportOff,
-      WaveImportSchedule.weekly => context.l10n.wave_autoImportWeekly,
-      WaveImportSchedule.monthly => context.l10n.wave_autoImportMonthly,
-    };
 
 /// Admin-only Wave integration controls in Settings. Holds ephemeral
 /// [WaveConnection] and busy-flag state, and surfaces any [WaveFailure] via
@@ -42,14 +31,11 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
   WaveConnection? _connection;
   bool _connectBusy = false;
   bool _syncBusy = false;
-  bool _scheduleBusy = false;
   bool _retryBusy = false;
 
-  /// True while any Wave round trip is in flight. The cadence picker adds
-  /// [_scheduleBusy] on top; the Connect/Sync buttons swap places, so neither
-  /// needs it. [_retryBusy] IS in here — Retry drains the same queue Sync
-  /// does, so running both at once would have the two presses fighting over
-  /// the same jobs and reporting each other's work.
+  /// True while any Wave round trip is in flight. [_retryBusy] IS in here —
+  /// Retry drains the same queue Sync does, so running both at once would have
+  /// the two presses fighting over the same jobs.
   bool get _busy => _connectBusy || _syncBusy || _retryBusy;
 
   /// Fail-fast offline guard so the long-running Wave callables don't hang.
@@ -187,39 +173,6 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
     );
   }
 
-  Future<void> _pickSchedule(WaveImportSchedule current) async {
-    final choice = await showAdaptiveActionSheet<WaveImportSchedule>(
-      context,
-      title: context.l10n.wave_autoImportLabel,
-      actions: [
-        for (final s in WaveImportSchedule.values)
-          AdaptiveSheetAction(value: s, label: _scheduleLabel(context, s)),
-      ],
-    );
-    if (choice == null || choice == current) return;
-    if (!mounted) return;
-    if (_blockedOffline()) return;
-
-    await _runWaveAction(
-      tag: 'SCHEDULE',
-      setBusy: ({required busy}) => setState(() => _scheduleBusy = busy),
-      action: () async {
-        await ref.read(waveServiceProvider).setImportSchedule(choice);
-        if (!mounted) return;
-        // Reflect the new cadence locally; invalidate so a later mount
-        // re-reads the persisted value.
-        final base = _connection ?? ref.read(waveConnectionProvider).value;
-        if (base != null) {
-          setState(() => _connection = base.copyWith(importSchedule: choice));
-        }
-        ref.invalidate(waveConnectionProvider);
-        ref
-            .read(noticeServiceProvider)
-            .success(context.l10n.wave_autoImportUpdated);
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final connectionAsync = ref.watch(waveConnectionProvider);
@@ -244,12 +197,8 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
         if (connected)
           _ConnectedStatus(
             connection: connection,
-            scheduleBusy: _scheduleBusy,
-            onTapSchedule: _busy || _scheduleBusy
-                ? null
-                : () => _pickSchedule(connection.importSchedule),
             retryBusy: _retryBusy,
-            onRetryFailed: _busy || _scheduleBusy ? null : _retryFailed,
+            onRetryFailed: _busy ? null : _retryFailed,
           ),
         // Connect is first-time setup only — the status row replaces it once connected.
         if (!connected)
@@ -272,20 +221,16 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
   }
 }
 
-/// The persisted-connection status row + auto-import schedule tile, shown
-/// once Wave is connected.
+/// The persisted-connection status row and the outbox rows, shown once Wave
+/// is connected.
 class _ConnectedStatus extends StatelessWidget {
   const _ConnectedStatus({
     required this.connection,
-    required this.scheduleBusy,
-    required this.onTapSchedule,
     required this.retryBusy,
     required this.onRetryFailed,
   });
 
   final WaveConnection connection;
-  final bool scheduleBusy;
-  final VoidCallback? onTapSchedule;
   final bool retryBusy;
   final VoidCallback? onRetryFailed;
 
@@ -320,30 +265,6 @@ class _ConnectedStatus extends StatelessWidget {
               ),
             ],
           ),
-        ),
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: const Icon(Icons.sync_rounded),
-          title: Text(context.l10n.wave_autoImportLabel),
-          trailing: scheduleBusy
-              ? const SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: AdaptiveProgressIndicator(),
-                )
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _scheduleLabel(context, connection.importSchedule),
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                    const Icon(Icons.chevron_right_rounded),
-                  ],
-                ),
-          onTap: onTapSchedule,
         ),
         // The outbox, which had nowhere to be shown. Both rows are omitted at
         // zero AND at null — null means the count could not be taken (or an

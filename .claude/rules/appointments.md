@@ -1029,6 +1029,24 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   be able to disagree. It compares against `fullAddress` and canonicalises both
   sides; a `noFixedAddress` client is always custom. See the comment there for
   why the raw `address` field is the wrong side of the comparison.
+- **The overdue review is the one BULK close** (`OverdueReviewScreen`,
+  admin-only, 2026-09-13). `watchOverdueOpen(now)` queries `status whereIn
+  openStatusQueryValues` (the STORED `pending`/`in_progress`, so a legacy
+  `confirmed` doc is not listed even though the server's `OPEN_STATUSES` still
+  counts it for the push) with `endTime < now` ordered DESC, capped at 500 with
+  an `APPT-REVIEW` warn and served by the existing `(status ASC, endTime DESC)`
+  composite. `overdueJobsAt` then re-filters through `displayStatusAt(now)`,
+  which is what drops personal blocks and time off. `overdueOpenJobsProvider`
+  feeds BOTH the screen and the drawer badge so the two cannot disagree, and
+  re-issues its boundary every 15 minutes while watched. Writes go through
+  `updateAppointmentStatuses` in 450-id chunks (`chunkIds`), so History's
+  window is patched and every doc is written alone — a run or a series never
+  gets a scope dialog. Complete writes `done`, which stamps `completedAt` with
+  the REVIEW time rather than when the work happened (accepted; the dialog
+  says so); Not done writes `cancelled`. There is no Undo:
+  `restoreAppointmentStatus` is one doc per call behind a rate limit, so a
+  confirmation (`showConfirmDialog(cancelLabel:)`, "Go back") names the
+  consequence before anything is written.
 - **The dashboard's window is SPLIT: one live listener, one `.get()`.**
   `DashboardAggregator.liveRangeAround` (this ISO week through next Monday /
   the 3-day pending horizon) is watched; `historyRangeAround` (the seven

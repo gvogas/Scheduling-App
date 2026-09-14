@@ -94,6 +94,8 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
   late int _selectedColor;
   late bool _onCall;
   late bool _isAdmin;
+  late bool _isTestAccount;
+  late bool _monthEndReviewPush;
   late bool _isDisabled;
   final Map<String, String?> errors = {};
 
@@ -138,6 +140,8 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     _selectedColor = e.color.toARGB32();
     _onCall = e.onCall;
     _isAdmin = e.isAdmin;
+    _isTestAccount = e.isTestAccount;
+    _monthEndReviewPush = e.monthEndReviewPush;
     _isDisabled = e.isDisabled;
   }
 
@@ -251,6 +255,8 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
       workEndMinutes: _workEndMinutes,
       maxJobsPerDay: _maxJobsPerDay,
       onCall: _onCall,
+      isTestAccount: _isTestAccount,
+      monthEndReviewPush: _isAdmin && _monthEndReviewPush,
     );
 
     final outcome = await ref
@@ -457,9 +463,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     ),
     const SizedBox(height: AppSpacing.sp8),
     Text(
-      l10n.employees_coloursLeft(
-        availableCrewColorCount(widget.usedColors),
-      ),
+      l10n.employees_coloursLeft(availableCrewColorCount(widget.usedColors)),
       style: theme.textTheme.labelSmall?.copyWith(
         color: theme.palette.textTertiary,
       ),
@@ -558,6 +562,25 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
       subtitle: Text(l10n.employees_adminAccessDescription),
       onChanged: (value) => setState(() => _isAdmin = value),
     ),
+    SwitchListTile.adaptive(
+      key: const Key('testAccount'),
+      value: _isTestAccount,
+      activeTrackColor: theme.colorScheme.primary,
+      contentPadding: EdgeInsets.zero,
+      title: Text(l10n.employees_testAccount),
+      subtitle: Text(l10n.employees_testAccountCaption),
+      onChanged: (value) => setState(() => _isTestAccount = value),
+    ),
+    if (_isAdmin)
+      SwitchListTile.adaptive(
+        key: const Key('monthEndReviewPush'),
+        value: _monthEndReviewPush,
+        activeTrackColor: theme.colorScheme.primary,
+        contentPadding: EdgeInsets.zero,
+        title: Text(l10n.employees_monthEndReviewPush),
+        subtitle: Text(l10n.employees_monthEndReviewPushDescription),
+        onChanged: (value) => setState(() => _monthEndReviewPush = value),
+      ),
     const SizedBox(height: AppSpacing.sp24),
     _StatusFooter(
       employeeId: widget.employee.id,

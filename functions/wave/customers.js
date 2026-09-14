@@ -243,7 +243,7 @@ function hasNotFoundInputError(inputErrors) {
  *   network during a unit test.
  * @return {!Promise<!Object>} A status object (see decision flow). The
  *   `status` vocabulary — `skipped`/`noop`/`patched`/`linked`/`created` — is
- *   READ FOR DISPLAY by `tallyUpsert` in `worker.js`, which turns it into the
+ *   READ FOR DISPLAY by `tallyUpsert` in `dispatch.js`, which turns it into the
  *   "N clients added to Wave / N updated in Wave" counts the admin sees after
  *   a sync. A sixth status added here lands in that helper's uncounted bucket
  *   by default, with every test still passing — classify it there too.

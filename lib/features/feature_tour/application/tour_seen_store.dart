@@ -12,7 +12,6 @@ const _keyTourSeenSteps = 'tour_seen_steps';
 /// The old key, one entry per SCOPE. Read exactly once, by the migration.
 const _keyTourSeenTabs = 'tour_seen_tabs';
 
-
 /// Tracks which tour STEPS this device has already seen. Await `ready` before
 /// reading it, or a cold start can replay steps that were already shown.
 ///
@@ -53,6 +52,9 @@ class TourSeenController extends Notifier<Set<TourStepId>> {
       logger.warn('TOUR read seen flags failed', e, st);
     }
   }
+
+  /// The steps seen so far, readable after an await without touching `ref`.
+  Set<TourStepId> get seen => state;
 
   /// Marks the steps that actually ran — never a whole scope. A step whose
   /// target wasn't rendered has not been seen and must be offered again.

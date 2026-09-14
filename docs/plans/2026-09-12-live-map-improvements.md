@@ -1,7 +1,10 @@
 # Live staff map improvements — design
 
-**Status: DESIGN APPROVED 2026-09-12, mockup picked. NOT STARTED — no code,
-no implementation plan yet.** The owner gives the build go-ahead separately.
+**Status: BUILT 2026-09-13 on `dev` (uncommitted at time of writing), NOT
+SHIPPED.** No backend deploy (the optional rules type check was skipped).
+Left: the device-only checks in §7, republishing `docs/legal/privacy-policy.html`
+to `es-pro-legal`, and flipping the Apple tester's Test account switch once the
+build ships. Deviations from this design are recorded at the end of this file.
 
 Mockup (chosen design, private artifact):
 https://claude.ai/code/artifact/3033bea3-5790-4966-9e8f-a3ce99339655
@@ -224,3 +227,37 @@ sign-out, account deletion or disable, which is unchanged. **Republish to the
   Test accounts section), `liveMap_` (sheet header count, the three section
   labels, "Also nearby", footer, "Hasn't turned sharing on"), `settings_` or
   `onboarding_` (ask page), and reworded `tour_liveMapRoster*`.
+
+## As built (2026-09-13) — deviations from the design above
+
+- **One owner for "not crew": `EmployeeRecord.isAssignable` now includes
+  `!isTestAccount`.** Every picker, the dashboard's per-person numbers, the
+  calendar crew filter, the clash swap pool and a book-again crew already
+  route through it, so no call site re-spells the filter. The map uses
+  `LiveMapAggregator.join`/`groupTeam`; the roster splits the list itself.
+- **`neverSetUpAccountsProvider` is NOT filtered.** It is a security flag about
+  an account still on its starting password, not a teammate listing.
+- **The three sections are always in the sheet's scroll**, revealed by dragging
+  up, rather than swapped in when the sheet crosses a height.
+- **"No calendar tour pending" means no calendar step has EVER been seen**, not
+  every step: `calendarCollapse` never renders in split layout, so the literal
+  reading would hold the ask page back forever on a tablet. Consequence: on an
+  upgraded device whose calendar catalog gained a step, that one step's tour can
+  coincide with the ask page once.
+- **"Asked" is recorded when the page is pushed**, not on a button, so a
+  swipe-back or a killed app counts as Not now.
+- **The ask page's map thumbnail is a painted street grid** with the person's
+  avatar as the pin — a real map would cost a platform view and a billed tile
+  load for decoration.
+- **The recenter tile tracks the sheet's top edge** through
+  `DraggableScrollableNotification`, isolated in a `ValueListenableBuilder` so a
+  drag does not rebuild the map.
+- **The hidden tab renders the last-known team** with no live tick, the same
+  paused treatment the markers already had.
+- `liveMap_rosterButton`, `liveMap_rosterTitle` and `liveMap_rosterCount` were
+  deleted with `staff_roster_sheet.dart` and `staff_info_card.dart`.
+- The optional `isTestAccount` rules type check was skipped (owner scope), so
+  this change needs no backend deploy.
+- The gate's conditions are pinned by `location_share_ask_policy_test.dart`;
+  there is no widget test of `LocationShareAskGate` itself, whose hub-visibility
+  and tour wiring is left to the device pass.

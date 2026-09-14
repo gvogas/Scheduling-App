@@ -7,6 +7,7 @@ import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
 import 'package:scheduling/features/auth/application/is_active_admin_provider.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
+import 'package:scheduling/features/calendar/application/overdue_review_providers.dart';
 import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
 import 'package:scheduling/features/employees/application/employee_schedule_providers.dart';
 import 'package:scheduling/features/navigation/domain/drawer_catalog.dart';
@@ -283,7 +284,14 @@ class _NavRow extends ConsumerWidget {
                 // An absent count renders nothing - the empty-omitted rule.
                 if (count != null) ...[
                   const SizedBox(width: AppSpacing.sp8),
-                  Text('$count', style: theme.monoType.data),
+                  Text(
+                    '$count',
+                    style: destination == PushedDestination.overdueReview
+                        ? theme.monoType.data.copyWith(
+                            color: theme.statusColors.overdue,
+                          )
+                        : theme.monoType.data,
+                  ),
                 ],
               ],
             ),
@@ -293,10 +301,12 @@ class _NavRow extends ConsumerWidget {
     );
   }
 
-  /// Only two rows carry a count today. Time off joins in P6.
+  /// The rows that carry a live count.
   int? _countFor(WidgetRef ref) => switch (destination) {
     HubTab.calendar => _todayJobCount(ref),
     HubTab.liveMap => _onTheClockCount(ref),
+    PushedDestination.overdueReview =>
+      ref.watch(overdueOpenJobsProvider).value?.length,
     _ => null,
   };
 

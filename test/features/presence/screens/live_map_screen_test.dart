@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/features/maps/application/maps_providers.dart';
+import 'package:scheduling/features/maps/domain/places_repository.dart';
 import 'package:scheduling/features/presence/application/live_map_providers.dart';
 import 'package:scheduling/features/presence/domain/models/presence_fix.dart';
 import 'package:scheduling/features/presence/screens/live_map_screen.dart';
@@ -20,29 +22,50 @@ final _now = DateTime(2026, 7, 17, 12);
 const _alice = EmployeeRecord(id: 'u1', name: 'Alice', status: 'active');
 const _bob = EmployeeRecord(id: 'u2', name: 'Bob', status: 'active');
 
+class _MockPlaces extends Mock implements PlacesRepository {}
+
 PresenceFix _fix(String id, double lat, double lng, DateTime updatedAt) =>
     PresenceFix(userDocId: id, lat: lat, lng: lng, updatedAt: updatedAt);
 
 void main() {
   late LiveMapConfig? lastConfig;
+  late _MockPlaces places;
 
-  setUp(() => lastConfig = null);
+  setUp(() {
+    lastConfig = null;
+    // Every on-map row resolves its city, so an unstubbed repository would
+    // reach for a Firebase app that does not exist here.
+    places = _MockPlaces();
+    when(
+      () => places.reverseGeocode(
+        lat: any(named: 'lat'),
+        lng: any(named: 'lng'),
+        locale: any(named: 'locale'),
+      ),
+    ).thenAnswer((_) async => null);
+  });
 
   Widget stubMap(LiveMapConfig config) {
     lastConfig = config;
     return const ColoredBox(color: Color(0xFF888888));
   }
 
-  Widget themed(Widget child) => ThemeNotifier(
+  Widget themed(Widget child, {double textScale = 1}) => ThemeNotifier(
     themeMode: ThemeMode.light,
     toggleTheme: () {},
-    textScale: 1,
+    textScale: textScale,
     setTextScale: (_) {},
     setLanguage: (_) {},
     child: MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
       theme: lightTheme(),
+      builder: (context, app) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(textScale)),
+        child: app!,
+      ),
       home: child,
     ),
   );
@@ -50,7 +73,21 @@ void main() {
   Widget wrap({
     required List<Override> overrides,
     Widget child = const LiveMapScreen(isAdmin: true, employeeId: 'e1'),
-  }) => ProviderScope(overrides: overrides, child: themed(child));
+    double textScale = 1,
+  }) => ProviderScope(
+    overrides: overrides,
+    child: themed(child, textScale: textScale),
+  );
+
+  /// Tall enough that the whole team sheet is built at its resting height.
+  void useTallViewport(
+    WidgetTester tester, {
+    Size size = const Size(800, 2000),
+  }) {
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+  }
 
   // Marker icons encode via real dart:ui async that the fake test clock won't advance — drive under runAsync.
   Future<void> settleMap(WidgetTester tester) async {
@@ -78,6 +115,7 @@ void main() {
     liveMapTickProvider.overrideWith(
       (ref) => tick?.stream ?? const Stream<int>.empty(),
     ),
+    placesRepositoryProvider.overrideWithValue(places),
     ...extra,
   ];
 
@@ -106,8 +144,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('tapping a marker shows the info card with name, freshness, '
-      'and the resolved address', (tester) async {
+  testWidgets('tapping a marker focuses that person at the top of the sheet '
+      'with name, freshness, and the resolved address', (tester) async {
     final key = ReverseGeocodeQuery(lat: 45.5, lng: -73.6, locale: 'en');
     await tester.pumpWidget(
       wrap(
@@ -140,40 +178,37 @@ void main() {
     expect(find.text('123 Alice St'), findsOneWidget);
   });
 
-  testWidgets(
-    'the address line is hidden when no address is available '
-    '(same branch as a lookup failure)',
-    (tester) async {
-      final key = ReverseGeocodeQuery(lat: 45.5, lng: -73.6, locale: 'en');
-      await tester.pumpWidget(
-        wrap(
-          overrides: baseOverrides(
-            presence: Stream.value([_fix('u1', 45.5, -73.6, _now)]),
-            users: const [_alice],
-            // A null result (no address / lookup failure) takes the same
-            // `SizedBox.shrink()` branch in the info card.
-            extra: [
-              reverseGeocodeProvider(key).overrideWith((ref) async => null),
-            ],
-          ),
-          child: LiveMapScreen(
-            isAdmin: true,
-            employeeId: 'e1',
-            mapBuilder: stubMap,
-          ),
+  testWidgets('the address line is hidden when no address is available '
+      '(same branch as a lookup failure)', (tester) async {
+    final key = ReverseGeocodeQuery(lat: 45.5, lng: -73.6, locale: 'en');
+    await tester.pumpWidget(
+      wrap(
+        overrides: baseOverrides(
+          presence: Stream.value([_fix('u1', 45.5, -73.6, _now)]),
+          users: const [_alice],
+          // A null result (no address / lookup failure) takes the same
+          // `SizedBox.shrink()` branch in the info card.
+          extra: [
+            reverseGeocodeProvider(key).overrideWith((ref) async => null),
+          ],
         ),
-      );
-      await settleMap(tester);
+        child: LiveMapScreen(
+          isAdmin: true,
+          employeeId: 'e1',
+          mapBuilder: stubMap,
+        ),
+      ),
+    );
+    await settleMap(tester);
 
-      lastConfig!.markers.first.onTap!();
-      await settleMap(tester);
+    lastConfig!.markers.first.onTap!();
+    await settleMap(tester);
 
-      // Card still shows the person, but no address / resolving line.
-      expect(find.text('Alice'), findsOneWidget);
-      expect(find.text('Finding address…'), findsNothing);
-      expect(find.text('123 Alice St'), findsNothing);
-    },
-  );
+    // Card still shows the person, but no address / resolving line.
+    expect(find.text('Alice'), findsOneWidget);
+    expect(find.text('Finding address…'), findsNothing);
+    expect(find.text('123 Alice St'), findsNothing);
+  });
 
   testWidgets('empty presence data renders the empty-state card over the map', (
     tester,
@@ -269,4 +304,144 @@ void main() {
       );
     },
   );
+
+  testWidgets('the team sheet counts who is on the map, not seen, and not '
+      'sharing', (tester) async {
+    useTallViewport(tester);
+    const carol = EmployeeRecord(id: 'u3', name: 'Carol', status: 'active');
+    await tester.pumpWidget(
+      wrap(
+        overrides: baseOverrides(
+          presence: Stream.value([
+            _fix('u1', 45.5, -73.6, _now),
+            _fix('u2', 45.6, -73.7, _now.subtract(const Duration(hours: 3))),
+          ]),
+          users: const [_alice, _bob, carol],
+        ),
+        child: LiveMapScreen(
+          isAdmin: true,
+          employeeId: 'e1',
+          mapBuilder: stubMap,
+        ),
+      ),
+    );
+    await settleMap(tester);
+
+    expect(
+      [
+        find.text('ON THE MAP · 1'),
+        find.text('NOT SEEN IN 2 H · 1'),
+        find.text('LOCATION SHARING OFF · 1'),
+      ].map((f) => f.evaluate().length),
+      [1, 1, 1],
+    );
+  });
+
+  testWidgets('a pin older than two hours gets no marker', (tester) async {
+    await tester.pumpWidget(
+      wrap(
+        overrides: baseOverrides(
+          presence: Stream.value([
+            _fix('u1', 45.5, -73.6, _now),
+            _fix('u2', 45.6, -73.7, _now.subtract(const Duration(hours: 3))),
+          ]),
+        ),
+        child: LiveMapScreen(
+          isAdmin: true,
+          employeeId: 'e1',
+          mapBuilder: stubMap,
+        ),
+      ),
+    );
+    await settleMap(tester);
+
+    expect(lastConfig!.markers.map((m) => m.markerId.value), ['u1']);
+  });
+
+  testWidgets('a test account is neither a marker nor a row', (tester) async {
+    useTallViewport(tester);
+    const apple = EmployeeRecord(
+      id: 'u4',
+      name: 'Apple Tester',
+      status: 'active',
+      locationSharingEnabled: true,
+      isTestAccount: true,
+    );
+    await tester.pumpWidget(
+      wrap(
+        overrides: baseOverrides(
+          presence: Stream.value([_fix('u4', 45.5, -73.6, _now)]),
+          users: const [_alice, apple],
+        ),
+        child: LiveMapScreen(
+          isAdmin: true,
+          employeeId: 'e1',
+          mapBuilder: stubMap,
+        ),
+      ),
+    );
+    await settleMap(tester);
+
+    expect(find.text('Apple Tester'), findsNothing);
+    expect(lastConfig!.markers, isEmpty);
+  });
+
+  testWidgets('tapping a row focuses that person', (tester) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(
+      wrap(
+        overrides: baseOverrides(
+          presence: Stream.value([
+            _fix('u1', 45.5, -73.6, _now),
+            _fix('u2', 45.6, -73.7, _now),
+          ]),
+        ),
+        child: LiveMapScreen(
+          isAdmin: true,
+          employeeId: 'e1',
+          mapBuilder: stubMap,
+        ),
+      ),
+    );
+    await settleMap(tester);
+    expect(find.text('Open in Maps'), findsNothing);
+
+    await tester.tap(find.text('Bob'));
+    await settleMap(tester);
+
+    expect(find.text('Open in Maps'), findsOneWidget);
+  });
+
+  testWidgets('survives 260x640 at 2.0 text scale with someone focused', (
+    tester,
+  ) async {
+    useTallViewport(tester, size: const Size(260, 640));
+    const carol = EmployeeRecord(
+      id: 'u3',
+      name: 'Carol Beaulieu-Tremblay',
+      status: 'active',
+    );
+    await tester.pumpWidget(
+      wrap(
+        textScale: 2,
+        overrides: baseOverrides(
+          presence: Stream.value([
+            _fix('u1', 45.5, -73.6, _now),
+            _fix('u2', 45.6, -73.7, _now.subtract(const Duration(hours: 3))),
+          ]),
+          users: const [_alice, _bob, carol],
+        ),
+        child: LiveMapScreen(
+          isAdmin: true,
+          employeeId: 'e1',
+          mapBuilder: stubMap,
+        ),
+      ),
+    );
+    await settleMap(tester);
+    lastConfig!.markers.first.onTap!();
+    await settleMap(tester);
+
+    expect(tester.takeException(), isNull);
+  });
 }

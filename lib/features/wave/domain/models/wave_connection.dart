@@ -1,13 +1,10 @@
 import 'package:flutter/foundation.dart';
 
-import 'package:scheduling/features/wave/domain/models/wave_import_schedule.dart';
-
 @immutable
 class WaveConnection {
   const WaveConnection({
     required this.businessId,
     required this.businessName,
-    this.importSchedule = WaveImportSchedule.off,
     this.pendingCount,
     this.failedCount,
   });
@@ -16,9 +13,6 @@ class WaveConnection {
     return WaveConnection(
       businessId: (map['businessId'] as String?) ?? '',
       businessName: (map['businessName'] as String?) ?? '',
-      importSchedule: WaveImportSchedule.fromRaw(
-        map['importSchedule'] as String?,
-      ),
       pendingCount: (map['pendingCount'] as num?)?.toInt(),
       failedCount: (map['failedCount'] as num?)?.toInt(),
     );
@@ -26,7 +20,6 @@ class WaveConnection {
 
   final String businessId;
   final String businessName;
-  final WaveImportSchedule importSchedule;
 
   /// Client edits queued for Wave but not pushed yet.
   ///
@@ -52,17 +45,13 @@ class WaveConnection {
   /// Whether any client edit has permanently failed to reach Wave.
   bool get hasFailed => (failedCount ?? 0) > 0;
 
-  WaveConnection copyWith({
-    WaveImportSchedule? importSchedule,
-    int? pendingCount,
-    int? failedCount,
-  }) => WaveConnection(
-    businessId: businessId,
-    businessName: businessName,
-    importSchedule: importSchedule ?? this.importSchedule,
-    pendingCount: pendingCount ?? this.pendingCount,
-    failedCount: failedCount ?? this.failedCount,
-  );
+  WaveConnection copyWith({int? pendingCount, int? failedCount}) =>
+      WaveConnection(
+        businessId: businessId,
+        businessName: businessName,
+        pendingCount: pendingCount ?? this.pendingCount,
+        failedCount: failedCount ?? this.failedCount,
+      );
 
   @override
   bool operator ==(Object other) =>
@@ -71,18 +60,12 @@ class WaveConnection {
           runtimeType == other.runtimeType &&
           businessId == other.businessId &&
           businessName == other.businessName &&
-          importSchedule == other.importSchedule &&
           pendingCount == other.pendingCount &&
           failedCount == other.failedCount;
 
   @override
-  int get hashCode => Object.hash(
-    businessId,
-    businessName,
-    importSchedule,
-    pendingCount,
-    failedCount,
-  );
+  int get hashCode =>
+      Object.hash(businessId, businessName, pendingCount, failedCount);
 }
 
 /// What one "Retry failed" press recovered.

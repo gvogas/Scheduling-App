@@ -30,6 +30,7 @@ const {
   buildNotificationMessage,
   buildDigestMessage,
   buildJobCompletedMessage,
+  buildOverdueReviewMessage,
 } = require("./notification_messages");
 
 const {
@@ -37,6 +38,8 @@ const {
   OVERDUE_LOOKBACK_MS,
   OVERDUE_SWEEP_MAX,
   DIGEST_SWEEP_MAX,
+  MONTH_END_REVIEW_MAX,
+  MONTH_END_SCAN_MAX,
   WIDGET_PAYLOAD_MAX_BYTES,
   OPEN_STATUSES,
   CHANGE_RECIPIENT_ROLES,
@@ -47,6 +50,8 @@ const {
   nowMillis,
   diffAppointmentForNotifications,
   selectOverdueCandidates,
+  isLastDayOfBusinessMonth,
+  selectMonthEndOverdue,
   groupTomorrowsJobsByEmployee,
   tomorrowWindowToronto,
   overduePromptLedgerId,
@@ -668,6 +673,48 @@ async function runDailyDigest(deps) {
 }
 
 /**
+ * On the business-local last day of the month, tells the admins who opted in
+ * how many jobs ended without being closed.
+ * @param {!Object} deps `{db, messaging, logger, now}`.
+ * @param {{sendToEmployee: (!Function|undefined)}=} opts Test injection only.
+ * @return {!Promise<{count: number, recipients: number}>}
+ */
+async function runMonthEndOverdueReview(deps, opts) {
+  const {db, now, logger} = deps;
+  const nowDate = now || new Date();
+  if (!isLastDayOfBusinessMonth(nowDate)) return {count: 0, recipients: 0};
+  const window = await scanAppointmentWindow(db, {
+    statuses: OPEN_STATUSES,
+    field: "endTime",
+    lo: new Date(0),
+    loOp: ">",
+    hi: nowDate,
+    hiOp: "<=",
+    descending: true,
+    cap: MONTH_END_SCAN_MAX,
+    logger,
+    label: "runMonthEndOverdueReview",
+    consequence: "the month-end push reports N+ rather than the true count",
+  });
+  const found = selectMonthEndOverdue(window, nowDate).length;
+  if (found === 0) return {count: 0, recipients: 0};
+  const count = Math.min(found, MONTH_END_REVIEW_MAX);
+  const capped =
+    window.length >= MONTH_END_SCAN_MAX || found >= MONTH_END_REVIEW_MAX;
+  const recipients = await sendToActiveAdmins(
+      deps,
+      {kind: "overdueReview", count: capped ? `${count}+` : String(count)},
+      (locale) => buildOverdueReviewMessage(count, capped, nowDate, locale),
+      {
+        includeUser: (user) => user.monthEndReviewPush === true,
+        sendToEmployee: (opts || {}).sendToEmployee,
+      },
+  );
+  if (logger) logger.info("monthEndReview: sent", {count, recipients});
+  return {count, recipients};
+}
+
+/**
  * Pushes "Marc finished Leak fix" to every active admin who is not on the job.
  * @param {string} id appointment doc id.
  * @param {?Object} before
@@ -744,15 +791,18 @@ async function stampLifecycle(id, before, after, deps) {
  * @param {function(string): {title: string, body: string}} buildMsg Localized
  * message builder keyed by 'en'|'fr'.
  * @param {{excludeDocId: (string|undefined),
+ * includeUser: (function(!Object): boolean|undefined),
  * sendToEmployee: (!Function|undefined)}=} opts `excludeDocId` skips
  * the person who caused the notice — they do not need telling what they just
- * did. `sendToEmployee` is injectable for tests only.
- * @return {!Promise<void>}
+ * did. `includeUser` narrows the already-read admin docs with no new query.
+ * `sendToEmployee` is injectable for tests only.
+ * @return {!Promise<number>} Admins targeted after filtering.
  */
 async function sendToActiveAdmins(deps, data, buildMsg, opts) {
   const {db, logger} = deps;
   const options = opts || {};
   const send = options.sendToEmployee || sendToEmployee;
+  const include = options.includeUser || (() => true);
   try {
     const snap = await db.collection("users")
         .where("role", "==", "admin")
@@ -769,8 +819,10 @@ async function sendToActiveAdmins(deps, data, buildMsg, opts) {
     // read per active admin per notice.
     const cache = new Map(snap.docs.map(
         (doc) => [doc.id, {user: doc.data() || {}, tokenDocs: null}]));
-    await Promise.all(snap.docs
+    const targets = snap.docs
         .filter((doc) => doc.id !== options.excludeDocId)
+        .filter((doc) => include(doc.data() || {}));
+    await Promise.all(targets
         .map((doc) => send(
             deps, doc.id, data, buildMsg, ADMIN_RECIPIENT_ROLES, cache,
         ).catch((e) => {
@@ -779,10 +831,12 @@ async function sendToActiveAdmins(deps, data, buildMsg, opts) {
                 {docId: doc.id, err: String(e)});
           }
         })));
+    return targets.length;
   } catch (e) {
     if (logger) {
       logger.warn("sendToActiveAdmins: fan-out failed", {err: String(e)});
     }
+    return 0;
   }
 }
 
@@ -794,6 +848,8 @@ module.exports = {
   OVERDUE_LOOKBACK_MS,
   OVERDUE_SWEEP_MAX,
   DIGEST_SWEEP_MAX,
+  MONTH_END_REVIEW_MAX,
+  MONTH_END_SCAN_MAX,
   WIDGET_PAYLOAD_MAX_BYTES,
   OPEN_STATUSES,
   CHANGE_RECIPIENT_ROLES,
@@ -813,6 +869,9 @@ module.exports = {
   buildNotificationMessage,
   buildDigestMessage,
   selectOverdueCandidates,
+  isLastDayOfBusinessMonth,
+  selectMonthEndOverdue,
+  buildOverdueReviewMessage,
   groupTomorrowsJobsByEmployee,
   tomorrowWindowToronto,
   overduePromptLedgerId,
@@ -827,5 +886,6 @@ module.exports = {
   deliverRecipientOnce: _deliverRecipientOnce,
   handleAppointmentWrite,
   runDailyDigest,
+  runMonthEndOverdueReview,
   runOverduePromptSweep,
 };

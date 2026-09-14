@@ -1,7 +1,18 @@
 # Month-end overdue review — design
 
-**Status: DESIGN APPROVED 2026-09-12, mockup picked. NOT STARTED — no code,
-no implementation plan yet.** The owner gives the build go-ahead separately.
+**Status: BUILT 2026-09-13 on branch `month-end` (from `ba2fdb05`),
+UNCOMMITTED, NOT DEPLOYED.** Deploy `functions` first (the rider; old builds
+degrade to the calendar on the tap), then ship the app build; no index, rules
+or export change. After the app ships, an admin turns the month-end switch ON
+for Paul — until then the rider sends to nobody and logs a recipient count of 0.
+Deviations from the text below, all deliberate: the server counts
+`OPEN_STATUSES` (which still includes legacy `confirmed`) while the screen lists
+the stored `pending`/`in_progress` only; months group by the job's local
+START date, the date its card shows; the analytics `count` is bucketed through
+`bucketCount` like every other count; the month splitter's hairline sits under
+its label row so the row can wrap at 260 px and 2x text; the checkbox is a 48pt
+tile beside the card rather than inside its edge; and `sendToActiveAdmins`
+gained an `includeUser` filter and now returns how many admins it targeted.
 
 Mockup (chosen design, private artifact):
 https://claude.ai/code/artifact/5eecc202-c6d8-4a6b-b723-25d7ebc99f05
@@ -193,7 +204,22 @@ jobs"). Add the tag to the notice-bearing registry in
 
 - **No crew pushes.** `notifyAppointmentChanges` gates cancel/reschedule
   events on `hasWorkLeft`, which is false for a job whose end has passed.
-  Mark-done sends no push today either.
+  **No admin pushes either — but only since the 2026-09-13 review fix.** This
+  line first said "Mark-done sends no push today either", which was true for
+  the crew only: `notifyAdminsOfCompletion` pushed every OTHER admin once per
+  completed job, so a bulk Complete of 60 jobs was 60 pushes each. The bulk
+  write now stamps a fresh `seriesOpId` on every status, and
+  `isCrewCompletion` reads a fresh op id as an admin write (the crew mark-done
+  rule cannot write one). Side effect, accepted: an admin's edit-form save to
+  Done no longer pushes the other admins; the action-bar Mark as complete still
+  does, since that single write stamps no op id.
+- **Personal blocks and time off never close, so they sit in both reads.** The
+  server scans `MONTH_END_SCAN_MAX` (5000) raw rows and caps only the REPORTED
+  number at 1000, so they cannot consume it. The app's live query is still
+  `.limit(500)` before the Dart filter — accepted 2026-09-13 with prod holding
+  15 open-ended rows (12 open personal blocks in total): past ~500 the oldest
+  real overdue jobs drop off the screen and `APPT-REVIEW` warns, years away at
+  that rate.
 - **`completedAt` = when Paul reviewed it**, not when the work happened.
   `stampLifecycle` stamps at the transition, server-side. Accepted: fixing it
   would mean letting a client write a server-owned field. The confirmation copy

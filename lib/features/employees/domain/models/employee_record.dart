@@ -37,6 +37,10 @@ abstract class EmployeeRecord with _$EmployeeRecord {
     // Explicit consent for live location uploads used by the staff map and
     // travel-time presence.
     @Default(false) bool locationSharingEnabled,
+    // Admin-only: hides the account from every teammate list and count.
+    @Default(false) bool isTestAccount,
+    // Admin-only opt-in for the month-end overdue review push.
+    @Default(false) bool monthEndReviewPush,
     // NOTE: emergencyContact/emergencyPhone are NOT here — they live in
     // users/{docId}/private/emergency so rules can gate them to the admin and
     // the person themselves.
@@ -81,6 +85,8 @@ abstract class EmployeeRecord with _$EmployeeRecord {
       // `!= false`, never `== true`: an absent field must read as ON.
       travelAlertsEnabled: data['travelAlertsEnabled'] != false,
       locationSharingEnabled: data['locationSharingEnabled'] == true,
+      isTestAccount: data['isTestAccount'] == true,
+      monthEndReviewPush: data['monthEndReviewPush'] == true,
       createdAt: firestoreDateTime(data['createdAt']),
     );
   }
@@ -100,6 +106,8 @@ abstract class EmployeeRecord with _$EmployeeRecord {
     'workEndMinutes': workEndMinutes,
     'maxJobsPerDay': maxJobsPerDay,
     'onCall': onCall,
+    'isTestAccount': isTestAccount,
+    'monthEndReviewPush': monthEndReviewPush,
     // NOTE: `travelAlertsEnabled` is deliberately NOT emitted. It is the
     // person's own notification preference, written only by `updateSelfDetails`
     // — an admin save must leave it exactly as it was, and emitting it here
@@ -118,8 +126,8 @@ abstract class EmployeeRecord with _$EmployeeRecord {
 
   bool get isAdmin => role == 'admin';
 
-  /// Crew — someone a job can be assigned to. See [JobTitle.isAssignable].
-  bool get isAssignable => jobTitle.isAssignable;
+  /// Crew — someone a job can be assigned to; never a test account.
+  bool get isAssignable => jobTitle.isAssignable && !isTestAccount;
 
   bool get isActive => status == 'active';
   bool get isDisabled => status == 'disabled';

@@ -22,6 +22,10 @@ void main() {
     expect(kSelfServiceUserFields, equals(inRules));
   });
 
+  test('isTestAccount is admin-only, so nobody can un-hide themselves', () {
+    expect(kSelfServiceUserFields, isNot(contains('isTestAccount')));
+  });
+
   test('updatedAt is in the set', () {
     // Every write path stamps it, so the rules must permit it — `hasOnly` is
     // exact about what MAY appear, not about what must.

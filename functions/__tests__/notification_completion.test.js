@@ -66,6 +66,25 @@ describe("isCrewCompletion", () => {
   test("a delete is not a completion", () => {
     expect(isCrewCompletion(job({status: "done"}), null)).toBe(false);
   });
+
+  test("a write stamping a FRESH op id is an admin write, not crew", () => {
+    // The month-end review closes 60 jobs in one batch; that must page nobody.
+    expect(
+        isCrewCompletion(
+            job({seriesOpId: "old"}),
+            job({seriesOpId: "bulk-1", status: "done"}),
+        ),
+    ).toBe(false);
+  });
+
+  test("a crew mark-done keeps the stored op id, so it still counts", () => {
+    expect(
+        isCrewCompletion(
+            job({seriesOpId: "old"}),
+            job({seriesOpId: "old", status: "done"}),
+        ),
+    ).toBe(true);
+  });
 });
 
 describe("buildJobCompletedMessage", () => {

@@ -6,7 +6,6 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/features/wave/data/wave_service.dart';
 import 'package:scheduling/features/wave/domain/models/wave_connection.dart';
-import 'package:scheduling/features/wave/domain/models/wave_import_schedule.dart';
 import 'package:scheduling/features/wave/domain/wave_error_mapper.dart';
 import 'package:scheduling/features/wave/domain/wave_failure.dart';
 import 'package:scheduling/l10n/l10n.dart';
@@ -570,31 +569,6 @@ void main() {
         const WaveUnknown().toLocalizedMessage(ctx),
         isNotEmpty,
       );
-    });
-  });
-
-  group('WaveConnection.fromMap importSchedule', () {
-    test('parses a known schedule', () {
-      final conn = WaveConnection.fromMap(const {
-        'businessId': 'b1',
-        'businessName': 'Biz',
-        'importSchedule': 'weekly',
-      });
-      expect(conn.importSchedule, WaveImportSchedule.weekly);
-    });
-
-    test('defaults to off when absent or unknown', () {
-      final absent = WaveConnection.fromMap(const {
-        'businessId': 'b1',
-        'businessName': 'Biz',
-      });
-      final unknown = WaveConnection.fromMap(const {
-        'businessId': 'b1',
-        'businessName': 'Biz',
-        'importSchedule': 'yearly',
-      });
-      expect(absent.importSchedule, WaveImportSchedule.off);
-      expect(unknown.importSchedule, WaveImportSchedule.off);
     });
   });
 }

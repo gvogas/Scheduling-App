@@ -17,6 +17,7 @@ abstract final class AnalyticsScreens {
   static const String dashboard = 'dashboard';
   static const String history = 'history';
   static const String dayRoute = 'day_route';
+  static const String overdueReview = 'overdue_review';
   static const String settings = 'settings';
   static const String myDetails = 'my_details';
   static const String login = 'login';
@@ -41,6 +42,7 @@ abstract final class AnalyticsScreens {
     dashboard,
     history,
     dayRoute,
+    overdueReview,
     settings,
     myDetails,
     login,
@@ -85,6 +87,7 @@ String? analyticsScreenForRoute(String? routeName) {
     AppRoutes.dashboard => AnalyticsScreens.dashboard,
     AppRoutes.history => AnalyticsScreens.history,
     AppRoutes.dayRoute => AnalyticsScreens.dayRoute,
+    AppRoutes.overdueReview => AnalyticsScreens.overdueReview,
     AppRoutes.settings => AnalyticsScreens.settings,
     AppRoutes.myDetails => AnalyticsScreens.myDetails,
     AppRoutes.login => AnalyticsScreens.login,

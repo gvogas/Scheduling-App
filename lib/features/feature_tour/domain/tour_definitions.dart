@@ -67,6 +67,8 @@ List<TourStepId> _destinationSteps(
     TourStepId.dayRouteStops,
     TourStepId.dayRouteNavigate,
   ],
+  // No walkthrough: the review is one list and one action bar.
+  PushedDestination.overdueReview => const [],
   PushedDestination.dashboard => [
     if (isAdmin) ...[
       TourStepId.dashboardHero,

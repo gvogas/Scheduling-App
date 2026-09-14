@@ -197,7 +197,7 @@ class PresenceSyncController with ReentrantSync {
         return;
       }
       // Restart stream if permission was flipped while running.
-      _lifecycle ??= AppLifecycleListener(onResume: () => unawaited(sync()));
+      _lifecycle ??= AppLifecycleListener(onResume: _onResume);
       final uid = _auth.currentUser?.uid;
       if (uid == null) return;
       // Fast path: already streaming for this uid.
@@ -277,6 +277,38 @@ class PresenceSyncController with ReentrantSync {
         _uploadThrottled(position, now);
       }
     });
+  }
+
+  void _onResume() {
+    unawaited(sync());
+    // The 250 m filter emits nothing for a phone reopened where it was closed.
+    if (_positionSub != null) unawaited(_freshFixOnResume());
+  }
+
+  Future<void> _freshFixOnResume() async {
+    final logger = _logger;
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
+      );
+      if (_positionSub == null) return;
+      _lastPosition = position;
+      final now = DateTime.now();
+      if (!shouldWritePresenceFix(lastUploadAt: _lastUploadAt, now: now)) {
+        return;
+      }
+      _trailingFlush?.cancel();
+      _trailingFlush = null;
+      _uploadThrottled(position, now);
+    } catch (e, st) {
+      if (_isExpectedLocationLoss(e)) {
+        logger.breadcrumb('PRESENCE resume fix skipped: location access lost');
+      } else {
+        logger.warn('PRESENCE resume fix failed', e, st);
+      }
+    }
   }
 
   void _armTrailingFlush(DateTime now) {
@@ -395,9 +427,8 @@ class PresenceSyncController with ReentrantSync {
       // Resolve the docId when this session never started — `_start` needs
       // firebaseReady AND a granted location permission AND a successful
       // findUserByUid, and if any of those failed today the doc from a
-      // PREVIOUS launch is still live. That stale pin is visually identical to
-      // a fresh one on the admin map (`LiveMapAggregator.join` filters on the
-      // user, never on freshness), and the privacy policy promises sign-out
+      // PREVIOUS launch is still live. The map shows that pin for up to two
+      // hours (`presenceHiddenAfter`), and the privacy policy promises sign-out
       // clears it. Same fix as `LiveActivityRegistrationController.unregister`.
       final docId = knownDocId ?? await _resolveUserDocId();
       if (docId == null) return false;

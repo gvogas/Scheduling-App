@@ -59,6 +59,8 @@ class AppointmentCard extends StatelessWidget {
     this.emphasizeToday = false,
     this.collapseWhenClosed = false,
     this.slice,
+    this.showStatusChip = true,
+    this.showDate = false,
   });
 
   /// Minimum collapsed tap target height.
@@ -89,6 +91,12 @@ class AppointmentCard extends StatelessWidget {
 
   /// This card's day within a multi-day run.
   final AppointmentDaySlice? slice;
+
+  /// Hides the status chip where every card shares one status.
+  final bool showStatusChip;
+
+  /// Leads the time line with the date, for a list that spans days.
+  final bool showDate;
 
   @override
   Widget build(BuildContext context) {
@@ -168,6 +176,7 @@ class AppointmentCard extends StatelessWidget {
       compact: model.compact,
       isCancelled: model.isCancelled,
       hasPhotos: model.hasPhotos,
+      showChip: showStatusChip,
     );
 
     if (model.collapsed) {
@@ -238,11 +247,14 @@ class AppointmentCard extends StatelessWidget {
         ? l10n.calendar_allDay
         : '${DateUtilsHelper.formatTime(window?.windowStart ?? appointment.startTime)} – '
               '${DateUtilsHelper.formatTime(window?.windowEnd ?? appointment.endTime)}';
-    if (window == null || !window.isMultiDay) return base;
+    final dated = showDate
+        ? '${DateUtilsHelper.formatMonthDay(window?.windowStart ?? appointment.startTime)} · $base'
+        : base;
+    if (window == null || !window.isMultiDay) return dated;
     final counter = window.isOvernight
         ? l10n.calendar_nightOfCount(window.dayIndex, window.dayCount)
         : l10n.calendar_dayOfCount(window.dayIndex, window.dayCount);
-    return '$base · $counter';
+    return '$dated · $counter';
   }
 
   /// `Theo` for one assignee, `Theo +1` for more, null for none.
@@ -500,6 +512,7 @@ class _TitleRow extends StatelessWidget {
     required this.compact,
     required this.isCancelled,
     required this.hasPhotos,
+    this.showChip = true,
   });
 
   final String title;
@@ -508,6 +521,7 @@ class _TitleRow extends StatelessWidget {
   final bool compact;
   final bool isCancelled;
   final bool hasPhotos;
+  final bool showChip;
 
   @override
   Widget build(BuildContext context) {
@@ -555,6 +569,7 @@ class _TitleRow extends StatelessWidget {
       );
     }
 
+    if (!showChip) return titleContent;
     final chip = StatusChip(status: status);
     if (compact) {
       return Column(

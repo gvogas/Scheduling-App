@@ -18,6 +18,7 @@ const {getMessaging} = require("firebase-admin/messaging");
 const {
   handleAppointmentWrite,
   runDailyDigest,
+  runMonthEndOverdueReview,
   runOverduePromptSweep,
 } = require("./notification_utils");
 const {runTravelAwareReminderSweep} = require("./travel_utils");
@@ -178,7 +179,8 @@ const sendUpcomingJobReminders = onSchedule(
 //   1. The digest — one push per employee with >=1 job tomorrow. No ledger; it
 //      runs once daily, so we accept the occasional rare duplicate.
 //   2. The Live Activity TTL prune.
-//   3. The daily Wave maintenance — drain the outbox, import if the cadence is
+//   3. The month-end overdue review — last day of the month only, above Wave.
+//   4. The daily Wave maintenance — drain the outbox, import if the cadence is
 //      due. This was `waveScheduledImport`, its own `every 24 hours` timer,
 //      until 2026-08-13.
 //
@@ -188,13 +190,13 @@ const sendUpcomingJobReminders = onSchedule(
 // prune had already established the pattern.
 //
 // EACH RIDER IS ISOLATED IN ITS OWN try/catch, and that is the whole safety
-// argument for merging: the digest has already sent by the time either runs,
-// so neither can affect the push, and neither can skip the other. Add a
-// fourth rider the same way — never above the digest, never sharing a try.
+// argument for merging: the digest has already sent by the time any runs,
+// so none can affect the push, and none can skip another. Add a fifth rider
+// the same way — never above the digest, never sharing a try.
 //
-// `timeoutSeconds` now has to cover all three (the Wave import is ~650
+// `timeoutSeconds` now has to cover all four (the Wave import is ~650
 // customers over ~7 pages and carried 540 s on its own), and the function
-// binds `WAVE_FULL_ACCESS_TOKEN` because rider 3 pushes to Wave.
+// binds `WAVE_FULL_ACCESS_TOKEN` because rider 4 pushes to Wave.
 const sendDailyJobDigest = onSchedule(
     {
       schedule: "0 18 * * *",
@@ -224,6 +226,11 @@ const sendDailyJobDigest = onSchedule(
         }
       } catch (err) {
         logger.warn("liveActivity: TTL prune failed", {err});
+      }
+      try {
+        await runMonthEndOverdueReview(deps);
+      } catch (err) {
+        logger.warn("monthEndReview failed", {err});
       }
       try {
         await runWaveDaily();

@@ -240,6 +240,8 @@ class FirebaseEmployeesRepository implements EmployeesRepository {
       'workEndMinutes': employee.workEndMinutes,
       'maxJobsPerDay': employee.maxJobsPerDay,
       'onCall': employee.onCall,
+      'isTestAccount': employee.isTestAccount,
+      'monthEndReviewPush': employee.monthEndReviewPush,
       // Scrub, not write: the emergency pair moved to
       // users/{docId}/private/emergency, and any value left on the parent doc
       // by a pre-move build is still readable by every active peer.

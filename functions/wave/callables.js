@@ -13,7 +13,6 @@ const {
   listOutstandingClientIds,
 } = require("./worker");
 const {classifyWaveError} = require("./errors");
-const {SCHEDULE_SET} = require("./import_schedule");
 // The sync-run primitives are shared with the `waveUpsertCustomer` trigger and
 // the daily rider (`triggers.js`), so they live in their own module — these
 // were hand-copied here once and the copies drifted.
@@ -37,11 +36,6 @@ const {
 // Wave pages), so a modest cap keeps a stuck/retried admin from hammering Wave.
 const WAVE_IMPORT_RATE_MAX = 5;
 const WAVE_IMPORT_RATE_WINDOW_MS = 60 * 60 * 1000;
-
-// Cadence is a single enum field, so the cap is looser than the import's —
-// generous enough that an admin toggling the picker never trips it.
-const WAVE_SCHEDULE_RATE_MAX = 20;
-const WAVE_SCHEDULE_RATE_WINDOW_MS = 60 * 60 * 1000;
 
 // waveGetConnection is a read, but not a free one: it runs two count()
 // aggregates on waveSyncQueue, which are billed per 1000 index entries. It was
@@ -181,8 +175,7 @@ const waveGetConnection = onCall(
           WAVE_CONN_RATE_WINDOW_MS,
       );
 
-      const {businessId, businessName, importSchedule} =
-        await readWaveConnection();
+      const {businessId, businessName} = await readWaveConnection();
 
       // Outbox depth, so Settings can say what is still waiting instead of
       // offering a Sync button over an invisible queue. Two `count()`
@@ -214,7 +207,6 @@ const waveGetConnection = onCall(
         connected: Boolean(businessId),
         businessId,
         businessName,
-        importSchedule,
         pendingCount,
         failedCount,
       };
@@ -298,37 +290,15 @@ const waveRetryFailedJobs = onCall(
     },
 );
 
-// waveSetImportSchedule — admin-only setter for the auto-import cadence on
-// the wave/connection doc. No secret, but rate-limited like every other admin
-// write callable: defense-in-depth so a compromised admin session can't spin
-// the doc. The limit sits AFTER the payload validation, so a burst of
-// malformed submissions can't burn a legitimate caller's window.
+// waveSetImportSchedule — retired no-op kept for shipped builds.
 const waveSetImportSchedule = onCall(
     {enforceAppCheck: true},
     async (req) => {
+      // #compat-1.61.0: `schedule` stays accepted, and is ignored.
       const uid = await assertAdminCall(req, new Set(["schedule"]));
-
-      // The VALUE check sits between the composed opening and the limiter, so
-      // a burst of invalid cadences can't burn a legitimate admin's window.
-      const schedule = req.data && req.data.schedule;
-      if (typeof schedule !== "string" || !SCHEDULE_SET.has(schedule)) {
-        throw new HttpsError("invalid-argument", "wave/invalid-schedule");
-      }
-      await enforceDurableRateLimit(
-          "wave-schedule",
-          uid,
-          WAVE_SCHEDULE_RATE_MAX,
-          WAVE_SCHEDULE_RATE_WINDOW_MS,
-      );
-
-      const {ref, businessId} = await readWaveConnection();
-      if (!businessId) {
-        throw new HttpsError("failed-precondition", "wave/not-bootstrapped");
-      }
-
-      await ref.update({importSchedule: schedule});
-      logger.info("WAVE-SCHED set", {uidHash: shortHash(uid), schedule});
-      return {schedule};
+      logger.info("WAVE-SCHED ignored a retired cadence call",
+          {uidHash: shortHash(uid)});
+      return {schedule: "off"};
     },
 );
 

@@ -2,7 +2,6 @@ import 'package:cloud_functions/cloud_functions.dart';
 
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/features/wave/domain/models/wave_connection.dart';
-import 'package:scheduling/features/wave/domain/models/wave_import_schedule.dart';
 import 'package:scheduling/features/wave/domain/wave_error_mapper.dart';
 
 /// How long the app waits on a "Sync with Wave" run before reporting failure.
@@ -11,10 +10,8 @@ import 'package:scheduling/features/wave/domain/wave_error_mapper.dart';
 /// which is sized to leave most of this window to the import half.
 const int kWaveSyncTimeoutSeconds = 120;
 
-/// The deadline on every Wave callable that ISN'T the long-running sync — a
-/// connection read, a cadence write, a dead-letter requeue. Hoisted because it
-/// was written out at three call sites; the sync pair above keeps its own,
-/// much longer, budget.
+/// The deadline on the short Wave callables — connecting and the connection
+/// read. The sync and the dead-letter requeue keep the longer budget above.
 const Duration _callableTimeout = Duration(seconds: 20);
 
 class WaveService {
@@ -157,21 +154,6 @@ class WaveService {
         e,
         st,
       );
-      throw WaveErrorMapper.map(e);
-    }
-  }
-
-  /// Set automatic-import cadence.
-  Future<void> setImportSchedule(WaveImportSchedule schedule) async {
-    try {
-      await _functions
-          .httpsCallable(
-            'waveSetImportSchedule',
-            options: HttpsCallableOptions(timeout: _callableTimeout),
-          )
-          .call<void>(<String, dynamic>{'schedule': schedule.raw});
-    } catch (e, st) {
-      _logger.warn('WAVE-SCHED waveSetImportSchedule callable failed', e, st);
       throw WaveErrorMapper.map(e);
     }
   }

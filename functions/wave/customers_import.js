@@ -26,9 +26,17 @@ const {adminFirestore} = require("../admin_firestore");
 const {
   readBusinessId, LIST_CUSTOMERS, LIST_CUSTOMERS_SINCE,
 } = require("./customer_queries");
+const {
+  QUEUE_COLLECTION,
+  OUTSTANDING_STATUSES,
+  customerUpsertJobId,
+} = require("./outbox_keys");
 
 /** Firestore WriteBatch hard limit. */
 const BATCH_LIMIT = 500;
+
+/** Guarded client updates committed concurrently. */
+const GUARDED_UPDATE_CHUNK = 25;
 
 /**
  * Decides what one Wave customer means locally and stages that write.
@@ -39,15 +47,18 @@ const BATCH_LIMIT = 500;
  * deserves to be readable on its own rather than buried three levels into a
  * paging loop.
  *
- * Mutates `ctx.summary` and stages onto `ctx.batch`.
+ * Mutates `ctx.summary`, stages creates onto `ctx.batch`, and holds updates to
+ * an existing client in `ctx.guarded` for `commitGuardedUpdates`.
  *
  * @param {?Object} node One Wave customer node, or null.
  * @param {{db: !Object, batch: !Object, now: !Function, summary: !Object,
- *   skipClientIds: !Set<string>, existingByWaveId: !Map<string, !Object>}} ctx
+ *   skipClientIds: !Set<string>, existingByWaveId: !Map<string, !Object>,
+ *   guarded: !Array<{ref: !Object, update: !Object}>}} ctx
  * @return {boolean} whether an operation was staged on the batch.
  */
 function importOneCustomer(node, ctx) {
-  const {db, batch, now, summary, skipClientIds, existingByWaveId} = ctx;
+  const {db, batch, now, summary, skipClientIds, existingByWaveId, guarded} =
+    ctx;
   if (!node) return false;
   if (node.isArchived === true) {
     summary.skippedArchived += 1;
@@ -97,10 +108,7 @@ function importOneCustomer(node, ctx) {
   const waveId = fields.waveCustomerId;
   const existing = waveId ? existingByWaveId.get(waveId) : undefined;
   if (existing) {
-    // The local edit wins while it is still queued for Wave. Overwriting
-    // here would also stamp lastSyncedHash from Wave's values, which
-    // turns the pending push into a no-op and destroys the edit
-    // permanently — see listOutstandingClientIds in worker.js.
+    // Prefilter only: `commitGuardedUpdates` is the guarantee.
     if (skipClientIds.has(existing.ref.id)) {
       summary.skippedPending += 1;
       return false;
@@ -126,9 +134,14 @@ function importOneCustomer(node, ctx) {
     const {docFields, wave} = stageWrite();
     const update = {...docFields, wave, updatedAt: now()};
     if (!existing.hasCreatedAt) update.createdAt = now();
-    batch.set(existing.ref, update, {merge: true});
-    summary.updated += 1;
-    return true;
+    // Its create is still uncommitted in THIS batch, so no job can exist yet.
+    if (existing.createdInBatch === batch) {
+      batch.set(existing.ref, update, {merge: true});
+      summary.updated += 1;
+      return true;
+    }
+    guarded.push({ref: existing.ref, update});
+    return false;
   }
 
   const {docFields, wave} = stageWrite();
@@ -149,9 +162,67 @@ function importOneCustomer(node, ctx) {
   summary.imported += 1;
   // Cache so duplicate Wave ids within the same import collapse to one.
   if (waveId) {
-    existingByWaveId.set(waveId, {ref: newRef, hasCreatedAt: true});
+    existingByWaveId.set(waveId,
+        {ref: newRef, hasCreatedAt: true, createdInBatch: batch});
   }
   return true;
+}
+
+/**
+ * Commits held client updates, each in a transaction that first reads that
+ * client's outbox job — so an edit enqueued at any point before the write
+ * aborts and retries it, and is left alone.
+ *
+ * A write held back by a job counts as `skippedPending`. So does one whose
+ * transaction failed: it is logged, and counting it pending holds the
+ * watermark so the next run retries that customer.
+ *
+ * @param {!Object} db Firestore instance.
+ * @param {!Array<{ref: !Object, update: !Object}>} guarded Held updates.
+ * @param {!Object} summary The import summary; `updated`/`skippedPending` move.
+ * @param {!Object} logger Logging facade.
+ * @return {!Promise<void>}
+ */
+async function commitGuardedUpdates(db, guarded, summary, logger) {
+  for (let i = 0; i < guarded.length; i += GUARDED_UPDATE_CHUNK) {
+    const chunk = guarded.slice(i, i + GUARDED_UPDATE_CHUNK);
+    const outcomes = await Promise.all(
+        chunk.map((held) => commitGuardedUpdate(db, held, logger)));
+    for (const outcome of outcomes) {
+      if (outcome === "updated") {
+        summary.updated += 1;
+      } else {
+        summary.skippedPending += 1;
+      }
+    }
+  }
+}
+
+/**
+ * Writes one held client update unless that client has an outstanding job.
+ * @param {!Object} db Firestore instance.
+ * @param {{ref: !Object, update: !Object}} held The client ref and its update.
+ * @param {!Object} logger Logging facade.
+ * @return {!Promise<string>} `updated`, `pending` or `failed`.
+ */
+async function commitGuardedUpdate(db, {ref, update}, logger) {
+  const jobRef = db.collection(QUEUE_COLLECTION)
+      .doc(customerUpsertJobId(ref.id));
+  try {
+    return await db.runTransaction(async (tx) => {
+      const job = await tx.get(jobRef);
+      const status = job && job.exists ? (job.data() || {}).status : "";
+      if (OUTSTANDING_STATUSES.includes(status)) return "pending";
+      tx.set(ref, update, {merge: true});
+      return "updated";
+    });
+  } catch (e) {
+    logger.warn("WAVE-CUST guarded client update failed; held for next run", {
+      clientId: ref.id,
+      error: String(e),
+    });
+    return "failed";
+  }
 }
 
 /**
@@ -160,15 +231,16 @@ function importOneCustomer(node, ctx) {
  * use it as the doc id directly, since Wave Node ids are base64 and can
  * contain `/`, which isn't legal in a Firestore doc id.
  * @param {Object=} deps Injectable dependencies — `db`, `graphql`,
- *   `businessId`, `pageSize` (default 100), `now`, `skipClientIds` (a Set of
- *   client ids with an un-pushed outbox job — see below). No default touches
+ *   `businessId`, `pageSize` (default 100), `now`, `logger`, `skipClientIds`
+ *   (a Set of client ids with an un-pushed outbox job). No default touches
  *   real Firestore/network during a unit test.
  *
- *   `skipClientIds` is passed in rather than read here on purpose:
- *   `worker.js` owns the queue and already requires this module, so reaching
- *   back for `listOutstandingClientIds` would close a require cycle. Every
- *   caller must supply it — omitting it silently re-opens the clobber
- *   described on that helper.
+ *   `skipClientIds` is an optional PREFILTER that saves a transaction per
+ *   known-pending client. It is not the guarantee: every update to an
+ *   existing client commits through `commitGuardedUpdates`, which reads that
+ *   client's job inside the write's own transaction, so a caller that omits
+ *   the set — or reads it before an edit is enqueued — cannot clobber a queued
+ *   edit.
  *
  *   `since` (an ISO-8601 string, optional) switches the run to a DELTA
  *   import: Wave filters by `modifiedAtAfter` server-side and returns only
@@ -178,14 +250,17 @@ function importOneCustomer(node, ctx) {
  * @return {!Promise<!Object>} Summary `{totalCount, imported, updated,
  *   skippedArchived, skippedPending, skippedUnchanged, pages, delta}`.
  *   `updated` counts only customers whose Wave-mapped fields actually
- *   differed. **`totalCount` is the size of the QUERIED set, so on a delta
- *   run it is the number of changed customers, not the roster size** — don't
- *   render it as "you have N clients".
+ *   differed. `skippedPending` also counts a guarded write that failed, so the
+ *   caller holds the watermark. **`totalCount` is the size of the QUERIED set,
+ *   so on a delta run it is the number of changed customers, not the roster
+ *   size** — don't render it as "you have N clients".
  */
 async function importCustomers(deps = {}) {
   const db = deps.db || adminFirestore().getFirestore();
   const graphql = deps.graphql || require("./client").graphql;
   const now = deps.now || adminFirestore().FieldValue.serverTimestamp;
+  // eslint-disable-next-line global-require
+  const logger = deps.logger || require("firebase-functions/logger");
   const pageSize = typeof deps.pageSize === "number" && deps.pageSize > 0 ?
     deps.pageSize : 100;
   const businessId = deps.businessId || await readBusinessId(db);
@@ -241,14 +316,16 @@ async function importCustomers(deps = {}) {
       summary.totalCount = pageInfo.totalCount;
     }
 
+    const guarded = [];
     for (const edge of edges) {
       const wrote = importOneCustomer(edge && edge.node, {
-        db, batch, now, summary, skipClientIds, existingByWaveId,
+        db, batch, now, summary, skipClientIds, existingByWaveId, guarded,
       });
       if (!wrote) continue;
       opsInBatch += 1;
       await flushIfFull();
     }
+    await commitGuardedUpdates(db, guarded, summary, logger);
 
     const current = typeof pageInfo.currentPage === "number" ?
       pageInfo.currentPage : page;
@@ -303,11 +380,10 @@ async function buildWaveIdIndex(db) {
 
 module.exports = {
   importCustomers,
-  // Exported so the two decisions the page loop delegates can be driven
-  // directly from a unit test: `importOneCustomer` owns the five counters the
-  // watermark logic reads, and `buildWaveIdIndex` owns the shape those
-  // decisions are made against.
+  // Exported so the decisions the page loop delegates can be driven directly
+  // from a unit test.
   importOneCustomer,
+  commitGuardedUpdates,
   buildWaveIdIndex,
   BATCH_LIMIT,
 };

@@ -31,6 +31,7 @@ jest.mock("../notification_utils", () => ({
   handleAppointmentWrite: jest.fn(),
   runDailyDigest: jest.fn(),
   runOverduePromptSweep: jest.fn(),
+  runMonthEndOverdueReview: jest.fn(),
 }));
 jest.mock("../travel_utils", () => ({
   runTravelAwareReminderSweep: jest.fn(),
@@ -62,6 +63,7 @@ beforeEach(() => {
   getMessaging.mockReturnValue({});
   policy.runDailyDigest.mockResolvedValue(undefined);
   policy.runOverduePromptSweep.mockResolvedValue(undefined);
+  policy.runMonthEndOverdueReview.mockResolvedValue({count: 0, recipients: 0});
   travel.runTravelAwareReminderSweep.mockResolvedValue(undefined);
   registry.pruneExpiredActivityTokens.mockResolvedValue({pruned: 0});
   registry.pruneExpiredCardMarkers.mockResolvedValue({pruned: 0});
@@ -69,18 +71,57 @@ beforeEach(() => {
 });
 
 describe("sendDailyJobDigest riders", () => {
-  test("the happy path runs the digest and both riders, in order", async () => {
+  test("the happy path runs the digest and all riders, in order", async () => {
     await sendDailyJobDigest.run({});
 
     expect(policy.runDailyDigest).toHaveBeenCalledTimes(1);
     expect(registry.pruneExpiredActivityTokens).toHaveBeenCalledTimes(1);
+    expect(policy.runMonthEndOverdueReview).toHaveBeenCalledTimes(1);
     expect(waveTriggers.runWaveDaily).toHaveBeenCalledTimes(1);
     // The digest is the only time-sensitive step, so it must go first.
     expect(policy.runDailyDigest.mock.invocationCallOrder[0])
         .toBeLessThan(
             registry.pruneExpiredActivityTokens.mock.invocationCallOrder[0]);
     expect(registry.pruneExpiredActivityTokens.mock.invocationCallOrder[0])
+        .toBeLessThan(
+            policy.runMonthEndOverdueReview.mock.invocationCallOrder[0]);
+  });
+
+  test("the month-end review runs BEFORE the Wave rider", async () => {
+    // All riders share one 540 s timeout and the Wave import once needed most
+    // of it, so a rider below Wave could be killed on the evening it matters.
+    await sendDailyJobDigest.run({});
+
+    expect(policy.runMonthEndOverdueReview.mock.invocationCallOrder[0])
         .toBeLessThan(waveTriggers.runWaveDaily.mock.invocationCallOrder[0]);
+  });
+
+  test("a THROWING month-end review still runs the Wave rider", async () => {
+    policy.runMonthEndOverdueReview.mockRejectedValue(new Error("review boom"));
+
+    await expect(sendDailyJobDigest.run({})).resolves.toBeUndefined();
+
+    expect(waveTriggers.runWaveDaily).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+        "monthEndReview failed", expect.anything());
+  });
+
+  test("a THROWING digest or prune still runs the month-end review",
+      async () => {
+        policy.runDailyDigest.mockRejectedValue(new Error("a"));
+        registry.pruneExpiredActivityTokens.mockRejectedValue(new Error("b"));
+
+        await expect(sendDailyJobDigest.run({})).resolves.toBeUndefined();
+
+        expect(policy.runMonthEndOverdueReview).toHaveBeenCalledTimes(1);
+      });
+
+  test("the month-end review gets Firestore-only deps", async () => {
+    await sendDailyJobDigest.run({});
+
+    const [deps] = policy.runMonthEndOverdueReview.mock.calls[0];
+    expect(deps).toHaveProperty("db");
+    expect(deps).not.toHaveProperty("apnsAuth");
   });
 
   test("a THROWING digest still runs both riders", async () => {
@@ -132,6 +173,7 @@ describe("sendDailyJobDigest riders", () => {
   test("EVERY step failing still resolves", async () => {
     policy.runDailyDigest.mockRejectedValue(new Error("a"));
     registry.pruneExpiredActivityTokens.mockRejectedValue(new Error("b"));
+    policy.runMonthEndOverdueReview.mockRejectedValue(new Error("d"));
     waveTriggers.runWaveDaily.mockRejectedValue(new Error("c"));
 
     await expect(sendDailyJobDigest.run({})).resolves.toBeUndefined();

@@ -7,8 +7,10 @@ import 'package:scheduling/features/auth/screens/account_setup_screen.dart';
 import 'package:scheduling/features/auth/screens/forgot_password_screen.dart';
 import 'package:scheduling/features/auth/screens/login_screen.dart';
 import 'package:scheduling/features/calendar/screens/day_route_screen.dart';
+import 'package:scheduling/features/calendar/screens/overdue_review_screen.dart';
 import 'package:scheduling/features/clients/screens/history_screen.dart';
 import 'package:scheduling/features/dashboard/screens/dashboard_screen.dart';
+import 'package:scheduling/features/presence/screens/share_location_ask_screen.dart';
 import 'package:scheduling/features/settings/screens/my_details_screen.dart';
 import 'package:scheduling/features/settings/screens/settings_screen.dart';
 import 'package:scheduling/l10n/l10n.dart';
@@ -29,6 +31,8 @@ class AppRoutes {
   static const String myDetails = '/settings/my-details';
   static const String dashboard = '/dashboard';
   static const String dayRoute = '/day-route';
+  static const String shareLocationAsk = '/share-location';
+  static const String overdueReview = '/overdue-review';
 
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -65,7 +69,7 @@ class AppRoutes {
           // then rejected. An argless push is a caller bug, not a licence.
           //
           // THE ASYMMETRY WITH THE ARG-REQUIRED ROUTES BELOW IS DELIBERATE.
-          // Those seven recover to an invalid-link screen on an argless push,
+          // Those recover to an invalid-link screen on an argless push,
           // which is the right answer for a route whose whole content is its
           // argument: there is nothing to render. This one is the app's HOME,
           // reached from a cold start and from every back stack, so blocking
@@ -136,6 +140,19 @@ class AppRoutes {
           ),
         );
 
+      case overdueReview:
+        final args = _args<OverdueReviewArgs>(settings);
+        if (args == null) return _invalidRoute(settings);
+        return AppPageRoute(
+          settings: settings,
+          builder: (_) => AdminOnly(
+            child: OverdueReviewScreen(
+              isAdmin: args.isAdmin,
+              employeeId: args.employeeId,
+            ),
+          ),
+        );
+
       case liveMap:
         final args = _args<MainCalendarArgs>(settings);
         if (args == null) return _invalidRoute(settings);
@@ -144,6 +161,12 @@ class AppRoutes {
           HubTab.liveMap,
           isAdmin: args.isAdmin,
           employeeId: args.employeeId,
+        );
+
+      case shareLocationAsk:
+        return AppPageRoute(
+          settings: settings,
+          builder: (_) => const ShareLocationAskScreen(),
         );
 
       case AppRoutes.myDetails:
@@ -321,6 +344,12 @@ class ClientsListArgs {
 
 class HistoryArgs {
   const HistoryArgs({required this.isAdmin, required this.employeeId});
+  final bool isAdmin;
+  final String employeeId;
+}
+
+class OverdueReviewArgs {
+  const OverdueReviewArgs({required this.isAdmin, required this.employeeId});
   final bool isAdmin;
   final String employeeId;
 }

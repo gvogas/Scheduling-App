@@ -18,7 +18,6 @@ import 'package:scheduling/features/settings/screens/settings_screen.dart';
 import 'package:scheduling/features/wave/application/wave_providers.dart';
 import 'package:scheduling/features/wave/data/wave_service.dart';
 import 'package:scheduling/features/wave/domain/models/wave_connection.dart';
-import 'package:scheduling/features/wave/domain/models/wave_import_schedule.dart';
 import 'package:scheduling/features/wave/domain/models/wave_problem.dart';
 import 'package:scheduling/features/wave/domain/wave_failure.dart';
 import 'package:scheduling/features/wave/widgets/wave_settings_section.dart';
@@ -116,7 +115,6 @@ Widget _wrapSettings({
 
 void main() {
   setUpAll(() {
-    registerFallbackValue(WaveImportSchedule.off);
     PackageInfo.setMockInitialValues(
       appName: 'Scheduling',
       packageName: 'net.vogas.scheduling',
@@ -659,40 +657,6 @@ void main() {
       // tweak breaks one test instead of two.
       expect(emitted.last, contains('added to Wave'));
       expect(emitted.last, contains('added to the app'));
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('picking a cadence calls setImportSchedule and notices', (
-      tester,
-    ) async {
-      final service = _mockService();
-      final notices = NoticeService();
-      final emitted = <String>[];
-      notices.stream.listen((n) => emitted.add(n.message));
-
-      when(service.getConnection).thenAnswer(
-        (_) async => const WaveConnection(
-          businessId: 'biz-1',
-          businessName: 'Test Biz',
-        ),
-      );
-      when(() => service.setImportSchedule(any())).thenAnswer((_) async {});
-
-      await tester.pumpWidget(_wrapSection(service, noticeService: notices));
-      await tester.pumpAndSettle();
-
-      // Open the cadence picker (row shows the current 'Off' value).
-      await tester.tap(find.text('Automatic import'));
-      await tester.pumpAndSettle();
-
-      // Choose Weekly from the sheet.
-      await tester.tap(find.text('Weekly').last);
-      await tester.pumpAndSettle();
-
-      verify(
-        () => service.setImportSchedule(WaveImportSchedule.weekly),
-      ).called(1);
-      expect(emitted.last, contains('Automatic import updated'));
       expect(tester.takeException(), isNull);
     });
 

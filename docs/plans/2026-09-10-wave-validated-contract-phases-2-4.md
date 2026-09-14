@@ -5,7 +5,8 @@
 **Status (2026-09-13): PHASE 2 COMPLETE — shipped in 1.61.0+90 and deployed
 2026-09-13 02:07Z (`38c8225b`), in the inverted order below. Phase 3 COMPLETE
 (its own plan, archived at `docs/archive/2026-09-11-wave-validated-contract-phase-3.md`). Phase 4
-planned, not started.** The "nothing deployed" paragraph below is the
+BUILT 2026-09-13 and NOT deployed — Tasks 10-12 below, with the deploy notes
+under Task 12.** The "nothing deployed" paragraph below is the
 build-time state. Phase 1 was complete, deployed (`fe9edc51`, report-only) and
 prod-replayed 2026-09-09 (**724 clients, 0 blocking, 1 advisory**). Design:
 `docs/plans/2026-08-30-wave-validated-contract-design.md` §3-§7. Phase 1 plan:
@@ -621,6 +622,14 @@ the collection rather than only from the trigger.
 Pure moves onto code already behaving. **Do not start these until 2B has been
 deployed and has run quietly for several days.**
 
+**Built 2026-09-13 by owner call, the same day 2B deployed.** The "several
+quiet days" guard now applies to DEPLOYING Phase 4, not to building it.
+
+**Verified after the build, observed rather than carried forward:** analyzer
+clean; `flutter test` **3678 passed** (baseline 3686 on `ba2fdb05`, minus the 8
+cadence tests deleted with it); functions eslint clean; jest **1927 passed / 94
+suites** (baseline 1935 / 91).
+
 ## Task 10: Split `worker.js` four ways
 
 814 lines (not the design's 968 — it has already shrunk). Two of the four cuts
@@ -633,18 +642,37 @@ are contiguous and two are not.
 | `outbox_core.js` | `:75-192`, `:306-395`, `:446-477` | no |
 | `dispatch.js` | `:397-445`, `:478-693` | no |
 
-- [ ] **Step 10.1:** Move `enqueue.js` alone, re-export from `worker.js`, run
+- [x] **Step 10.1:** Move `enqueue.js` alone, re-export from `worker.js`, run
       the suite. One commit.
-- [ ] **Step 10.2:** Same for `outbox_queries.js`.
-- [ ] **Step 10.3:** The core/dispatch cut last — they interleave through the
+- [x] **Step 10.2:** Same for `outbox_queries.js`.
+- [x] **Step 10.3:** The core/dispatch cut last — they interleave through the
       "drainQueue phases" block (`:275-611`) and share the `DrainContext`
       typedef (`:277-296`), which goes to `outbox_core.js` with `dispatch.js`
       importing it.
-- [ ] **Step 10.4:** `wave_worker.test.js` (2,218 lines, 60 tests) splits with
+- [x] **Step 10.4:** `wave_worker.test.js` (2,218 lines, 60 tests) splits with
       the modules. **`wave_callables.test.js` and `wave_triggers.test.js`
       `jest.mock("../wave/worker")` by module path** — every moved export
       needs its mock re-pointed, or the mock silently stops intercepting and
       the assertions pass vacuously.
+
+**As built, and where it deviates.**
+- **A fifth, leaf module: `outbox_keys.js`** (`QUEUE_COLLECTION`,
+  `OUTSTANDING_STATUSES`, `customerUpsertJobId`, `clientIdFromRefPath`).
+  Task 11 needs the job id inside `customers_import.js`, and reaching it
+  through `outbox_core.js` closes a cycle: `customers_import` → `outbox_core`
+  → `retry_policy` → `customers` → `customers_import`.
+- **One change, not four commits** — nothing here is committed; the
+  orchestrator lands it.
+- **No mock needed re-pointing, and that was PROVED rather than assumed.**
+  Every production caller still requires `./worker`, so both mocks still
+  intercept. Pointing `callables.js`'s `drainQueue` at `./dispatch` failed 2
+  tests in `wave_callables`; pointing `triggers.js`'s `enqueueCustomerUpsert`
+  at `./enqueue` failed 6 in `wave_triggers`. Both were restored.
+- The test file became `wave_enqueue` / `wave_dispatch` /
+  `wave_outbox_queries` over shared fakes in
+  `__tests__/mocks/wave_outbox_fakes.js` (under the ignored `mocks/`, so jest
+  does not collect it as a suite), plus a `wave_worker` test pinning that
+  each re-export IS the owning module's function.
 
 ## Task 11: The import's transactional precondition
 
@@ -658,14 +686,32 @@ and `:114`. A per-doc transaction means unwinding that batching in
 transaction (a read + a write) per client. On ~724 clients a full pass goes
 from ~2 batch commits to ~724 transactions.
 
-- [ ] **Step 11.1:** Decide whether the race is worth that cost, and record the
-      decision here either way. The race is real and documented; the current
-      mitigation is a convention a new caller can forget, which is the actual
-      argument for the change.
-- [ ] **Step 11.2:** If yes — implement inside the writer so a caller cannot
-      forget it, keep `summary.skippedPending` (the watermark hold in
-      `sync_run.js:164` depends on it), and keep `listOutstandingClientIds`
-      for the drain ordering.
+- [x] **Step 11.1: Decided YES — and the price above was overstated.** Only
+      the UPDATE branch needs the check: `skippedUnchanged`,
+      `skippedArchived` and `skippedPending` write nothing, and a create has
+      no prior doc or job. So a steady-state full pass costs a handful of
+      transactions, not ~724; ~726 is the worst case, every linked customer
+      changed in Wave. From the code: once Task 12 removed the daily rider,
+      full passes run ONLY in `waveImportCustomers` (`timeoutSeconds: 300`,
+      client deadline `kWaveSyncTimeoutSeconds` 120 s), and they go full at
+      most every `FULL_RESYNC_INTERVAL_MS` (7 days). `wave.md` records serial
+      per-job transactions at ~40-60 ms (a few hundred requeues took
+      12-20 s), so 726 at `GUARDED_UPDATE_CHUNK` = 25 concurrent is ~2-3 s,
+      and ~44 s even fully serial — inside both deadlines. The transactions
+      touch distinct client and job documents, so they contend only with a
+      concurrent edit of the SAME client, and that retry is exactly the case
+      the check exists for. The extra billed read per guarded write is
+      negligible.
+- [x] **Step 11.2:** `commitGuardedUpdates` (`customers_import.js`) runs each
+      held update in a transaction that reads `customerUpsert__<id>` first
+      and skips while it is `queued`/`inflight`/`dead`. Held or FAILED writes
+      count as `skippedPending`, so the watermark hold still works. Creates,
+      and updates to a doc created earlier in the same run, stay batched.
+      `skipClientIds` survives as a prefilter, so `listOutstandingClientIds`
+      keeps its caller; its at-cap log became a warn, because a truncated list
+      now costs only transactions. Tests were written first and seen red, and
+      disabling the check fails 4 of them. **Not closed:** an edit whose
+      trigger has not yet enqueued its job, a window of seconds.
 
 ## Task 12: Delete the scheduled-import cadence
 
@@ -681,24 +727,43 @@ client sends nothing, **and** no build at or below the last one that does
 remains in the fleet. That is a separate deploy; it does not ride along with
 the app build that stops calling it.
 
-- [ ] **Step 12.1:** Delete the cadence half of `import_schedule.js`
+**Tagged `#compat-1.61.0`, not 1.59.0**: 1.61.0+90 is the newest shipped build
+and still calls it (`dd8c4863:lib/features/wave/data/wave_service.dart`).
+
+- [x] **Step 12.1:** Delete the cadence half of `import_schedule.js`
       (`DAY_MS`, `WEEK_MS`, `MONTH_MS`, `SCHEDULE_VALUES`, `SCHEDULE_SET`,
       `isImportDue`). **Keep the watermark half** — `DELTA_OVERLAP_MS`,
       `FULL_RESYNC_INTERVAL_MS`, `resolveImportWindow`, `watermarkPatch`
-      (§5.2). The file is half-and-half; do not delete it whole.
-- [ ] **Step 12.2:** Remove `runWaveDaily`'s import rider (`triggers.js:295-336`).
+      (§5.2). The file is half-and-half; do not delete it whole. `DAY_MS`
+      stayed after all: `FULL_RESYNC_INTERVAL_MS` is built from it.
+- [x] **Step 12.2:** Remove `runWaveDaily`'s import rider (`triggers.js:295-336`).
       **The drain above it (`:274-293`) SURVIVES** — it is the safety net for a
       job on backoff or left `inflight` by a dead instance, neither of which
-      produces a client write to ride on.
-- [ ] **Step 12.3:** Remove the Settings cadence control
+      produces a client write to ride on. `importWithWatermark`'s
+      `extraPatch` went too — that rider was its only caller.
+- [x] **Step 12.3:** Remove the Settings cadence control
       (`wave_settings_section.dart:20-25, 189-220, 323-346`),
       `wave_import_schedule.dart`, the `WaveConnection.importSchedule` field,
       `WaveService.setImportSchedule`, and the five `wave_autoImport*` ARB keys
       from **both** ARBs.
-- [ ] **Step 12.4:** Neutralise `waveSetImportSchedule` server-side; leave the
-      export and the allowlist key in place with the `#compat-` tag.
-- [ ] **Step 12.5:** `import_schedule.test.js` (27 tests) loses its cadence
-      half and keeps its watermark half.
+- [x] **Step 12.4:** Neutralise `waveSetImportSchedule` server-side; leave the
+      export and the allowlist key in place with the `#compat-` tag. It
+      returns `{schedule: "off"}` with no read, no write and no rate limit,
+      and logs `WAVE-SCHED ignored a retired cadence call` — the signal for
+      retiring it. `waveGetConnection` also stops returning
+      `importSchedule`: 1.61.0's `WaveConnection.fromMap` defaults an absent
+      value to `off`, so no carve-out is needed there.
+- [x] **Step 12.5:** `import_schedule.test.js` (27 tests) loses its cadence
+      half and keeps its watermark half (9 tests now, including one pinning
+      that the module exports nothing else).
+
+**Deploy (not done).** No new export (29), no index, no rules change, and
+no allowlist key removed, so it is compatible with every shipped build. It
+may deploy before or after the next app build. That build drops the picker,
+and 1.61.0 still gets a success from the no-op. One cosmetic lie remains
+for 1.61.0 admins: picking a cadence shows "Automatic import updated." and
+then re-reads as Off. The deploy should still wait on the quiet-days guard
+above, since Task 11 changes the import's write path.
 
 ---
 

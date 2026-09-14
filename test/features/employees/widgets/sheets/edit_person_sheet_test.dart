@@ -192,6 +192,23 @@ void main() {
     verifyNoSave();
   });
 
+  testWidgets('the test account switch is saved with the record', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(
+      wrap(const EmployeeRecord(id: 'e1', name: 'Theo', email: 'theo@x.com')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('testAccount')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(capturedSave().isTestAccount, isTrue);
+  });
+
   testWidgets('picking a job title does not touch the admin toggle', (
     tester,
   ) async {
@@ -354,9 +371,9 @@ void main() {
     tester,
   ) async {
     final toggleCompleter = Completer<void>();
-    when(() => repo.deactivateEmployee('e1')).thenAnswer(
-      (_) => toggleCompleter.future,
-    );
+    when(
+      () => repo.deactivateEmployee('e1'),
+    ).thenAnswer((_) => toggleCompleter.future);
 
     useTallViewport(tester);
     await tester.pumpWidget(
@@ -468,5 +485,49 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an admin gets the month-end reminder switch, and it saves', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(
+      wrap(
+        const EmployeeRecord(
+          id: 'e1',
+          firstName: 'Paul',
+          email: 'paul@example.com',
+          role: 'admin',
+          status: 'active',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('monthEndReviewPush')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(capturedSave().monthEndReviewPush, isTrue);
+  });
+
+  testWidgets('a non-admin never sees the month-end reminder switch', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(
+      wrap(
+        const EmployeeRecord(
+          id: 'e2',
+          firstName: 'Theo',
+          email: 'theo@example.com',
+          status: 'active',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('monthEndReviewPush')), findsNothing);
   });
 }

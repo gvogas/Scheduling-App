@@ -32,7 +32,11 @@ List<DrawerGroup> drawerGroups({required bool isAdmin}) => [
   if (isAdmin)
     (
       title: (l10n) => l10n.nav_groupBusiness,
-      rows: [PushedDestination.dashboard, PushedDestination.history],
+      rows: [
+        PushedDestination.dashboard,
+        PushedDestination.history,
+        PushedDestination.overdueReview,
+      ],
     ),
   (
     title: (l10n) => l10n.nav_groupAccount,
@@ -53,6 +57,7 @@ String drawerRowLabel(AppLocalizations l10n, AppDestination destination) =>
       HubTab.liveMap => l10n.common_liveMap,
       PushedDestination.dayRoute => l10n.nav_dayRoute,
       PushedDestination.history => l10n.common_history,
+      PushedDestination.overdueReview => l10n.nav_overdueReview,
       PushedDestination.dashboard => l10n.nav_dashboard,
       PushedDestination.settings => l10n.common_settings,
     };
@@ -68,6 +73,7 @@ IconData drawerRowIcon(AppDestination destination) => switch (destination) {
   HubTab.clients => Icons.people_rounded,
   PushedDestination.dashboard => Icons.insights_rounded,
   PushedDestination.history => Icons.history_rounded,
+  PushedDestination.overdueReview => Icons.assignment_late_rounded,
   PushedDestination.settings => Icons.settings_rounded,
 };
 
@@ -82,5 +88,6 @@ Color drawerDotColor(AppDestination destination) => switch (destination) {
   HubTab.clients => AppColors.navClients,
   PushedDestination.dashboard => AppColors.navDashboard,
   PushedDestination.history => AppColors.navHistory,
+  PushedDestination.overdueReview => AppColors.navOverdueReview,
   PushedDestination.settings => AppColors.navSettings,
 };

@@ -626,17 +626,44 @@ self-service settings. Root context: `../../CLAUDE.md`.
   sign-out, self-service account deletion, and the server-side disable/delete
   bridge (`functions/bridge.js`). Losing the OS permission mid-stream only runs
   `_stop()`, which cancels the subscription and timers — no network call. That
-  matters because **the stored fix keeps rendering on the admin live map**:
-  `LiveMapAggregator.join` filters on missing/inactive user, never on freshness,
-  and `staff_marker_icon.dart` has no staleness branch, so a months-old pin is
-  visually identical to a live one (only the roster row and info card show the
-  age). The policy used to promise deletion on revocation and promise the pin
+  matters because **the stored fix keeps rendering on the admin live map for
+  up to two hours**: `LiveMapAggregator.groupTeam` drops a pin older than
+  `presenceHiddenAfter` (2 h, 2026-09-13) into the team sheet's NOT SEEN
+  section, and until then `staff_marker_icon.dart` has no staleness branch, so
+  an hour-old pin looks like a live one (only the sheet row shows the age). The
+  stored doc itself is still NOT deleted by that cutoff — it only stops being
+  drawn. The policy used to promise deletion on revocation and promise the pin
   disappeared; owner call was to correct the TEXT rather than the code, so
-  `docs/legal/privacy-policy.html` §6 and §8 now describe this behaviour
+  `docs/legal/privacy-policy.html` §2, §6 and §8 now describe this behaviour
   exactly. **The two must stay in step**: if you ever wire permission-revocation
-  into a delete, or add a freshness filter to the map, update those two sections
-  in the same change — and republish (see below), or the site keeps describing
-  the old behaviour.
+  into a delete, or change `presenceHiddenAfter`, update those sections in the
+  same change — and republish (see below), or the site keeps describing the old
+  behaviour.
+- **`isTestAccount` hides an account from every teammate LIST and COUNT, and
+  from no LOOKUP** (2026-09-13, for the Apple App Review account). It is an
+  ADMIN-ONLY field: a switch on `edit_person_sheet.dart`, on `updateEmployee`'s
+  patch and in `toMap()`, and deliberately absent from
+  `kSelfServiceUserFields` and `isAvailabilityOnlyChange()`'s `hasOnly`, so a
+  person cannot un-hide themselves (an ADMIN tester can clear its own flag
+  through the admin branch — accepted). No rules change: `isValidUserData` is a
+  per-key check, not a `hasOnly`. **The filter has two owners, never a call-site
+  copy.** `EmployeeRecord.isAssignable` is `jobTitle.isAssignable &&
+  !isTestAccount`, which removes the account from `assignableEmployeesProvider`
+  (both assignee pickers, the dashboard's workload, capacity and availability
+  flags, the picker's availability reducer), the calendar crew filter, the
+  time-off clash swap pool and a book-again crew in one place; and
+  `LiveMapAggregator` (`join`/`groupTeam`) removes it from the map, its sheet
+  and the drawer's on-the-clock badge. The Team roster splits it into a
+  collapsed `TestAccountsSection` at the bottom rather than dropping it —
+  without that an admin could never reach the switch again. **Never filter a
+  LOOKUP**: `employeeColorMapProvider`/`employeeNameMapProvider`, the detail
+  sheet's and My details' own-record reads, `usedColors` (a tester's colour is
+  still taken) and the clash dialog's `_rosterName` keep it, or crew names and
+  colours blank on jobs already assigned to it. `offerableAssignees` still
+  offers a tester STORED on a job, so hiding it from the picker cannot strand
+  it there. `neverSetUpAccountsProvider` keeps it too — that list is a security
+  flag about a starting password, not a teammate listing. History, the tester's
+  own session and every server-side push are untouched.
 - **`docs/legal/*.html` are SOURCES, not the published pages.** The live site is
   the separate `gvogas/es-pro-legal` GitHub Pages repo, where
   `privacy-policy.html` is published as **`index.html`** (which is why the other
@@ -681,6 +708,14 @@ self-service settings. Root context: `../../CLAUDE.md`.
   absent `travelAlertsEnabled` reads as ON, absent `locationSharingEnabled` as
   OFF. Both are also on `isAvailabilityOnlyChange`'s `hasOnly` set, so the
   Settings toggle and the availability form can each write theirs alone.
+  **`monthEndReviewPush` is the opposite case: ADMIN-ONLY and on NEITHER
+  list** (2026-09-13). It decides who receives the month-end overdue push, an
+  operational setting rather than a personal preference, so nobody may opt
+  themselves in or out. It is written only by the admin `updateEmployee` path
+  (and `toMap`), shown on `EditPersonSheet` only while the person is an admin,
+  saved `false` whenever the admin switch is off, and absent reads as OFF. No
+  rules change was needed: `isValidUserData` is per-key and the admin
+  `allow update` carries no key allowlist.
   **`email` must never join it** — it is a sign-in
   identity, and Auth and Firestore move together through `changeEmployeeEmail`
   or not at all. Neither may `maxJobsPerDay`, `role`, `jobTitle`, `colorValue`

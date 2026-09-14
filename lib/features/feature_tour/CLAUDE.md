@@ -77,7 +77,8 @@ identity, so a rename replays or orphans a tour.
   during auto-start otherwise wedges it shut. **Data-dependent tabs MUST pass `FeatureTourHost(ready:)` false
   while their body shows a loading/error placeholder** — the tour's targets
   don't exist yet, so an ungated start finds zero survivors and permanently
-  shows nobody anything against an empty body (bit LiveMap: its FAB targets
+  shows nobody anything against an empty body (bit LiveMap: its targets — the
+  team sheet's header and the recenter tile since 2026-09-13, FABs before —
   live in the map stack, absent during the presence-data load). **A PARTIAL
   start is the same bug and is easier to miss**, though since 2026-09-04 it is
   no longer PERMANENT: only the steps that actually ran are marked, so the

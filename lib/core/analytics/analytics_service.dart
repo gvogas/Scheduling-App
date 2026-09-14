@@ -314,6 +314,14 @@ class AnalyticsService {
     {AnalyticsParams.period: period},
   );
 
+  /// A bulk close from the overdue review — the action and a bucketed count,
+  /// nothing that identifies a job.
+  void logOverdueReviewApplied({required String action, required int count}) =>
+      _log(AnalyticsEvents.overdueReviewApplied, {
+        AnalyticsParams.action: action,
+        AnalyticsParams.count: bucketCount(count),
+      });
+
   // ---------------------------------------------------------------------------
   // Auth
   // ---------------------------------------------------------------------------

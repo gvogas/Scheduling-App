@@ -115,9 +115,7 @@ void _useWideViewport(WidgetTester tester) {
 }
 
 void main() {
-  setUpAll(
-    () => registerFallbackValue(const EmployeeRecord(id: 'fallback')),
-  );
+  setUpAll(() => registerFallbackValue(const EmployeeRecord(id: 'fallback')));
 
   testWidgets('renders employee cards from the stream', (tester) async {
     await tester.pumpWidget(
@@ -128,6 +126,45 @@ void main() {
     expect(find.text('Jane Doe'), findsOneWidget);
     expect(find.text('Bob Smith'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a test account leaves the main list for a collapsed section', (
+    tester,
+  ) async {
+    const testAccount = EmployeeRecord(
+      id: 't1',
+      name: 'Apple Tester',
+      email: 'tester@example.com',
+      status: 'active',
+      isTestAccount: true,
+    );
+    await tester.pumpWidget(
+      _wrap(employees: () => Stream.value(const [_jane, testAccount])),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Apple Tester'), findsNothing);
+  });
+
+  testWidgets('expanding the test accounts section reaches the account', (
+    tester,
+  ) async {
+    const testAccount = EmployeeRecord(
+      id: 't1',
+      name: 'Apple Tester',
+      email: 'tester@example.com',
+      status: 'active',
+      isTestAccount: true,
+    );
+    await tester.pumpWidget(
+      _wrap(employees: () => Stream.value(const [_jane, testAccount])),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('1 TEST ACCOUNT'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Apple Tester'), findsOneWidget);
   });
 
   testWidgets('shows empty-state copy when the list is empty', (tester) async {
@@ -400,9 +437,9 @@ void main() {
     'mobile detail sheet opens edit with the latest live employee snapshot',
     (tester) async {
       final repo = _MockEmployeesRepo();
-      when(() => repo.watchEmergencyContact(any())).thenAnswer(
-        (_) => Stream.value(EmergencyContact.empty),
-      );
+      when(
+        () => repo.watchEmergencyContact(any()),
+      ).thenAnswer((_) => Stream.value(EmergencyContact.empty));
       when(
         () => repo.updateEmployee(
           docId: any(named: 'docId'),

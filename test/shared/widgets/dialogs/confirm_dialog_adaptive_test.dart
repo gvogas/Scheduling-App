@@ -77,4 +77,40 @@ void main() {
   ) async {
     expect(await _openAndTap(tester, 'Delete'), isTrue);
   });
+
+  for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
+    testWidgets('cancelLabel replaces Cancel on $platform', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: platform),
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: ElevatedButton(
+                onPressed: () => showConfirmDialog(
+                  context,
+                  title: 'Mark 2 jobs not done?',
+                  confirmLabel: 'Not done',
+                  message: 'They will be cancelled.',
+                  cancelLabel: 'Go back',
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Go back'), findsOneWidget);
+      expect(find.text('Cancel'), findsNothing);
+    });
+  }
 }

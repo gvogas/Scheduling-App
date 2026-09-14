@@ -50,15 +50,24 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   "synced" and nothing logged. Ordering alone does not prevent it, because the
   drain is bounded AND its query only takes jobs already due — a job backed off
   after a transient Wave error is invisible to the drain and still live
-  milliseconds later. Every caller of `importCustomers` therefore passes
-  `skipClientIds` from **`listOutstandingClientIds`** (`worker.js`, covers
-  `queued`, `inflight` AND `dead` — the prose here said "queued AND inflight"
-  until 2026-09-10, which is not what the query says; a dead job's client has
-  an un-pushed edit too, so protecting it is correct);
-  the param is injected rather than read inside
-  `customers_import.js` because `worker.js` already requires that module and
-  reaching back would close a cycle. Both callers need it — the daily
-  the daily `runWaveDaily` most of all, since it runs unattended.
+  milliseconds later. **The guarantee is TRANSACTIONAL and lives in the
+  writer** (Wave Phase 4, Task 11, 2026-09-13): every update to an existing
+  client commits through `commitGuardedUpdates` (`customers_import.js`), whose
+  transaction reads that client's `customerUpsert__<id>` job and skips the
+  write while it is `queued`, `inflight` or `dead` (`OUTSTANDING_STATUSES`,
+  `outbox_keys.js`). A concurrent enqueue writes that job, so it aborts the
+  transaction and the retry sees it. A held OR failed write counts as
+  `skippedPending`, which is what holds the watermark. `skipClientIds` from
+  `listOutstandingClientIds` survives only as a PREFILTER that saves a
+  transaction per known-pending client; a caller that omits it, or reads it
+  before an edit lands, can no longer clobber anything. A create stays
+  batched (a brand-new doc has no job), and so does an update to a doc whose
+  create is still in the SAME uncommitted batch (`createdInBatch === batch`).
+  Keyed on the batch OBJECT, not "created this run": once `flushIfFull`
+  commits, an admin can edit the new client and enqueue a job, so a later
+  duplicate of that Wave id must go through the guard.
+  **The one window it does not close:** an edit whose trigger has not yet
+  enqueued its job, a matter of seconds.
   **The import is hash-gated, and `updated` counts REAL changes only.** It
   skips any linked client whose stored `wave.lastSyncedHash` already equals
   `mappedFieldsHash(fromWaveCustomer(node))` (counted as `skippedUnchanged`).
@@ -80,13 +89,11 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   `modifiedAtAfter: null` would give a full import that imports nothing and
   reports success. **`importCustomers` stays stateless about the watermark; the
   whole read → decide → import → advance sequence has ONE owner,
-  `importWithWatermark` (`wave/sync_run.js`)**, called by both the interactive
-  sync and the unattended daily import. It was hand-copied in both before, and
-  each omission fails silently in its own direction; the unattended copy — the
-  one where a mistake is invisible — was the untested one. The decisions
-  themselves are the pure `resolveImportWindow` / `watermarkPatch`, in
-  `wave/import_schedule.js` beside `isImportDue` because the two cadences
-  interact.
+  `importWithWatermark` (`wave/sync_run.js`)**, called by the interactive sync
+  (the unattended daily import that shared it was deleted with the cadence).
+  The decisions themselves are the pure `resolveImportWindow` /
+  `watermarkPatch` in `wave/import_schedule.js` — the watermark half that the
+  cadence deletion kept.
   **THE WATERMARK ADVANCES ONLY OVER A WINDOW THAT WAS FULLY COVERED.** Three
   things break it, all silent, all handled: a throw (leaves both stamps, next
   run redoes the window), a run with `skippedPending > 0` (those clients were
@@ -102,10 +109,7 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   push counts with it.
   A periodic full pass runs every 7 days: not for deletes
   (the import never deletes a local client) but as the backstop for `modifiedAt`
-  itself, which we trust Wave to bump and cannot verify. That interval is
-  shorter than both cadences, so the SCHEDULED import normally goes full every
-  time and the delta mostly benefits the interactive sync — accepted, since a
-  weekly job paying 7 Wave pages costs nothing. `buildWaveIdIndex`
+  itself, which we trust Wave to bump and cannot verify. `buildWaveIdIndex`
   (`wave/customers_import.js`) is built lazily so a no-op delta costs zero
   Firestore reads. Full detail:
   `docs/CLOUD_FUNCTIONS.md`.
@@ -140,9 +144,8 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   durably rate-limited — `wave-connection`, 60/hour, added once it stopped
   being a single-document read: it also runs two `count()` aggregates on
   `waveSyncQueue` so Settings can show the outbox depth), `waveSetImportSchedule`
-  (admin + App Check; no secret, but durably rate-limited like every other
-  admin write callable — `wave-schedule`, 20/hour — writes the `importSchedule`
-  field on `wave/connection`), `waveRetryFailedJobs` (admin + App Check + the
+  (RETIRED to an accepted-and-ignored no-op, `#compat-1.61.0` — see the
+  cadence bullet below), `waveRetryFailedJobs` (admin + App Check + the
   `WAVE_FULL_ACCESS_TOKEN` secret + durable rate limit — `wave-retry`,
   10/hour — admin-only recovery for dead-lettered outbox jobs: `requeueDeadJobs`
   puts them back in the queue, then a best-effort drain pushes them so the
@@ -182,28 +185,21 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   is what stops `upsertCustomer`'s own `wave.*` write-back from re-entering the
   drain in a cycle (the hash is unchanged by that write, so the re-fire returns
   at the top).
-  **`runWaveDaily` therefore drains BEFORE its due check, unconditionally.**
-  That is the safety net for the two states an event-driven push structurally
-  cannot catch: a job sitting on its `nextAttemptAt` backoff, and a job left
-  `inflight` by a dead instance (reclaimed by `drainQueue`'s lease pass) —
-  neither produces a client write to ride on. It must run even when
-  `importSchedule` is `off`, which is the DEFAULT and governs the PULL only;
-  gating the push on it would mean a default install never pushes
-  automatically at all. It also re-establishes push-before-pull on the
-  unattended path, and reads `skipClientIds` AFTER the drain. Pinned by
-  `wave_callables.test.js` ("pushes without a poll" / "is the drain safety
-  net"). Don't reintroduce a polling worker to "fix" a sync latency
-  complaint — check the trigger's drain and the daily sweep first.
-  `importCustomers` still only re-runs when the configured cadence is due.
+  **`runWaveDaily` is now ONLY a drain** (its pull was deleted with the
+  cadence, 2026-09-13). That drain is the safety net for the two states an
+  event-driven push structurally cannot catch: a job sitting on its
+  `nextAttemptAt` backoff, and a job left `inflight` by a dead instance
+  (reclaimed by `drainQueue`'s lease pass) — neither produces a client write
+  to ride on. Pinned by `wave_callables.test.js` ("pushes without a poll" /
+  "is the drain safety net"). Don't reintroduce a polling worker to "fix" a
+  sync latency complaint — check the trigger's drain and the daily sweep
+  first. The pull runs only from "Sync with Wave".
   **`wave/connection` is READ through ONE owner: `readWaveConnection` /
   `connectionFieldsOf`** (`wave/sync_run.js`, 2026-09-07). The doc-get and the
   field coercion were spelled out at eight sites across the callables, the
-  daily rider and `sync_run.js` itself, and `importSchedule` was coerced twice
-  with only ONE copy applying the unknown-value fallback — so the same stored
-  value read as `off` in one place and as itself in another.
-  `readWaveConnection` returns the `ref` beside the coerced fields because most
-  callers need it next (to update the cadence, or to hand `importWithWatermark`
-  the document it advances); `connectionFieldsOf` is the same coercion over a
+  daily rider and `sync_run.js` itself.
+  `readWaveConnection` returns the `ref` beside the coerced fields because the
+  sync needs it next (to hand `importWithWatermark` the document it advances); `connectionFieldsOf` is the same coercion over a
   snapshot already in hand, which is what the bootstrap transaction needs.
   `readWaveBusinessId` is now a projection of it, not a second read.
   **All five Wave callables open with `assertAdminCall`** (2026-09-07), like
@@ -211,13 +207,29 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   opening is gone. It changes the opening and not one allowlist key, so it
   breaks no build in the fleet; see `.claude/rules/security.md` for why the
   composed guard exists.
-  **Auto-import cadence:** `importSchedule` on `wave/connection` is one of
-  `off`/`weekly`/`monthly` (`WaveImportSchedule` enum client-side; `SCHEDULE_VALUES`
-  server-side, with `SCHEDULE_SET` its membership form — owned beside it in
-  `import_schedule.js`, because two `new Set(SCHEDULE_VALUES)` are two chances
-  for the validator and the coercion to disagree). The `isImportDue` helper (`wave/import_schedule.js`, pure/jest-testable)
-  treats **off or any unknown value as never-run**; a due import stamps
-  `lastAutoImportAt` and a failed one leaves it unchanged (retried next day). The full-access
+  **The auto-import cadence is DELETED** (Wave Phase 4, Task 12, 2026-09-13);
+  production had it `off` by owner choice. Gone: the Settings picker, the
+  `WaveImportSchedule` enum, `WaveConnection.importSchedule`,
+  `WaveService.setImportSchedule`, the five `wave_autoImport*` ARB keys,
+  `isImportDue`/`SCHEDULE_VALUES`/`SCHEDULE_SET`, and `runWaveDaily`'s import
+  rider. **`waveSetImportSchedule` stays DEPLOYED as an accepted-and-ignored
+  no-op (`#compat-1.61.0`)**, because the 1.61.0 app still calls it from its
+  picker: the export and the `schedule` allowlist key remain, and it answers
+  `{schedule: "off"}` with no read, no write and no rate limit. It logs
+  `WAVE-SCHED ignored a retired cadence call`, which is the retirement
+  signal: remove it only once that line has gone quiet AND no build at or
+  below 1.61.0 remains, in its own deploy (`docs/DEPLOYMENT.md` §4a).
+  `waveGetConnection` no longer returns `importSchedule`; 1.61.0's
+  `WaveConnection.fromMap` reads the absent field as `off`. Stored
+  `importSchedule`/`lastAutoImportAt` fields on `wave/connection` are inert.
+  **The outbox is FIVE modules behind one import path** (Wave Phase 4,
+  Task 10): `enqueue.js` (the enqueue decision, enqueue, cancel),
+  `dispatch.js` (`drainQueue`), `outbox_core.js` (claim, lease, outcome
+  guard), `outbox_queries.js` (counts, requeue, protect-list) and the leaf
+  `outbox_keys.js`. `worker.js` only re-exports them, and every production
+  caller keeps requiring `./worker`: both `jest.mock("../wave/worker")`
+  suites intercept by that path, so a caller that requires a submodule
+  directly silently escapes its mock. The full-access
   Wave token lives in Secret Manager (`WAVE_FULL_ACCESS_TOKEN`) only — **no
   OAuth**. The Connect target is chosen **server-side**: `waveBootstrap` resolves
   the business from the `WAVE_BUSINESS_NAME` secret when the client sends no

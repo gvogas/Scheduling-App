@@ -153,7 +153,7 @@ abstract final class AppColors {
   // gold of amber, which also clears dark brown `#C9985A` and olive `#B9CC45`.
   static const Color darkHolidayConstruction = Color(0xFFEA802E);
 
-  /// The eight nav-drawer row hues, one per `AppDestination`.
+  /// The nine nav-drawer row hues, one per `AppDestination`.
   ///
   /// A SEPARATE palette from [crewPalette], deliberately, even though every
   /// entry matches one of its hues exactly: that list is the pool employee
@@ -174,6 +174,7 @@ abstract final class AppColors {
   static const Color navDashboard = Color(0xFFE08A00);
   static const Color navHistory = Color(0xFFC43F8E);
   static const Color navSettings = Color(0xFF5A6B85);
+  static const Color navOverdueReview = Color(0xFF8A5A2B);
 }
 
 /// Resolves a STORED employee colour int to the colour this theme renders.

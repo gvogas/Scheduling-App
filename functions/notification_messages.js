@@ -334,7 +334,42 @@ function buildJobCompletedMessage(who, what, locale) {
   };
 }
 
+/**
+ * The month-end "N jobs still open" push the admin gets.
+ * @param {number} count Open overdue jobs.
+ * @param {boolean} capped Whether the scan hit its ceiling.
+ * @param {(Date|number)} now Names the month that is wrapping up.
+ * @param {string} locale 'en' or 'fr'.
+ * @return {{title: string, body: string}}
+ */
+function buildOverdueReviewMessage(count, capped, now, locale) {
+  const n = capped ? `${count}+` : String(count);
+  const one = !capped && count === 1;
+  if (locale === "fr") {
+    const month = formatBusinessTime("fr", now, {month: "long"});
+    const de = /^[aeiouh]/i.test(month) ? "d'" : "de ";
+    return {
+      title: one ? `${n} visite encore ouverte` :
+        `${n} visites encore ouvertes`,
+      body: one ?
+        "Elle s'est terminée sans être fermée. " +
+          `Passez-la en revue avant la fin ${de}${month}.` :
+        "Elles se sont terminées sans être fermées. " +
+          `Passez-les en revue avant la fin ${de}${month}.`,
+    };
+  }
+  const month = formatBusinessTime("en", now, {month: "long"});
+  return {
+    title: one ? `${n} job still open` : `${n} jobs still open`,
+    body: one ?
+      `It ended without being closed. Review it before ${month} wraps up.` :
+      "They ended without being closed. " +
+        `Review them before ${month} wraps up.`,
+  };
+}
+
 module.exports = {
+  buildOverdueReviewMessage,
   buildNotificationMessage,
   buildDigestMessage,
   buildEmailChangedMessage,

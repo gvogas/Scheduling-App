@@ -152,3 +152,10 @@ invariants that have to be visible from every feature.
   walks every declared name through `AnalyticsNames`, which also encodes that
   the user-property cap (24) is SHORTER than the event cap (40): a name valid
   as an event can be too long as a property.
+- **`overdue_review_applied`** (2026-09-13) fires on the review screen's
+  `OverdueReviewApplied` branch only, never on `Busy`, with `action`
+  (`AnalyticsOverdueReviewActions.complete` / `not_done`) and `count`, a new
+  `allParams` key sent through `bucketCount`. The screen reports as
+  `overdue_review` through the route observer, and a job opened from it reports
+  `AnalyticsSources.overdueReview`. A new parameter must be registered as a
+  custom dimension in GA before it shows in reports.

@@ -3,11 +3,9 @@
 /**
  * @fileoverview The two sync-run primitives every Wave push/pull site shares.
  *
- * `importWithWatermark` and `drainForSync` are each called from more than one
- * place — the interactive `waveImportCustomers` callable, the
- * `waveUpsertCustomer` trigger and the daily `runWaveDaily` rider — and each
- * was hand-copied before
- * it had ONE owner. They live here rather than in `callables.js` because
+ * `importWithWatermark` and `drainForSync` are the two halves of the
+ * interactive sync, and each was hand-copied across callers before it had
+ * ONE owner. They live here rather than in `callables.js` because
  * nothing about either is a callable: they were only ever in that file because
  * the callables happened to be their first caller.
  *
@@ -25,11 +23,7 @@ const {getFirestore} = require("firebase-admin/firestore");
 const {graphql} = require("./client");
 const {importCustomers} = require("./customers");
 const {drainQueue, countQueuedJobs} = require("./worker");
-const {
-  resolveImportWindow,
-  watermarkPatch,
-  SCHEDULE_SET,
-} = require("./import_schedule");
+const {resolveImportWindow, watermarkPatch} = require("./import_schedule");
 const {toMillis} = require("../time_utils");
 const {shortHash} = require("../security");
 
@@ -37,36 +31,32 @@ const {shortHash} = require("../security");
  * Coerces a `wave/connection` snapshot into the fields its read sites need.
  *
  * The one owner of that coercion: it was spelled out at eight sites across
- * the callables, the daily rider and here, and `importSchedule` was coerced
- * twice with only one copy applying the `SCHEDULE_SET` fallback.
+ * the callables, the daily rider and here.
  *
  * @param {?Object} snap The connection document snapshot, or null.
- * @return {{data: ?Object, businessId: string, businessName: string,
- *   importSchedule: string}} The stored document beside its coerced fields;
- *   `businessId` is "" when not connected.
+ * @return {{data: ?Object, businessId: string, businessName: string}} The
+ *   stored document beside its coerced fields; `businessId` is "" when not
+ *   connected.
  */
 function connectionFieldsOf(snap) {
   const data = snap && snap.exists ? snap.data() : null;
-  const raw = data && typeof data.importSchedule === "string" ?
-    data.importSchedule : "off";
   return {
     data,
     businessId: data && typeof data.businessId === "string" ?
       data.businessId : "",
     businessName: data && typeof data.businessName === "string" ?
       data.businessName : "",
-    importSchedule: SCHEDULE_SET.has(raw) ? raw : "off",
   };
 }
 
 /**
  * Reads `wave/connection` once, returning its ref beside the coerced fields.
  *
- * The ref comes back because most callers need it next — to update the
- * cadence, or to hand `importWithWatermark` the document it advances.
+ * The ref comes back because the sync needs it next, to hand
+ * `importWithWatermark` the document it advances.
  *
  * @return {!Promise<{ref: !Object, data: ?Object, businessId: string,
- *   businessName: string, importSchedule: string}>} The connection.
+ *   businessName: string}>} The connection.
  */
 async function readWaveConnection() {
   const ref = getFirestore().collection("wave").doc("connection");
@@ -122,15 +112,12 @@ async function readWaveBusinessIdCached() {
  * untouched, which is the correct failure behaviour.
  *
  * @param {{connectionRef: !Object, connection: !Object, businessId: string,
- *   skipClientIds: !Set<string>, nowMs: number,
- *   extraPatch: (Object|undefined)}}
- *   params `connection` is the already-read doc data; `extraPatch` merges into
- *   the same post-run write so a caller needing its own stamp costs no
- *   second round trip.
+ *   skipClientIds: !Set<string>, nowMs: number}} params `connection` is the
+ *   already-read doc data.
  * @return {!Promise<{summary: !Object, window: !Object}>}
  */
 async function importWithWatermark({
-  connectionRef, connection, businessId, skipClientIds, nowMs, extraPatch,
+  connectionRef, connection, businessId, skipClientIds, nowMs,
 }) {
   let window = resolveImportWindow({
     deltaSinceMs: toMillis(connection.customerDeltaSince),
@@ -146,8 +133,7 @@ async function importWithWatermark({
   } catch (e) {
     // A delta-only failure is STICKY without this: the watermark stays put,
     // so every retry rebuilds the same delta query and fails the same way
-    // until the 7-day resync ages it out — and only the admin-facing sync
-    // breaks, since the scheduled run is normally full anyway. One retry as
+    // until the 7-day resync ages it out. One retry as
     // a full import both self-heals that and covers `modifiedAtAfter` itself
     // being wrong, which is not a hypothetical: the query shape was already
     // wrong once against this API.
@@ -175,11 +161,8 @@ async function importWithWatermark({
   // `wasFull` comes from the window we just built, not from the summary —
   // routing our own input back out through importCustomers would give the
   // decision two sources and the further-travelled one would win.
-  const patch = {
-    ...(extraPatch || {}),
-    ...(covered ?
-      watermarkPatch({startedAtMs: nowMs, wasFull: !window.since}) : {}),
-  };
+  const patch = covered ?
+    watermarkPatch({startedAtMs: nowMs, wasFull: !window.since}) : {};
   if (!covered) {
     logger.info("WAVE-CUST watermark held — run protected pending clients", {
       skippedPending: summary.skippedPending,

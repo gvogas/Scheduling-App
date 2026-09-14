@@ -13,7 +13,6 @@ jest.mock("../wave/worker", () => ({
   enqueueCustomerUpsert: jest.fn(),
   cancelCustomerUpsert: jest.fn(),
   drainQueue: jest.fn(),
-  listOutstandingClientIds: jest.fn(),
   shouldEnqueueClientWrite: jest.fn(),
 }));
 jest.mock("../wave/sync_run", () => ({
@@ -84,7 +83,6 @@ beforeEach(() => {
   worker.enqueueCustomerUpsert.mockResolvedValue(undefined);
   worker.cancelCustomerUpsert.mockResolvedValue(false);
   worker.drainQueue.mockResolvedValue(IDLE_DRAIN);
-  worker.listOutstandingClientIds.mockResolvedValue([]);
   syncRun.readWaveBusinessIdCached.mockResolvedValue("");
   // Stands in for the shared connection read so `makeDb`'s `connection` /
   // `connectionError` options still drive these tests. The COERCION itself is
@@ -99,7 +97,6 @@ beforeEach(() => {
       data,
       businessId: (data && data.businessId) || "",
       businessName: (data && data.businessName) || "",
-      importSchedule: (data && data.importSchedule) || "off",
     };
   });
 });
@@ -284,10 +281,11 @@ describe("runWaveDaily connection read", () => {
     expect(worker.drainQueue).not.toHaveBeenCalled();
   });
 
-  test("drains even when the import cadence is off", async () => {
-    // The `off` setting governs the PULL only.
+  test("drains the outbox, and never imports", async () => {
+    // The scheduled pull was deleted in Wave Phase 4; a connection doc still
+    // carrying the old cadence field must not bring it back.
     const {db} = makeDb({
-      connection: {businessId: "biz-1", importSchedule: "off"},
+      connection: {businessId: "biz-1", importSchedule: "weekly"},
     });
     getFirestore.mockReturnValue(db);
 
@@ -297,22 +295,14 @@ describe("runWaveDaily connection read", () => {
     expect(syncRun.importWithWatermark).not.toHaveBeenCalled();
   });
 
-  test("a failing drain does not skip the import below it", async () => {
+  test("a failing drain resolves quietly and is logged", async () => {
     worker.drainQueue.mockRejectedValueOnce(new Error("drain boom"));
-    syncRun.importWithWatermark.mockResolvedValue({
-      summary: {
-        imported: 0, updated: 0, skippedArchived: 0,
-        skippedPending: 0, skippedUnchanged: 0, pages: 1,
-      },
-      window: {reason: "full"},
-    });
-    const {db} = makeDb({
-      connection: {businessId: "biz-1", importSchedule: "weekly"},
-    });
+    const {db} = makeDb({connection: {businessId: "biz-1"}});
     getFirestore.mockReturnValue(db);
 
-    await runWaveDaily();
+    await expect(runWaveDaily()).resolves.toBeUndefined();
 
-    expect(syncRun.importWithWatermark).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+        expect.stringContaining("drain failed"), expect.anything());
   });
 });

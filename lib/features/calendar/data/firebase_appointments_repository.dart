@@ -70,6 +70,9 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   /// costs two round-trips to reach the ceiling, not twenty.
   static const int _clientHistoryPageSize = 500;
 
+  /// Ceiling on the overdue review's live query.
+  static const int _overdueReviewLimit = 500;
+
   /// Bounded LRU of recent results.
   late final SearchResultCache<AppointmentRecord> _searchCache =
       SearchResultCache(clock: _clock);
@@ -386,15 +389,13 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       );
     }
     if (ids.isEmpty) return;
-    // ONE shared op id across the batch, so `claimSeriesNotice` collapses the
-    // whole run into a single push instead of one per day — the same claim
-    // `updateAppointments` and `rewriteSeries` make.
+    // One shared op id for EVERY status: it collapses cancel pushes and marks a bulk Complete as an admin write.
     final opId = _newSeriesOpId();
     final batch = _appointments.firestore.batch();
     for (final id in ids) {
       batch.update(_appointments.doc(id), {
         'status': trimmed,
-        if (trimmed == 'cancelled') 'seriesOpId': opId,
+        'seriesOpId': opId,
         'updatedAt': FieldValue.serverTimestamp(),
       });
     }
@@ -453,6 +454,29 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   Stream<List<AppointmentRecord>> watchInRange(AppointmentDateRange range) {
     return retryStream(
       () => _rangeQuery(range).snapshots().map(_mapRangeSnapshot),
+    );
+  }
+
+  @override
+  Stream<List<AppointmentRecord>> watchOverdueOpen(DateTime now) {
+    return retryStream(
+      () => _appointments
+          .where('status', whereIn: openStatusQueryValues)
+          .where('endTime', isLessThan: Timestamp.fromDate(now))
+          .orderBy('endTime', descending: true)
+          .limit(_overdueReviewLimit)
+          .snapshots()
+          .map((snapshot) {
+            if (snapshot.docs.length >= _overdueReviewLimit) {
+              _logger.warn(
+                'APPT-REVIEW overdue query hit the $_overdueReviewLimit-doc '
+                'cap - the oldest overdue jobs are not listed',
+              );
+            }
+            return snapshot.docs
+                .map((doc) => AppointmentRecord.fromMap(doc.id, doc.data()))
+                .toList();
+          }),
     );
   }
 

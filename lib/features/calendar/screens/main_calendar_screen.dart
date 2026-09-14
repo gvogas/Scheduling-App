@@ -41,6 +41,7 @@ import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_steps.dart';
 import 'package:scheduling/features/feature_tour/widgets/feature_tour_host.dart';
 import 'package:scheduling/features/navigation/widgets/app_nav_drawer.dart';
+import 'package:scheduling/features/presence/widgets/location_share_ask_gate.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
 import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
@@ -433,68 +434,71 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
     final data = _prepareBuild(context);
 
     // Session listeners are hosted at the calendar shell.
-    return RoleUpgradeListener(
-      employeeId: widget.employeeId,
+    return LocationShareAskGate(
       isAdmin: widget.isAdmin,
-      child: PhotoUploadFailureListener(
-        showActions: widget.isAdmin,
-        child: FeatureTourHost(
-          scope: _tour.scope,
-          isAdmin: widget.isAdmin,
-          ready: !data.isLoading,
-          stepKeys: _tour.keys,
-          child: Scaffold(
-            floatingActionButton: _addAppointmentFab(context),
-            endDrawer: AppNavDrawer(
-              isAdmin: widget.isAdmin,
-              employeeId: widget.employeeId,
-              userName: data.userName,
-            ),
-            body: Column(
-              children: [
-                CalendarHeaderBlock(
-                  monthLabel: data.monthLabel,
-                  monthLabelShort: data.monthLabelShort,
-                  yearLabel: data.yearLabel,
-                  onPickMonth: _pickMonth,
-                  crewFilterButton: widget.isAdmin
-                      ? _tour.stepIf(
-                          TourStepId.calendarCrewFilter,
-                          const CrewFilterButton(),
-                        )
-                      : null,
-                  routeButton: _dayRouteButton(context),
-                  weekStrip: _weekStrip(data.today, data.colorMap),
-                ),
-                Expanded(
-                  // The header block reserves the status bar itself.
-                  child: SafeArea(
-                    top: false,
-                    child: Stack(
-                      children: [
-                        _content(
-                          isLoading: data.isLoading,
-                          colorMap: data.colorMap,
-                          nameMap: data.nameMap,
-                          today: data.today,
-                          dayTitle: data.dayTitle,
-                          dayTitleShort: data.dayTitleShort,
-                          jobLabel: data.jobLabel,
-                          weekDays: data.weekDays,
-                        ),
-                        Positioned(
-                          bottom: AppSpacing.sp16,
-                          left: AppSpacing.sp16,
-                          child: TodayPill(
-                            visible: _showTodayButton(data.today),
-                            onPressed: () => _goToToday(data.today),
+      child: RoleUpgradeListener(
+        employeeId: widget.employeeId,
+        isAdmin: widget.isAdmin,
+        child: PhotoUploadFailureListener(
+          showActions: widget.isAdmin,
+          child: FeatureTourHost(
+            scope: _tour.scope,
+            isAdmin: widget.isAdmin,
+            ready: !data.isLoading,
+            stepKeys: _tour.keys,
+            child: Scaffold(
+              floatingActionButton: _addAppointmentFab(context),
+              endDrawer: AppNavDrawer(
+                isAdmin: widget.isAdmin,
+                employeeId: widget.employeeId,
+                userName: data.userName,
+              ),
+              body: Column(
+                children: [
+                  CalendarHeaderBlock(
+                    monthLabel: data.monthLabel,
+                    monthLabelShort: data.monthLabelShort,
+                    yearLabel: data.yearLabel,
+                    onPickMonth: _pickMonth,
+                    crewFilterButton: widget.isAdmin
+                        ? _tour.stepIf(
+                            TourStepId.calendarCrewFilter,
+                            const CrewFilterButton(),
+                          )
+                        : null,
+                    routeButton: _dayRouteButton(context),
+                    weekStrip: _weekStrip(data.today, data.colorMap),
+                  ),
+                  Expanded(
+                    // The header block reserves the status bar itself.
+                    child: SafeArea(
+                      top: false,
+                      child: Stack(
+                        children: [
+                          _content(
+                            isLoading: data.isLoading,
+                            colorMap: data.colorMap,
+                            nameMap: data.nameMap,
+                            today: data.today,
+                            dayTitle: data.dayTitle,
+                            dayTitleShort: data.dayTitleShort,
+                            jobLabel: data.jobLabel,
+                            weekDays: data.weekDays,
                           ),
-                        ),
-                      ],
+                          Positioned(
+                            bottom: AppSpacing.sp16,
+                            left: AppSpacing.sp16,
+                            child: TodayPill(
+                              visible: _showTodayButton(data.today),
+                              onPressed: () => _goToToday(data.today),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),

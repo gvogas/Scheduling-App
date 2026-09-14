@@ -292,4 +292,11 @@ void main() {
       expect(restored.createdAt, isNull);
     });
   });
+
+  test('monthEndReviewPush reads absent as off and round-trips', () {
+    expect(EmployeeRecord.fromMap('e1', const {}).monthEndReviewPush, isFalse);
+    final on = EmployeeRecord.fromMap('e1', const {'monthEndReviewPush': true});
+    expect(on.monthEndReviewPush, isTrue);
+    expect(on.toMap()['monthEndReviewPush'], isTrue);
+  });
 }

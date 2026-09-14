@@ -22,13 +22,13 @@ import 'package:scheduling/features/presence/application/live_map_providers.dart
 import 'package:scheduling/features/presence/domain/live_map_aggregator.dart';
 import 'package:scheduling/features/presence/domain/staff_marker_assembly.dart';
 import 'package:scheduling/features/presence/widgets/live_map_overlays.dart';
-import 'package:scheduling/features/presence/widgets/staff_info_card.dart';
+import 'package:scheduling/features/presence/widgets/live_map_team_sheet.dart';
 import 'package:scheduling/features/presence/widgets/staff_marker_icon.dart';
-import 'package:scheduling/features/presence/widgets/staff_roster_sheet.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_header_pair.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_top_bar.dart';
 import 'package:scheduling/shared/widgets/feedback/centered_error_text.dart';
+import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 
 /// Everything the map body needs, so a test can inject a stub via
 /// [LiveMapScreen.mapBuilder] instead of the real platform-view [GoogleMap]
@@ -52,7 +52,7 @@ class LiveMapConfig {
 }
 
 /// Admin-only live staff-location map — a colored avatar marker per active
-/// staff member, with per-person freshness and a tap-to-open info card.
+/// staff member, with a draggable team sheet underneath.
 class LiveMapScreen extends ConsumerStatefulWidget {
   const LiveMapScreen({
     required this.isAdmin,
@@ -80,10 +80,16 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
   );
 
   final StaffMarkerIconRenderer _renderer = StaffMarkerIconRenderer();
+  final DraggableScrollableController _sheetController =
+      DraggableScrollableController();
+  final ValueNotifier<double> _sheetExtent = ValueNotifier(kTeamSheetRestSize);
+  ScrollController? _sheetScroll;
 
   GoogleMapController? _mapController;
   Set<Marker> _markers = {};
-  List<StaffMapPoint> _lastPoints = const [];
+  LiveMapTeam _team = LiveMapTeam.empty;
+  bool _hasTeam = false;
+  DateTime _now = DateTime.now();
   String? _selectedDocId;
   bool _traffic = false;
   bool _satellite = false;
@@ -93,9 +99,8 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
   int _assembleToken = 0;
   String? _lastSignature;
 
-  // True once the map body (which hosts the tour's FAB targets) is rendered;
-  // gates the tour so it isn't auto-marked-seen against a body with no targets
-  // yet.
+  // True once the map body (which hosts the tour's targets) is rendered; gates
+  // the tour so it isn't auto-marked-seen against a body with no targets yet.
   bool _mapTargetsRendered = false;
 
   late final _tour = TourSteps(
@@ -106,6 +111,8 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
   @override
   void dispose() {
     _mapController?.dispose();
+    _sheetController.dispose();
+    _sheetExtent.dispose();
     super.dispose();
   }
 
@@ -123,16 +130,14 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
     final visible = TickerMode.valuesOf(context).enabled;
 
     // Paused (tab hidden) — render the kept-alive map with the last-known
-    // markers, and don't watch the data providers, so autoDispose can tear down
+    // team, and don't watch the data providers, so autoDispose can tear down
     // the presence listener and ticker.
     final Widget body;
     if (visible) {
       body = _liveBody(context);
     } else {
-      // Paused branch renders the kept-alive map stack, so the FAB targets
-      // exist.
       _mapTargetsRendered = true;
-      body = _mapStack(context, _lastPoints, selectedPoint: null, paused: true);
+      body = _mapStack(context, selectedPoint: null, paused: true);
     }
 
     return FeatureTourHost(
@@ -157,14 +162,15 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
   }
 
   Widget _liveBody(BuildContext context) {
-    final pointsAsync = ref.watch(liveMapPointsProvider);
-    ref.listen<AsyncValue<List<StaffMapPoint>>>(
-      liveMapPointsProvider,
-      _onPointsChanged,
-    );
+    final teamAsync = ref.watch(liveMapTeamProvider);
+    ref.listen<AsyncValue<LiveMapTeam>>(liveMapTeamProvider, _onTeamChanged);
+    _now = ref.watch(liveMapClockProvider)();
 
-    if (pointsAsync.hasValue) _lastPoints = pointsAsync.value!;
-    final points = pointsAsync.value ?? _lastPoints;
+    if (teamAsync.value case final team?) {
+      _team = team;
+      _hasTeam = true;
+    }
+    final points = _team.onMap;
 
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final selected = _effectiveSelected(points);
@@ -172,15 +178,14 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
     _scheduleMarkerAssembly(context, points, selected, dpr);
     _maybeFitCamera(points);
 
-    final hasShownMap = _markers.isNotEmpty || _lastPoints.isNotEmpty;
-    if (pointsAsync.hasError && !hasShownMap) {
+    if (teamAsync.hasError && !_hasTeam) {
       _mapTargetsRendered = false;
       return CenteredErrorText(
         message: context.l10n.error_introLoadLiveMap,
-        onRetry: () => ref.invalidate(liveMapPointsProvider),
+        onRetry: () => ref.invalidate(liveMapTeamProvider),
       );
     }
-    if (pointsAsync.isLoading && !hasShownMap) {
+    if (teamAsync.isLoading && !_hasTeam) {
       _mapTargetsRendered = false;
       return const LiveMapLoadingBody();
     }
@@ -189,17 +194,12 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
     final selectedPoint = selected == null
         ? null
         : points.where((p) => p.userDocId == selected).firstOrNull;
-    return _mapStack(
-      context,
-      points,
-      selectedPoint: selectedPoint,
-      paused: false,
-    );
+    return _mapStack(context, selectedPoint: selectedPoint, paused: false);
   }
 
-  void _onPointsChanged(
-    AsyncValue<List<StaffMapPoint>>? previous,
-    AsyncValue<List<StaffMapPoint>> next,
+  void _onTeamChanged(
+    AsyncValue<LiveMapTeam>? previous,
+    AsyncValue<LiveMapTeam> next,
   ) {
     if (!isFirstAsyncError(previous, next)) return;
     ref
@@ -216,15 +216,14 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
         );
   }
 
-  /// The stored selection, or null once that person has left the current
-  /// points.
+  /// The stored selection, or null once that person has left the map.
   String? _effectiveSelected(List<StaffMapPoint> points) {
     final id = _selectedDocId;
     if (id == null) return null;
     if (points.any((p) => p.userDocId == id)) return id;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_selectedDocId == id && !_lastPoints.any((p) => p.userDocId == id)) {
+      if (_selectedDocId == id && !_team.onMap.any((p) => p.userDocId == id)) {
         setState(() => _selectedDocId = null);
       }
     });
@@ -270,16 +269,29 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
       _lastSignature = signature;
       setState(() => _markers = markers);
     } catch (e, st) {
-      // Logged through the logger captured above — a marker render that fails
-      // after the screen is disposed is exactly the case worth having in
-      // Crashlytics, and it was being dropped.
       logger.warn('LIVEMAP-MARKERS assemble failed', e, st);
     }
   }
 
   void _selectMarker(String docId) {
-    if (_selectedDocId == docId) return;
-    setState(() => _selectedDocId = docId);
+    final point = _team.onMap.where((p) => p.userDocId == docId).firstOrNull;
+    if (point != null) _focusOn(point);
+  }
+
+  /// A pin tap and a row tap: focus the person and ease the camera to them.
+  void _focusOn(StaffMapPoint point) {
+    if (_selectedDocId != point.userDocId) {
+      setState(() => _selectedDocId = point.userDocId);
+    }
+    _animateCamera(
+      CameraUpdate.newLatLngZoom(LatLng(point.lat, point.lng), 15),
+    );
+    final scroll = _sheetScroll;
+    if (scroll != null && scroll.hasClients) scroll.jumpTo(0);
+    if (_sheetController.isAttached &&
+        _sheetController.size < kTeamSheetRestSize) {
+      _moveSheetToRest();
+    }
   }
 
   void _clearSelection() {
@@ -287,27 +299,26 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
     setState(() => _selectedDocId = null);
   }
 
+  void _closeSelection() {
+    _clearSelection();
+    if (_sheetController.isAttached) _moveSheetToRest();
+  }
+
+  void _moveSheetToRest() {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _sheetController.jumpTo(kTeamSheetRestSize);
+      return;
+    }
+    _sheetController.animateTo(
+      kTeamSheetRestSize,
+      duration: AppDuration.normal,
+      curve: Curves.easeOut,
+    );
+  }
+
   void _onMapCreated(GoogleMapController controller) {
     _mapController = controller;
-    _maybeFitCamera(_lastPoints);
-  }
-
-  Future<void> _openRoster() async {
-    final selected = await showStaffRosterSheet(
-      context,
-      selfDocId: widget.employeeId,
-    );
-    if (!mounted || selected == null) return;
-    _focusOn(selected);
-  }
-
-  /// Selects a staff member (opens their info card) and eases the camera to
-  /// them — the roster row → map bridge.
-  void _focusOn(StaffMapPoint point) {
-    _selectMarker(point.userDocId);
-    _animateCamera(
-      CameraUpdate.newLatLngZoom(LatLng(point.lat, point.lng), 15),
-    );
+    _maybeFitCamera(_team.onMap);
   }
 
   void _maybeFitCamera(List<StaffMapPoint> points) {
@@ -366,8 +377,7 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
   }
 
   Widget _mapStack(
-    BuildContext context,
-    List<StaffMapPoint> points, {
+    BuildContext context, {
     required StaffMapPoint? selectedPoint,
     required bool paused,
   }) {
@@ -380,65 +390,88 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
       onMapCreated: _onMapCreated,
       onTap: (_) => _clearSelection(),
     );
+    final recenter = _tour.stepIf(
+      TourStepId.liveMapRecenter,
+      MapGhostIcon(
+        icon: Icons.my_location,
+        tooltip: context.l10n.liveMap_recenter,
+        onTap: () => _applyFit(_team.onMap),
+      ),
+    );
 
-    return Stack(
-      children: [
-        Positioned.fill(child: builder(config)),
-        Positioned(
-          top: AppSpacing.sp12,
-          right: AppSpacing.sp12,
-          child: SafeArea(
-            child: MapToggles(
-              traffic: _traffic,
-              satellite: _satellite,
-              onTrafficToggle: () => setState(() => _traffic = !_traffic),
-              onSatelliteToggle: () => setState(() => _satellite = !_satellite),
-            ),
-          ),
-        ),
-        Positioned(
-          bottom: AppSpacing.sp16,
-          right: AppSpacing.sp16,
-          child: _MapFabColumn(
-            paused: paused,
-            onOpenRoster: _openRoster,
-            onRecenter: () => _applyFit(_lastPoints),
-            rosterTourWrap: _tour.has(TourStepId.liveMapRoster)
-                ? (child) => _tour.step(
-                    TourStepId.liveMapRoster,
-                    targetBorderRadius: BorderRadius.circular(AppRadius.r16),
-                    child: child,
-                  )
-                : null,
-            recenterTourWrap: _tour.has(TourStepId.liveMapRecenter)
-                ? (child) => _tour.step(
-                    TourStepId.liveMapRecenter,
-                    targetBorderRadius: BorderRadius.circular(AppRadius.r16),
-                    child: child,
-                  )
-                : null,
-          ),
-        ),
-        if (!paused && points.isEmpty) const EmptyMapCard(),
-        if (!paused)
+    return LayoutBuilder(
+      builder: (context, constraints) => Stack(
+        children: [
+          Positioned.fill(child: builder(config)),
           Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: AnimatedSwitcher(
-              duration: MediaQuery.disableAnimationsOf(context)
-                  ? Duration.zero
-                  : AppDuration.normal,
-              child: selectedPoint == null
-                  ? const SizedBox.shrink()
-                  : StaffInfoCard(
-                      key: ValueKey(selectedPoint.userDocId),
-                      point: selectedPoint,
-                      onClose: _clearSelection,
-                    ),
+            top: AppSpacing.sp12,
+            right: AppSpacing.sp12,
+            child: SafeArea(
+              child: MapToggles(
+                traffic: _traffic,
+                satellite: _satellite,
+                onTrafficToggle: () => setState(() => _traffic = !_traffic),
+                onSatelliteToggle: () =>
+                    setState(() => _satellite = !_satellite),
+              ),
             ),
           ),
-      ],
+          if (!paused && _team.onMap.isEmpty)
+            const Positioned(
+              left: AppSpacing.sp24,
+              // Clear of the toggle column on the right.
+              right: AppSpacing.sp24 + kGhostTapTarget,
+              top: AppSpacing.sp16,
+              child: EmptyMapCard(),
+            ),
+          Positioned.fill(
+            child: NotificationListener<DraggableScrollableNotification>(
+              onNotification: (notification) {
+                _sheetExtent.value = notification.extent;
+                return false;
+              },
+              child: DraggableScrollableSheet(
+                controller: _sheetController,
+                initialChildSize: kTeamSheetRestSize,
+                minChildSize: kTeamSheetMinSize,
+                maxChildSize: kTeamSheetMaxSize,
+                snap: true,
+                snapSizes: const [kTeamSheetRestSize],
+                builder: (context, scrollController) {
+                  _sheetScroll = scrollController;
+                  return LiveMapTeamSheet(
+                    team: _team,
+                    now: _now,
+                    selfDocId: widget.employeeId,
+                    selected: selectedPoint,
+                    scrollController: scrollController,
+                    onSelect: _focusOn,
+                    onCloseSelection: _closeSelection,
+                    headerTourWrap: _tour.has(TourStepId.liveMapRoster)
+                        ? (child) => _tour.step(
+                            TourStepId.liveMapRoster,
+                            targetBorderRadius: BorderRadius.circular(
+                              AppRadius.r20,
+                            ),
+                            child: child,
+                          )
+                        : null,
+                  );
+                },
+              ),
+            ),
+          ),
+          ValueListenableBuilder<double>(
+            valueListenable: _sheetExtent,
+            builder: (context, extent, child) => Positioned(
+              right: AppSpacing.sp12,
+              bottom: extent * constraints.maxHeight + AppSpacing.sp4,
+              child: child!,
+            ),
+            child: recenter,
+          ),
+        ],
+      ),
     );
   }
 
@@ -457,50 +490,4 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
       Factory<OneSequenceGestureRecognizer>(EagerGestureRecognizer.new),
     },
   );
-}
-
-/// Bottom-right FAB stack: open the staff roster, and recenter the camera on
-/// the last-known points.
-class _MapFabColumn extends StatelessWidget {
-  const _MapFabColumn({
-    required this.paused,
-    required this.onOpenRoster,
-    required this.onRecenter,
-    this.rosterTourWrap,
-    this.recenterTourWrap,
-  });
-
-  final bool paused;
-  final VoidCallback onOpenRoster;
-  final VoidCallback onRecenter;
-  final Widget Function(Widget child)? rosterTourWrap;
-  final Widget Function(Widget child)? recenterTourWrap;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          (rosterTourWrap ?? (w) => w)(
-            FloatingActionButton.small(
-              heroTag: 'liveMapRosterFab',
-              tooltip: context.l10n.liveMap_rosterButton,
-              onPressed: paused ? null : onOpenRoster,
-              child: const Icon(Icons.groups_outlined),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.sp12),
-          (recenterTourWrap ?? (w) => w)(
-            FloatingActionButton.small(
-              heroTag: 'liveMapRecenterFab',
-              tooltip: context.l10n.liveMap_recenter,
-              onPressed: onRecenter,
-              child: const Icon(Icons.my_location),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

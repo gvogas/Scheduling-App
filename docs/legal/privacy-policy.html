@@ -266,7 +266,8 @@
     appointment (via Google Maps Platform, through our secure backend) so the
     App can send the reminder at the right moment. If you are an employee or
     administrator, administrators can also view your single most recent
-    location on a live staff map in the App while location sharing is active.
+    location on a live staff map in the App while location sharing is active;
+    the map stops showing a location once it is more than two hours old.
     It is <strong>not</strong> used to monitor your movements over time or
     build a location history — only the latest reading is ever available,
     never a trail of where you have been.</li>
@@ -464,9 +465,10 @@
     account deleted or disabled by an administrator. Revoking location permission
     stops any further readings being taken, but does not by itself delete the
     reading already stored: until one of the events above occurs, that last
-    reading remains, and administrators can still see it on the live map, shown
-    with how long ago it was recorded. Sign out if you want it removed
-    straight away.</li>
+    reading remains. Administrators can see it on the live map, shown with how
+    long ago it was recorded, until it is more than two hours old; after that
+    the map no longer shows it, although the reading itself is still stored.
+    Sign out if you want it removed straight away.</li>
 </ul>
 <p>
   We keep personal information only as long as necessary for the purposes
@@ -524,10 +526,10 @@
     device’s Settings; features that rely on a permission will be limited if it
     is revoked. Turning off location access stops the App taking any further
     readings, which ends the “time to leave” reminders; the last reading already
-    stored is not deleted by revoking the permission, and stays visible to
-    administrators on the staff map — labelled with how long ago it was taken —
-    until you sign out, delete your account, or an administrator disables or
-    deletes it (see Section 6). The Lock Screen job card can be turned off in
+    stored is not deleted by revoking the permission: it is kept until you sign
+    out, delete your account, or an administrator disables or deletes it (see
+    Section 6), and administrators can see it on the staff map — labelled with
+    how long ago it was taken — only until it is two hours old. The Lock Screen job card can be turned off in
     Settings → Notifications, and the home-screen widget by removing it from
     your Home Screen.</li>
   <li><strong>If you are a client of a business</strong> that uses the App,

@@ -8,6 +8,8 @@ abstract final class DateUtilsHelper {
   static final Map<String, DateFormat> _dayHeaderShortFormats = {};
   static final Map<String, DateFormat> _whenLineFormats = {};
   static final Map<String, DateFormat> _dayMonthFormats = {};
+  static final Map<String, DateFormat> _monthDayFormats = {};
+  static final Map<String, DateFormat> _monthYearFormats = {};
 
   static String get _locale => Intl.defaultLocale ?? 'en_CA';
 
@@ -23,6 +25,24 @@ abstract final class DateUtilsHelper {
     final format = _dateFormats.putIfAbsent(
       _locale,
       () => DateFormat.yMMMd(_locale),
+    );
+    return format.format(date);
+  }
+
+  /// "Jul 22" — a date inside a list that spans days.
+  static String formatMonthDay(DateTime date) {
+    final format = _monthDayFormats.putIfAbsent(
+      _locale,
+      () => DateFormat.MMMd(_locale),
+    );
+    return format.format(date);
+  }
+
+  /// "July 2026" — a month splitter.
+  static String formatMonthYear(DateTime date) {
+    final format = _monthYearFormats.putIfAbsent(
+      _locale,
+      () => DateFormat.yMMMM(_locale),
     );
     return format.format(date);
   }

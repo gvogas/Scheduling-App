@@ -17,6 +17,7 @@ import 'package:scheduling/features/calendar/utils/sheet_helpers.dart';
 import 'package:scheduling/features/home_widget/application/widget_sync_service.dart';
 import 'package:scheduling/features/notifications/application/push_registration_controller.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/routes/app_routes.dart';
 import 'package:scheduling/routes/hub_shell.dart';
 
 /// Routes the two non-`app_links` external entry points — iOS home-widget taps
@@ -86,6 +87,9 @@ class AppointmentLinkOpener {
 
   /// Number of [_hubPollInterval] ticks spent waiting for the hub — ~10s.
   static const int _hubPollAttempts = 50;
+
+  /// The `kind` the month-end overdue review push carries.
+  static const String _overdueReviewKind = 'overdueReview';
 
   void start() {
     _startPushTaps();
@@ -160,15 +164,42 @@ class AppointmentLinkOpener {
   @visibleForTesting
   Future<void> handlePushTap(RemoteMessage? message) async {
     if (message == null) return;
-    final appointmentId =
-        (message.data['appointmentId'] as String?)?.trim() ?? '';
     final logger = ref.read(loggerProvider);
     // Swallow errors to prevent leaking into zone handlers as FATAL crashes.
     try {
+      // Kind BEFORE the id: the month-end review push carries no appointmentId.
+      if (message.data['kind'] == _overdueReviewKind) {
+        await openOverdueReview();
+        return;
+      }
+      final appointmentId =
+          (message.data['appointmentId'] as String?)?.trim() ?? '';
       await openAppointment(appointmentId);
     } catch (e, st) {
       logger.warn('PUSH-TAP open failed', e, st);
     }
+  }
+
+  /// The month-end push: lands on the calendar, then opens the overdue review
+  /// over it for an admin.
+  Future<void> openOverdueReview() async {
+    if (!isSignedIn()) return;
+    final logger = ref.read(loggerProvider);
+    final shell = await _awaitLiveHub();
+    if (!isMounted()) return;
+    if (shell == null) {
+      logger.warn('PUSH-TAP hub never appeared');
+      return;
+    }
+    shell.showCalendar();
+    final navContext = navigatorKey.currentContext;
+    if (navContext == null || !navContext.mounted) return;
+    shell.goHome();
+    if (!shell.isAdmin) return;
+    Navigator.of(navContext).pushNamed(
+      AppRoutes.overdueReview,
+      arguments: OverdueReviewArgs(isAdmin: true, employeeId: shell.employeeId),
+    );
   }
 
   /// Shared deep-link handler — shows the calendar, then opens the

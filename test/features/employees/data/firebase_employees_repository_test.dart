@@ -210,40 +210,34 @@ void main() {
       );
     });
 
-    test(
-      'maps email-exists to EmployeesFailureEmailAlreadyExists',
-      () async {
-        final callable = _MockHttpsCallable();
-        when(
-          () => functions.httpsCallable(
-            any(that: equals('createEmployeeAccount')),
-            options: any(named: 'options'),
-          ),
-        ).thenReturn(callable);
-        when(() => callable.call<dynamic>(any<Object?>())).thenThrow(
-          FirebaseFunctionsException(
-            message: 'email-exists',
-            code: 'already-exists',
-          ),
-        );
-        final repo = FirebaseEmployeesRepository(
-          firestore,
-          functions: functions,
-        );
-        expect(
-          () => repo.createEmployeeAccount(
-            name: 'A',
-            firstName: '',
-            lastName: '',
-            email: 'a@b.com',
-            phone: '',
-            colorValue: '1',
-            jobTitle: '',
-          ),
-          throwsA(isA<EmployeesFailureEmailAlreadyExists>()),
-        );
-      },
-    );
+    test('maps email-exists to EmployeesFailureEmailAlreadyExists', () async {
+      final callable = _MockHttpsCallable();
+      when(
+        () => functions.httpsCallable(
+          any(that: equals('createEmployeeAccount')),
+          options: any(named: 'options'),
+        ),
+      ).thenReturn(callable);
+      when(() => callable.call<dynamic>(any<Object?>())).thenThrow(
+        FirebaseFunctionsException(
+          message: 'email-exists',
+          code: 'already-exists',
+        ),
+      );
+      final repo = FirebaseEmployeesRepository(firestore, functions: functions);
+      expect(
+        () => repo.createEmployeeAccount(
+          name: 'A',
+          firstName: '',
+          lastName: '',
+          email: 'a@b.com',
+          phone: '',
+          colorValue: '1',
+          jobTitle: '',
+        ),
+        throwsA(isA<EmployeesFailureEmailAlreadyExists>()),
+      );
+    });
   });
 
   /// Stubs [name] to a callable returning [data] and hands back the mock so
@@ -478,6 +472,7 @@ void main() {
           jobTitle: JobTitle.leadTech,
           maxJobsPerDay: 4,
           onCall: true,
+          isTestAccount: true,
         ),
       );
 
@@ -486,6 +481,7 @@ void main() {
       expect(data['firstName'], 'Theo');
       expect(data['maxJobsPerDay'], 4);
       expect(data['onCall'], isTrue);
+      expect(data['isTestAccount'], isTrue);
       expect(data['role'], 'admin');
       expect(data.containsKey('uid'), isFalse);
       expect(data.containsKey('status'), isFalse);
@@ -810,45 +806,37 @@ void main() {
   });
 
   group('auth-propagation retry (C2)', () {
-    FirebaseException permissionDenied() => FirebaseException(
-      plugin: 'cloud_firestore',
-      code: 'permission-denied',
-    );
+    FirebaseException permissionDenied() =>
+        FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied');
 
-    test(
-      'watchEmployees constrains role + active status',
-      () async {
-        when(query.snapshots).thenAnswer((_) => Stream.value(snapshot));
-        repo().watchEmployees().listen((_) {});
-        // retryStream builds the query on subscribe, one microtask later.
-        await Future<void>.delayed(Duration.zero);
+    test('watchEmployees constrains role + active status', () async {
+      when(query.snapshots).thenAnswer((_) => Stream.value(snapshot));
+      repo().watchEmployees().listen((_) {});
+      // retryStream builds the query on subscribe, one microtask later.
+      await Future<void>.delayed(Duration.zero);
 
-        // These constraints are not an optimization. For a LIST query Firestore
-        // evaluates the rules against the query's constraints, not the docs, so
-        // dropping the status filter doesn't return extra rows — it rejects the
-        // whole query with permission-denied, which surfaces as an empty
-        // employee picker and silently changes who can be assigned a visit.
-        verify(
-          () => collection.where('role', whereIn: ['employee', 'admin']),
-        ).called(1);
-        verify(() => query.where('status', isEqualTo: 'active')).called(1);
-        // Bounded: this is a live listener held open for the whole session.
-        verify(() => query.limit(1000)).called(1);
-      },
-    );
+      // These constraints are not an optimization. For a LIST query Firestore
+      // evaluates the rules against the query's constraints, not the docs, so
+      // dropping the status filter doesn't return extra rows — it rejects the
+      // whole query with permission-denied, which surfaces as an empty
+      // employee picker and silently changes who can be assigned a visit.
+      verify(
+        () => collection.where('role', whereIn: ['employee', 'admin']),
+      ).called(1);
+      verify(() => query.where('status', isEqualTo: 'active')).called(1);
+      // Bounded: this is a live listener held open for the whole session.
+      verify(() => query.limit(1000)).called(1);
+    });
 
-    test(
-      'watchAssignableUsers constrains active status',
-      () async {
-        when(query.snapshots).thenAnswer((_) => Stream.value(snapshot));
-        repo().watchAssignableUsers().listen((_) {});
-        // retryStream builds the query on subscribe, one microtask later.
-        await Future<void>.delayed(Duration.zero);
+    test('watchAssignableUsers constrains active status', () async {
+      when(query.snapshots).thenAnswer((_) => Stream.value(snapshot));
+      repo().watchAssignableUsers().listen((_) {});
+      // retryStream builds the query on subscribe, one microtask later.
+      await Future<void>.delayed(Duration.zero);
 
-        verify(() => collection.where('status', isEqualTo: 'active')).called(1);
-        verify(() => query.limit(1000)).called(1);
-      },
-    );
+      verify(() => collection.where('status', isEqualTo: 'active')).called(1);
+      verify(() => query.limit(1000)).called(1);
+    });
 
     test(
       'watchEmployees sorts active users client-side by display name',
@@ -884,10 +872,9 @@ void main() {
         final amy = _MockQueryDocSnapshot();
         when(() => zed.id).thenReturn('z');
         when(() => amy.id).thenReturn('a');
-        when(zed.data).thenReturn(const {
-          'name': 'Zed Roy',
-          'status': 'active',
-        });
+        when(
+          zed.data,
+        ).thenReturn(const {'name': 'Zed Roy', 'status': 'active'});
         when(amy.data).thenReturn(const {
           'firstName': 'Amy',
           'lastName': 'Adams',
@@ -909,10 +896,9 @@ void main() {
         final amy = _MockQueryDocSnapshot();
         when(() => zed.id).thenReturn('z');
         when(() => amy.id).thenReturn('a');
-        when(zed.data).thenReturn(const {
-          'name': 'Zed Roy',
-          'status': 'disabled',
-        });
+        when(
+          zed.data,
+        ).thenReturn(const {'name': 'Zed Roy', 'status': 'disabled'});
         when(amy.data).thenReturn(const {
           'firstName': 'Amy',
           'lastName': 'Adams',
@@ -983,10 +969,7 @@ void main() {
         final repository = repo();
         repository
             .watchUserDoc('uid-1')
-            .listen(
-              emissions.add,
-              onError: (Object e) => error = e,
-            );
+            .listen(emissions.add, onError: (Object e) => error = e);
 
         async.elapse(const Duration(seconds: 1));
         expect(subscriptions, 2);
@@ -1031,9 +1014,7 @@ void main() {
           when(() => deletedSnapshot.docs).thenReturn(const []);
           when(() => deletedSnapshot.metadata).thenReturn(deletedMetadata);
           when(() => deletedMetadata.isFromCache).thenReturn(false);
-          when(
-            query.snapshots,
-          ).thenAnswer(
+          when(query.snapshots).thenAnswer(
             (_) => Stream.fromIterable([liveSnapshot, deletedSnapshot]),
           );
 
@@ -1064,10 +1045,7 @@ void main() {
         Object? error;
         repo()
             .watchUserDoc('uid-1')
-            .listen(
-              (_) {},
-              onError: (Object e) => error = e,
-            );
+            .listen((_) {}, onError: (Object e) => error = e);
 
         async.elapse(const Duration(seconds: 5));
         expect(subscriptions, 1);
@@ -1101,15 +1079,7 @@ void main() {
   group('updateSelfDetails', () {
     Future<Map<String, dynamic>> save({
       String phone = '(514) 555-1234',
-      List<bool> workingDays = const [
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-        true,
-      ],
+      List<bool> workingDays = const [true, true, true, true, true, true, true],
       int workStartMinutes = 420,
       int workEndMinutes = 960,
       bool onCall = true,

@@ -15,6 +15,7 @@
 const {
   toMillis,
   nowMillis,
+  businessYmd,
   businessDayStartMs,
   businessMinutesOfDay,
   hasWorkLeft,
@@ -36,6 +37,12 @@ const OVERDUE_SWEEP_MAX = 500;
 // The same valve for the nightly digest, which reads a ~15-day window of open
 // jobs business-wide.
 const DIGEST_SWEEP_MAX = 1000;
+
+// The month-end review's display cap; past it the push says "1000+".
+const MONTH_END_REVIEW_MAX = 1000;
+
+// The raw read under it: personal blocks never close and must not fill it.
+const MONTH_END_SCAN_MAX = 5000;
 
 // FCM's hard cap on a message's data map is 4 KB.
 const WIDGET_PAYLOAD_MAX_BYTES = 3000;
@@ -106,6 +113,8 @@ function toIdList(value) {
 function isCrewCompletion(before, after) {
   if (!after || !before) return false;
   if (after.isPersonal === true || after.isDayOff === true) return false;
+  // A fresh op id is an admin write; the crew mark-done rule cannot stamp one.
+  if (after.seriesOpId && after.seriesOpId !== before.seriesOpId) return false;
   return isCompletedStatus(after.status) && !isCompletedStatus(before.status);
 }
 
@@ -235,6 +244,35 @@ function selectOverdueCandidates(records, now) {
 }
 
 /**
+ * Whether `now` falls on the last business-local day of its month.
+ * @param {(Date|number)} now
+ * @return {boolean}
+ */
+function isLastDayOfBusinessMonth(now) {
+  const nowMs = nowMillis(now);
+  if (!Number.isFinite(nowMs)) return false;
+  const [, month] = businessYmd(new Date(nowMs));
+  const [, tomorrowMonth] = businessYmd(new Date(businessDayStartMs(nowMs, 1)));
+  return month !== tomorrowMonth;
+}
+
+/**
+ * Open jobs whose end has passed, however long ago, for the month-end review.
+ * @param {!Array<!Object>} records Appointment records.
+ * @param {(Date|number)} now
+ * @return {!Array<!Object>}
+ */
+function selectMonthEndOverdue(records, now) {
+  const nowMs = nowMillis(now);
+  return (records || []).filter((r) => {
+    if (!OPEN_LIKE.has(String(r.status || "").toLowerCase())) return false;
+    if (r.isPersonal === true || r.isDayOff === true) return false;
+    const ms = toMillis(r.endTime);
+    return ms != null && ms <= nowMs;
+  });
+}
+
+/**
  * Groups the jobs RUNNING tomorrow (Toronto) by employee doc id, cancelled
  * excluded, each list sorted by clock time.
  * @param {!Array<!Object>} records Appointment records.
@@ -350,6 +388,8 @@ module.exports = {
   OVERDUE_LOOKBACK_MS,
   OVERDUE_SWEEP_MAX,
   DIGEST_SWEEP_MAX,
+  MONTH_END_REVIEW_MAX,
+  MONTH_END_SCAN_MAX,
   WIDGET_PAYLOAD_MAX_BYTES,
   OPEN_STATUSES,
   CHANGE_RECIPIENT_ROLES,
@@ -360,6 +400,8 @@ module.exports = {
   nowMillis,
   diffAppointmentForNotifications,
   selectOverdueCandidates,
+  isLastDayOfBusinessMonth,
+  selectMonthEndOverdue,
   groupTomorrowsJobsByEmployee,
   tomorrowWindowToronto,
   overduePromptLedgerId,

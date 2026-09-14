@@ -77,7 +77,7 @@ call 2026-09-06, so Year's absence is permanent. **Re-decide before shipping Yea
     ├── settings/                    Theme, text scale, language, app version, biometric app-lock toggle, notification-permission recovery row, Live job card switch (iOS-only, hidden where unsupported), LegalSettingsCard (Privacy Policy + Terms of Service rows — the durable route to the terms, since the setup screen's consent link is shown once and only to a new employee), and my_details_screen — the ONLY self-service edit surface. Since P5 (2026-08-10) it covers the person's own phone, emergency contact + emergency phone, full availability (working days, hours, on-call), `travelAlertsEnabled`, `locationSharingEnabled` (which also has its own screen, `location_sharing_screen.dart` / `LocationSharingView` — what is uploaded, when it was last sent, and one action that stops sharing AND erases the stored position; `applyLocationSharing` is the one owner of the field-plus-presence flip, reached by both surfaces through `saveLocationSharing`, which adds the offline guard, the ME-SAVE tag and the error notice), and — through `SelfEmailService`, which re-authenticates first and calls `changeEmployeeEmail` rather than writing the doc — their own sign-in email. It carries TWO save behaviours on purpose: identity fields sit behind a dirty-gated Save/Discard bar (a half-typed phone auto-committing is a bad write with no undo), while availability applies immediately and optimistically, rolling back on failure. Still admin-owned on both branches and NOT reachable here: `maxJobsPerDay` (admin-only section, hidden for a technician), `role`, `jobTitle`, `colorValue`, `status`
     ├── siri/                        Siri App Intents snapshot — ScheduleSnapshotService writes a today+7d payload under the App Group key `schedule_snapshot` (nothing renders it); buildScheduleSnapshot is hand-mirrored with ios/SiriIntents/ScheduleSnapshot.swift (schema **v3** — bump scheduleSnapshotVersion and supportedVersion together; v2 added isAllDay + title, v3 the multi-day dayIndex/dayCount); payload is field-limited because the App Group reads while locked
     ├── splash/                      Auth resolution on cold start (screen + routing logic)
-    └── wave/                        Wave Accounting integration — read-only connection status + per-client sync badge + auto-import cadence picker + the two-way "Sync with Wave" action (all writes are Cloud-Function-owned). `domain/wave_sync_notice.dart` composes the result notice from a `WaveSyncSummary`: one clause per direction, zero-valued clauses dropped, and clauses for still-queued / dead-lettered / push-failed so an all-zero run can't be reported as success
+    └── wave/                        Wave Accounting integration — read-only connection status + per-client sync badge + the two-way "Sync with Wave" action (all writes are Cloud-Function-owned). `domain/wave_sync_notice.dart` composes the result notice from a `WaveSyncSummary`: one clause per direction, zero-valued clauses dropped, and clauses for still-queued / dead-lettered / push-failed so an all-zero run can't be reported as success
 ```
 
 ---
@@ -1627,14 +1627,12 @@ rateLimits/{route__uid}  True sliding window written by enforceDurableRateLimit.
                            wave-bootstrap         10 / hr
                            wave-connection        60 / hr
                            wave-import             5 / hr
-                           wave-schedule          20 / hr
                            wave-retry             10 / hr
 
                        Note the two spellings: the account/client/employee/places
                        routes use the callable's own name, while the Wave ones
                        use a wave-* id that is NOT the callable name
                        (waveGetConnection → 'wave-connection',
-                       waveSetImportSchedule → 'wave-schedule',
                        waveImportCustomers → 'wave-import',
                        waveRetryFailedJobs → 'wave-retry').
   attempts: [number]   epoch-ms timestamps; entries older than the window are
@@ -1713,8 +1711,9 @@ clientRecountClaims/{clientId}   The same ledger for the client `jobCount`
 
 wave/{docId}           Wave Accounting connection metadata (e.g. wave/connection:
                        status, businessId, businessName, last-sync timestamps,
-                       importSchedule 'off'|'weekly'|'monthly' + lastAutoImportAt
-                       for the daily runWaveDaily). Token lives only in
+                       and any legacy importSchedule/lastAutoImportAt, inert
+                       since the cadence was deleted 2026-09-13). Token lives
+                       only in
                        Secret Manager. Read only via the waveGetConnection
                        callable — never client-side (read+write denied).
   customerDeltaSince   Delta-import watermark: imports ask Wave for customers

@@ -2175,26 +2175,6 @@
   "@wave_syncButton": {
     "description": "Button label: runs a two-way Wave sync — pending app edits are pushed to Wave, then Wave customers are pulled into the app"
   },
-  "wave_autoImportLabel": "Automatic import",
-  "@wave_autoImportLabel": {
-    "description": "Settings label for the Wave automatic-import cadence picker."
-  },
-  "wave_autoImportOff": "Off",
-  "@wave_autoImportOff": {
-    "description": "Wave automatic-import cadence: disabled."
-  },
-  "wave_autoImportWeekly": "Weekly",
-  "@wave_autoImportWeekly": {
-    "description": "Wave automatic-import cadence: once a week."
-  },
-  "wave_autoImportMonthly": "Monthly",
-  "@wave_autoImportMonthly": {
-    "description": "Wave automatic-import cadence: once a month."
-  },
-  "wave_autoImportUpdated": "Automatic import updated.",
-  "@wave_autoImportUpdated": {
-    "description": "Success notice after changing the Wave automatic-import cadence."
-  },
   "wave_connectedSuccess": "Connected to {businessName}",
   "@wave_connectedSuccess": {
     "description": "Success notice shown after a successful Wave bootstrap",
@@ -2677,22 +2657,100 @@
   "@liveMap_recenter": {
     "description": "Accessibility label / tooltip for the button that recenters the staff map on all staff pins"
   },
-  "liveMap_rosterButton": "Show staff list",
-  "@liveMap_rosterButton": {
-    "description": "Tooltip / accessibility label for the button that opens the bottom sheet listing every staff member on the map"
+  "liveMap_teamTitle": "Team",
+  "@liveMap_teamTitle": {
+    "description": "Header of the draggable team sheet on the admin staff map"
   },
-  "liveMap_rosterTitle": "Staff",
-  "@liveMap_rosterTitle": {
-    "description": "Title of the bottom sheet that lists every staff member currently sharing their location"
-  },
-  "liveMap_rosterCount": "{count, plural, =1{1 sharing} other{{count} sharing}}",
-  "@liveMap_rosterCount": {
-    "description": "Subtitle showing how many staff are currently sharing their location",
+  "liveMap_teamOnMapCount": "{count} on the map",
+  "@liveMap_teamOnMapCount": {
+    "description": "First half of the team sheet's count line: how many teammates have a pin on the map",
     "placeholders": {
       "count": {
         "type": "int"
       }
     }
+  },
+  "liveMap_teamOffMapCount": "{count} not on it",
+  "@liveMap_teamOffMapCount": {
+    "description": "Second half of the team sheet's count line: how many active teammates have no pin on the map",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "liveMap_sectionOnMap": "On the map",
+  "@liveMap_sectionOnMap": {
+    "description": "Team sheet section label for teammates with a pin on the map (the app uppercases it and appends a count)"
+  },
+  "liveMap_sectionAlsoNearby": "Also nearby",
+  "@liveMap_sectionAlsoNearby": {
+    "description": "Team sheet section label for the other pins, shown under the selected person"
+  },
+  "liveMap_sectionNotSeen": "Not seen in 2 h",
+  "@liveMap_sectionNotSeen": {
+    "description": "Team sheet section label for teammates whose location is more than two hours old, or who have sharing on but no location yet"
+  },
+  "liveMap_sectionSharingOff": "Location sharing off",
+  "@liveMap_sectionSharingOff": {
+    "description": "Team sheet section label for teammates who have not turned location sharing on"
+  },
+  "liveMap_noFixYet": "No location received yet",
+  "@liveMap_noFixYet": {
+    "description": "Row subtitle for a teammate who turned sharing on but whose phone has never reported a location"
+  },
+  "liveMap_sharingOffRow": "Hasn't turned sharing on",
+  "@liveMap_sharingOffRow": {
+    "description": "Row subtitle for a teammate in the Location sharing off section"
+  },
+  "liveMap_sharingOffFooter": "They can turn it on in Settings › Staff map location.",
+  "@liveMap_sharingOffFooter": {
+    "description": "Footer under the Location sharing off section, naming the Settings row that turns sharing on"
+  },
+  "employees_testAccount": "Test account",
+  "@employees_testAccount": {
+    "description": "Admin-only switch on the edit-person sheet that marks an account as a test account"
+  },
+  "employees_testAccountCaption": "Hides this person from the staff map, the job pickers and team counts.",
+  "@employees_testAccountCaption": {
+    "description": "Caption under the Test account switch explaining what it hides"
+  },
+  "employees_testAccountsSection": "{count, plural, =1{1 test account} other{{count} test accounts}}",
+  "@employees_testAccountsSection": {
+    "description": "Collapsed section at the bottom of the Team roster holding test accounts",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "onboarding_shareLocationTitle": "Be on the team map",
+  "@onboarding_shareLocationTitle": {
+    "description": "Headline of the one-time page asking a teammate to turn location sharing on"
+  },
+  "onboarding_shareLocationBody": "Share your spot so the office can send whoever is closest to the next job.",
+  "@onboarding_shareLocationBody": {
+    "description": "One sentence explaining why the team map asks for location sharing"
+  },
+  "onboarding_shareLocationOnlyOpen": "Only while the app is open",
+  "@onboarding_shareLocationOnlyOpen": {
+    "description": "First reassurance on the location-sharing ask page"
+  },
+  "onboarding_shareLocationOnlyLatest": "Only your latest spot, never a trail",
+  "@onboarding_shareLocationOnlyLatest": {
+    "description": "Second reassurance on the location-sharing ask page"
+  },
+  "onboarding_shareLocationOffAnytime": "Turn it off anytime in Settings",
+  "@onboarding_shareLocationOffAnytime": {
+    "description": "Third reassurance on the location-sharing ask page"
+  },
+  "onboarding_shareLocationTurnOn": "Turn on",
+  "@onboarding_shareLocationTurnOn": {
+    "description": "Primary button on the location-sharing ask page"
+  },
+  "onboarding_shareLocationNotNow": "Not now",
+  "@onboarding_shareLocationNotNow": {
+    "description": "Secondary button on the location-sharing ask page; the page is never shown again"
   },
   "liveMap_you": "You",
   "@liveMap_you": {
@@ -2820,21 +2878,21 @@
   "@tour_historySearchDesc": {
     "description": "Tour step description: history search bar"
   },
-  "tour_liveMapRosterTitle": "Staff roster",
+  "tour_liveMapRosterTitle": "Your team",
   "@tour_liveMapRosterTitle": {
-    "description": "Tour step title: live-map roster FAB"
+    "description": "Tour step title: live-map team sheet handle"
   },
-  "tour_liveMapRosterDesc": "See everyone sharing their location, sorted by distance from you.",
+  "tour_liveMapRosterDesc": "Drag this sheet up to see who is on the map, who hasn't been seen in two hours, and who hasn't turned sharing on.",
   "@tour_liveMapRosterDesc": {
-    "description": "Tour step description: live-map roster FAB"
+    "description": "Tour step description: live-map team sheet handle"
   },
   "tour_liveMapRecenterTitle": "Recenter",
   "@tour_liveMapRecenterTitle": {
-    "description": "Tour step title: live-map recenter FAB"
+    "description": "Tour step title: live-map recenter tile"
   },
   "tour_liveMapRecenterDesc": "Bring the map back to your team after panning around.",
   "@tour_liveMapRecenterDesc": {
-    "description": "Tour step description: live-map recenter FAB"
+    "description": "Tour step description: live-map recenter tile"
   },
   "tour_settingsAppearanceTitle": "Make it yours",
   "@tour_settingsAppearanceTitle": {
@@ -4139,5 +4197,173 @@
   "tour_clientsSortDesc": "Sort by name, by who has had the most jobs, or by who was added most recently.",
   "@tour_clientsSortDesc": {
     "description": "Description of the clients tour step highlighting the sort control."
+  },
+  "nav_overdueReview": "Overdue jobs",
+  "@nav_overdueReview": {
+    "description": "Drawer row (admins only, THE BUSINESS group, after History) opening the overdue-job review screen."
+  },
+  "calendar_overdueReviewTitle": "Overdue jobs",
+  "@calendar_overdueReviewTitle": {
+    "description": "Top bar title of the overdue review screen: every open job whose end time has passed."
+  },
+  "calendar_overdueReviewSummary": "{count, plural, =1{job ended without being closed} other{jobs ended without being closed}}",
+  "@calendar_overdueReviewSummary": {
+    "description": "Caption under the big overdue count on the review screen. The number itself is rendered separately above it.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewOldest": "Oldest · {date}",
+  "@calendar_overdueReviewOldest": {
+    "description": "Mono line under the review summary naming the oldest overdue job's date, e.g. 'Oldest · Jul 22'.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "calendar_overdueReviewSelected": "{count} selected",
+  "@calendar_overdueReviewSelected": {
+    "description": "Replaces the 'Oldest' line while any job on the review screen is ticked.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewMonthSplitter": "{month} · {count}",
+  "@calendar_overdueReviewMonthSplitter": {
+    "description": "Month splitter on the review screen, e.g. 'JULY 2026 · 2'. The month arrives already uppercased.",
+    "placeholders": {
+      "month": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewSelectAll": "Select all",
+  "@calendar_overdueReviewSelectAll": {
+    "description": "Trailing button on a month splitter that ticks every job in that month."
+  },
+  "calendar_overdueReviewClear": "Clear",
+  "@calendar_overdueReviewClear": {
+    "description": "Replaces 'Select all' on a month splitter once every job in that month is ticked; unticks them."
+  },
+  "calendar_overdueReviewNotDoneCount": "Not done ({count})",
+  "@calendar_overdueReviewNotDoneCount": {
+    "description": "Destructive action-bar button on the review screen: marks the ticked jobs cancelled.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewCompleteCount": "Complete ({count})",
+  "@calendar_overdueReviewCompleteCount": {
+    "description": "Primary action-bar button on the review screen: marks the ticked jobs done.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewNotDone": "Not done",
+  "@calendar_overdueReviewNotDone": {
+    "description": "Confirm button of the Not done dialog. The stored status behind it is cancelled."
+  },
+  "calendar_overdueReviewComplete": "Complete",
+  "@calendar_overdueReviewComplete": {
+    "description": "Confirm button of the Complete dialog on the review screen."
+  },
+  "calendar_overdueReviewGoBack": "Go back",
+  "@calendar_overdueReviewGoBack": {
+    "description": "Dismiss button of both review dialogs. Deliberately not 'Cancel', which reads as the destructive choice in a dialog about cancelling jobs."
+  },
+  "calendar_overdueReviewConfirmCompleteTitle": "{count, plural, =1{Mark 1 job complete?} other{Mark {count} jobs complete?}}",
+  "@calendar_overdueReviewConfirmCompleteTitle": {
+    "description": "Title of the confirmation before marking the ticked overdue jobs done.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewConfirmCompleteBody": "{count, plural, =1{It'll move to History as Complete, stamped with today's date.} other{They'll move to History as Complete, stamped with today's date.}}",
+  "@calendar_overdueReviewConfirmCompleteBody": {
+    "description": "Body of the Complete confirmation. The finish time recorded is the review time, not when the work happened.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewConfirmNotDoneTitle": "{count, plural, =1{Mark 1 job not done?} other{Mark {count} jobs not done?}}",
+  "@calendar_overdueReviewConfirmNotDoneTitle": {
+    "description": "Title of the confirmation before marking the ticked overdue jobs not done (cancelled).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewConfirmNotDoneBody": "{count, plural, =1{It'll be cancelled and move to History. The crew won't be notified.} other{They'll be cancelled and move to History. The crew won't be notified.}}",
+  "@calendar_overdueReviewConfirmNotDoneBody": {
+    "description": "Body of the Not done confirmation.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewMarkedComplete": "{count, plural, =1{1 job marked complete} other{{count} jobs marked complete}}",
+  "@calendar_overdueReviewMarkedComplete": {
+    "description": "Success notice after the review marks jobs done.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewMarkedNotDone": "{count, plural, =1{1 job marked not done} other{{count} jobs marked not done}}",
+  "@calendar_overdueReviewMarkedNotDone": {
+    "description": "Success notice after the review marks jobs not done (cancelled).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewEmptyTitle": "No overdue jobs",
+  "@calendar_overdueReviewEmptyTitle": {
+    "description": "Empty-state title on the review screen."
+  },
+  "calendar_overdueReviewEmptyBody": "Every job that has ended was closed.",
+  "@calendar_overdueReviewEmptyBody": {
+    "description": "Empty-state body on the review screen."
+  },
+  "calendar_overdueReviewSelectJob": "Select {title}",
+  "@calendar_overdueReviewSelectJob": {
+    "description": "Screen-reader label of a job's checkbox on the review screen.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "employees_monthEndReviewPush": "Month-end overdue reminder",
+  "@employees_monthEndReviewPush": {
+    "description": "Admin-only switch on the edit-person sheet, shown only for an admin."
+  },
+  "employees_monthEndReviewPushDescription": "A push on the last day of each month counting jobs that ended without being closed",
+  "@employees_monthEndReviewPushDescription": {
+    "description": "Caption under the month-end overdue reminder switch."
+  },
+  "error_introReviewOverdue": "Couldn't update the jobs",
+  "@error_introReviewOverdue": {
+    "description": "Intro sentence of the failure notice when the overdue review's bulk status write fails (APPT-REVIEW)."
   }
 }

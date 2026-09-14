@@ -90,8 +90,8 @@ alwaysApply: true
   - a POSITIONAL first argument to a helper that logs —
     `image_viewer.dart`'s `_runExclusive` (`IMG-SAVE`, `IMG-SHARE`);
   - built by interpolation — `wave_settings_section.dart`'s `'WAVE-$tag'`,
-    where the four suffixes are spelled as bare `tag:` values (`CONNECT`,
-    `SYNC`, `RETRY`, `SCHEDULE`) and the prefix is added at the logging site,
+    where the three suffixes are spelled as bare `tag:` values (`CONNECT`,
+    `SYNC`, `RETRY`) and the prefix is added at the logging site,
     so neither half greps as the whole tag;
   - spelled inside a ternary — `appointment_image_loader.dart` (`IMG-LOAD`,
     twice);
@@ -120,6 +120,7 @@ alwaysApply: true
   | `APPT-OPEN` | `error_introOpenAppointment` |
   | `APPT-STATUS` | `error_introUpdateAppointmentStatus` |
   | `APPT-FIELDNOTE` | `error_introSaveFieldNotes` |
+  | `APPT-REVIEW` | `error_introReviewOverdue` |
   | `CLI-ADD` | `error_introAddClient` |
   | `CLI-SAVE` | `error_introSaveClient` |
   | `CLI-DEL` | `error_introDeleteClient` |
@@ -137,14 +138,18 @@ alwaysApply: true
   | `APPLOCK` | `error_introSaveAppLock` |
   | `ACCT-SIGNOUT` | `error_introSignOut` |
 
-  Five of those carry a per-tag caveat. CLI-ARCH covers archive AND un-archive,
+  Six of those carry a per-tag caveat. CLI-ARCH covers archive AND un-archive,
   which share one tag because they are one toggle. CLI-DEL's typed
   `ClientsFailureHasHistory` branch runs FIRST — "archive it instead" is
   actionable where the generic cause notice is not — and the composer is the
   fallback; both live in the shared `ClientActionsHost` mixin, so the list and
   the detail can't drift on either tag. APPT-STATUS = mark-done/cancel;
   `event_details_controller`'s status setters return a sealed
-  `EventDetailsActionOutcome`, so the widget composes the notice. EMP-DELETE =
+  `EventDetailsActionOutcome`, so the widget composes the notice. APPT-REVIEW = the
+  overdue review's bulk Complete / Not done; `OverdueReviewController` logs it
+  and returns a sealed `OverdueReviewOutcome`, so the screen composes the
+  notice, and the screen's load listener and the repository's cap warn log under
+  the same tag. EMP-DELETE =
   removing a pending account, P4c's replacement for the retired EMP-REVOKE; its
   typed `EmployeesFailureAccountNoLongerPending` branch runs FIRST and the
   composer is the fallback. ACCT-SIGNOUT is spelled at TWO layers and only one of them composes a notice: `delete_account_flow.dart` surfaces `error_introSignOut`, while `auth_service.dart`'s two sites are log-only (a sign-out failing during teardown has no screen left to notify). It is listed here rather than below because the intro key exists; don't move it back on the strength of the service's uses alone. **`EMP-SAVE` is GONE** — the employee save path logs
@@ -180,16 +185,15 @@ alwaysApply: true
   - Devices / delivery: `FCM`, `PUSH`, `PUSH-TAP`, `LIVE-ACT`, `WIDGET`,
     `WIDGET-TAP`, `SIRI`
   - OS permissions: `PERM-LOCATION`, `PERM-MEDIA`
-  - Wave: `WAVE-BOOT`, `WAVE-CONN`, `WAVE-CUST`, `WAVE-RETRY`, `WAVE-SCHED`
+  - Wave: `WAVE-BOOT`, `WAVE-CONN`, `WAVE-CUST`, `WAVE-RETRY`
     (all `wave_service.dart`), `WAVE-BADGE` (`wave_sync_badge.dart`),
     `WAVE-BLOCKED` (`firebase_clients_repository.dart`'s `watchBlockedClients`), plus the
-    four `WaveSettingsSection` composes by interpolation — `WAVE-CONNECT`,
-    `WAVE-SYNC`, `WAVE-RETRY`, `WAVE-SCHEDULE`. Note `WAVE-RETRY` is spelled at
-    two layers and `WAVE-SCHED`/`WAVE-SCHEDULE` are two DIFFERENT tags for the
-    same feature at two layers; a Crashlytics search for one will not find the
-    other. The Settings-layer four are the `WaveNetwork().toLocalizedMessage`
-    carve-out from `composeErrorNotice`, so they surface a message without an
-    `error_intro*` key.
+    three `WaveSettingsSection` composes by interpolation — `WAVE-CONNECT`,
+    `WAVE-SYNC`, `WAVE-RETRY`. Note `WAVE-RETRY` is spelled at two layers.
+    `WAVE-SCHED` and `WAVE-SCHEDULE` are GONE from the app with the import
+    cadence (2026-09-13). The Settings-layer three are the
+    `WaveNetwork().toLocalizedMessage` carve-out from `composeErrorNotice`, so
+    they surface a message without an `error_intro*` key.
 - **A user-visible failure notice is not a substitute for a log.** A `catch` that
   only pushes a notice (or only returns `false`) is invisible in Crashlytics —
   every swallowed failure needs a `warn` beside it. The sanctioned exceptions are

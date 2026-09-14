@@ -258,11 +258,12 @@ Material Design 3 (Flat / Elevation). Use `ColorScheme`, `TextTheme`, and `Theme
   `heroTag`.** The `IndexedStack` keeps every tab's `Scaffold` (and FAB) mounted
   at once, so a default/shared hero tag collides ("multiple heroes share the same
   tag"). The tags are declared in the tab screens the hub keeps mounted (not in
-  `hub_shell.dart` itself). Existing tags (5): `addFab`
-  (`main_calendar_screen.dart`), `clientsAddFab` (`clients_screen.dart`),
-  `employeesAddFab` (`employees_screen.dart`), and `liveMapRosterFab` +
-  `liveMapRecenterFab` (`live_map_screen.dart`). `todayFab` retired in P2 — the
-  Today control is now a plain `Material` pill, not a FAB.
+  `hub_shell.dart` itself). Existing tags (3): `addFab`
+  (`main_calendar_screen.dart`), `clientsAddFab` (`clients_screen.dart`) and
+  `employeesAddFab` (`employees_screen.dart`). `todayFab` retired in P2 — the
+  Today control is now a plain `Material` pill, not a FAB — and
+  `liveMapRosterFab` / `liveMapRecenterFab` went on 2026-09-13, when the map's
+  controls became ghost tiles over a draggable team sheet.
 - **`AppSearchBar` call sites must pass `textScaler: MediaQuery.textScalerOf(context)`.**
   Its `preferredSize` has no `BuildContext`, so without the scaler the app-bar
   bottom slot reserves fixed height and clips the field at large text sizes.

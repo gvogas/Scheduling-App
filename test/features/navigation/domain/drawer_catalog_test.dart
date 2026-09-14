@@ -4,10 +4,22 @@ import 'package:scheduling/core/navigation/app_destination.dart';
 import 'package:scheduling/features/navigation/domain/drawer_catalog.dart';
 
 void main() {
-  test('an admin sees eight rows in four groups', () {
+  test('an admin sees nine rows in four groups', () {
     final groups = drawerGroups(isAdmin: true);
     expect(groups, hasLength(4));
-    expect(groups.expand((g) => g.rows), hasLength(8)); // 10 once P5+P6 land
+    expect(groups.expand((g) => g.rows), hasLength(9));
+  });
+
+  test('Overdue jobs follows History in the BUSINESS group, admin only', () {
+    final business = drawerGroups(isAdmin: true)[2].rows;
+    expect(
+      business.indexOf(PushedDestination.overdueReview),
+      business.indexOf(PushedDestination.history) + 1,
+    );
+    final employeeRows = drawerGroups(
+      isAdmin: false,
+    ).expand((g) => g.rows).toList();
+    expect(employeeRows, isNot(contains(PushedDestination.overdueReview)));
   });
 
   test('an employee sees only TODAY and ACCOUNT', () {

@@ -23,6 +23,7 @@ abstract final class AnalyticsEvents {
   static const String appointmentRestored = 'appointment_restored';
   static const String jobStarted = 'job_started';
   static const String jobCompleted = 'job_completed';
+  static const String overdueReviewApplied = 'overdue_review_applied';
 
   // Calendar.
   static const String calendarDateChanged = 'calendar_date_changed';
@@ -67,6 +68,7 @@ abstract final class AnalyticsEvents {
     appointmentRestored,
     jobStarted,
     jobCompleted,
+    overdueReviewApplied,
     calendarDateChanged,
     calendarViewChanged,
     clientCreated,
@@ -137,6 +139,9 @@ abstract final class AnalyticsParams {
   static const String period = 'period';
   static const String role = 'role';
 
+  /// How many jobs one bulk action touched.
+  static const String count = 'count';
+
   static const Set<String> allParams = {
     source,
     surface,
@@ -162,6 +167,7 @@ abstract final class AnalyticsParams {
     action,
     period,
     role,
+    count,
   };
 }
 
@@ -189,6 +195,7 @@ abstract final class AnalyticsSources {
   static const String dayRoute = 'day_route';
   static const String employees = 'employees';
   static const String notification = 'notification';
+  static const String overdueReview = 'overdue_review';
   /// An in-app notice's action — distinct from a push tap.
   static const String notice = 'notice';
 }
@@ -201,6 +208,12 @@ abstract final class AnalyticsContactActions {
 
   /// An external web page (the legal links).
   static const String link = 'link';
+}
+
+/// Canonical `action` values for [AnalyticsEvents.overdueReviewApplied].
+abstract final class AnalyticsOverdueReviewActions {
+  static const String complete = 'complete';
+  static const String notDone = 'not_done';
 }
 
 /// Canonical `surface` values for the cross-cutting events.
