@@ -106,9 +106,7 @@ class LiveMapTeamSheet extends StatelessWidget {
                   if (i > 0) const _RowDivider(),
                   _AbsenceRow(
                     absence: absence,
-                    subtitle: absence.lastSeenAt == null
-                        ? l10n.liveMap_noFixYet
-                        : freshnessLabel(l10n, absence.lastSeenAt, now),
+                    subtitle: l10n.liveMap_noFixYet,
                   ),
                 ],
               ],

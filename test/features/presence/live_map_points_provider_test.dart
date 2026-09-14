@@ -14,6 +14,7 @@ EmployeeRecord _employee(String id) => EmployeeRecord(
   name: 'Person $id',
   email: '$id@example.com',
   status: 'active',
+  locationSharingEnabled: true,
 );
 
 final _now = DateTime(2026, 7, 8, 12);
@@ -96,7 +97,7 @@ void main() {
     );
   });
 
-  test('a fix older than two hours is not a point on the map', () async {
+  test('a fix older than two hours is still a point on the map', () async {
     final container = _container(
       fixes: [_fix('e1', age: const Duration(hours: 3))],
       users: [_employee('e1')],
@@ -104,19 +105,8 @@ void main() {
     addTearDown(container.dispose);
     await _settle();
 
-    expect(container.read(liveMapPointsProvider).requireValue, isEmpty);
-  });
-
-  test('the team groups the same fix under NOT SEEN', () async {
-    final container = _container(
-      fixes: [_fix('e1', age: const Duration(hours: 3))],
-      users: [_employee('e1')],
-    )..listen(liveMapTeamProvider, (_, _) {});
-    addTearDown(container.dispose);
-    await _settle();
-
     expect(
-      container.read(liveMapTeamProvider).requireValue.notSeen.single.userDocId,
+      container.read(liveMapPointsProvider).requireValue.single.userDocId,
       'e1',
     );
   });

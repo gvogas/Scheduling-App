@@ -19,8 +19,18 @@ import 'package:scheduling/l10n/l10n.dart';
 
 final _now = DateTime(2026, 7, 17, 12);
 
-const _alice = EmployeeRecord(id: 'u1', name: 'Alice', status: 'active');
-const _bob = EmployeeRecord(id: 'u2', name: 'Bob', status: 'active');
+const _alice = EmployeeRecord(
+  id: 'u1',
+  name: 'Alice',
+  status: 'active',
+  locationSharingEnabled: true,
+);
+const _bob = EmployeeRecord(
+  id: 'u2',
+  name: 'Bob',
+  status: 'active',
+  locationSharingEnabled: true,
+);
 
 class _MockPlaces extends Mock implements PlacesRepository {}
 
@@ -235,6 +245,35 @@ void main() {
     );
   });
 
+  testWidgets('the team sheet survives the empty-state card going away', (
+    tester,
+  ) async {
+    final presence = StreamController<List<PresenceFix>>.broadcast();
+    addTearDown(presence.close);
+    await tester.pumpWidget(
+      wrap(
+        overrides: baseOverrides(presence: presence.stream),
+        child: LiveMapScreen(
+          isAdmin: true,
+          employeeId: 'e1',
+          mapBuilder: stubMap,
+        ),
+      ),
+    );
+    await tester.pump();
+    presence.add(const []);
+    await settleMap(tester);
+    expect(
+      find.text('No one is sharing their location right now'),
+      findsOneWidget,
+    );
+
+    presence.add([_fix('u1', 45.5, -73.6, _now)]);
+    await settleMap(tester);
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('a presence stream error renders the error body', (tester) async {
     await tester.pumpWidget(
       wrap(
@@ -309,6 +348,12 @@ void main() {
       'sharing', (tester) async {
     useTallViewport(tester);
     const carol = EmployeeRecord(id: 'u3', name: 'Carol', status: 'active');
+    const dave = EmployeeRecord(
+      id: 'u4',
+      name: 'Dave',
+      status: 'active',
+      locationSharingEnabled: true,
+    );
     await tester.pumpWidget(
       wrap(
         overrides: baseOverrides(
@@ -316,7 +361,7 @@ void main() {
             _fix('u1', 45.5, -73.6, _now),
             _fix('u2', 45.6, -73.7, _now.subtract(const Duration(hours: 3))),
           ]),
-          users: const [_alice, _bob, carol],
+          users: const [_alice, _bob, carol, dave],
         ),
         child: LiveMapScreen(
           isAdmin: true,
@@ -329,15 +374,15 @@ void main() {
 
     expect(
       [
-        find.text('ON THE MAP · 1'),
-        find.text('NOT SEEN IN 2 H · 1'),
+        find.text('ON THE MAP · 2'),
+        find.text('NOT SEEN YET · 1'),
         find.text('LOCATION SHARING OFF · 1'),
       ].map((f) => f.evaluate().length),
       [1, 1, 1],
     );
   });
 
-  testWidgets('a pin older than two hours gets no marker', (tester) async {
+  testWidgets('a pin older than two hours keeps its marker', (tester) async {
     await tester.pumpWidget(
       wrap(
         overrides: baseOverrides(
@@ -355,7 +400,10 @@ void main() {
     );
     await settleMap(tester);
 
-    expect(lastConfig!.markers.map((m) => m.markerId.value), ['u1']);
+    expect(
+      lastConfig!.markers.map((m) => m.markerId.value),
+      unorderedEquals(['u1', 'u2']),
+    );
   });
 
   testWidgets('a test account is neither a marker nor a row', (tester) async {

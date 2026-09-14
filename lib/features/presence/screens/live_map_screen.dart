@@ -424,7 +424,9 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
               top: AppSpacing.sp16,
               child: EmptyMapCard(),
             ),
+          // Keyed: the conditional card above must not re-slot the sheet.
           Positioned.fill(
+            key: const ValueKey('liveMapTeamSheet'),
             child: NotificationListener<DraggableScrollableNotification>(
               onNotification: (notification) {
                 _sheetExtent.value = notification.extent;

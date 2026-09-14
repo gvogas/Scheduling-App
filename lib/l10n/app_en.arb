@@ -2687,9 +2687,9 @@
   "@liveMap_sectionAlsoNearby": {
     "description": "Team sheet section label for the other pins, shown under the selected person"
   },
-  "liveMap_sectionNotSeen": "Not seen in 2 h",
+  "liveMap_sectionNotSeen": "Not seen yet",
   "@liveMap_sectionNotSeen": {
-    "description": "Team sheet section label for teammates whose location is more than two hours old, or who have sharing on but no location yet"
+    "description": "Team sheet section label for teammates who turned sharing on but whose phone has never reported a location (the app uppercases it and appends a count)"
   },
   "liveMap_sectionSharingOff": "Location sharing off",
   "@liveMap_sectionSharingOff": {
@@ -2882,7 +2882,7 @@
   "@tour_liveMapRosterTitle": {
     "description": "Tour step title: live-map team sheet handle"
   },
-  "tour_liveMapRosterDesc": "Drag this sheet up to see who is on the map, who hasn't been seen in two hours, and who hasn't turned sharing on.",
+  "tour_liveMapRosterDesc": "Drag this sheet up to see who is on the map, who hasn't sent a location yet, and who hasn't turned sharing on.",
   "@tour_liveMapRosterDesc": {
     "description": "Tour step description: live-map team sheet handle"
   },

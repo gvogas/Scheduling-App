@@ -3,7 +3,11 @@
 **Status: BUILT 2026-09-13 on `dev` (uncommitted at time of writing), NOT
 SHIPPED.** No backend deploy (the optional rules type check was skipped).
 Left: the device-only checks in §7, republishing `docs/legal/privacy-policy.html`
-to `es-pro-legal`, and flipping the Apple tester's Test account switch once the
+to `es-pro-legal` once the build ships (the rest of that file went live
+2026-09-14, so the three two-hour location passages are the only difference),
+re-checking the crew-map paragraph of `docs/legal/accessibility.html` (written
+2026-09-14 against 1.61's staff list, which this build replaces with the team
+sheet) and republishing it, and flipping the Apple tester's Test account switch once the
 build ships. Deviations from this design are recorded at the end of this file.
 
 Mockup (chosen design, private artifact):

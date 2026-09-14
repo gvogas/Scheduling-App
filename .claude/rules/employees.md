@@ -626,19 +626,22 @@ self-service settings. Root context: `../../CLAUDE.md`.
   sign-out, self-service account deletion, and the server-side disable/delete
   bridge (`functions/bridge.js`). Losing the OS permission mid-stream only runs
   `_stop()`, which cancels the subscription and timers — no network call. That
-  matters because **the stored fix keeps rendering on the admin live map for
-  up to two hours**: `LiveMapAggregator.groupTeam` drops a pin older than
-  `presenceHiddenAfter` (2 h, 2026-09-13) into the team sheet's NOT SEEN
-  section, and until then `staff_marker_icon.dart` has no staleness branch, so
-  an hour-old pin looks like a live one (only the sheet row shows the age). The
-  stored doc itself is still NOT deleted by that cutoff — it only stops being
-  drawn. The policy used to promise deletion on revocation and promise the pin
-  disappeared; owner call was to correct the TEXT rather than the code, so
-  `docs/legal/privacy-policy.html` §2, §6 and §8 now describe this behaviour
-  exactly. **The two must stay in step**: if you ever wire permission-revocation
-  into a delete, or change `presenceHiddenAfter`, update those sections in the
-  same change — and republish (see below), or the site keeps describing the old
-  behaviour.
+  matters because **the stored fix keeps rendering on the admin live map for as
+  long as it exists**: the 2 h `presenceHiddenAfter` cutoff (2026-09-13) was
+  REMOVED 2026-09-14 by owner call, so `LiveMapAggregator.groupTeam` pins every
+  fix at any age, and `staff_marker_icon.dart` has no staleness branch — a
+  day-old pin looks like a live one (only the sheet row shows the age). **A pin
+  needs its owner's `locationSharingEnabled` ON, and that gate is the backstop
+  that replaced the cutoff**: without it, presence docs written before sharing
+  became opt-in (2026-09-04) would reappear for people who never turned it on,
+  and a failed `unregister()` delete would pin someone who switched sharing off.
+  NOT SEEN now means sharing on with no fix yet. The policy used to promise
+  deletion on revocation and promise the pin disappeared; owner call was to
+  correct the TEXT rather than the code, so `docs/legal/privacy-policy.html`
+  §2, §6 and §8 now describe this behaviour exactly. **The two must stay in
+  step**: if you ever wire permission-revocation into a delete, reintroduce an
+  age cutoff, or drop the sharing gate, update those sections in the same change
+  — and republish (see below), or the site keeps describing the old behaviour.
 - **`isTestAccount` hides an account from every teammate LIST and COUNT, and
   from no LOOKUP** (2026-09-13, for the Apple App Review account). It is an
   ADMIN-ONLY field: a switch on `edit_person_sheet.dart`, on `updateEmployee`'s

@@ -9,9 +9,6 @@ import 'package:scheduling/features/presence/domain/models/presence_fix.dart';
 /// with PRESENCE_STALE_MINUTES in functions/travel_utils.js.
 const presenceStaleAfter = Duration(minutes: 25);
 
-/// A pin older than this leaves the map; Dart-only, unlike [presenceStaleAfter].
-const presenceHiddenAfter = Duration(hours: 2);
-
 /// Pure reducers that join raw presence fixes with the active staff roster
 /// for the admin live-location map. Every function takes `now` explicitly so
 /// the whole feature can be tested with a fixed clock.
@@ -44,30 +41,30 @@ class LiveMapAggregator {
     return points;
   }
 
-  /// On the map, not seen (old fix, or sharing on with none yet), or sharing off.
+  /// On the map (sharing on, any age), not seen (no fix yet), or sharing off.
   static LiveMapTeam groupTeam({
     required List<PresenceFix> fixes,
     required List<EmployeeRecord> users,
-    required DateTime now,
   }) {
+    final sharingIds = {
+      for (final u in users)
+        if (u.locationSharingEnabled) u.id,
+    };
     final onMap = [
       for (final p in join(fixes: fixes, users: users))
-        if (!isHidden(p.updatedAt, now)) p,
+        if (sharingIds.contains(p.userDocId)) p,
     ];
     final onMapIds = {for (final p in onMap) p.userDocId};
-    final fixById = {for (final f in fixes) f.userDocId: f};
     final notSeen = <StaffAbsence>[];
     final sharingOff = <StaffAbsence>[];
     for (final user in users) {
       if (!_isTeammate(user) || onMapIds.contains(user.id)) continue;
-      final fix = fixById[user.id];
       final absence = StaffAbsence(
         userDocId: user.id,
         name: user.displayName,
         color: user.color,
-        lastSeenAt: fix?.updatedAt,
       );
-      if (fix != null || user.locationSharingEnabled) {
+      if (user.locationSharingEnabled) {
         notSeen.add(absence);
       } else {
         sharingOff.add(absence);
@@ -89,12 +86,6 @@ class LiveMapAggregator {
   static bool isStale(DateTime? updatedAt, DateTime now) {
     if (updatedAt == null) return false;
     return now.difference(updatedAt) > presenceStaleAfter;
-  }
-
-  /// True only once [updatedAt] is older than [presenceHiddenAfter].
-  static bool isHidden(DateTime? updatedAt, DateTime now) {
-    if (updatedAt == null) return false;
-    return now.difference(updatedAt) > presenceHiddenAfter;
   }
 
   /// Widget-facing freshness bucket so call sites only map to l10n strings.
@@ -228,15 +219,11 @@ class StaffAbsence {
     required this.userDocId,
     required this.name,
     required this.color,
-    required this.lastSeenAt,
   });
 
   final String userDocId;
   final String name;
   final Color color;
-
-  /// The age of the stored fix; null when the phone has never reported one.
-  final DateTime? lastSeenAt;
 }
 
 /// The admin map's three team sections.

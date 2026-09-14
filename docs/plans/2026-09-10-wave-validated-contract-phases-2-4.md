@@ -764,6 +764,12 @@ and 1.61.0 still gets a success from the no-op. One cosmetic lie remains
 for 1.61.0 admins: picking a cadence shows "Automatic import updated." and
 then re-reads as Off. The deploy should still wait on the quiet-days guard
 above, since Task 11 changes the import's write path.
+**At the deploy, drop the cadence wording from `docs/legal/` and republish
+both pages to `es-pro-legal`:** the privacy policy's Wave row ("or, if the
+administrator sets a schedule, automatically each week or month" and the
+sentence about turning automatic import off) and the terms' "or on a schedule
+the administrator chooses". Until then the wording is still true, because the
+deployed `runWaveDaily` still honours a set cadence.
 
 ---
 

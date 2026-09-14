@@ -27,7 +27,7 @@ final liveMapTickProvider = StreamProvider.autoDispose<int>(
   (ref) => Stream<int>.periodic(const Duration(seconds: 30), (i) => i),
 );
 
-/// Watches the tick so a pin crossing [presenceHiddenAfter] drops off live.
+/// Watches the tick so the team sheet's freshness labels age live.
 final liveMapTeamProvider = Provider.autoDispose<AsyncValue<LiveMapTeam>>((
   ref,
 ) {
@@ -51,7 +51,6 @@ final liveMapTeamProvider = Provider.autoDispose<AsyncValue<LiveMapTeam>>((
     LiveMapAggregator.groupTeam(
       fixes: fixes.requireValue,
       users: users.requireValue,
-      now: ref.watch(liveMapClockProvider)(),
     ),
   );
 });

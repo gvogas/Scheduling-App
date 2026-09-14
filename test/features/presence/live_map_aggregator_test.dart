@@ -108,29 +108,6 @@ void main() {
     });
   });
 
-  group('LiveMapAggregator.isHidden', () {
-    test('null updatedAt stays on the map', () {
-      expect(LiveMapAggregator.isHidden(null, now), isFalse);
-    });
-
-    test('just under two hours stays on the map', () {
-      final updatedAt = now.subtract(
-        const Duration(hours: 1, minutes: 59, seconds: 59),
-      );
-      expect(LiveMapAggregator.isHidden(updatedAt, now), isFalse);
-    });
-
-    test('exactly two hours stays on the map (strict >)', () {
-      final updatedAt = now.subtract(const Duration(hours: 2));
-      expect(LiveMapAggregator.isHidden(updatedAt, now), isFalse);
-    });
-
-    test('just over two hours drops off the map', () {
-      final updatedAt = now.subtract(const Duration(hours: 2, seconds: 1));
-      expect(LiveMapAggregator.isHidden(updatedAt, now), isTrue);
-    });
-  });
-
   group('LiveMapAggregator.groupTeam', () {
     PresenceFix fix(String id, Duration age) => PresenceFix(
       userDocId: id,
@@ -156,7 +133,6 @@ void main() {
       final team = LiveMapAggregator.groupTeam(
         fixes: [fix('a', const Duration(minutes: 5))],
         users: [person('a', sharing: true)],
-        now: now,
       );
 
       expect(team.onMap.map((p) => p.userDocId), ['a']);
@@ -164,30 +140,32 @@ void main() {
       expect(team.sharingOff, isEmpty);
     });
 
-    test('a fix older than two hours is NOT SEEN and keeps its age', () {
+    test('a days-old fix stays on the map while sharing is on', () {
       final team = LiveMapAggregator.groupTeam(
-        fixes: [fix('a', const Duration(hours: 3))],
+        fixes: [fix('a', const Duration(days: 3))],
         users: [person('a', sharing: true)],
-        now: now,
+      );
+
+      expect(team.onMap.map((p) => p.userDocId), ['a']);
+    });
+
+    test('a fix whose owner has sharing off is SHARING OFF, not a pin', () {
+      final team = LiveMapAggregator.groupTeam(
+        fixes: [fix('a', const Duration(minutes: 5))],
+        users: [person('a')],
       );
 
       expect(team.onMap, isEmpty);
-      expect(team.notSeen.single.userDocId, 'a');
-      expect(
-        team.notSeen.single.lastSeenAt,
-        now.subtract(const Duration(hours: 3)),
-      );
+      expect(team.sharingOff.single.userDocId, 'a');
     });
 
     test('sharing on with no fix at all is NOT SEEN, not SHARING OFF', () {
       final team = LiveMapAggregator.groupTeam(
         fixes: const [],
         users: [person('a', sharing: true)],
-        now: now,
       );
 
       expect(team.notSeen.single.userDocId, 'a');
-      expect(team.notSeen.single.lastSeenAt, isNull);
       expect(team.sharingOff, isEmpty);
     });
 
@@ -195,7 +173,6 @@ void main() {
       final team = LiveMapAggregator.groupTeam(
         fixes: const [],
         users: [person('a')],
-        now: now,
       );
 
       expect(team.sharingOff.single.userDocId, 'a');
@@ -213,7 +190,6 @@ void main() {
           person('old', sharing: true, testAccount: true),
           person('none', testAccount: true),
         ],
-        now: now,
       );
 
       expect(team.onMap, isEmpty);
@@ -228,7 +204,6 @@ void main() {
           person('d', status: 'disabled'),
           person('i', status: 'invited'),
         ],
-        now: now,
       );
 
       expect(team.notSeen, isEmpty);
@@ -239,7 +214,6 @@ void main() {
       final team = LiveMapAggregator.groupTeam(
         fixes: const [],
         users: [person('zoe'), person('amy'), person('max')],
-        now: now,
       );
 
       expect(team.sharingOff.map((a) => a.name), ['amy', 'max', 'zoe']);

@@ -245,6 +245,16 @@ Material Design 3 (Flat / Elevation). Use `ColorScheme`, `TextTheme`, and `Theme
   `IntrinsicHeight` subtree. `AppointmentCard` uses `IntrinsicHeight` to stretch
   the employee-color bar, so its title stays a plain `Text` — don't swap it back
   to `AutoSizeText`.
+- **A `DraggableScrollableSheet` with a `controller` needs a KEYED slot when
+  any earlier sibling is conditional.** A `Stack`/`Column` matches unkeyed
+  siblings by position, so an `if (...)` child appearing or vanishing above the
+  sheet re-slots it into a NEW element — whose `initState` attaches the
+  controller before the old one's `dispose` detaches it. Debug asserts
+  "Draggable scrollable controller is already attached to a sheet"; release is
+  worse, because the old `dispose` then detaches (and disposes the extent of)
+  the NEW sheet, so every later `animateTo`/`jumpTo` silently no-ops. The live
+  map's team sheet shipped this under its conditional `EmptyMapCard`
+  (2026-09-14); pinned in `live_map_screen_test.dart`.
 - **Multiple primary scrollables alive at once → wrap each in
   `PrimaryScrollScope`** (`core/layout/primary_scroll_scope.dart`). A route
   offers one `PrimaryScrollController`, and the app-wide `Scrollbar`/

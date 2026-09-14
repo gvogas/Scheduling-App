@@ -427,9 +427,9 @@ class PresenceSyncController with ReentrantSync {
       // Resolve the docId when this session never started — `_start` needs
       // firebaseReady AND a granted location permission AND a successful
       // findUserByUid, and if any of those failed today the doc from a
-      // PREVIOUS launch is still live. The map shows that pin for up to two
-      // hours (`presenceHiddenAfter`), and the privacy policy promises sign-out
-      // clears it. Same fix as `LiveActivityRegistrationController.unregister`.
+      // PREVIOUS launch is still live. The map keeps showing that pin, and the
+      // privacy policy promises sign-out clears it. Same fix as
+      // `LiveActivityRegistrationController.unregister`.
       final docId = knownDocId ?? await _resolveUserDocId();
       if (docId == null) return false;
       return await _ref
