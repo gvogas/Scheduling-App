@@ -1783,9 +1783,9 @@ not default it off.
   meaningful regression test here — a naive local-time version passes the same
   cases. Mirrored in `.claude/rules/testing.md`.
 
-Run: `flutter test` (3760 passing as of 2026-09-19, tree `608b817a` + the 1.62.0 release pass — that is the runner's count;
-`grep`ing for `test(`/`testWidgets(` gives fewer (3638), since some cases are
-generated inside loops; `functions` adds 1971 jest tests across 95 suites in
+Run: `flutter test` (3771 passing as of 2026-09-19, tree `bec23b85` + the second 1.62.0 release pass — that is the runner's count;
+`grep`ing for `test(`/`testWidgets(` gives fewer (3649), since some cases are
+generated inside loops; `functions` adds 1986 jest tests across 95 suites in
 `functions/__tests__/` — the parallel `functions/test/` directory was
 merged away). **`functions/node_modules` must be installed before `npx jest`
 means anything**: on an empty install it resolves a throwaway jest from the npx

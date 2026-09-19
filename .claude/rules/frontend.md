@@ -407,6 +407,17 @@ Material Design 3 (Flat / Elevation). Use `ColorScheme`, `TextTheme`, and `Theme
   happens to be watching from the widget layer. `AddEventController.applyPrefill`
   is the reference; the tell that it was missing was a keep-alive in the unit
   test with no production counterpart.
+- **A Retry over a COMBINING provider must invalidate the errored SOURCES, not
+  the combiner.** A `Provider.autoDispose<AsyncValue<T>>` that folds several
+  stream/future providers (`_firstFailure`, `liveMapTeamProvider`) recomputes
+  from their cached state when invalidated, so the error comes straight back
+  and the button does nothing — and automatic retry is off app-wide
+  (`main.dart`), so nothing else re-subscribes either. Gate each invalidate on
+  that source's `hasError` where a healthy one would be re-billed:
+  `retryDashboardSources` and the live map's `_retryTeam` are the two
+  instances. A widget test of it needs `retry: (_, _) => null` on its
+  `ProviderScope`, or Riverpod's test-default retry recovers first and the
+  test passes against the broken wiring.
 - **`DateFormat` is memoized per locale** (`calendar/domain/month_grid.dart`:
   `longDateFormatFor`, `weekdayAbbrevFormatFor`, `_symbolsFormat`). Constructing
   one verifies the locale and parses a skeleton into pattern fields, and the

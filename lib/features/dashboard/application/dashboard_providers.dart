@@ -84,9 +84,9 @@ class DashboardPeriodController extends Notifier<DashboardPeriod> {
   void select(DashboardPeriod period) {
     // The guard also stops a re-tap logging a change.
     if (period == state) return;
-    ref.read(analyticsServiceProvider).logDashboardPeriodChanged(
-      period: period.name,
-    );
+    ref
+        .read(analyticsServiceProvider)
+        .logDashboardPeriodChanged(period: period.name);
     state = period;
   }
 }
@@ -155,6 +155,21 @@ final dashboardStatsProvider = Provider.autoDispose<AsyncValue<DashboardStats>>(
     );
   },
 );
+
+/// Re-fetches the errored sources; invalidating a combiner re-reads their cached error.
+void retryDashboardSources(WidgetRef ref) {
+  final live = appointmentsInRangeProvider(
+    ref.read(dashboardLiveRangeProvider),
+  );
+  if (ref.read(live).hasError) ref.invalidate(live);
+  if (ref.read(dashboardHistoryProvider).hasError) {
+    ref.invalidate(dashboardHistoryProvider);
+  }
+  if (ref.read(newClientsProvider).hasError) ref.invalidate(newClientsProvider);
+  if (ref.read(employeesStreamProvider).hasError) {
+    ref.invalidate(employeesStreamProvider);
+  }
+}
 
 /// Invited accounts never set up, oldest first (null `createdAt` last).
 final neverSetUpAccountsProvider =

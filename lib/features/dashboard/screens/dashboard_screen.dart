@@ -116,7 +116,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           ),
           AsyncError() => CenteredErrorText(
             message: context.l10n.error_introLoadDashboard,
-            onRetry: () => ref.invalidate(dashboardStatsProvider),
+            onRetry: () => retryDashboardSources(ref),
           ),
           _ => const _LoadingList(),
         },
@@ -176,8 +176,7 @@ class _StatsList extends ConsumerWidget {
                   padding: const EdgeInsets.only(bottom: AppSpacing.sp24),
                   child: CenteredErrorText(
                     message: context.l10n.error_introLoadDashboard,
-                    onRetry: () =>
-                        ref.invalidate(dashboardPeriodSummaryProvider),
+                    onRetry: () => retryDashboardSources(ref),
                   ),
                 ),
                 _ => null,

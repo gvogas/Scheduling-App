@@ -52,6 +52,13 @@ missing and why, and a crew picker that lets you double-book on purpose.
 ### Fixed
 - **Accented addresses from suggestions no longer come out garbled**, such as
   "MontrÃ©al" for "Montréal".
+- **A client Wave couldn't sync no longer stays flagged after you undo the
+  edit.** Putting its details back to what Wave already has now clears the
+  "can't sync" badge, instead of leaving the client listed until some other
+  change came along.
+- **Retry works on the crew map and the Dashboard.** When either failed to
+  load, tapping Retry showed the same error again without trying; it now
+  reloads whatever failed.
 
 ## [1.61.0+90] - 2026-09-12
 

@@ -46,13 +46,18 @@ Widget _wrap({
   required List<AppointmentRecord> appointments,
   required ClientsRepository clientsRepo,
   Object? appointmentsError,
+  Stream<List<AppointmentRecord>> Function()? appointmentsStream,
   List<EmployeeRecord> users = const [_jane],
 }) {
   return ProviderScope(
+    // Production disables Riverpod's automatic retry; Retry must do the work.
+    retry: (_, _) => null,
     overrides: [
       dashboardClockProvider.overrideWithValue(() => _now),
       appointmentsInRangeProvider.overrideWith(
-        (_, _) => appointmentsError != null
+        (_, _) => appointmentsStream != null
+            ? appointmentsStream()
+            : appointmentsError != null
             ? Stream<List<AppointmentRecord>>.error(appointmentsError)
             : Stream.value(appointments),
       ),
@@ -139,10 +144,7 @@ void main() {
     expect(find.text('BUSINESS TRENDS'), findsOneWidget);
     expect(find.text('NEEDS ATTENTION'), findsOneWidget);
     expect(find.text('Jane Doe'), findsWidgets);
-    expect(
-      find.text('1 pending visit starts within 48 hours'),
-      findsOneWidget,
-    );
+    expect(find.text('1 pending visit starts within 48 hours'), findsOneWidget);
     expect(find.text('1 past visit was never closed'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -182,10 +184,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No upcoming visits today'), findsOneWidget);
-    expect(
-      find.text('All clear — nothing needs attention'),
-      findsOneWidget,
-    );
+    expect(find.text('All clear — nothing needs attention'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -262,9 +261,7 @@ void main() {
     // because bare numbers also appear on the KPI tiles and on this card's own
     // trend chip.
     expect(
-      tester
-          .widget<Text>(find.byKey(const ValueKey('new-clients-total')))
-          .data,
+      tester.widget<Text>(find.byKey(const ValueKey('new-clients-total'))).data,
       '1',
     );
     expect(find.text('In the last 8 weeks'), findsOneWidget);
@@ -290,10 +287,7 @@ void main() {
 
     Finder bookedValue() => find.descendant(
       of: find
-          .ancestor(
-            of: find.text('Booked'),
-            matching: find.byType(Column),
-          )
+          .ancestor(of: find.text('Booked'), matching: find.byType(Column))
           .first,
       matching: find.byType(Text),
     );
@@ -326,6 +320,31 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text("Couldn't load the dashboard"), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Retry re-subscribes the errored source, not the combiner', (
+    tester,
+  ) async {
+    await withPhoneViewport(tester);
+    var subscriptions = 0;
+    await tester.pumpWidget(
+      _wrap(
+        appointments: const [],
+        clientsRepo: clientsRepo,
+        appointmentsStream: () => subscriptions++ == 0
+            ? Stream<List<AppointmentRecord>>.error(Exception('boom'))
+            : Stream.value(const <AppointmentRecord>[]),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text("Couldn't load the dashboard"), findsOneWidget);
+
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+
+    expect(subscriptions, 2);
+    expect(find.text("Couldn't load the dashboard"), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

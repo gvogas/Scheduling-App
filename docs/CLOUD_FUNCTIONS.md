@@ -6,7 +6,8 @@ refreshed 2026-09-19 (release 1.62.0+91 — **still 29 exports, all DEPLOYED**: 
 month-end overdue rider on `sendDailyJobDigest` and Wave Phase 4 (the `worker.js`
 split, the guarded import updates, the cadence deleted and
 `waveSetImportSchedule` retired to a no-op) went live 2026-09-19 16:37Z
-(`608b817a`), ahead of the app build. Previously refreshed 2026-09-12 (release
+(`608b817a`), ahead of the app build; the audit's stale-block clear in
+`waveUpsertCustomer` followed at ~19:45Z (`bec23b85`). Previously refreshed 2026-09-12 (release
 1.61.0+90 — **the export list is unchanged at 29**,
 and all of it is DEPLOYED: the app build shipped first and the full `functions`
 deploy followed 2026-09-13 02:07Z (`38c8225b`), the INVERTED order Wave Phase 2
@@ -1408,6 +1409,14 @@ after the enqueue commits. Two properties are load-bearing:
   which re-fires this trigger — but `mappedFieldsHash` is unchanged by that
   write, so `shouldEnqueueClientWrite` returns false at the top and the re-fire
   never reaches the drain.
+- **It clears a stale block on the no-enqueue path** (audit B1, 2026-09-19).
+  Rule 2 skips a write whose mapped fields equal `wave.lastSyncedHash`, which
+  also skipped the one write that should UNBLOCK a client: editing a `blocked`
+  client back to what Wave already holds. `isBlockedRevertToSynced` catches
+  that case and `clearStaleBlock` re-runs the contract and writes the verdict
+  with `syncState: synced`; a revert that still fails the contract writes
+  nothing. The clear's own re-fire exits on both predicates — the hash is
+  unchanged and the doc is no longer `blocked`.
 
 A disconnected install still enqueues (the outbox is durable) but does not
 drain; the connection gate is the cached `readWaveBusinessIdCached`, which is
