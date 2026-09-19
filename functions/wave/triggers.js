@@ -29,6 +29,7 @@ const {
   cancelCustomerUpsert,
   drainQueue,
   shouldEnqueueClientWrite,
+  isBlockedRevertToSynced,
 } = require("./worker");
 const {mappedFieldsHash} = require("./mappers");
 const {buildCustomerPayload, verdictPatch} = require("./customer_contract");
@@ -108,7 +109,12 @@ const waveUpsertCustomer = onDocumentWritten(
       if (!after) return;
 
       const before = beforeSnap?.exists ? beforeSnap.data() : null;
-      if (!shouldEnqueueClientWrite(before, after)) return;
+      if (!shouldEnqueueClientWrite(before, after)) {
+        if (isBlockedRevertToSynced(before, after)) {
+          await clearStaleBlock(getFirestore(), event.params.clientId, after);
+        }
+        return;
+      }
 
       // The mark-pending write below only touches wave.* fields, so when
       // the trigger re-fires on it, mappedFieldsHash is unchanged and
@@ -231,6 +237,25 @@ const waveUpsertCustomer = onDocumentWritten(
       }
     },
 );
+
+/**
+ * Clears a `blocked` verdict once the doc is back on values Wave already holds.
+ * @param {!Object} db Firestore handle.
+ * @param {string} clientId Firestore `clients` document id.
+ * @param {!Object} after Post-write client document data.
+ * @return {!Promise<void>}
+ */
+async function clearStaleBlock(db, clientId, after) {
+  const contract = buildCustomerPayload(after);
+  if (!contract.ok) return;
+  try {
+    await db.doc("clients/" + clientId)
+        .update(verdictPatch(contract, {clearedState: "synced"}));
+  } catch (e) {
+    logger.warn("waveUpsertCustomer: clearing a stale block failed",
+        {clientId, err: e.message});
+  }
+}
 
 // runWaveDaily — the daily Wave job: drain the outbox (app → Wave).
 //

@@ -92,8 +92,8 @@ abstract class AppointmentsRepository {
 
   Stream<List<AppointmentRecord>> watchInRange(AppointmentDateRange range);
 
-  /// Every open job whose `endTime` is before [now], newest-ended first and
-  /// capped. Admin-only: the query is not narrowed by `employeeIds`.
+  /// The jobs overdue at [now] (`overdueJobsAt`), oldest first and capped.
+  /// Admin-only: the query is not narrowed by `employeeIds`.
   Stream<List<AppointmentRecord>> watchOverdueOpen(DateTime now);
 
   /// The same query as [watchInRange], read ONCE.

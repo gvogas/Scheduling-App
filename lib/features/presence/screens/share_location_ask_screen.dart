@@ -24,7 +24,7 @@ class _ShareLocationAskScreenState
     extends ConsumerState<ShareLocationAskScreen> {
   bool _busy = false;
 
-  Future<void> _turnOn(EmployeeRecord record) async {
+  Future<bool> _enable(EmployeeRecord record) async {
     setState(() => _busy = true);
     final saved = await saveLocationSharing(
       context,
@@ -32,26 +32,19 @@ class _ShareLocationAskScreenState
       record,
       enabled: true,
     );
-    if (!mounted) return;
-    setState(() => _busy = false);
-    if (saved) Navigator.of(context).pop();
+    if (mounted) setState(() => _busy = false);
+    return saved;
+  }
+
+  Future<void> _turnOn(EmployeeRecord record) async {
+    if (await _enable(record) && mounted) Navigator.of(context).pop();
   }
 
   /// iOS will not ask again, so the switch is saved and Settings does the rest.
   Future<void> _openSettings(EmployeeRecord record) async {
     final permissions = ref.read(locationPermissionServiceProvider);
-    if (!record.locationSharingEnabled) {
-      setState(() => _busy = true);
-      final saved = await saveLocationSharing(
-        context,
-        ref,
-        record,
-        enabled: true,
-      );
-      if (!mounted) return;
-      setState(() => _busy = false);
-      if (!saved) return;
-    }
+    if (!record.locationSharingEnabled && !await _enable(record)) return;
+    if (!mounted) return;
     Navigator.of(context).pop();
     await permissions.openSettings();
   }

@@ -98,10 +98,15 @@ void main() {
                 resolveHub: () => hub,
                 hubPollInterval: hubPollInterval,
                 showDetails:
-                    (context, record, {required showActions, required analyticsSource}) async {
-                  shown?.add(record);
-                  shownWithActions?.add(showActions);
-                },
+                    (
+                      context,
+                      record, {
+                      required showActions,
+                      required analyticsSource,
+                    }) async {
+                      shown?.add(record);
+                      shownWithActions?.add(showActions);
+                    },
               );
               return const SizedBox.shrink();
             },
@@ -215,6 +220,27 @@ void main() {
     verify(() => notices.info(any())).called(1);
   });
 
+  testWidgets('an id that is not a doc id is never fetched', (tester) async {
+    final shown = <AppointmentRecord?>[];
+    final opener = await pumpOpener(
+      tester,
+      signedIn: true,
+      hub: _FakeHub(),
+      shown: shown,
+    );
+
+    for (final id in ['a1/fieldNotes/n1', 'x' * 129]) {
+      await opener.handleWidgetTap(
+        Uri.parse('esproschedule://appointment?id=$id'),
+      );
+      await tester.pump();
+    }
+
+    expect(shown, isEmpty);
+    verifyNever(() => repository.getAppointmentById(any()));
+    verify(() => notices.info(any())).called(2);
+  });
+
   testWidgets('an id-less tap just shows the calendar', (tester) async {
     final hub = _FakeHub();
     final shown = <AppointmentRecord?>[];
@@ -287,8 +313,12 @@ void main() {
                 isSignedIn: () => true,
                 resolveHub: _FakeHub.new,
                 showDetails:
-                    (context, record, {required showActions, required analyticsSource}) async =>
-                    throw StateError('boom'),
+                    (
+                      context,
+                      record, {
+                      required showActions,
+                      required analyticsSource,
+                    }) async => throw StateError('boom'),
               );
               return const SizedBox.shrink();
             },
@@ -298,9 +328,7 @@ void main() {
     );
 
     await expectLater(
-      opener.handlePushTap(
-        const RemoteMessage(data: {'appointmentId': 'a1'}),
-      ),
+      opener.handlePushTap(const RemoteMessage(data: {'appointmentId': 'a1'})),
       completes,
     );
   });
@@ -322,9 +350,7 @@ void main() {
     );
     await tester.pump();
 
-    final route = pushed.singleWhere(
-      (s) => s.name == AppRoutes.overdueReview,
-    );
+    final route = pushed.singleWhere((s) => s.name == AppRoutes.overdueReview);
     final args = route.arguments! as OverdueReviewArgs;
     expect(args.isAdmin, isTrue);
     expect(args.employeeId, 'me');

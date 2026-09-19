@@ -17,23 +17,7 @@ import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/dialogs/app_dialog_frame.dart';
 import 'package:scheduling/shared/widgets/primitives/app_avatar.dart';
 
-/// Reads the client jobs a just-saved personal block ran into, and offers to
-/// swap the crew on each.
-///
-/// **Advisory, and always AFTER the write.** The block is already saved and
-/// nothing here can un-save it: closing the dialog leaves the time off in place
-/// and the jobs untouched. Time off is a fact about a person; the schedule does
-/// not get to veto it. Each swap writes immediately for the same reason —
-/// nothing is held in limbo, so a swap survives closing the dialog.
-///
-/// The lookup is CLIENT JOBS ONLY. "Swap Marc for Nadia" on Marc's own dentist
-/// appointment is nonsense — that block belongs to him — so a personal block
-/// overlapping only another personal block raises no alert at all, which is
-/// correct: there is nothing here to fix.
-///
-/// A failed lookup is silent to the user and logged: this is a courtesy on top
-/// of a save that already succeeded, and an error notice about it would read as
-/// the save having failed.
+/// Offers crew swaps on the client jobs a just-saved personal block hit.
 Future<void> showPersonalBlockClashesIfAny(
   BuildContext context,
   WidgetRef ref, {
@@ -41,8 +25,7 @@ Future<void> showPersonalBlockClashesIfAny(
 }) async {
   if (!block.isPersonal || block.employeeIds.isEmpty) return;
 
-  // Resolved before the await: the sheet this runs from can be dismissed
-  // mid-lookup, and Riverpod 3 throws on `ref` from an unmounted consumer.
+  // Resolved before the await: Riverpod 3 throws on `ref` once unmounted.
   final repository = ref.read(appointmentsRepositoryProvider);
   final logger = ref.read(loggerProvider);
 
@@ -80,8 +63,7 @@ class _ClashGroup {
   final List<AppointmentRecord> jobs;
 }
 
-/// What a row is showing. Sealed so a new state can't be added without every
-/// branch of the row builder being forced to handle it.
+/// What a row is showing; sealed so every builder branch must handle it.
 sealed class _RowState {
   const _RowState();
 }
@@ -106,13 +88,7 @@ class _RowStuck extends _RowState {
 class _RowDone extends _RowState {
   const _RowDone({required this.took});
 
-  /// Who took the job. Undo INVERTS the swap off this — it puts the person who
-  /// is off back in [took]'s place — rather than writing a whole-record
-  /// snapshot back. A snapshot is only correct until the next swap on the same
-  /// job: two people off one job meant undoing the first row silently reverted
-  /// the second row's swap AND re-added someone who is off, which is precisely
-  /// the outcome this dialog exists to undo. Undo lives only as long as this
-  /// dialog; afterwards the swap is an ordinary edit to that job.
+  /// Who took the job; Undo inverts the swap off this, never a snapshot.
   final EmployeeRecord took;
 }
 
@@ -132,17 +108,9 @@ class _PersonalBlockClashDialogState
   final Map<String, _RowState> _states = {};
 
   /// The live record for each clashing job, keyed by DOC ID — never per row.
-  ///
-  /// One job can appear under two blocked people (a team day off), and every
-  /// swap rewrites the whole crew. Reading the dialog-open snapshot for the
-  /// second swap wrote the FIRST swap's replacement back out and put the
-  /// person who is off back on the job — the exact thing this dialog exists to
-  /// undo. Keyed per row it had the same hole, since the two rows are two
-  /// keys over one document.
   final Map<String, AppointmentRecord> _jobs = {};
 
-  /// Only one row opens at a time: opening another closes the first, so the
-  /// list shifts once rather than accumulating expanded rows.
+  /// The one open row; opening another closes it.
   String? _openKey;
 
   static String _keyFor(String employeeId, AppointmentRecord job) =>
@@ -155,8 +123,7 @@ class _PersonalBlockClashDialogState
     final groups = <_ClashGroup>[];
     for (var i = 0; i < widget.block.employeeIds.length; i++) {
       final employeeId = widget.block.employeeIds[i];
-      // Membership is tested against the job as it was when the dialog
-      // opened, so a row survives its own swap and can still offer Undo.
+      // Membership uses the dialog-open job, so a swapped row can still Undo.
       final jobs = [
         for (final job in widget.clashes)
           if (job.employeeIds.contains(employeeId)) _live(job),
@@ -187,9 +154,7 @@ class _PersonalBlockClashDialogState
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    // Watched, not read: it holds the roster subscription open for as long as
-    // the dialog is, so a row's swap list is served from a live stream rather
-    // than starting one per tap.
+    // Watched to hold the roster stream open while the dialog is.
     ref.watch(employeesStreamProvider);
     final groups = _groups();
     final jobCount = widget.clashes.length;
@@ -198,9 +163,7 @@ class _PersonalBlockClashDialogState
       children: [
         _header(context, groups: groups, jobCount: jobCount),
         const SizedBox(height: AppSpacing.sp16),
-        // A fortnight off would otherwise break the dialog: the list
-        // scrolls between a pinned head and footer, and the count sits in
-        // the header rather than being something you scroll to find.
+        // Scrolls between a pinned header and footer so long absences fit.
         Flexible(
           child: SingleChildScrollView(
             child: Column(
@@ -279,9 +242,7 @@ class _PersonalBlockClashDialogState
     required bool showName,
   }) {
     final theme = Theme.of(context);
-    // Day headings only earn their space once the person's jobs span more than
-    // one day — a single-day absence would otherwise carry a heading over one
-    // row saying what the header already said.
+    // Day headings only once the jobs span more than one day.
     final days = {for (final job in group.jobs) job.startTime.dateOnly};
     final rows = <Widget>[
       if (showName)
@@ -290,9 +251,7 @@ class _PersonalBlockClashDialogState
           child: Text(group.name, style: theme.monoType.label),
         ),
     ];
-    // Resolved HERE rather than inside a per-row `Builder`: a builder body runs
-    // at build time, so the running "last day seen" would be re-evaluated on
-    // every rebuild in whatever order the framework chose.
+    // Resolved here, not in a per-row Builder, so rebuild order can't skew it.
     DateTime? lastDay;
     for (final job in group.jobs) {
       final day = job.startTime.dateOnly;
@@ -336,8 +295,7 @@ class _PersonalBlockClashDialogState
             minimumSize: const Size(double.infinity, 44),
           ),
           onPressed: () => Navigator.pop(context),
-          // Never "Cancel": nothing here is undone by dismissing, and Cancel
-          // would read as cancelling the time off, which this cannot do.
+          // Never "Cancel": that would read as cancelling the time off.
           child: Text(context.l10n.calendar_leaveThem),
         ),
       ),
@@ -354,28 +312,14 @@ class _PersonalBlockClashDialogState
     ],
   );
 
-  /// Who else could take [job] — active crew, minus anyone already on it,
-  /// minus everyone booked off alongside this person, minus anyone busy in that
-  /// job's own window.
-  ///
-  /// The roster is AWAITED rather than read off the provider's current value: a
-  /// lazily-read stream provider is still loading the first time anything asks,
-  /// so reading it here reported an empty pool and every row went straight to
-  /// "everyone else is booked".
-  ///
-  /// A failed scan fails CLOSED, to the same stuck row. Offering a name the
-  /// scan never checked would put someone on a job they are already booked for,
-  /// which is the failure this dialog exists to undo.
+  /// Who else could take [job]; a failed scan fails CLOSED to the stuck row.
   Future<void> _openRow(String employeeId, AppointmentRecord job) async {
     final key = _keyFor(employeeId, job);
     final repository = ref.read(appointmentsRepositoryProvider);
     final logger = ref.read(loggerProvider);
     final roster = ref.read(employeesStreamProvider.future);
     setState(() {
-      // Closing the previous one is what keeps the list shifting once rather
-      // than accumulating expanded rows. A previous row still LOADING is put
-      // back too: its own completion is dropped by the staleness guard below,
-      // so left as-is it would spin forever with no action left to recover it.
+      // A still-loading previous row resets too, or it spins forever.
       final previous = _openKey;
       if (previous != null &&
           previous != key &&
@@ -390,9 +334,7 @@ class _PersonalBlockClashDialogState
     try {
       final pool = [
         for (final e in await roster)
-          // `isAssignable` is the same crew test `assignableEmployeesProvider`
-          // applies; it is spelled here because this needs the AWAITED stream,
-          // and that provider exposes only a settled value.
+          // `assignableEmployeesProvider`'s crew test, on the AWAITED stream.
           if (e.isAssignable &&
               !job.employeeIds.contains(e.id) &&
               !widget.block.employeeIds.contains(e.id))
@@ -419,12 +361,7 @@ class _PersonalBlockClashDialogState
     });
   }
 
-  /// Replaces one assignee with another on THAT OCCURRENCE only.
-  ///
-  /// Never the series: a weekly job's Wednesday slot is what clashes, and the
-  /// person is not off every Wednesday. And a replace, never a removal —
-  /// `AppointmentFormValidator` rejects an empty crew, so taking the only
-  /// assignee off would write a state the form itself forbids.
+  /// Replaces one assignee on THAT OCCURRENCE only — never the series.
   Future<void> _swap(
     String employeeId,
     AppointmentRecord job,
@@ -447,13 +384,7 @@ class _PersonalBlockClashDialogState
     }
   }
 
-  /// Puts the person who is off back in place of whoever took the job.
-  ///
-  /// Built on [_live], not on a snapshot taken at swap time, so it composes
-  /// with any later swap on the same job the way [_swap] does.
-  /// Takes the whole [_ClashGroup] rather than its id and name as two
-  /// adjacent strings — the one shape where a transposed pair still compiles,
-  /// on a method that writes to Firestore.
+  /// Puts the person who is off back, built on [_live] like [_swap].
   Future<void> _undo(_ClashGroup group, AppointmentRecord job) async {
     final key = _keyFor(group.employeeId, job);
     final state = _states[key];
@@ -492,13 +423,7 @@ class _PersonalBlockClashDialogState
     setState(() => _states[key] = const _RowBusy());
     try {
       await repository.updateAppointment(record);
-      // Guarded on the way out, not just in the catch below: every caller
-      // calls setState on `true`, and this dialog is barrier-dismissible, so
-      // dismissing it mid-write unmounts the State before that lands. In
-      // release `setState`'s own lifecycle check is an assert, so it falls
-      // through to `_element!.markNeedsBuild()` and is filed as a FATAL.
-      // `use_build_context_synchronously` cannot see it — setState is not a
-      // BuildContext use. The write itself has already committed.
+      // Re-checked: setState on a dismissed dialog is a release FATAL.
       if (!mounted) return false;
       return true;
     } on Object catch (e, st) {
@@ -548,9 +473,7 @@ class _ClashRow extends StatelessWidget {
       _RowIdle() => (scheme.outlineVariant, scheme.surface),
     };
 
-    // Hoisted out of the chip loop below: built inline it re-tallied the whole
-    // strip for every chip in it, which is the quadratic naming pass the
-    // picker's own comment warns against.
+    // Hoisted out of the chip loop so the tally isn't rebuilt per chip.
     final freeFirstNames = switch (state) {
       _RowOpen(:final free) => firstNameTally([for (final p in free) p.name]),
       _ => const <String, int>{},
@@ -587,9 +510,7 @@ class _ClashRow extends StatelessWidget {
                   for (final person in free)
                     _FreeCrewChip(
                       person: person,
-                      // Two Marcs in the strip is exactly what this helper is
-                      // for — identical chips give no way to tell which one
-                      // is being put on the job.
+                      // Disambiguates two people sharing a first name.
                       shortName: shortAssigneeName(
                         person.name,
                         among: freeFirstNames,

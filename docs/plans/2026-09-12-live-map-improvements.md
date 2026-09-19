@@ -1,7 +1,9 @@
 # Live staff map improvements — design
 
-**Status: BUILT 2026-09-13 on `dev` (uncommitted at time of writing), NOT
-SHIPPED.** No backend deploy (the optional rules type check was skipped).
+**Status (2026-09-19): BUILT and committed (`ed59a6a5`, `e544fb01`), DEVICE PASS
+DONE (owner, 2026-09-19), NOT SHIPPED.** The accessibility page is rewritten for
+the team sheet in the repo; publishing both legal pages waits on the build.
+Original banner: built 2026-09-13, not shipped. No backend deploy (the optional rules type check was skipped).
 Left: the device-only checks in §7, republishing `docs/legal/privacy-policy.html`
 to `es-pro-legal` once the build ships (the rest of that file went live
 2026-09-14, so the three two-hour location passages are the only difference),
@@ -277,19 +279,20 @@ sign-out, account deletion or disable, which is unchanged. **Republish to the
 
 ### Follow-ups still open (2026-09-15)
 
-Not verifiable in the test harness, so they need a device pass before release:
+Not verifiable in the test harness, so they needed a device pass before release —
+**done 2026-09-19 (owner)**:
 
-- [ ] Install a NEW build number over an older one: the team-map page opens
+- [x] Install a NEW build number over an older one: the team-map page opens
       first on the calendar, and the calendar tour starts only after it closes.
-- [ ] Relaunch the same build: the page does not come back.
-- [ ] Fresh install, sharing off: Turn on raises the iOS location prompt.
-- [ ] Location refused for the app ("Don't Allow"): the page shows Open
+- [x] Relaunch the same build: the page does not come back.
+- [x] Fresh install, sharing off: Turn on raises the iOS location prompt.
+- [x] Location refused for the app ("Don't Allow"): the page shows Open
       Settings, the switch is saved on, and iOS Settings opens on the app.
-- [ ] Location Services off for the whole phone: same Open Settings version.
-- [ ] Already sharing with location allowed: "You're on the team map" + Done.
-- [ ] Launch from a notification tap that opens a job: neither the page nor
+- [x] Location Services off for the whole phone: same Open Settings version.
+- [x] Already sharing with location allowed: "You're on the team map" + Done.
+- [x] Launch from a notification tap that opens a job: neither the page nor
       the calendar tour opens on top of the job sheet; both follow once it closes.
-- [ ] Admin live map tour: the new "Not on the map?" step highlights the count
+- [x] Admin live map tour: the new "Not on the map?" step highlights the count
       line in the team sheet at rest and in landscape.
-- [ ] French: the three page versions and the new tour step fit at large text.
-- [ ] Add the change to the next CHANGELOG entry (`/release`).
+- [x] French: the three page versions and the new tour step fit at large text.
+- [x] Add the change to the next CHANGELOG entry (`/release`) — 1.62.0+91.

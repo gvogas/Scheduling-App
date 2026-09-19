@@ -17,7 +17,7 @@ personal-job state. Light and dark.
 ## What is already fixed, and is not in question here
 
 A simulator pass on 2026-09-12 found and fixed four defects on this sheet. They
-are recorded in `2026-09-11-fresh-header-redesign.md` and are shipped on the
+are recorded in `docs/archive/2026-09-11-fresh-header-redesign.md` and are shipped on the
 branch; the options below sit on top of them and none of them re-opens one:
 
 - `SheetHeaderBar` truncated "New Appointment" to "New Appoin..." on the widest

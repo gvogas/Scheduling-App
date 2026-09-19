@@ -17,6 +17,8 @@ describe("worker re-exports the outbox modules", () => {
   test("each export is the owning module's function, by identity", () => {
     expect(worker.shouldEnqueueClientWrite)
         .toBe(enqueue.shouldEnqueueClientWrite);
+    expect(worker.isBlockedRevertToSynced)
+        .toBe(enqueue.isBlockedRevertToSynced);
     expect(worker.enqueueCustomerUpsert).toBe(enqueue.enqueueCustomerUpsert);
     expect(worker.cancelCustomerUpsert).toBe(enqueue.cancelCustomerUpsert);
     expect(worker.drainQueue).toBe(dispatch.drainQueue);
@@ -36,6 +38,7 @@ describe("worker re-exports the outbox modules", () => {
       "countQueuedJobs",
       "drainQueue",
       "enqueueCustomerUpsert",
+      "isBlockedRevertToSynced",
       "listOutstandingClientIds",
       "requeueDeadJobs",
       "shouldEnqueueClientWrite",

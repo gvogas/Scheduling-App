@@ -1,5 +1,12 @@
 # Apple CarPlay for ES Pro — driving-task job list
 
+**CLOSED 2026-09-19 — owner: "CarPlay works, all clear."** The behavioural checks the
+sections below leave open are done: the four actions (Directions, Start,
+Complete, Call), the technician view and the App Lock behaviour were confirmed
+on a device, with App Lock accepted as it behaves today (no change). Nothing is
+left in this plan; archived the same day.
+
+
 Status: **BUILT, COMPILED, DRIVEN and SHIPPED in 1.61.0+90** (release commit
 `dd8c4863`; banner corrected 2026-09-13). Written 2026-09-04; UI design finalised
 2026-09-09 (decisions 9-14 below); implementation followed the same day.

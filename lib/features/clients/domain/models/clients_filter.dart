@@ -59,9 +59,3 @@ class ClientsFilterArchived extends ClientsFilter {
   @override
   int get hashCode => 0;
 }
-
-/// Tapping the already-selected chip clears back to [ClientsFilterAll],
-/// mirroring the pre-existing ClientTypeFilterBar behaviour. All three members
-/// compare by VALUE, so this never depends on const canonicalization.
-ClientsFilter toggledFilter(ClientsFilter current, ClientsFilter tapped) =>
-    current == tapped ? const ClientsFilterAll() : tapped;

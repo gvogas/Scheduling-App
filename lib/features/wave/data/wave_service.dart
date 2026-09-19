@@ -6,7 +6,7 @@ import 'package:scheduling/features/wave/domain/wave_error_mapper.dart';
 
 /// How long the app waits on a "Sync with Wave" run before reporting failure.
 ///
-/// Hand-mirrored by `SYNC_PUSH_BUDGET_MS` in `functions/wave/callables.js`,
+/// Hand-mirrored by `SYNC_PUSH_BUDGET_MS` in `functions/wave/sync_run.js`,
 /// which is sized to leave most of this window to the import half.
 const int kWaveSyncTimeoutSeconds = 120;
 
@@ -87,7 +87,7 @@ class WaveService {
   ///
   /// A callable cannot be cancelled, so this timeout is not a limit on the
   /// server — it is the point at which the admin is told the sync failed
-  /// while it keeps running. `SYNC_PUSH_BUDGET_MS` in `wave/callables.js` is
+  /// while it keeps running. `SYNC_PUSH_BUDGET_MS` in `wave/sync_run.js` is
   /// sized against it (hand-mirrored; each carries a pointer to the other):
   /// the push takes a small slice and the import gets the rest.
   Future<WaveSyncSummary> syncCustomers() async {

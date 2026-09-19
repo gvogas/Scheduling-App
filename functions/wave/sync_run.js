@@ -20,8 +20,9 @@
 const logger = require("firebase-functions/logger");
 const {getFirestore} = require("firebase-admin/firestore");
 
-const {graphql} = require("./client");
-const {importCustomers} = require("./customers");
+const {graphql, WaveApiError} = require("./client");
+const {importCustomers, WaveValidationError} = require("./customers");
+const {sanitizeError, describeWaveError} = require("./retry_policy");
 const {drainQueue, countQueuedJobs} = require("./worker");
 const {resolveImportWindow, watermarkPatch} = require("./import_schedule");
 const {toMillis} = require("../time_utils");
@@ -138,9 +139,8 @@ async function importWithWatermark({
     // being wrong, which is not a hypothetical: the query shape was already
     // wrong once against this API.
     if (!window.since) throw e;
-    logger.warn("WAVE-CUST delta import failed — retrying as full", {
-      error: String(e),
-    });
+    logger.warn("WAVE-CUST delta import failed — retrying as full",
+        logSafeError(e));
     window = {since: "", reason: "delta-failed-fell-back-to-full"};
     summary = await importCustomers({
       businessId, graphql, skipClientIds, since: "",
@@ -205,6 +205,19 @@ const SYNC_PUSH_BATCH_LIMIT = 20;
 const SYNC_PUSH_BUDGET_MS = 20 * 1000;
 
 /**
+ * Log fields for an error that may carry a Wave message quoting customer data.
+ * @param {*} e The caught error.
+ * @return {{error: string, errorDetail: string}} Loggable fields.
+ */
+function logSafeError(e) {
+  const isWave = e instanceof WaveApiError || e instanceof WaveValidationError;
+  return {
+    error: isWave ? sanitizeError(e) : String(e),
+    errorDetail: describeWaveError(e),
+  };
+}
+
+/**
  * Pushes pending outbox jobs to Wave for the interactive sync, then counts
  * what is still queued.
  *
@@ -246,7 +259,7 @@ async function drainForSync({businessId, uid}) {
     // produce identical counters, and only one of them is good news.
     result.incomplete = true;
     logger.warn("WAVE-CUST sync push failed",
-        {uidHash: shortHash(uid), error: String(e)});
+        {uidHash: shortHash(uid), ...logSafeError(e)});
   }
 
   // Counted AFTER the drain, so the number is what the admin still has to

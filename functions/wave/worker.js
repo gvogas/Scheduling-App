@@ -14,6 +14,7 @@
 const {RATE_LIMITED_MAX_ATTEMPTS} = require("./retry_policy");
 const {
   shouldEnqueueClientWrite,
+  isBlockedRevertToSynced,
   enqueueCustomerUpsert,
   cancelCustomerUpsert,
 } = require("./enqueue");
@@ -34,5 +35,6 @@ module.exports = {
   requeueDeadJobs,
   listOutstandingClientIds,
   shouldEnqueueClientWrite,
+  isBlockedRevertToSynced,
   RATE_LIMITED_MAX_ATTEMPTS,
 };

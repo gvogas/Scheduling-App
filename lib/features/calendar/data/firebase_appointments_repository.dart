@@ -18,6 +18,7 @@ import 'package:scheduling/features/calendar/domain/models/appointment_image.dar
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/domain/models/field_note.dart';
 import 'package:scheduling/features/calendar/domain/models/repeat_interval.dart';
+import 'package:scheduling/features/calendar/domain/overdue_review.dart';
 import 'package:scheduling/features/calendar/domain/policies/history_search_policy.dart';
 import 'package:scheduling/features/clients/domain/policies/client_search_policy.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
@@ -70,8 +71,12 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   /// costs two round-trips to reach the ceiling, not twenty.
   static const int _clientHistoryPageSize = 500;
 
-  /// Ceiling on the overdue review's live query.
-  static const int _overdueReviewLimit = 500;
+  /// Raw rows the overdue review's live query reads; mirrors the server's
+  /// `MONTH_END_SCAN_MAX`, since personal blocks and days off never close.
+  static const int _overdueScanLimit = 5000;
+
+  /// Overdue jobs the review lists; mirrors `MONTH_END_REVIEW_MAX`.
+  static const int _overdueReviewLimit = 1000;
 
   /// Bounded LRU of recent results.
   late final SearchResultCache<AppointmentRecord> _searchCache =
@@ -459,23 +464,39 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
 
   @override
   Stream<List<AppointmentRecord>> watchOverdueOpen(DateTime now) {
+    var hasWarned = false;
     return retryStream(
       () => _appointments
           .where('status', whereIn: openStatusQueryValues)
           .where('endTime', isLessThan: Timestamp.fromDate(now))
           .orderBy('endTime', descending: true)
-          .limit(_overdueReviewLimit)
+          // One past the cap tells a full window from an exactly-full one.
+          .limit(_overdueScanLimit + 1)
           .snapshots()
           .map((snapshot) {
-            if (snapshot.docs.length >= _overdueReviewLimit) {
+            final scanFull = snapshot.docs.length > _overdueScanLimit;
+            final overdue = overdueJobsAt(
+              snapshot.docs
+                  .take(_overdueScanLimit)
+                  .map((doc) => AppointmentRecord.fromMap(doc.id, doc.data())),
+              now,
+            );
+            final isOverList = overdue.length > _overdueReviewLimit;
+            if (!hasWarned && (scanFull || isOverList)) {
+              hasWarned = true;
               _logger.warn(
-                'APPT-REVIEW overdue query hit the $_overdueReviewLimit-doc '
-                'cap - the oldest overdue jobs are not listed',
+                scanFull
+                    ? 'APPT-REVIEW overdue query filled its '
+                          '$_overdueScanLimit-row scan - any overdue job older '
+                          'than the window is not listed'
+                    : 'APPT-REVIEW ${overdue.length} overdue jobs past the '
+                          '$_overdueReviewLimit-job list cap - the newest are '
+                          'not listed',
               );
             }
-            return snapshot.docs
-                .map((doc) => AppointmentRecord.fromMap(doc.id, doc.data()))
-                .toList();
+            return isOverList
+                ? overdue.sublist(0, _overdueReviewLimit)
+                : overdue;
           }),
     );
   }

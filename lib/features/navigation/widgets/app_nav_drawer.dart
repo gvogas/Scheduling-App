@@ -286,7 +286,7 @@ class _NavRow extends ConsumerWidget {
                   const SizedBox(width: AppSpacing.sp8),
                   Text(
                     '$count',
-                    style: destination == PushedDestination.overdueReview
+                    style: drawerCountIsAlert(destination)
                         ? theme.monoType.data.copyWith(
                             color: theme.statusColors.overdue,
                           )

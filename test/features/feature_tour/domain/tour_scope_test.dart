@@ -20,13 +20,6 @@ void main() {
     );
   });
 
-  test('tourScopeByKey round-trips every scope', () {
-    for (final scope in allTourScopes) {
-      expect(tourScopeByKey(scope.storageKey), scope);
-    }
-    expect(tourScopeByKey('nope'), isNull);
-  });
-
   test('scopes with the same key are equal and share a hash', () {
     expect(
       const DestinationTour(HubTab.calendar),

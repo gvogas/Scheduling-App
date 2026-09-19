@@ -1,7 +1,7 @@
 # Open follow-ups from the 2026-09-12 session
 
 **Date:** 2026-09-12
-**Status: OPEN — item 4 CLOSED 2026-09-12, the other four still blocked.** Five items, each blocked on a
+**Status: OPEN — item 4 CLOSED 2026-09-12, item 5 CLOSED 2026-09-19, the other three still blocked.** Five items, each blocked on a
 different thing — a design decision, a deploy, a machine permission, a commit
 boundary, and a device. None is blocked on not knowing what to do.
 
@@ -9,7 +9,7 @@ Written because they were each raised, reasoned about and then deliberately
 NOT done during the 2026-09-12 session, and a decision that only exists in a
 conversation is a decision that gets re-litigated from scratch. The work that
 DID land that day is in `2026-09-12-add-appointment-sheet-structure.md` and
-`2026-09-11-fresh-header-redesign.md`.
+`docs/archive/2026-09-11-fresh-header-redesign.md`.
 
 ---
 
@@ -135,11 +135,11 @@ Until then, edit these four in BINARY mode.
 
 ---
 
-## 5. Phase 3's device pass on the fresh-header redesign
+## 5. Phase 3's device pass on the fresh-header redesign — CLOSED 2026-09-19
 
-**Blocked on: a device.**
+**Done (owner, 2026-09-19).** Was blocked on: a device.
 
-Carried over from `2026-09-11-fresh-header-redesign.md`, which is the authority
+Carried over from `docs/archive/2026-09-11-fresh-header-redesign.md`, which is the authority
 — not repeated here beyond the pointer. Status-bar icon colour on every screen
 in both themes, landscape on Clients and Settings, the drawer from the ghost
 menu, Dynamic Type on the Clients chip row, plus three things a full-branch

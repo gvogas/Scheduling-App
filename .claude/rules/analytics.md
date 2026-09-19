@@ -56,11 +56,14 @@ invariants that have to be visible from every feature.
   spend a property slot on data the console already has.
 - **`user_role` follows the LIVE Firestore doc**, through
   `AnalyticsIdentityListener` (`core/app/`, a sibling of `AppSyncListeners`,
-  registered from `main.dart`'s `build`). An empty or unsettled role CLEARS the
-  property rather than holding the last one — that covers sign-out AND the
-  bootstrap window a fresh sign-in passes through, where attributing events to
-  the previous session's role is the misattribution the live read exists to
-  avoid. A stale role here would mis-label every event for the rest of the
+  registered from `main.dart`'s `build`). An EMPTY role CLEARS the property
+  rather than holding the last one — that covers sign-out AND the bootstrap
+  window a fresh sign-in passes through (settled-but-empty doc), where
+  attributing events to the previous session's role is the misattribution the
+  live read exists to avoid. An UNSETTLED read (loading or error) is the
+  opposite case and HOLDS the last value: it says nothing about the role, and
+  blanking on every transient Firestore hiccup would be its own mislabel.
+  A stale role here would mis-label every event for the rest of the
   session, and the resulting report ("employees use the dashboard heavily")
   reads perfectly plausible.
 - **Sign-out does NOT call `resetAnalyticsData`.** That would mint a new app
@@ -95,6 +98,16 @@ invariants that have to be visible from every feature.
   add/edit-client and invite/edit-person sheets each call `logScreenView` from
   their own `initState`. Without that, the create funnels have no entry step and
   only their successful completions are visible.
+- **Three parameters are ABSENT on purpose — don't "complete" them.**
+  `job_completed` has no `has_notes`: the parent `fieldNotes` string is the
+  LEGACY write path (crew notes live in a subcollection), so it would read near
+  zero; `note_added` already answers how often notes are written.
+  `search_used` has no result count: the debounce commit is the one place that
+  knows a search ran, and the results are not fetched yet there — a count sent
+  later would be a second event for one search. `contact_action` has no
+  `source`: it fires from the shared launch helpers, which every call site
+  passes through and which by construction do not know the calling screen;
+  threading a surface down to them would put a display concern in a launcher.
 - **An event fires on the SEALED SUCCESS branch, never before the write.**
   `AddEventSubmitted`, `EventDetailsSaved`, `EventDetailsActionOk`,
   `ClientSaved`, `EmployeeAccountCreated`. The `Busy` members are the

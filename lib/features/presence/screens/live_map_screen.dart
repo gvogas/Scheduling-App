@@ -13,6 +13,7 @@ import 'package:scheduling/core/navigation/app_destination.dart';
 import 'package:scheduling/core/navigation/hub_shell_scope.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
+import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_steps.dart';
@@ -182,7 +183,7 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
       _mapTargetsRendered = false;
       return CenteredErrorText(
         message: context.l10n.error_introLoadLiveMap,
-        onRetry: () => ref.invalidate(liveMapTeamProvider),
+        onRetry: _retryTeam,
       );
     }
     if (teamAsync.isLoading && !_hasTeam) {
@@ -228,6 +229,14 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
       }
     });
     return null;
+  }
+
+  /// Re-subscribes the errored sources; invalidating the derived team alone re-reads their error.
+  void _retryTeam() {
+    ref.invalidate(allPresenceStreamProvider);
+    if (ref.read(allUsersStreamProvider).hasError) {
+      ref.invalidate(allUsersStreamProvider);
+    }
   }
 
   void _scheduleMarkerAssembly(

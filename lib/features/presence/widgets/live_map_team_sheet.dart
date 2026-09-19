@@ -104,28 +104,17 @@ class LiveMapTeamSheet extends StatelessWidget {
                   onTap: () => onSelect(point),
                 ),
               ],
-              if (team.notSeen.isNotEmpty) ...[
-                _SectionLabel(l10n.liveMap_sectionNotSeen, team.notSeen.length),
-                for (final (i, absence) in team.notSeen.indexed) ...[
-                  if (i > 0) const _RowDivider(),
-                  _AbsenceRow(
-                    absence: absence,
-                    subtitle: l10n.liveMap_noFixYet,
-                  ),
-                ],
-              ],
-              if (team.sharingOff.isNotEmpty) ...[
-                _SectionLabel(
-                  l10n.liveMap_sectionSharingOff,
-                  team.sharingOff.length,
-                ),
-                for (final (i, absence) in team.sharingOff.indexed) ...[
-                  if (i > 0) const _RowDivider(),
-                  _AbsenceRow(
-                    absence: absence,
-                    subtitle: l10n.liveMap_sharingOffRow,
-                  ),
-                ],
+              ..._absenceSection(
+                l10n.liveMap_sectionNotSeen,
+                team.notSeen,
+                l10n.liveMap_noFixYet,
+              ),
+              ..._absenceSection(
+                l10n.liveMap_sectionSharingOff,
+                team.sharingOff,
+                l10n.liveMap_sharingOffRow,
+              ),
+              if (team.sharingOff.isNotEmpty)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
                     AppSpacing.sp16,
@@ -140,13 +129,24 @@ class LiveMapTeamSheet extends StatelessWidget {
                     ),
                   ),
                 ),
-              ],
             ],
           ),
         ),
       ),
     );
   }
+
+  List<Widget> _absenceSection(
+    String label,
+    List<StaffAbsence> absences,
+    String subtitle,
+  ) => [
+    if (absences.isNotEmpty) _SectionLabel(label, absences.length),
+    for (final (i, absence) in absences.indexed) ...[
+      if (i > 0) const _RowDivider(),
+      _AbsenceRow(absence: absence, subtitle: subtitle),
+    ],
+  ];
 }
 
 class _TeamHeader extends StatelessWidget {

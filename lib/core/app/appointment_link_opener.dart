@@ -184,14 +184,8 @@ class AppointmentLinkOpener {
   /// over it for an admin.
   Future<void> openOverdueReview() async {
     if (!isSignedIn()) return;
-    final logger = ref.read(loggerProvider);
-    final shell = await _awaitLiveHub();
-    if (!isMounted()) return;
-    if (shell == null) {
-      logger.warn('PUSH-TAP hub never appeared');
-      return;
-    }
-    shell.showCalendar();
+    final shell = await _landOnCalendar(ref.read(loggerProvider));
+    if (shell == null) return;
     final navContext = navigatorKey.currentContext;
     if (navContext == null || !navContext.mounted) return;
     shell.goHome();
@@ -214,7 +208,7 @@ class AppointmentLinkOpener {
     final repository = ref.read(appointmentsRepositoryProvider);
     // Fetch this concurrently with hub startup, on the shared retry ladder —
     // a cold start right after sign-in can lose the auth-token race.
-    final recordFuture = appointmentId.isEmpty
+    final recordFuture = appointmentId.isEmpty || !_isDocId(appointmentId)
         ? Future<AppointmentRecord?>.value()
         : retryAsync<AppointmentRecord?>(
             () => repository.getAppointmentById(appointmentId),
@@ -223,15 +217,8 @@ class AppointmentLinkOpener {
             return null;
           });
 
-    final shell = await _awaitLiveHub();
-    if (!isMounted()) return;
-    if (shell == null) {
-      // The tap is discarded here. Without this the user taps a notification,
-      // the app opens, and nothing happens with no trace anywhere.
-      logger.warn('PUSH-TAP hub never appeared');
-      return;
-    }
-    shell.showCalendar();
+    final shell = await _landOnCalendar(logger);
+    if (shell == null) return;
 
     final record = await recordFuture;
     if (!isMounted()) return;
@@ -260,6 +247,18 @@ class AppointmentLinkOpener {
     );
   }
 
+  /// Shows the calendar once the hub is live; null (logged) if it never is.
+  Future<AppointmentLinkHub?> _landOnCalendar(AppLogger logger) async {
+    final shell = await _awaitLiveHub();
+    if (!isMounted()) return null;
+    if (shell == null) {
+      logger.warn('PUSH-TAP hub never appeared');
+      return null;
+    }
+    shell.showCalendar();
+    return shell;
+  }
+
   /// Polls for up to ~10s waiting for the live hub to appear. Returns null
   /// if it never shows up.
   Future<AppointmentLinkHub?> _awaitLiveHub() async {
@@ -272,3 +271,6 @@ class AppointmentLinkOpener {
     return null;
   }
 }
+
+/// Mirrors `isValidDocIdField` in `firestore.rules`: no path separator, ≤ 128.
+bool _isDocId(String id) => id.length <= 128 && !id.contains('/');

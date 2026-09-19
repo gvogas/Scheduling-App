@@ -4,16 +4,9 @@ import 'package:scheduling/features/employees/domain/models/employee_record.dart
 /// Which version of the team-map page a person gets.
 enum LocationShareAskVariant { turnOn, openSettings, alreadyOn }
 
-/// Whether this app build still owes a real, active account the team-map page.
-bool isLocationShareAskDue({
-  required EmployeeRecord? me,
-  required bool askedThisBuild,
-}) =>
-    me != null &&
-    me.uid.isNotEmpty &&
-    me.isActive &&
-    !me.isTestAccount &&
-    !askedThisBuild;
+/// Whether an account may get the team-map page; per build, see the store.
+bool isLocationShareAskDue({required EmployeeRecord? me}) =>
+    me != null && me.uid.isNotEmpty && me.isActive && !me.isTestAccount;
 
 /// The page's version, from the sharing switch and the iOS permission.
 LocationShareAskVariant locationShareAskVariant({

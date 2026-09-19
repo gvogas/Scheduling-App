@@ -728,6 +728,18 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   exact outcome this dialog exists to undo. Keyed per ROW it has the same
   hole, since two rows are two keys over one document. Pinned by "a SECOND
   swap on the same job builds on the first".
+  **Undo INVERTS the swap off `_RowDone.took`, never writes a snapshot back.**
+  A whole-record snapshot is only correct until the next swap on the same job:
+  with two people off one job, undoing the first row silently reverted the
+  second row's swap AND re-added someone who is off. `_undo` takes the whole
+  `_ClashGroup` rather than its id and name as two adjacent strings — the one
+  shape where a transposed pair still compiles, on a method that writes.
+  **Opening a row resets the previous one when it is open OR still LOADING.**
+  A loading row's own completion is dropped by the `_openKey != key` staleness
+  guard, so left as-is it spins forever with no action left to recover it.
+  **A failed clash LOOKUP is silent to the user and logged** (`APPT-BUSY`): the
+  alert is a courtesy on top of a save that already succeeded, and an error
+  notice there would read as the save having failed.
   **A swap re-serializes the WHOLE record, so it must normalize the status
   through `AppointmentStatus.storedRaw`** like every other such write — a
   legacy `confirmed`/unknown value would otherwise be written back verbatim
@@ -1041,12 +1053,23 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   admin-only, 2026-09-13). `watchOverdueOpen(now)` queries `status whereIn
   openStatusQueryValues` (the STORED `pending`/`in_progress`, so a legacy
   `confirmed` doc is not listed even though the server's `OPEN_STATUSES` still
-  counts it for the push) with `endTime < now` ordered DESC, capped at 500 with
-  an `APPT-REVIEW` warn and served by the existing `(status ASC, endTime DESC)`
-  composite. `overdueJobsAt` then re-filters through `displayStatusAt(now)`,
-  which is what drops personal blocks and time off. `overdueOpenJobsProvider`
-  feeds BOTH the screen and the drawer badge so the two cannot disagree, and
-  re-issues its boundary every 15 minutes while watched. Writes go through
+  counts it for the push) with `endTime < now` ordered DESC, served by the
+  existing `(status ASC, endTime DESC)` composite. **It has TWO caps, mirroring
+  the server's `MONTH_END_SCAN_MAX`/`MONTH_END_REVIEW_MAX` (audit B2,
+  2026-09-19)**: the live query scans up to `_overdueScanLimit` (5000) raw rows,
+  the repository filters them through `overdueJobsAt` (`displayStatusAt(now)`,
+  which drops personal blocks and time off), and only THEN trims to
+  `_overdueReviewLimit` (1000, oldest kept). One cap of 500 applied before the
+  filter let past personal blocks and days off — which never reach a terminal
+  status and so sit in this window forever — push the oldest real overdue jobs
+  out of both the screen and the badge. It warns under `APPT-REVIEW` once per
+  stream, when more than 1000 overdue jobs remain (jobs are missing) or the raw
+  scan hit 5000 (older ones may be). `overdueOpenJobsProvider` feeds BOTH the
+  screen and the drawer badge so the two cannot disagree (the badge therefore
+  tops out at 1000), re-issues its boundary every 15 minutes while watched, and
+  is held warm for that same 15 minutes (`keepWarmWithGrace(grace:)`, audit I2)
+  rather than the shared 3, so a drawer reopened inside the window does not
+  re-read the whole set. Writes go through
   `updateAppointmentStatuses` in 450-id chunks (`chunkIds`), so History's
   window is patched and every doc is written alone — a run or a series never
   gets a scope dialog. Complete writes `done`, which stamps `completedAt` with
@@ -1066,7 +1089,20 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   (`DashboardAggregator.mergeById`, live wins) and never concatenated — each
   query reaches back to its own `fetchStart`, so they overlap by a fortnight.
   Adding a reducer that needs older data means widening the HISTORY half, not
-  the live one.
+  the live one. **`dashboardPeriodProvider` must never reach a query**: all
+  three periods fit inside the window already fetched, so it is a pure
+  in-memory filter, and a period that widened the live listener would undo the
+  split. `availabilityConflictsProvider` is scoped to the LIVE window on
+  purpose — it is the data already on screen, and a conflict further out
+  surfaces when the window reaches it. **`_firstFailure` reports an error BEFORE
+  a loading sibling**, or a source that has already failed is masked by one
+  still in flight and the screen sits on a skeleton forever.
+  **`newClientsProvider` drops archived clients and those with no `createdAt`
+  IN DART** (owner call 2026-08-10: an archived client is one you decided not
+  to look at). A `.where('archived', ...)` would need an `(archived, createdAt)`
+  composite and a deploy. The "never filter a server page in Dart" rule is
+  about `fetchClientsPage`, where a shortened page breaks the cursor; this is a
+  bounded one-shot read with no cursor, so that hazard does not apply.
 - **A technician's History is the same terminal archive narrowed by
   `employeeIds`** (2026-09-01, the audit's "technician has no search").
   `_historyQuery(employeeId)` (`firebase_appointments_repository.dart`) is the

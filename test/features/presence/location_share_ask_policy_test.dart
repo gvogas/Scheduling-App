@@ -8,8 +8,8 @@ void main() {
   const me = EmployeeRecord(id: 'e1', uid: 'uid-1', status: 'active');
 
   group('isLocationShareAskDue', () {
-    bool due({EmployeeRecord? record = me, bool askedThisBuild = false}) =>
-        isLocationShareAskDue(me: record, askedThisBuild: askedThisBuild);
+    bool due({EmployeeRecord? record = me}) =>
+        isLocationShareAskDue(me: record);
 
     test('is due for an active real account not yet asked on this build', () {
       expect(due(), isTrue);
@@ -17,10 +17,6 @@ void main() {
 
     test('is due for someone already sharing too', () {
       expect(due(record: me.copyWith(locationSharingEnabled: true)), isTrue);
-    });
-
-    test('is not due twice on the same build', () {
-      expect(due(askedThisBuild: true), isFalse);
     });
 
     test('is not due before the record has loaded', () {

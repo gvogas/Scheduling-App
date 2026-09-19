@@ -1,7 +1,8 @@
 # Month-end overdue review — design
 
-**Status: BUILT 2026-09-13 on branch `month-end` (from `ba2fdb05`),
-UNCOMMITTED, NOT DEPLOYED.** Deploy `functions` first (the rider; old builds
+**Status (2026-09-19): BUILT and committed (`ed59a6a5`); functions DEPLOYED
+2026-09-19 16:37Z (`608b817a`); NOT SHIPPED.** Built 2026-09-13 on branch
+`month-end` (from `ba2fdb05`). Deploy `functions` first (the rider; old builds
 degrade to the calendar on the tap), then ship the app build; no index, rules
 or export change. After the app ships, an admin turns the month-end switch ON
 for Paul — until then the rider sends to nobody and logs a recipient count of 0.

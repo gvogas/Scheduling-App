@@ -19,6 +19,7 @@ import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_header_pair.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_top_bar.dart';
 import 'package:scheduling/shared/widgets/dialogs/confirm_dialog.dart';
+import 'package:scheduling/shared/widgets/feedback/centered_error_text.dart';
 
 /// Opens one job from the review.
 typedef OverdueJobOpener =
@@ -50,8 +51,12 @@ class _OverdueReviewScreenState extends ConsumerState<OverdueReviewScreen> {
     super.initState();
     final logger = ref.read(loggerProvider);
     ref.listenManual(overdueOpenJobsProvider, (previous, next) {
-      if (next.hasError && !(previous?.hasError ?? false)) {
-        logger.warn('APPT-REVIEW overdue load failed', next.error);
+      if (isFirstAsyncError(previous, next)) {
+        logger.warn(
+          'APPT-REVIEW overdue load failed',
+          next.error,
+          next.stackTrace,
+        );
       }
     });
   }
@@ -69,7 +74,8 @@ class _OverdueReviewScreenState extends ConsumerState<OverdueReviewScreen> {
 
   Future<void> _apply(
     OverdueReviewAction action,
-    List<AppointmentRecord> jobs,
+    Set<String> visible,
+    int count,
   ) async {
     final l10n = context.l10n;
     if (guardedOffline(context, ref, intro: l10n.error_introReviewOverdue)) {
@@ -78,12 +84,6 @@ class _OverdueReviewScreenState extends ConsumerState<OverdueReviewScreen> {
     final controller = ref.read(overdueReviewControllerProvider.notifier);
     final notices = ref.read(noticeServiceProvider);
     final analytics = ref.read(analyticsServiceProvider);
-    final visible = {for (final job in jobs) ?job.id};
-    final count = ref
-        .read(overdueReviewControllerProvider)
-        .selected
-        .where(visible.contains)
-        .length;
     final isComplete = action == OverdueReviewAction.complete;
     final confirmed = await showConfirmDialog(
       context,
@@ -162,8 +162,13 @@ class _OverdueReviewScreenState extends ConsumerState<OverdueReviewScreen> {
             : OverdueReviewActionBar(
                 count: selectedCount,
                 isBusy: review.isApplying,
-                onComplete: () => _apply(OverdueReviewAction.complete, jobs),
-                onNotDone: () => _apply(OverdueReviewAction.notDone, jobs),
+                onComplete: () => _apply(
+                  OverdueReviewAction.complete,
+                  visible,
+                  selectedCount,
+                ),
+                onNotDone: () =>
+                    _apply(OverdueReviewAction.notDone, visible, selectedCount),
               ),
       ),
     );
@@ -173,18 +178,13 @@ class _OverdueReviewScreenState extends ConsumerState<OverdueReviewScreen> {
     if (!value.hasError) {
       return const Center(child: CircularProgressIndicator.adaptive());
     }
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Text(
-          composeErrorNotice(
-            context,
-            intro: context.l10n.error_introReviewOverdue,
-            error: value.error!,
-          ),
-          textAlign: TextAlign.center,
-        ),
+    return CenteredErrorText(
+      message: composeErrorNotice(
+        context,
+        intro: context.l10n.error_introReviewOverdue,
+        error: value.error!,
       ),
+      onRetry: () => ref.invalidate(overdueOpenJobsProvider),
     );
   }
 }

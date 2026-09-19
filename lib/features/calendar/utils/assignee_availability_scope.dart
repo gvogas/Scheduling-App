@@ -14,8 +14,8 @@ import 'package:scheduling/features/calendar/domain/policies/appointment_form_va
 /// worse than one showing none.
 ///
 /// **An undetermined span answers nothing.** A date with no times could still
-/// become an 8 pm job, so dimming whoever is booked that morning would be a
-/// guess presented as a fact; the picker offers everyone until the span is
+/// become an 8 pm job, so dimming anyone on it would be a guess presented as a
+/// fact; the picker offers everyone until the span is
 /// real. That covers the "no date picked yet" state too.
 ///
 /// **A PERSONAL block dims nobody, and that is not a nicety.** Dimming means

@@ -2,7 +2,12 @@
 
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
-refreshed 2026-09-12 (release 1.61.0+90 — **the export list is unchanged at 29**,
+refreshed 2026-09-19 (release 1.62.0+91 — **still 29 exports, all DEPLOYED**: the
+month-end overdue rider on `sendDailyJobDigest` and Wave Phase 4 (the `worker.js`
+split, the guarded import updates, the cadence deleted and
+`waveSetImportSchedule` retired to a no-op) went live 2026-09-19 16:37Z
+(`608b817a`), ahead of the app build. Previously refreshed 2026-09-12 (release
+1.61.0+90 — **the export list is unchanged at 29**,
 and all of it is DEPLOYED: the app build shipped first and the full `functions`
 deploy followed 2026-09-13 02:07Z (`38c8225b`), the INVERTED order Wave Phase 2
 needs — 1.60.0+89 never shipped, so this build carries its Dart. One body

@@ -7,24 +7,8 @@ import 'package:scheduling/core/analytics/analytics_privacy.dart';
 import 'package:scheduling/core/analytics/analytics_screens.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 
-/// The ONE place this app talks to Firebase Analytics.
-///
-/// Nothing else may import `firebase_analytics`. Scattered `logEvent` calls are
-/// how an event name drifts into two spellings and how a client's phone number
-/// ends up on a wire, and neither failure reports itself — a malformed event is
-/// dropped SILENTLY by Firebase, and a leaked parameter looks like a working
-/// dashboard. Routing everything through here means the event vocabulary
-/// (`analytics_events.dart`) and the PII sanitizer (`analytics_privacy.dart`)
-/// are unavoidable rather than optional.
-///
-/// **No method here can throw, and every one returns `void`.** Each send is
-/// wrapped and a failure is a `logger.warn` and nothing more: analytics is
-/// instrumentation, and must never be the reason a save fails or a sheet
-/// crashes. `void` rather than `Future<void>` is deliberate — a future would
-/// make every one of the ~25 call sites, most of them inside an `async` widget
-/// handler, either `await` a network round trip in the middle of a user action
-/// or wrap it in `unawaited(...)`. Neither is ceremony worth paying for a call
-/// that cannot fail and that nothing waits on.
+/// The only importer of `firebase_analytics`; every method is `void` and
+/// never throws.
 class AnalyticsService {
   AnalyticsService({FirebaseAnalytics? analytics, AppLogger? logger})
     : _override = analytics,
@@ -34,21 +18,7 @@ class AnalyticsService {
   final FirebaseAnalytics? _override;
   final AppLogger _logger;
 
-  /// Resolved LAZILY, and null when there is nothing to talk to.
-  ///
-  /// `FirebaseAnalytics.instance` requires an initialized Firebase, which is
-  /// the normal state of production and NOT the normal state of a widget test.
-  /// Resolving in the constructor would make merely READING
-  /// `analyticsServiceProvider` throw, so every one of the ~20 instrumented
-  /// widgets would need a provider override to stay testable — and the first
-  /// suite that forgot one would fail with a Firebase error pointing nowhere
-  /// near the analytics call that caused it.
-  ///
-  /// Returning null instead of throwing is deliberate: an uninitialized
-  /// Firebase is not a failure worth reporting, it is a harness with no
-  /// analytics in it. Throwing-and-catching would work too, but it would print
-  /// a `logger.warn` from every instrumented widget in the suite, which is the
-  /// kind of noise that trains people to ignore the log.
+  /// Resolved lazily; null when Firebase is uninitialized (widget tests).
   FirebaseAnalytics? get _analytics {
     if (_override != null) return _override;
     if (Firebase.apps.isEmpty) return null;
@@ -71,19 +41,12 @@ class AnalyticsService {
   // ---------------------------------------------------------------------------
 
   /// Turns collection on or off for the whole app.
-  ///
-  /// Debug builds pass `false` unless `--dart-define=ANALYTICS_DEBUG=true`, so
-  /// day-to-day `flutter run` never reaches the production property.
   void setCollectionEnabled({required bool enabled}) => _guard(
     'setAnalyticsCollectionEnabled',
     (analytics) => analytics.setAnalyticsCollectionEnabled(enabled),
   );
 
-  /// `admin` / `employee`, or null to clear it on sign-out.
-  ///
-  /// Passing the ROLE and never the uid is the whole point: it answers "how do
-  /// admins and employees differ?" without Firebase ever holding a value that
-  /// points at a person.
+  /// `admin` / `employee`, or null to clear it — never the uid.
   void setUserRole(String? role) =>
       _setUserProperty(AnalyticsUserProperties.userRole, role);
 
@@ -111,12 +74,7 @@ class AnalyticsService {
   // Screens
   // ---------------------------------------------------------------------------
 
-  /// Records a screen view.
-  ///
-  /// Firebase's automatic `user_engagement` event attributes its
-  /// `engagement_time_msec` to whichever screen was last reported, which is
-  /// what makes "how long do users spend in the calendar?" answerable without
-  /// any timing code of ours.
+  /// Records a screen view; engagement time accrues to the last one reported.
   void logScreenView(String screenName) {
     assert(
       AnalyticsScreens.allScreens.contains(screenName) &&
@@ -179,9 +137,7 @@ class AnalyticsService {
 
   void logJobStarted() => _log(AnalyticsEvents.jobStarted, const {});
 
-  /// No `hasNotes`: the parent `fieldNotes` string is the LEGACY write path
-  /// (crew notes live in a subcollection), so reading it would under-report to
-  /// near zero. `note_added` already answers how often notes are written.
+  /// No `hasNotes`: `fieldNotes` is the legacy path and would under-report.
   void logJobCompleted({required bool hasPhotos}) => _log(
     AnalyticsEvents.jobCompleted,
     {AnalyticsParams.hasPhotos: hasPhotos},
@@ -255,15 +211,7 @@ class AnalyticsService {
   // Cross-cutting
   // ---------------------------------------------------------------------------
 
-  /// Records that a search RAN — never what was typed.
-  ///
-  /// A client search in this app is somebody's surname or phone number by
-  /// definition, so only the query's bucketed length and result count go out.
-  /// Fires once per SETTLED search, never per keystroke.
-  ///
-  /// No result count: the one place that knows a search actually ran is the
-  /// debounce commit, and the results have not been fetched yet there. A
-  /// count reported later would be a second event for one search.
+  /// Records that a search RAN — never what was typed, and no result count.
   void logSearchUsed({required String surface, required int queryLength}) =>
       _log(AnalyticsEvents.searchUsed, {
         AnalyticsParams.surface: surface,
@@ -299,13 +247,7 @@ class AnalyticsService {
     AnalyticsParams.settingValue: settingValue,
   });
 
-  /// [action] is `call` / `email` / `directions` / `link` — never the number,
-  /// the address or the URL.
-  ///
-  /// No `source`: this fires from the shared launch helpers, which are the one
-  /// place all twelve call sites pass through and which by construction do not
-  /// know which screen called them. Threading a surface down through them to
-  /// satisfy a parameter would put a display concern in a launcher.
+  /// [action] is `call` / `email` / `directions` / `link`, never the value.
   void logContactAction({required String action}) =>
       _log(AnalyticsEvents.contactAction, {AnalyticsParams.action: action});
 
@@ -352,11 +294,7 @@ class AnalyticsService {
     );
   }
 
-  /// Swallows every failure so instrumentation can never break a user flow.
-  ///
-  /// The `warn` still files it, so a permanently broken channel shows up in
-  /// Crashlytics instead of presenting as "the dashboard is just empty" —
-  /// which is the failure mode a bare `catch (_) {}` would produce.
+  /// Logs and swallows every failure so instrumentation never breaks a flow.
   Future<void> _guard(
     String label,
     Future<void> Function(FirebaseAnalytics analytics) send,

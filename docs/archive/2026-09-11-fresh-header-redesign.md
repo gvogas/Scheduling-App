@@ -1,5 +1,9 @@
 # Fresh header and Clients list redesign
 
+**CLOSED 2026-09-19 — Phase 3's device pass is DONE (owner).** That was the only
+thing left below; archived the same day.
+
+
 **Date:** 2026-09-11
 **Status: ALL FOUR PHASES BUILT 2026-09-11, merged to `dev` and SHIPPED in
 1.61.0+90** (`fresh-header` is an ancestor of release commit `dd8c4863`;

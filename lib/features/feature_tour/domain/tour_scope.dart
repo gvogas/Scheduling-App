@@ -55,12 +55,3 @@ final List<TourScope> allTourScopes = [
   for (final destination in allDestinations) DestinationTour(destination),
   for (final form in TourForm.values) FormTour(form),
 ];
-
-/// Resolves a persisted key, or null for one that no longer exists — so a
-/// retired tour can't resurrect itself off a stale preferences entry.
-TourScope? tourScopeByKey(String key) {
-  for (final scope in allTourScopes) {
-    if (scope.storageKey == key) return scope;
-  }
-  return null;
-}

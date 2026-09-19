@@ -1,3 +1,4 @@
+import 'package:scheduling/core/utils/month_sections.dart';
 import 'package:scheduling/features/calendar/domain/appointment_status_values.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 
@@ -24,18 +25,13 @@ List<AppointmentRecord> overdueJobsAt(
 /// Groups an oldest-first list into consecutive calendar months.
 List<OverdueMonthGroup> groupOverdueByMonth(
   List<AppointmentRecord> oldestFirst,
-) {
-  final groups = <OverdueMonthGroup>[];
-  for (final job in oldestFirst) {
-    final month = DateTime(job.startTime.year, job.startTime.month);
-    if (groups.isNotEmpty && groups.last.month == month) {
-      groups.last.jobs.add(job);
-    } else {
-      groups.add((month: month, jobs: [job]));
-    }
-  }
-  return groups;
-}
+) => [
+  for (final section in monthSectionsOf(oldestFirst))
+    (
+      month: section.month,
+      jobs: oldestFirst.sublist(section.start, section.start + section.length),
+    ),
+];
 
 /// [ids] in runs of at most [size].
 List<List<String>> chunkIds(

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:scheduling/core/theme/design_tokens.dart';
-import 'package:scheduling/core/utils/date_utils_helper.dart';
+import 'package:scheduling/features/calendar/domain/month_grid.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
 /// "JULY 2026 · 2" over a hairline, with a per-month Select all / Clear.
@@ -36,7 +36,9 @@ class OverdueMonthSplitter extends StatelessWidget {
             children: [
               Text(
                 l10n.calendar_overdueReviewMonthSplitter(
-                  DateUtilsHelper.formatMonthYear(month).toUpperCase(),
+                  monthYearFormatFor(
+                    Localizations.localeOf(context).toString(),
+                  ).format(month).toUpperCase(),
                   count,
                 ),
                 style: theme.monoType.groupLabel.copyWith(

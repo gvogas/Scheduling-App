@@ -185,7 +185,7 @@ void main() {
       expect(r.waveProblems, hasLength(2));
       expect(r.waveProblems.first.code, WaveProblemCode.tooLong);
       expect(r.waveProblems.first.cap, 200);
-      expect(r.waveProblems.hasBlocking, isTrue);
+      expect(r.waveProblems.any((p) => p.isBlocking), isTrue);
     });
 
     test('fromMap defaults problems to empty when the server wrote null', () {

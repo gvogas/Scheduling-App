@@ -185,6 +185,17 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   is what stops `upsertCustomer`'s own `wave.*` write-back from re-entering the
   drain in a cycle (the hash is unchanged by that write, so the re-fire returns
   at the top).
+  **One case below that gate still needs work: a `blocked` client edited BACK
+  to its last-synced values** (`isBlockedRevertToSynced`, `enqueue.js`; audit
+  B1, 2026-09-19). Rule 2 returns false there — the fields already match Wave —
+  but the refusal write never touched `lastSyncedHash`, so nothing else would
+  ever re-run the contract: no job is queued (the refusal cancelled it), the
+  import skips it on the same hash, and `backfill-wave-blocked.js` leaves
+  blocked docs alone. The trigger therefore re-evaluates that one case through
+  `clearStaleBlock` and writes `verdictPatch(…, {clearedState: 'synced'})` if
+  the contract now passes; a revert that still fails writes nothing. The
+  predicate excludes the Rule 1 case (an unmapped edit), so the verdict write's
+  own re-fire is inert. Pinned by `wave_triggers.test.js`.
   **`runWaveDaily` is now ONLY a drain** (its pull was deleted with the
   cadence, 2026-09-13). That drain is the safety net for the two states an
   event-driven push structurally cannot catch: a job sitting on its
@@ -438,6 +449,9 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   `customer_contract.js` is a test failure. It also pins that the enqueue gate
   runs BEFORE the enqueue. Verified to fail on a planted violation, not just to
   pass.
+  **Retry and Sync share ONE busy flag** (`WaveSettingsSection._busy`
+  includes `_retryBusy`): Retry drains the same queue Sync does, so running
+  both at once would have the two presses fighting over the same jobs.
   **Surfaces.** `WaveSyncBadge` renders `blocked` and the reasons as visible
   TEXT (they were a `Semantics` label only), `WaveProblemList` owns the
   sentences so the badge and the Settings list cannot word one failure two

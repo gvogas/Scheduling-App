@@ -14,6 +14,7 @@ jest.mock("../wave/worker", () => ({
   cancelCustomerUpsert: jest.fn(),
   drainQueue: jest.fn(),
   shouldEnqueueClientWrite: jest.fn(),
+  isBlockedRevertToSynced: jest.fn(),
 }));
 jest.mock("../wave/sync_run", () => ({
   importWithWatermark: jest.fn(),
@@ -26,6 +27,8 @@ const logger = require("firebase-functions/logger");
 const worker = require("../wave/worker");
 const syncRun = require("../wave/sync_run");
 const {statePatch} = require("../wave/customer_contract");
+const {mappedFieldsHash} = require("../wave/mappers");
+const realEnqueue = jest.requireActual("../wave/enqueue");
 const {waveUpsertCustomer, runWaveDaily} = require("../wave/triggers");
 
 const snapOf = (data) => ({exists: data !== null, data: () => data});
@@ -80,6 +83,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   FieldValue.serverTimestamp = jest.fn(() => "TS");
   worker.shouldEnqueueClientWrite.mockReturnValue(true);
+  worker.isBlockedRevertToSynced.mockReturnValue(false);
   worker.enqueueCustomerUpsert.mockResolvedValue(undefined);
   worker.cancelCustomerUpsert.mockResolvedValue(false);
   worker.drainQueue.mockResolvedValue(IDLE_DRAIN);
@@ -253,6 +257,104 @@ describe("waveUpsertCustomer mark-pending batch", () => {
     expect(worker.enqueueCustomerUpsert).toHaveBeenCalledTimes(2);
     const last = worker.enqueueCustomerUpsert.mock.calls[1][1];
     expect(last.batch).toBeUndefined();
+  });
+});
+
+describe("waveUpsertCustomer stale block on a revert to last-synced", () => {
+  const CLIENT = {
+    type: "business",
+    name: "Plomberie Nord",
+    phone: "5145554321",
+    email: "shop@example.com",
+  };
+
+  /**
+   * Applies a doc update's dotted `wave.*` keys, as Firestore would.
+   * @param {!Object} doc Client document data.
+   * @param {!Object} patch Dotted-key patch.
+   * @return {!Object} The updated document data.
+   */
+  function applyPatch(doc, patch) {
+    const wave = {...(doc.wave || {})};
+    for (const [k, v] of Object.entries(patch)) wave[k.slice(5)] = v;
+    return {...doc, wave};
+  }
+
+  beforeEach(() => {
+    worker.shouldEnqueueClientWrite.mockImplementation(
+        realEnqueue.shouldEnqueueClientWrite);
+    worker.isBlockedRevertToSynced.mockImplementation(
+        realEnqueue.isBlockedRevertToSynced);
+  });
+
+  test("synced -> blocked -> reverted clears the block to synced", async () => {
+    const {db, docUpdates} = makeDb();
+    getFirestore.mockReturnValue(db);
+    const synced = {
+      ...CLIENT,
+      wave: {syncState: "synced", lastSyncedHash: mappedFieldsHash(CLIENT)},
+    };
+
+    const broken = {...synced, name: ""};
+    await waveUpsertCustomer.run(makeEvent("c1", synced, broken));
+    expect(docUpdates).toHaveLength(1);
+    const blocked = applyPatch(broken, docUpdates[0].patch);
+    expect(blocked.wave.syncState).toBe("blocked");
+
+    await waveUpsertCustomer.run(makeEvent("c1", broken, blocked));
+    expect(docUpdates).toHaveLength(1);
+
+    const reverted = {...blocked, name: CLIENT.name};
+    await waveUpsertCustomer.run(makeEvent("c1", blocked, reverted));
+    expect(docUpdates).toHaveLength(2);
+    expect(docUpdates[1].patch).toEqual({
+      "wave.syncState": "synced",
+      "wave.syncError": null,
+      "wave.problems": null,
+    });
+    expect(worker.enqueueCustomerUpsert).not.toHaveBeenCalled();
+
+    const cleared = applyPatch(reverted, docUpdates[1].patch);
+    await waveUpsertCustomer.run(makeEvent("c1", reverted, cleared));
+    expect(docUpdates).toHaveLength(2);
+    expect(worker.enqueueCustomerUpsert).not.toHaveBeenCalled();
+  });
+
+  test("a revert to last-synced values that still fail stays blocked",
+      async () => {
+        const {db, docUpdates} = makeDb();
+        getFirestore.mockReturnValue(db);
+        const stale = {...CLIENT, name: ""};
+        const problems = statePatch(stale)["wave.problems"];
+        const blocked = {
+          ...stale,
+          phone: "5145559999",
+          wave: {
+            syncState: "blocked",
+            problems,
+            lastSyncedHash: mappedFieldsHash(stale),
+          },
+        };
+        const reverted = {...blocked, phone: CLIENT.phone};
+
+        await waveUpsertCustomer.run(makeEvent("c1", blocked, reverted));
+
+        expect(docUpdates).toEqual([]);
+        expect(worker.enqueueCustomerUpsert).not.toHaveBeenCalled();
+      });
+
+  test("an unmapped edit on a blocked doc does not re-evaluate", async () => {
+    const {db, docUpdates} = makeDb();
+    getFirestore.mockReturnValue(db);
+    const blocked = {
+      ...CLIENT,
+      wave: {syncState: "blocked", lastSyncedHash: mappedFieldsHash(CLIENT)},
+    };
+    const edited = {...blocked, contacts: [{name: "A"}]};
+
+    await waveUpsertCustomer.run(makeEvent("c1", blocked, edited));
+
+    expect(docUpdates).toEqual([]);
   });
 });
 

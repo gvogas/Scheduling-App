@@ -62,6 +62,17 @@ self-service settings. Root context: `../../CLAUDE.md`.
   the case of someone calling the callable directly. `enforceAppCheck: true` is all that stands in the way
   there, and App Check is attestation, not authorization.
   Don't build on the ordering as if the server enforced it.
+  **Three `AccountSetupScreen` guards that look redundant and are not.**
+  Consent is re-checked inside `_submit`, not only by the disabled CTA — the
+  confirm-password field's keyboard submit reaches `_submit` without consulting
+  the button. An `already active` failure WALKS THEM IN rather than reporting
+  it: the password change that precedes activation landed, so the person is
+  finished, not stuck. And abandoning setup is a PLAIN `signOut`, deliberately
+  not `AccountExitController`'s teardown — an `invited` account has no push,
+  presence or Live Activity registration to remove (the rules deny it every
+  collection those write), so nothing needs the credential first. **If any
+  registration ever starts before activation, this must route through the
+  shared exit path instead.**
   **The password itself is validated TRIMMED** — `completeAccountSetup` stores
   `newPassword.trim()`, so checking the raw text let `"Aa1!bcd "` pass the
   8-character rule and set a 7-character password. The strength meter and the
@@ -665,7 +676,13 @@ self-service settings. Root context: `../../CLAUDE.md`.
   colours blank on jobs already assigned to it. `offerableAssignees` still
   offers a tester STORED on a job, so hiding it from the picker cannot strand
   it there. `neverSetUpAccountsProvider` keeps it too — that list is a security
-  flag about a starting password, not a teammate listing. History, the tester's
+  flag about a starting password, not a teammate listing. It reads
+  `allUsersStreamProvider` for the same reason: `employeesStreamProvider`
+  filters to `active`, so the flag would be permanently empty and never fire,
+  and `assignableEmployeesProvider` would also hide a pending dispatcher. Its
+  sort is oldest-first with a null `createdAt` LISTED LAST, never dropped — the
+  field is function-owned and absent on legacy docs, and "unknown age" must not
+  become "not shown". History, the tester's
   own session and every server-side push are untouched.
 - **`docs/legal/*.html` are SOURCES, not the published pages.** The live site is
   the separate `gvogas/es-pro-legal` GitHub Pages repo, where

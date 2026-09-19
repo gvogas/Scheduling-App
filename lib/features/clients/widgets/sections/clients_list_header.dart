@@ -133,82 +133,7 @@ class ClientsListHeader extends StatelessWidget {
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: width * 0.55),
                 child: _wrapSort(
-                  PopupMenuButton<ClientsSort>(
-                    tooltip: l10n.clients_sort,
-                    initialValue: sort,
-                    onSelected: onSortChanged,
-                    color: theme.colorScheme.surface,
-                    surfaceTintColor: Colors.transparent,
-                    elevation: 3,
-                    position: PopupMenuPosition.under,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.r16),
-                      side: BorderSide(color: theme.colorScheme.outlineVariant),
-                    ),
-                    itemBuilder: (context) => [
-                      for (final option in ClientsSort.values)
-                        PopupMenuItem<ClientsSort>(
-                          value: option,
-                          child: _SortOption(
-                            option: option,
-                            picked: option == sort,
-                          ),
-                        ),
-                    ],
-                    // The Filter button's vocabulary, painted rather than built
-                    // from GhostControl: the popup owns the tap, and a second
-                    // InkWell inside it would fight for the same gesture.
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        minHeight: kGhostTapTarget,
-                      ),
-                      child: Center(
-                        widthFactor: 1,
-                        child: Container(
-                          constraints: const BoxConstraints(
-                            minHeight: kGhostTile,
-                          ),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.surface,
-                            borderRadius: BorderRadius.circular(
-                              AppRadius.rFull,
-                            ),
-                            border: Border.all(
-                              color: theme.colorScheme.outlineVariant,
-                            ),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: AppSpacing.sp8,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            spacing: 6,
-                            children: [
-                              Icon(
-                                Icons.sort_rounded,
-                                size: 15,
-                                color: theme.colorScheme.onSurface,
-                              ),
-                              Flexible(
-                                child: Text(
-                                  sortLabel(l10n, sort),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    fontFamily: kFontSans,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: theme.colorScheme.onSurface,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                  _SortPill(sort: sort, onSortChanged: onSortChanged),
                 ),
               ),
             ],
@@ -219,6 +144,85 @@ class ClientsListHeader extends StatelessWidget {
   }
 
   Widget _wrapSort(Widget child) => sortWrap?.call(child) ?? child;
+}
+
+/// The sort control: a popup menu behind a ghost-tile-styled trigger.
+class _SortPill extends StatelessWidget {
+  const _SortPill({required this.sort, required this.onSortChanged});
+
+  final ClientsSort sort;
+  final ValueChanged<ClientsSort> onSortChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final theme = Theme.of(context);
+    return PopupMenuButton<ClientsSort>(
+      tooltip: l10n.clients_sort,
+      initialValue: sort,
+      onSelected: onSortChanged,
+      color: theme.colorScheme.surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 3,
+      position: PopupMenuPosition.under,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.r16),
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
+      ),
+      itemBuilder: (context) => [
+        for (final option in ClientsSort.values)
+          PopupMenuItem<ClientsSort>(
+            value: option,
+            child: _SortOption(option: option, picked: option == sort),
+          ),
+      ],
+      // The Filter button's vocabulary, painted rather than built
+      // from GhostControl: the popup owns the tap, and a second
+      // InkWell inside it would fight for the same gesture.
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: kGhostTapTarget),
+        child: Center(
+          widthFactor: 1,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: kGhostTile),
+            decoration: BoxDecoration(
+              color: theme.colorScheme.surface,
+              borderRadius: BorderRadius.circular(AppRadius.rFull),
+              border: Border.all(color: theme.colorScheme.outlineVariant),
+            ),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: AppSpacing.sp8,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: 6,
+              children: [
+                Icon(
+                  Icons.sort_rounded,
+                  size: 15,
+                  color: theme.colorScheme.onSurface,
+                ),
+                Flexible(
+                  child: Text(
+                    ClientsListHeader.sortLabel(l10n, sort),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: kFontSans,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// One row of the sort menu: the order's own glyph, its name, and a check on

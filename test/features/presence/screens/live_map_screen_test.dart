@@ -294,6 +294,35 @@ void main() {
     expect(lastConfig, isNull, reason: 'no map is built in the error state');
   });
 
+  testWidgets('Retry re-subscribes an errored presence stream', (tester) async {
+    var subscriptions = 0;
+    await tester.pumpWidget(
+      ProviderScope(
+        retry: (_, _) => null,
+        overrides: [
+          allPresenceStreamProvider.overrideWith((ref) {
+            subscriptions++;
+            return subscriptions == 1
+                ? Stream<List<PresenceFix>>.error(Exception('denied'))
+                : Stream.value([_fix('u1', 45.5, -73.6, _now)]);
+          }),
+          ...baseOverrides(presence: const Stream.empty()).skip(1),
+        ],
+        child: themed(
+          LiveMapScreen(isAdmin: true, employeeId: 'e1', mapBuilder: stubMap),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text("Couldn't load the staff map"), findsOneWidget);
+
+    await tester.tap(find.text('Retry'));
+    await settleMap(tester);
+
+    expect(find.text("Couldn't load the staff map"), findsNothing);
+    expect(lastConfig!.markers, hasLength(1));
+  });
+
   testWidgets(
     'pauses the presence stream while the tab is hidden and re-attaches when '
     'it becomes visible',

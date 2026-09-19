@@ -28,15 +28,6 @@ import 'package:scheduling/routes/app_routes.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
 
 /// First-run setup for an employee whose account an admin created.
-///
-/// They are ALREADY signed in when they get here — with the temporary starting
-/// password — and their `users` doc is still `invited`, which is what withholds
-/// every rules grant. This screen is the only route out of that state: it
-/// replaces the password and then activates the account, in that order (see
-/// [AuthService.completeAccountSetup] for why the order is the guarantee).
-///
-/// The email is NOT asked for and NOT editable — it is the address they just
-/// signed in with, so it is rendered locked.
 class AccountSetupScreen extends ConsumerStatefulWidget {
   const AccountSetupScreen({
     this.firstName = '',
@@ -45,8 +36,7 @@ class AccountSetupScreen extends ConsumerStatefulWidget {
     super.key,
   });
 
-  /// Whatever the admin already typed, so the person confirms rather than
-  /// retypes. Blank is fine — the fields are still required.
+  /// Admin-typed values, so the person confirms rather than retypes.
   final String firstName;
   final String lastName;
   final AuthService? authService;
@@ -117,12 +107,7 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
     final required = l10n.validation_nameIsRequired;
     final firstErr = _firstNameController.text.trim().isEmpty ? required : null;
     final lastErr = _lastNameController.text.trim().isEmpty ? required : null;
-    // The meter beside this field is advisory; the gate stays the strict
-    // new-password validator so it can never disagree with the checklist.
-    //
-    // Validated TRIMMED, because `completeAccountSetup` stores the trimmed
-    // value: checking `"Aa1!bcd "` (8) and then setting `"Aa1!bcd"` (7) let a
-    // password through that does not meet the policy it was checked against.
+    // Strict validator on the TRIMMED value — what setup actually stores.
     final password = _passwordController.text.trim();
     final passwordErr = AuthValidators.newPassword(context, password);
 
@@ -134,9 +119,7 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
       confirmErr = l10n.validation_passwordsDoNotMatch;
     }
 
-    // Only rebuild when a message actually changed: after the first failed
-    // submit this runs on EVERY keystroke in EVERY field, and an unconditional
-    // setState there rebuilds the whole form to redraw identical error text.
+    // Only rebuild when a message changed; this runs on every keystroke.
     if (firstErr != _firstNameError ||
         lastErr != _lastNameError ||
         passwordErr != _passwordError ||
@@ -163,15 +146,10 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
   bool get _isTransitionBusy => _isLoading || _isSigningOut;
 
   Future<void> _finishSetup() async {
-    // Reentrancy guard, synchronously first: AnimatedLoadingButton only nulls
-    // onPressed after the setState rebuild, so a same-frame double-tap would
-    // otherwise run two updatePassword calls and two completeEmployeeSetup
-    // invocations — burning 2 of 5 rate-limit slots and pushing the hub twice.
+    // Reentrancy guard first: the button only disables after the rebuild.
     if (_isTransitionBusy) return;
     FocusScope.of(context).unfocus();
-    // Consent is the gate, and this is where it is enforced: the confirm-
-    // password field's keyboard-submit reaches here without consulting the
-    // disabled button, so gating only at the CTA would let Done through.
+    // Consent enforced here too: keyboard-submit bypasses the button.
     if (!_consented) return;
 
     setState(() {
@@ -181,8 +159,7 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
 
     if (!_validate()) return;
 
-    // Before the in-flight flag: an awaited write offline never resolves until
-    // the connection returns, so the button would just spin.
+    // Before the in-flight flag, per the offline write guard.
     if (ref.read(isOfflineProvider)) {
       setState(() {
         _bannerError = const AuthFailureNetwork().toLocalizedMessageInContext(
@@ -218,16 +195,12 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
         stackTrace,
       );
       if (!mounted) return;
-      // Already active: the password change that precedes activation DID land,
-      // so this person is finished, not stuck. Walk them in rather than
-      // reporting a failure they cannot act on.
+      // Already active: the password change landed, so walk them in.
       if (failure is AuthFailureSetupAlreadyComplete) {
         await _routeIntoApp();
         return;
       }
-      // They retyped the password the admin issued. That is one field's
-      // problem, so it reads as a field error — a banner would name the
-      // failure without pointing at the box to fix.
+      // A reused starting password is a field error, not a banner.
       if (failure is AuthFailureStartingPasswordReused) {
         setState(() {
           _isLoading = false;
@@ -258,8 +231,7 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
     if (!mounted) return;
     switch (outcome) {
       case SignInSuccess(:final employee):
-        // Only on the branch that actually reaches the app — the pending-doc
-        // branch below leaves the person back at sign-in.
+        // Only on the branch that actually reaches the app.
         ref.read(analyticsServiceProvider).logAccountSetupCompleted();
         await Navigator.of(context).pushNamedAndRemoveUntil(
           AppRoutes.mainCalendar,
@@ -269,14 +241,10 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
             employeeId: employee.id,
           ),
         );
-      // The account is active server-side; the doc just isn't readable yet.
-      // Say so and offer the way back to sign-in.
+      // Active server-side but the doc isn't readable yet — back to sign-in.
       case SignInNoSession() || SignInProfilePending():
         await _recoverToLoginAfterSetup();
-      // These only come from signIn() — resumeAfterSignUp() never produces
-      // them, but the sealed family forces the branch. `NeedsAccountSetup`
-      // included: reaching it here would mean activation didn't stick, and
-      // looping back onto this same screen is not a recovery.
+      // Only signIn() yields these; looping back here is not a recovery.
       case SignInInvalidCredentials() ||
           SignInNoProfile() ||
           SignInAccountDisabled() ||
@@ -302,17 +270,7 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
     ).pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
   }
 
-  /// Abandoning setup has to be possible: the person is holding a live session
-  /// on an account that can read nothing, and the only way back to the sign-in
-  /// screen is to drop it.
-  ///
-  /// A plain `signOut`, deliberately — NOT the `AccountExitListeners` teardown
-  /// the Settings sign-out runs first. That order is load-bearing because push,
-  /// presence and Live Activity de-registration each need the credential
-  /// sign-out revokes; an `invited` account has none of those registrations to
-  /// begin with (the rules deny it every collection they write to), so there is
-  /// nothing to tear down. If a future registration ever starts before
-  /// activation, this has to route through the shared exit path instead.
+  /// Abandons setup with a plain `signOut`; there is nothing to tear down.
   Future<void> _signOut() async {
     if (_isTransitionBusy) return;
     final logger = ref.read(loggerProvider);
@@ -461,8 +419,7 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
       AnimatedLoadingButton(
         label: l10n.auth_finishSetup,
         isLoading: _isTransitionBusy,
-        // The checkbox IS the gate — it is on screen and self-explanatory, so
-        // a disabled button needs no error copy of its own.
+        // The checkbox IS the gate, so the disabled button needs no error copy.
         onPressed: _consented ? _finishSetup : null,
       ),
       const SizedBox(height: AppSpacing.sp8),
@@ -475,23 +432,14 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
     ];
   }
 
-  /// The strength meter and the requirements checklist, rebuilt from the
-  /// controller rather than from screen state.
-  ///
-  /// These two are the only things on the form that track the password on
-  /// every keystroke, and `TextEditingController` is already a
-  /// `ValueListenable` — so scoping the listen here keeps a keypress from
-  /// rebuilding the five fields, the consent row and the submit button around
-  /// them. That is why the password field's `onChanged` is the plain
-  /// [_onFieldChanged], with no `setState` of its own.
+  /// Meter and checklist; the only keystroke-driven rebuild on the form.
   Widget _passwordFeedback() => ValueListenableBuilder<TextEditingValue>(
     valueListenable: _passwordController,
     builder: (context, value, _) => Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: AppSpacing.sp8),
-        // Trimmed, so the meter and the checklist judge the same string
-        // `_validate` gates on and `completeAccountSetup` stores.
+        // Trimmed, matching what `_validate` gates on and setup stores.
         PasswordStrengthMeter(password: value.text.trim()),
         const SizedBox(height: AppSpacing.sp8),
         PasswordRequirementsChecklist(password: value.text.trim()),

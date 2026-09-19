@@ -46,9 +46,7 @@ class _LocationShareAskGateState extends ConsumerState<LocationShareAskGate> {
         (ref.watch(activeUserIdentityProvider).isLoading ||
             ref.watch(allUsersStreamProvider).isLoading);
     final due =
-        me != null &&
-        me.uid != _settledUid &&
-        isLocationShareAskDue(me: me, askedThisBuild: false);
+        me != null && me.uid != _settledUid && isLocationShareAskDue(me: me);
     _route = ModalRoute.of(context);
     final onTop =
         HubShellScope.currentOf(context) == HubTab.calendar &&

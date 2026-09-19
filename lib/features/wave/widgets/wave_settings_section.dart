@@ -14,9 +14,7 @@ import 'package:scheduling/features/wave/domain/wave_sync_notice.dart';
 import 'package:scheduling/features/wave/widgets/wave_blocked_list.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
-/// Admin-only Wave integration controls in Settings. Holds ephemeral
-/// [WaveConnection] and busy-flag state, and surfaces any [WaveFailure] via
-/// notices — never ScaffoldMessenger.
+/// Admin-only Wave controls in Settings; failures surface via notices.
 class WaveSettingsSection extends ConsumerStatefulWidget {
   const WaveSettingsSection({super.key});
 
@@ -26,28 +24,16 @@ class WaveSettingsSection extends ConsumerStatefulWidget {
 }
 
 class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
-  // This-session Connect result; takes precedence over the persisted
-  // [waveConnectionProvider] status right after connecting.
+  // This-session Connect result; wins over the persisted status.
   WaveConnection? _connection;
   bool _connectBusy = false;
   bool _syncBusy = false;
   bool _retryBusy = false;
 
-  /// True while any Wave round trip is in flight. [_retryBusy] IS in here —
-  /// Retry drains the same queue Sync does, so running both at once would have
-  /// the two presses fighting over the same jobs.
+  /// True while any Wave round trip is in flight, Retry included.
   bool get _busy => _connectBusy || _syncBusy || _retryBusy;
 
-  /// Fail-fast offline guard so the long-running Wave callables don't hang.
-  /// Surfaces the network notice and returns true, so the caller can abort.
-  ///
-  /// Deliberately NOT `guardedOffline` (`core/errors/error_cause.dart`), which
-  /// is otherwise the one owner of this shape: it hardcodes
-  /// `composeErrorNotice`, and every other notice this section emits is a
-  /// [WaveFailure]'s own localized message via [_runWaveAction]. Routing this
-  /// one through the composer would make the offline notice the only one here
-  /// speaking a different vocabulary, against the typed-Failure-branch-first
-  /// rule. This is the second carve-out from that docstring's rule.
+  /// Fail-fast offline guard — the documented `guardedOffline` carve-out.
   bool _blockedOffline() {
     if (!ref.read(isOfflineProvider)) return false;
     ref
@@ -56,19 +42,13 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
     return true;
   }
 
-  /// Shared try/on-WaveFailure/finally-busy-reset shape for the three actions
-  /// below. Logs under `WAVE-<tag>` before showing the notice, so failures
-  /// still reach Crashlytics.
+  /// Shared try/finally shape for the three actions; logs `WAVE-<tag>`.
   Future<void> _runWaveAction({
     required String tag,
     required void Function({required bool busy}) setBusy,
     required Future<void> Function() action,
   }) async {
-    // Captured before the await so the log genuinely happens BEFORE the
-    // mounted guard, as the docstring promises. It used to sit after it, so a
-    // failure on an unmounted section reached Crashlytics never — and moving
-    // it back above the guard without hoisting the read would instead throw
-    // there, since `ref.read` is unsafe on an unmounted consumer in Riverpod 3.
+    // Hoisted before the await so the log lands before the mounted guard.
     final logger = ref.read(loggerProvider);
     final notices = ref.read(noticeServiceProvider);
     setBusy(busy: true);
@@ -79,13 +59,7 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
       if (!mounted) return;
       notices.error(e.toLocalizedMessage(context));
     } on Object catch (e, st) {
-      // `WaveService` maps its own throws, but the `action:` closures also run
-      // notices, `ref.invalidate` and `setState` — so a non-`WaveFailure` is
-      // reachable, and it used to escape to the zone handler with NO notice
-      // shown: the admin taps Sync and nothing visibly happens. Reuses the
-      // existing generic string rather than minting an `error_intro*` key for
-      // a path that should never fire; this section is already the documented
-      // carve-out from `composeErrorNotice`.
+      // Generic fallback: the action closures can throw a non-WaveFailure.
       logger.warn('WAVE-$tag failed (unexpected)', e, st);
       if (!mounted) return;
       notices.error(context.l10n.error_somethingWentWrongPleaseTryAgain);
@@ -100,13 +74,11 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
       tag: 'CONNECT',
       setBusy: ({required busy}) => setState(() => _connectBusy = busy),
       action: () async {
-        // No business chosen client-side — waveBootstrap resolves it
-        // server-side, so the name never ships in the app.
+        // waveBootstrap resolves the business server-side.
         final conn = await ref.read(waveServiceProvider).bootstrap();
         if (!mounted) return;
         if (!conn.isConnected) {
-          // Server returned no business (misconfigured WAVE_BUSINESS_NAME) —
-          // don't show a blank "connected" state.
+          // No business returned — never show a blank "connected" state.
           ref
               .read(noticeServiceProvider)
               .error(context.l10n.wave_errorBusinessAmbiguous);
@@ -129,9 +101,7 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
       action: () async {
         final summary = await ref.read(waveServiceProvider).syncCustomers();
         if (!mounted) return;
-        // Re-read the outbox counts: this sync drained the queue, so the
-        // pending and failed rows above the button are now describing a state
-        // that no longer exists.
+        // Re-read the outbox counts this sync just drained.
         setState(() => _connection = null);
         ref.invalidate(waveConnectionProvider);
         ref
@@ -141,15 +111,7 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
     );
   }
 
-  /// Returns dead-lettered client edits to the queue and pushes them.
-  ///
-  /// The counter this acts on is the only trace a dead-lettered job leaves
-  /// outside one client's detail screen, so the notice has to distinguish
-  /// every outcome — including the one that made this press look broken: a job
-  /// dies on something Wave will reject again, so the push behind the requeue
-  /// dead-letters it inside the same call and the failed row does not move.
-  /// `waveRetryNotice` owns that wording; the tone is picked here, because a
-  /// notice claiming success over an unchanged failure row is the whole bug.
+  /// Requeues dead-lettered client edits; the notice tone must match.
   Future<void> _retryFailed() async {
     if (_blockedOffline()) return;
     await _runWaveAction(
@@ -158,8 +120,7 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
       action: () async {
         final result = await ref.read(waveServiceProvider).retryFailedJobs();
         if (!mounted) return;
-        // Re-read the counts rather than guessing them: the push may have
-        // moved `pending` too, and a concurrent edit may have added to it.
+        // Re-read the counts: the push or a concurrent edit may move them.
         setState(() => _connection = null);
         ref.invalidate(waveConnectionProvider);
         final message = waveRetryNotice(context.l10n, result);
@@ -180,8 +141,7 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
     final connection = _connection ?? connectionAsync.value;
     final connected = connection != null;
 
-    // Distinguish loading/error from not-connected, so a connected admin
-    // doesn't see the Connect CTA flash, and a failure still offers a retry.
+    // Loading/error is not "not connected", so Connect never flashes.
     if (_connection == null && connectionAsync.isLoading) {
       return const _WaveStatusLoading();
     }
@@ -208,8 +168,7 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
             onPressed: _busy ? null : _connect,
           )
         else
-          // Syncing only makes sense once connected — a tap while
-          // disconnected is guaranteed to fail.
+          // Syncing only makes sense once connected.
           AnimatedLoadingButton(
             label: context.l10n.wave_syncButton,
             isLoading: _syncBusy,
@@ -266,11 +225,7 @@ class _ConnectedStatus extends StatelessWidget {
             ],
           ),
         ),
-        // The outbox, which had nowhere to be shown. Both rows are omitted at
-        // zero AND at null — null means the count could not be taken (or an
-        // older backend did not send it), and "nothing shown" is the honest
-        // rendering of both. Never render null as 0: that reads as "the queue
-        // is empty", which is the one thing an admin would act on.
+        // Omitted at zero AND null; never render an unknown count as 0.
         if (connection.hasPending)
           _OutboxRow(
             icon: Icons.schedule_rounded,
@@ -293,17 +248,14 @@ class _ConnectedStatus extends StatelessWidget {
                     child: Text(context.l10n.wave_retryFailedButton),
                   ),
           ),
-        // A refused client is NOT a failed outbox job — it never became one —
-        // so it is absent from both counters above and needs its own surface.
+        // A refused client is in neither counter, so it gets its own surface.
         const WaveBlockedList(),
       ],
     );
   }
 }
 
-/// One outbox line: an icon, a count sentence, and an optional trailing
-/// action. Kept as its own widget so the pending and failed rows cannot drift
-/// in padding or type scale.
+/// One outbox line, its own widget so the two rows can't drift.
 class _OutboxRow extends StatelessWidget {
   const _OutboxRow({
     required this.icon,

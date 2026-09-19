@@ -22,7 +22,7 @@ is no deploy step.
 - **Needs attention is the last of eight sections**, below every chart, so the
   part the admin has to act on is the part they scroll to last.
 - **The blue gradient hero** (`DashboardHero`) is the last solid-blue block
-  left after the Fresh header (`2026-09-11-fresh-header-redesign.md`) removed
+  left after the Fresh header (`docs/archive/2026-09-11-fresh-header-redesign.md`) removed
   the blue bar.
 - **Two different questions share one scroll.** "What is happening now" (hero,
   Next up, workload, Attention) and "how have we done" (KPIs, charts, new

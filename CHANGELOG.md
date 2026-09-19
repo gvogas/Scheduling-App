@@ -10,6 +10,49 @@ All notable changes to this project are documented here.
 The `+N` build number after the version (e.g. `1.1.0+5`) is the store version
 code; it increments by one on every store upload regardless of the semver part.
 
+## [1.62.0+91] - 2026-09-19
+
+A month-end review for jobs nobody closed, a crew map that shows who is
+missing and why, and a crew picker that lets you double-book on purpose.
+
+### Added
+- **An overdue jobs review for admins.** "Overdue jobs" in the menu, with a
+  live count, lists every job whose end has passed without being closed,
+  oldest first and grouped by month. Tick jobs one at a time or a whole
+  month, then mark them all Complete or Not done in one step. The app
+  confirms before anything changes.
+- **A month-end reminder.** On the last day of the month, any admin with
+  "Month-end overdue reminder" turned on in their Team profile gets one
+  notification counting the jobs still open. Tapping it opens Overdue jobs.
+- **A "Be on the team map" page.** After each app update, everyone sees it
+  once before the calendar tour. It turns location sharing on, opens Settings
+  when iOS has already refused location, or confirms you're already on the
+  map.
+- **Test accounts.** An admin can mark a person as a test account in their
+  profile. They drop out of the crew map, the crew pickers and the team
+  counts, and sit in a collapsed "test accounts" section at the bottom of the
+  Team list.
+
+### Changed
+- **The crew map has a Team sheet.** It rests at the bottom of the map and
+  lists who's on it, nearest first. Tap a pin or a name to bring that person
+  to the top, with their address and an Open in Maps button. Swipe it up to
+  see who isn't on the map: people not seen yet, and people who haven't turned
+  sharing on. Traffic and satellite are buttons at the top of the map.
+- **A pin leaves the map after two hours without an update**, instead of
+  staying put on an old position. Opening the app sends a fresh position if
+  you're sharing.
+- **The crew picker no longer greys out someone who is on another job.** Pick
+  them anyway, and Save asks whether you mean to double-book them. Only
+  someone on a day off is still greyed out. The lines explaining who is off or
+  busy under the picker are gone.
+- **Wave imports only when you tap "Sync with Wave".** The weekly and monthly
+  automatic import is gone from Settings.
+
+### Fixed
+- **Accented addresses from suggestions no longer come out garbled**, such as
+  "MontrÃ©al" for "Montréal".
+
 ## [1.61.0+90] - 2026-09-12
 
 A fresh look for every screen header and the Clients list, a quicker booking

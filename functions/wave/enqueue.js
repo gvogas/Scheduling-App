@@ -40,6 +40,23 @@ function shouldEnqueueClientWrite(before, after) {
 }
 
 /**
+ * Whether a write reverted a `blocked` client to its last-synced mapped
+ * fields — the one case Rule 2 skips that still needs its verdict re-run.
+ * @param {Object|null|undefined} before Pre-write client document data.
+ * @param {Object|null|undefined} after Post-write client document data.
+ * @return {boolean} True when the stale block should be re-evaluated.
+ */
+function isBlockedRevertToSynced(before, after) {
+  const afterData = after || {};
+  const wave = (afterData.wave && typeof afterData.wave === "object") ?
+    afterData.wave : {};
+  if (wave.syncState !== "blocked" || !wave.lastSyncedHash) return false;
+  const afterHash = mappedFieldsHash(afterData);
+  if (afterHash !== wave.lastSyncedHash) return false;
+  return !before || mappedFieldsHash(before) !== afterHash;
+}
+
+/**
  * Uses a deterministic jobId (`customerUpsert__<clientId>`) written via
  * `set(..., {merge:true})`, so a burst of client edits collapses into one
  * updated-in-place job.
@@ -117,6 +134,7 @@ async function cancelCustomerUpsert(clientId, deps = {}) {
 
 module.exports = {
   shouldEnqueueClientWrite,
+  isBlockedRevertToSynced,
   enqueueCustomerUpsert,
   cancelCustomerUpsert,
 };

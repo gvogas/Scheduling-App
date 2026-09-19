@@ -16,6 +16,8 @@ Token file: `lib/core/theme/design_tokens.dart`. Never hardcode raw colors, spac
 
 **Employee colour is STORED as the light-theme ARGB int.** Render it through `crewColorOf(theme, storedInt)` (exact per-theme map for the ten `AppColors.crewPalette` hues, generic HSL lift for anything custom) and pick its foreground with `avatarForegroundFor(theme, background)` — white on a lifted crew colour fails contrast at avatar sizes. **Never store a lifted value.**
 
+**Four `design_tokens.dart` placements that look arbitrary and are not.** `AppColors.crewDefault` (a colourless employee) must stay a `crewPalette` MEMBER — a hue outside the pool is also outside the dark-theme override map, so it takes the generic HSL lift instead of its designed dark counterpart, and no picker would offer it. The nine `nav*` drawer hues are a SEPARATE set even though each equals a crew hue: `crewPalette` is the pool employee colours are ASSIGNED from, so reordering it (a normal change) would silently repaint the drawer; they live in the token file rather than as literals in `drawer_catalog.dart`, and render through `crewColorOf` for the dark lift. `decorativeHueRing` (the custom-colour swatch) is theme-INDEPENDENT on purpose — a spectrum, not a semantic colour — and lives there only to keep `lib/` free of literal colours; its last stop repeats the first so the sweep closes. `AppRadius` `r8`–`r24` is a COMPLETE rung ladder: an unused rung (`r24`) is what makes the next design decision a lookup instead of a new hardcoded number, so don't prune one for being unreferenced; `rCard`/`rPanel`/`rSheet`/`rDialog` are the design's named surfaces, off-scale by design.
+
 | Token class | Use for |
 |---|---|
 | `AppColors` | semantic color names; use `ColorScheme` tokens in `build()` for dark-mode safety |
@@ -411,3 +413,9 @@ Material Design 3 (Flat / Elevation). Use `ColorScheme`, `TextTheme`, and `Theme
   calendar built a fresh one PER DAY CELL for a semantics label — 30–90 per
   rebuild on every day tap and month swipe. Never call a `DateFormat.*`
   constructor inside a cell/item builder.
+- **There are two owners of a locale-keyed `DateFormat` cache, and they key on
+  different locale sources on purpose.** `month_grid.dart`'s cache above is
+  keyed on a passed `Localizations.localeOf` — use it for context-bound UI.
+  `lib/core/utils/date_utils_helper.dart:5-11` keys on `Intl.defaultLocale`
+  instead, for context-free code with no `BuildContext` to read. Don't merge
+  them; add a third owner only if one actually appears.

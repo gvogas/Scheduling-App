@@ -135,35 +135,4 @@ void main() {
       expect(list.map((p) => p.field), <String>['name', 'phone']);
     });
   });
-
-  group('hasBlocking', () {
-    test('is true when any problem blocks', () {
-      final list = WaveProblem.parseList(<dynamic>[
-        <String, dynamic>{
-          'field': 'phone',
-          'code': 'NOT_DIALABLE',
-          'severity': 'advisory',
-        },
-        <String, dynamic>{
-          'field': 'name',
-          'code': 'EMPTY',
-          'severity': 'blocking',
-        },
-      ]);
-
-      expect(list.hasBlocking, isTrue);
-    });
-
-    test('is false for advisories alone', () {
-      final list = WaveProblem.parseList(<dynamic>[
-        <String, dynamic>{
-          'field': 'phone',
-          'code': 'NOT_DIALABLE',
-          'severity': 'advisory',
-        },
-      ]);
-
-      expect(list.hasBlocking, isFalse);
-    });
-  });
 }

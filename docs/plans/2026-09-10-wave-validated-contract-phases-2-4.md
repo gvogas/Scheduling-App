@@ -5,8 +5,10 @@
 **Status (2026-09-13): PHASE 2 COMPLETE — shipped in 1.61.0+90 and deployed
 2026-09-13 02:07Z (`38c8225b`), in the inverted order below. Phase 3 COMPLETE
 (its own plan, archived at `docs/archive/2026-09-11-wave-validated-contract-phase-3.md`). Phase 4
-BUILT 2026-09-13 and NOT deployed — Tasks 10-12 below, with the deploy notes
-under Task 12.** The "nothing deployed" paragraph below is the
+BUILT 2026-09-13 and DEPLOYED 2026-09-19 16:37Z (`608b817a`, all 29 updated,
+no export change); the cadence wording was dropped from `docs/legal/` the same
+day. Left: republish privacy + terms to `es-pro-legal`, and — its own §4a
+deploy, once 1.61.0 has aged out of the fleet — delete `waveSetImportSchedule`.** The "nothing deployed" paragraph below is the
 build-time state. Phase 1 was complete, deployed (`fe9edc51`, report-only) and
 prod-replayed 2026-09-09 (**724 clients, 0 blocking, 1 advisory**). Design:
 `docs/plans/2026-08-30-wave-validated-contract-design.md` §3-§7. Phase 1 plan:
@@ -596,6 +598,9 @@ count unmoved.
 
 ## Task 9: Surface the existing broken clients
 
+**SUPERSEDED** by the Phase 3 plan (`docs/archive/2026-09-11-wave-validated-contract-phase-3.md`),
+which built and ran it; the unticked boxes below are not outstanding.
+
 **Files:**
 - Create: `functions/scripts/backfill-wave-blocked.js`
 - Create: `functions/__tests__/backfill_wave_blocked.test.js`
@@ -757,7 +762,7 @@ and still calls it (`dd8c4863:lib/features/wave/data/wave_service.dart`).
       half and keeps its watermark half (9 tests now, including one pinning
       that the module exports nothing else).
 
-**Deploy (not done).** No new export (29), no index, no rules change, and
+**Deploy DONE 2026-09-19 (`608b817a`).** No new export (29), no index, no rules change, and
 no allowlist key removed, so it is compatible with every shipped build. It
 may deploy before or after the next app build. That build drops the picker,
 and 1.61.0 still gets a success from the no-op. One cosmetic lie remains

@@ -44,11 +44,7 @@ final myPresenceFixProvider = StreamProvider.autoDispose<PresenceFix?>((ref) {
       .watchLocation(userDocId: record.id);
 });
 
-/// Writes the location-sharing choice and starts or stops presence tracking.
-///
-/// The ONE owner of that pair: the Settings row and the Location sharing
-/// screen both flip the same field, and a write that skipped the presence half
-/// would leave a technician's phone uploading fixes after they turned it off.
+/// The ONE owner of the location-sharing flip: the field AND presence.
 Future<void> applyLocationSharing(
   WidgetRef ref,
   EmployeeRecord record, {
@@ -65,14 +61,7 @@ Future<void> applyLocationSharing(
   }
 }
 
-/// [applyLocationSharing] behind the offline guard, log tag and error notice
-/// the two toggles share.
-///
-/// The Settings row and the Location sharing screen are the same operation, so
-/// the `ME-SAVE location sharing failed` tag — the only place Crashlytics can
-/// find it since notices stopped carrying support codes — lives here rather
-/// than at each site. Returns whether the write committed; the caller keeps
-/// its own busy-flag bracketing.
+/// [applyLocationSharing] behind the shared offline guard, tag and notice.
 Future<bool> saveLocationSharing(
   BuildContext context,
   WidgetRef ref,
@@ -110,14 +99,10 @@ Future<bool> saveLocationSharing(
 /// handles granularity; this guards Firestore write volume on a highway.
 const minPresenceUploadGap = Duration(minutes: 2);
 
-/// Stationary re-upsert cadence that keeps `updatedAt` fresh. Keep this in
-/// sync with PRESENCE_STALE_MINUTES = 25 in functions/travel_utils.js — the
-/// window is comfortably above two missed heartbeats.
+/// Stationary heartbeat; must stay under PRESENCE_STALE_MINUTES (25).
 const presenceHeartbeatEvery = Duration(minutes: 10);
 
-/// Pure gate — presence tracks exactly the timed-push audience. Delegates to
-/// [shouldRegisterPush] so the "presence audience == push audience" invariant
-/// holds by construction and can't drift apart.
+/// Pure gate; delegates to [shouldRegisterPush] so the audiences can't drift.
 bool shouldTrackPresence({
   required String role,
   required String status,
@@ -135,8 +120,7 @@ bool shouldWritePresenceFix({
     lastUploadAt == null ||
     now.difference(lastUploadAt) >= minPresenceUploadGap;
 
-/// Pure gate for the heartbeat tick. Only re-upserts when no movement fix
-/// has gone out for a full heartbeat period — a fresh fix already reset the clock.
+/// Heartbeat gate — only once no fix has gone out for a full period.
 bool shouldHeartbeat({
   required DateTime? lastUploadAt,
   required DateTime now,
@@ -144,8 +128,7 @@ bool shouldHeartbeat({
     lastUploadAt != null &&
     now.difference(lastUploadAt) >= presenceHeartbeatEvery;
 
-/// Delay until a throttled fix is allowed, or null if it's already allowed.
-/// Used to arm the trailing-flush timer so the last fix in a burst still lands.
+/// Delay until a throttled fix is allowed, so a burst's last fix lands.
 Duration? trailingFlushDelay({
   required DateTime? lastUploadAt,
   required DateTime now,
@@ -154,9 +137,7 @@ Duration? trailingFlushDelay({
   return minPresenceUploadGap - now.difference(lastUploadAt!);
 }
 
-/// Owns the foreground position stream that keeps
-/// `users/{docId}/presence/location` fresh for travel-time reminders. iOS
-/// suspends it on background — see `_settingsForPlatform`.
+/// Owns the foreground position stream behind `presence/location`.
 class PresenceSyncController with ReentrantSync {
   PresenceSyncController(this._ref, {FirebaseAuth? auth})
     : _auth = auth ?? FirebaseAuth.instance;
@@ -178,10 +159,7 @@ class PresenceSyncController with ReentrantSync {
   Future<void> sync() => runCoalesced(_syncGuarded);
 
   Future<void> _syncGuarded() async {
-    // Teardown runs BEFORE signOut(), so a body resuming mid-teardown still
-    // holds a valid credential: it would re-open the position stream and
-    // re-create presence/location for a user who just signed out, and keep
-    // uploading until the process dies. Every await below re-checks this.
+    // Every await re-checks the generation: teardown precedes signOut().
     final generation = syncGeneration;
     try {
       final gate = readAccountGateInputs(_ref, _auth);
@@ -209,13 +187,7 @@ class PresenceSyncController with ReentrantSync {
           .read(locationPermissionServiceProvider)
           .ensureLocation();
       if (isSyncStale(generation)) return;
-      // Silent no-op on any non-grant (never nag) — the server's
-      // address-fallback chain covers an untracked user. Silent to the USER,
-      // not to us: the three non-grant reasons need different remedies
-      // (re-prompt vs. open Settings vs. turn Location Services on), and
-      // collapsing them to one early return left "presence never starts" with
-      // nothing anywhere saying why. A breadcrumb, not a warn — a declined
-      // permission is a choice, not a defect.
+      // Silent to the user, but breadcrumbed with the reason.
       if (permission != LocationPermissionResult.granted) {
         _logger.breadcrumb('PRESENCE not tracking: ${permission.name}');
         return;
@@ -232,8 +204,7 @@ class PresenceSyncController with ReentrantSync {
       }
       _start(docId: docId, uid: uid);
     } catch (e, st) {
-      // sync() is called unawaited, so don't let failures escape as uncaught
-      // async errors.
+      // sync() is called unawaited, so nothing may escape.
       _logger.warn('PRESENCE sync failed', e, st);
     }
   }
@@ -287,6 +258,12 @@ class PresenceSyncController with ReentrantSync {
 
   Future<void> _freshFixOnResume() async {
     final logger = _logger;
+    if (!shouldWritePresenceFix(
+      lastUploadAt: _lastUploadAt,
+      now: DateTime.now(),
+    )) {
+      return;
+    }
     try {
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
@@ -332,9 +309,7 @@ class PresenceSyncController with ReentrantSync {
   void _uploadThrottled(Position position, DateTime attemptedAt) {
     final previous = _lastUploadAt;
     _lastUploadAt = attemptedAt;
-    // Resolved here, not in the handler: the handler runs from a Timer after
-    // this controller may be disposed, and Riverpod 3 throws on `ref.read`
-    // from a disposed consumer.
+    // Resolved here: the handler runs from a Timer after a possible dispose.
     final logger = _logger;
     unawaited(
       _upload(position)
@@ -344,8 +319,7 @@ class PresenceSyncController with ReentrantSync {
             if (result == PresenceWriteResult.denied) _stop();
           })
           .catchError((Object e, StackTrace st) {
-            // Runs from a Timer callback, so a throw here has no caller left and
-            // would land in Crashlytics as a fatal from a background GPS write.
+            // A Timer callback has no caller; an escape would file a fatal.
             if (_lastUploadAt == attemptedAt) _lastUploadAt = previous;
             logger.warn('PRESENCE upload failed', e, st);
           }),
@@ -376,9 +350,7 @@ class PresenceSyncController with ReentrantSync {
       (e is PositionUpdateException &&
           (e.message ?? '').contains('kCLErrorDomain error 1'));
 
-  /// This is about device capability, not UI look, so we use
-  /// `defaultTargetPlatform` rather than `context.isCupertino` — there's no
-  /// BuildContext here anyway, same as in `AddressMapLauncher`.
+  /// Device capability, so `defaultTargetPlatform`, not `isCupertino`.
   LocationSettings _settingsForPlatform() {
     if (defaultTargetPlatform == TargetPlatform.iOS) {
       return AppleSettings(
@@ -391,9 +363,7 @@ class PresenceSyncController with ReentrantSync {
     return AndroidSettings(
       accuracy: LocationAccuracy.medium,
       distanceFilter: 250,
-      // The foreground-service notification is what keeps the stream alive in
-      // background on Android (dev harness only — never ships to Play, so the
-      // untranslated text is acceptable).
+      // Keeps the Android stream alive in background (never shipped).
       foregroundNotificationConfig: const ForegroundNotificationConfig(
         notificationTitle: 'ES Pro',
         notificationText:
@@ -415,21 +385,13 @@ class PresenceSyncController with ReentrantSync {
     _lastUploadAt = null;
   }
 
-  /// Best-effort teardown for sign-out or account deletion — stops the stream
-  /// and deletes the presence doc. Never throws, since sign-out must not be blocked.
-  /// Returns whether the stored fix is provably gone — see
-  /// `PresenceRepository.deleteLocation`.
+  /// Best-effort sign-out teardown; never throws. True if the fix is gone.
   Future<bool> unregister() async {
     invalidateSync();
     final knownDocId = _docId;
     _stop();
     try {
-      // Resolve the docId when this session never started — `_start` needs
-      // firebaseReady AND a granted location permission AND a successful
-      // findUserByUid, and if any of those failed today the doc from a
-      // PREVIOUS launch is still live. The map keeps showing that pin, and the
-      // privacy policy promises sign-out clears it. Same fix as
-      // `LiveActivityRegistrationController.unregister`.
+      // Resolve the doc id even if this session never started tracking.
       final docId = knownDocId ?? await _resolveUserDocId();
       if (docId == null) return false;
       return await _ref

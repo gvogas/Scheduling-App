@@ -241,6 +241,15 @@ and did not cover the throw (2026-08-31). Each shape is worth recognising:
   `BuildContext` from the build that wired the callback and gate on
   `context.mounted` after the await.
 
+- **`setState` after an await needs its own `mounted` check even on the
+  SUCCESS path.** In release, `setState`'s lifecycle check is an assert, so on
+  an unmounted State it falls through to `_element!.markNeedsBuild()` and is
+  filed as a FATAL; `use_build_context_synchronously` cannot see it, because
+  `setState` is not a `BuildContext` use. The time-off clash dialog's `_write`
+  is the worked example: the dialog is barrier-dismissible and every caller
+  calls `setState` on `true`, so it returns `false` when unmounted even though
+  the write committed.
+
 The common tell is an unawaited or discarded future: it has no caller left to
 catch anything, so its `try` is the only thing between a routine failure and a
 fatal. Treat `unawaited(...)`, `Future.microtask(...)` and a fire-and-forget

@@ -91,3 +91,7 @@ Color drawerDotColor(AppDestination destination) => switch (destination) {
   PushedDestination.overdueReview => AppColors.navOverdueReview,
   PushedDestination.settings => AppColors.navSettings,
 };
+
+/// Whether a row's live count is a warning, painted in the overdue colour.
+bool drawerCountIsAlert(AppDestination destination) =>
+    destination == PushedDestination.overdueReview;

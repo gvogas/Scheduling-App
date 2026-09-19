@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
-import 'package:scheduling/features/calendar/domain/overdue_review.dart';
 
 /// How often a watched review re-issues its `endTime < now` boundary.
 const Duration kOverdueReviewRefresh = Duration(minutes: 15);
@@ -24,10 +23,8 @@ final overdueOpenJobsProvider =
       ref.onDispose(refresh.cancel);
       return streamForUid(ref, (uid) {
         if (uid == null) return Stream.value(const <AppointmentRecord>[]);
-        keepWarmWithGrace(ref);
-        return ref
-            .watch(appointmentsRepositoryProvider)
-            .watchOverdueOpen(now)
-            .map((jobs) => overdueJobsAt(jobs, now));
+        // Held until the next boundary refresh, so a cold drawer open reuses it.
+        keepWarmWithGrace(ref, grace: kOverdueReviewRefresh);
+        return ref.watch(appointmentsRepositoryProvider).watchOverdueOpen(now);
       });
     });

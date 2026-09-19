@@ -9,7 +9,6 @@ abstract final class DateUtilsHelper {
   static final Map<String, DateFormat> _whenLineFormats = {};
   static final Map<String, DateFormat> _dayMonthFormats = {};
   static final Map<String, DateFormat> _monthDayFormats = {};
-  static final Map<String, DateFormat> _monthYearFormats = {};
 
   static String get _locale => Intl.defaultLocale ?? 'en_CA';
 
@@ -34,15 +33,6 @@ abstract final class DateUtilsHelper {
     final format = _monthDayFormats.putIfAbsent(
       _locale,
       () => DateFormat.MMMd(_locale),
-    );
-    return format.format(date);
-  }
-
-  /// "July 2026" — a month splitter.
-  static String formatMonthYear(DateTime date) {
-    final format = _monthYearFormats.putIfAbsent(
-      _locale,
-      () => DateFormat.yMMMM(_locale),
     );
     return format.format(date);
   }
@@ -128,15 +118,7 @@ extension DateOnly on DateTime {
   DateTime get dateOnly => DateTime(year, month, day);
 }
 
-/// Calendar days from [from] to [to]. Normalized through UTC so the two
-/// DST-shift days can't make a whole-day difference come back as 23 or 25
-/// hours and round to the wrong integer.
-///
-/// Deliberately has no regression test: this suite runs in UTC, where a
-/// naive local-time subtraction passes the exact same cases the UTC
-/// normalization is meant to fix, so a "missing" test here would be a false
-/// green, not real coverage — don't add one on a UTC runner and call it
-/// pinned.
+/// Calendar days from [from] to [to], normalized through UTC for DST days.
 int calendarDaysBetween(DateTime from, DateTime to) => DateTime.utc(
   to.year,
   to.month,

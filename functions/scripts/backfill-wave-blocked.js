@@ -196,7 +196,6 @@ module.exports = {
   assertKnownFlags,
   backfillBlockedClients,
   changeFor,
-  sameProblem,
   sameProblems,
   PAGE_SIZE,
 };

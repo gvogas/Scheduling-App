@@ -65,10 +65,9 @@ class WaveProblem {
   }
 
   static List<WaveProblem> parseList(Object? raw) {
-    return firestoreList(raw)
-        .map(WaveProblem.fromMap)
-        .whereType<WaveProblem>()
-        .toList(growable: false);
+    return firestoreList(
+      raw,
+    ).map(WaveProblem.fromMap).whereType<WaveProblem>().toList(growable: false);
   }
 
   @override
@@ -83,8 +82,4 @@ class WaveProblem {
 
   @override
   int get hashCode => Object.hash(field, code, isBlocking, length, cap);
-}
-
-extension WaveProblemSeverity on List<WaveProblem> {
-  bool get hasBlocking => any((p) => p.isBlocking);
 }

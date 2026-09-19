@@ -66,6 +66,12 @@ paths:
   text scales 0.8–2.0 and assert no exceptions — reuse the `_scaled` /
   `_pumpAtViewport` harness pattern in
   `test/features/auth/screens/auth_screens_scale_sweep_test.dart`.
+- **The suite runs in UTC, so a DST fix cannot be pinned by it.**
+  `calendarDaysBetween` (`core/utils/date_utils_helper.dart`) normalizes
+  through UTC so the two DST-shift days can't round a 23- or 25-hour day to
+  the wrong integer, and it deliberately has no regression test: under UTC a
+  naive local-time subtraction passes the same cases, so such a test is a
+  false green. Don't add one on a UTC runner and call it pinned.
 - AutoDispose providers in tests need `container.listen(provider, (_, _) {})` in
   `setUp` so the family-keyed state survives across reads.
 - Repositories that accept optional deps (e.g. `FirebaseEmployeesRepository`

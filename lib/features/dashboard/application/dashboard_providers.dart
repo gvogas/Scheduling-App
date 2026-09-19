@@ -38,13 +38,7 @@ final dashboardHistoryRangeProvider =
       ),
     );
 
-/// One-shot read of the settled weeks.
-///
-/// A `.get()`, not a `.snapshots()`: these weeks are closed and cannot change
-/// under the screen, so a live listener over them was pure cost — and, held
-/// together with the live half in ONE 3000-doc-capped stream, it was also what
-/// silently truncated the trend charts above ~14 jobs/day.
-/// Kept warm on the same grace as the live half — see [keepWarmWithGrace].
+/// One-shot read of the settled weeks, kept warm like the live half.
 final dashboardHistoryProvider =
     FutureProvider.autoDispose<List<AppointmentRecord>>((ref) {
       keepWarmWithGrace(ref);
@@ -52,21 +46,7 @@ final dashboardHistoryProvider =
       return ref.watch(appointmentsRepositoryProvider).fetchInRange(range);
     });
 
-/// Clients created within the dashboard window, newest first.
-///
-/// Two exclusions, and the second is a deliberate behaviour change:
-///
-/// - **No `createdAt`** — a legacy doc has nothing to bucket by.
-/// - **Archived** — the dashboard answers *what should I look at now*, and an
-///   archived client is one you decided not to look at (owner call
-///   2026-08-10). Filtered in Dart on purpose: a
-///   `.where('archived', isEqualTo: false)` would need an
-///   `(archived, createdAt)` composite index and a deploy. The repo's "never
-///   filter a server page in Dart" rule is about `fetchClientsPage`, where a
-///   shortened page breaks the cursor and truncates the list permanently —
-///   this is a bounded one-shot read with no cursor and no pagination, so that
-///   hazard does not apply.
-/// Kept warm on the same grace as the live half — see [keepWarmWithGrace].
+/// Clients created within the window, newest first, archived excluded.
 final newClientsProvider = FutureProvider.autoDispose<List<ClientRecord>>((
   ref,
 ) async {
@@ -82,21 +62,14 @@ final newClientsProvider = FutureProvider.autoDispose<List<ClientRecord>>((
   return recent;
 });
 
-/// Client createdAt timestamps within the dashboard window, derived from
-/// [newClientsProvider] so the two can never disagree about which clients
-/// count — and so the fetch happens once.
+/// Client createdAt dates, derived from [newClientsProvider] so both agree.
 final newClientDatesProvider = Provider.autoDispose<AsyncValue<List<DateTime>>>(
   (ref) => ref
       .watch(newClientsProvider)
       .whenData((clients) => [for (final c in clients) c.createdAt!]),
 );
 
-/// The period the KPI numbers are counted over.
-///
-/// Deliberately reaches NO query: all three periods fit inside the window
-/// already fetched, so this is a pure in-memory filter. Nothing below may pass
-/// it to a range provider — a period that widened the live listener would undo
-/// the 2026-08-08 split.
+/// The KPI period — an in-memory filter that must never reach a query.
 final dashboardPeriodProvider =
     NotifierProvider.autoDispose<DashboardPeriodController, DashboardPeriod>(
       DashboardPeriodController.new,
@@ -109,8 +82,7 @@ class DashboardPeriodController extends Notifier<DashboardPeriod> {
   /// Re-tapping the active segment is a no-op rather than a rebuild of every
   /// section watching this.
   void select(DashboardPeriod period) {
-    // The no-op guard is also what keeps a re-tap of the active segment from
-    // reporting a change nothing acted on.
+    // The guard also stops a re-tap logging a change.
     if (period == state) return;
     ref.read(analyticsServiceProvider).logDashboardPeriodChanged(
       period: period.name,
@@ -119,16 +91,7 @@ class DashboardPeriodController extends Notifier<DashboardPeriod> {
   }
 }
 
-/// The two halves of the window, merged by doc id — **jobs only**.
-///
-/// Split out so the KPI summary and the stats can share one merge, and so
-/// changing the period recomputes four counters rather than every section.
-///
-/// Time off is dropped HERE rather than in each reducer, so every number on
-/// the screen answers the same question: a booked absence is not work done,
-/// not capacity used, and not an availability conflict. The dashboard is all
-/// counts and charts — the surfaces that still show a day off as a card are
-/// the calendar agenda and the team detail's TODAY panel.
+/// The two halves merged by doc id, with time off dropped once here.
 final dashboardRecordsProvider =
     Provider.autoDispose<AsyncValue<List<AppointmentRecord>>>((ref) {
       final liveRange = ref.watch(dashboardLiveRangeProvider);
@@ -140,9 +103,7 @@ final dashboardRecordsProvider =
         history,
       ]);
       if (failure != null) return failure;
-      // Merged by doc id, not concatenated: each query reaches back to its own
-      // `fetchStart` to catch a run already under way, so the live half
-      // re-reads the last fortnight of the history half.
+      // Merged by doc id: the two queries overlap by a fortnight.
       return AsyncValue.data([
         for (final record in DashboardAggregator.mergeById(
           appointments.requireValue,
@@ -171,12 +132,7 @@ final dashboardPeriodSummaryProvider =
       );
     });
 
-/// Combine appointments range, assignable employees, and new-clients into
-/// dashboard stats.
-///
-/// [assignableEmployeesProvider], not the unfiltered active stream: a
-/// dispatcher would sit at a permanent zero in the workload rows and still add
-/// their `maxJobsPerDay` to every daily-capacity bar.
+/// Combines records, assignable employees and new clients into stats.
 final dashboardStatsProvider = Provider.autoDispose<AsyncValue<DashboardStats>>(
   (ref) {
     final records = ref.watch(dashboardRecordsProvider);
@@ -200,23 +156,7 @@ final dashboardStatsProvider = Provider.autoDispose<AsyncValue<DashboardStats>>(
   },
 );
 
-/// Accounts an admin created that were never set up.
-///
-/// The person is still sitting on the starting password they were handed,
-/// which is the one operational risk the P4c design creates — so the dashboard
-/// says so.
-///
-/// Read from [allUsersStreamProvider], never `employeesStreamProvider` or
-/// `assignableEmployeesProvider`: the first filters to `status == 'active'`, so
-/// this list would be permanently empty and the flag would silently never fire,
-/// and the second would additionally hide a pending dispatcher — an account
-/// still sitting on its starting password, which is the whole point of the
-/// flag. `watchAllUsers()` is already
-/// always-on, so this costs no extra listener.
-///
-/// Sorted oldest-first, and a **null `createdAt` still lists** — the field is
-/// function-owned and absent on legacy docs, so "unknown age" must not become
-/// "not shown"; those sort last rather than being dropped.
+/// Invited accounts never set up, oldest first (null `createdAt` last).
 final neverSetUpAccountsProvider =
     Provider.autoDispose<AsyncValue<List<EmployeeRecord>>>(
       (ref) => ref.watch(allUsersStreamProvider).whenData((users) {
@@ -238,11 +178,7 @@ final neverSetUpAccountsProvider =
 /// unavailable for them.
 typedef AvailabilityConflict = ({EmployeeRecord employee, Set<int> days});
 
-/// Roster-wide availability conflicts over the dashboard's live window.
-///
-/// Scoped to that window on purpose: it is the data already on screen, and a
-/// wider question would need its own query. A conflict further out than next
-/// Monday surfaces when the window reaches it.
+/// Roster-wide availability conflicts over the live window only.
 final availabilityConflictsProvider =
     Provider.autoDispose<AsyncValue<List<AvailabilityConflict>>>((ref) {
       final records = ref.watch(dashboardRecordsProvider);
@@ -255,9 +191,7 @@ final availabilityConflictsProvider =
       if (failure != null) return failure;
 
       final range = ref.watch(dashboardLiveRangeProvider);
-      // Grouped by assignee in ONE pass. This used to rebuild a filtered copy
-      // of the whole merged list per employee — O(employees × records) `contains`
-      // checks plus a fresh list each, on every live snapshot.
+      // Grouped by assignee in ONE pass, not a filtered copy per employee.
       final byEmployee = <String, List<AppointmentRecord>>{};
       for (final a in records.requireValue) {
         for (final id in a.employeeIds) {
@@ -276,12 +210,7 @@ final availabilityConflictsProvider =
       ]);
     });
 
-/// The first error or loading state among [sources], or null when every one of
-/// them has settled with data.
-///
-/// Error before loading, deliberately: a source that has already failed must
-/// not be masked by a sibling still in flight, or the screen sits on a
-/// skeleton with nothing ever surfacing the failure.
+/// The first error, else loading, among [sources]; null once all have data.
 AsyncValue<T>? _firstFailure<T>(List<AsyncValue<Object?>> sources) {
   for (final source in sources) {
     if (source.hasError) {

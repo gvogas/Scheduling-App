@@ -13,17 +13,7 @@ import 'package:scheduling/features/siri/application/schedule_snapshot_service.d
 /// The CarPlay scene's channel.
 const carPlayChannelName = 'net.vogas.scheduling/carplay';
 
-/// Answers the CarPlay scene — the app's first Swift → Dart method handler.
-///
-/// The car renders from the App Group snapshot on its own, so this is only
-/// reached for the three things that need the live app: a refresh on connect,
-/// a status write, and the client's number. If it is unreachable the car still
-/// renders the last written snapshot.
-///
-/// Shaped like `AppointmentLinkOpener`: [start] from `initState`, [dispose]
-/// from `dispose`, an injected platform gate, providers resolved before the
-/// first `await`, and every failure caught and logged under `CARPLAY` rather
-/// than escaping to `runZonedGuarded` as a fatal.
+/// Answers the CarPlay scene's live-app requests; the car renders without it.
 class CarPlayBridge {
   CarPlayBridge(
     this._ref, {
@@ -82,8 +72,7 @@ class CarPlayBridge {
     throw MissingPluginException('${call.method} is not implemented');
   }
 
-  /// Every connect refreshes, so the car never renders a snapshot the app has
-  /// already moved past.
+  /// Every connect refreshes, so the car never renders a stale snapshot.
   Future<void> _refreshSnapshot() async {
     final snapshot = _ref.read(scheduleSnapshotProvider);
     final service = _ref.read(scheduleSnapshotServiceProvider);
@@ -91,11 +80,7 @@ class CarPlayBridge {
     await service.apply(snapshot.value);
   }
 
-  /// Fails fast offline, the same guard the in-app submit controllers carry.
-  ///
-  /// An awaited Firestore write only resolves on server ack, so without this
-  /// the method-channel reply never arrives and the driver — offline being the
-  /// normal condition in a moving vehicle — gets no feedback at all.
+  /// Fails fast offline: a pending write would never answer the channel.
   Future<bool> _writeStatus(Object? arguments, AppLogger logger) async {
     final args = _argumentsOf(arguments);
     final id = (args['id'] as String?)?.trim() ?? '';
@@ -110,8 +95,7 @@ class CarPlayBridge {
     return true;
   }
 
-  /// The FINISHED `tel:` URI, so the stripping rule stays in `dialableUri`
-  /// instead of being hand-mirrored into Swift. Read on demand, never stored.
+  /// The FINISHED `tel:` URI, so the stripping rule never forks into Swift.
   Future<String?> _dialableNumber(Object? arguments) async {
     final id = (_argumentsOf(arguments)['id'] as String?)?.trim() ?? '';
     if (id.isEmpty) return null;

@@ -23,36 +23,4 @@ void main() {
       isNot(equals(const ClientsFilterType(ClientType.residential))),
     );
   });
-
-  test('tapping the active chip clears back to All', () {
-    expect(
-      toggledFilter(
-        const ClientsFilterArchived(),
-        const ClientsFilterArchived(),
-      ),
-      isA<ClientsFilterAll>(),
-    );
-    expect(
-      toggledFilter(
-        const ClientsFilterType(ClientType.commercial),
-        const ClientsFilterType(ClientType.commercial),
-      ),
-      isA<ClientsFilterAll>(),
-    );
-  });
-
-  test('tapping an inactive chip selects it', () {
-    expect(
-      toggledFilter(const ClientsFilterAll(), const ClientsFilterArchived()),
-      isA<ClientsFilterArchived>(),
-    );
-    // Switching straight from one chip to another, not via All.
-    expect(
-      toggledFilter(
-        const ClientsFilterArchived(),
-        const ClientsFilterType(ClientType.commercial),
-      ),
-      isA<ClientsFilterType>(),
-    );
-  });
 }
