@@ -157,11 +157,24 @@ void main() {
   });
 
   group('assigneeOfferState', () {
+    final job = AppointmentRecord(
+      id: 'job',
+      startTime: DateTime(2026, 8, 26, 8),
+      endTime: DateTime(2026, 8, 26, 12),
+    );
+    final dayOff = AppointmentRecord(
+      id: 'off',
+      startTime: DateTime(2026, 8, 26),
+      endTime: DateTime(2026, 8, 26, 23, 59),
+      isPersonal: true,
+      isDayOff: true,
+    );
+
     test('nobody clashing is free', () {
       expect(
         assigneeOfferState(
           employeeId: 'e1',
-          clashingIds: const {},
+          clashes: const {},
           selectedIds: const {},
           alreadyAssignedIds: const {},
         ),
@@ -169,11 +182,24 @@ void main() {
       );
     });
 
-    test('a clash on someone not on the job is unavailable', () {
+    test('someone on another job is booked, not unavailable', () {
+      // Double booking is the admin's call, made at the Save-time prompt.
       expect(
         assigneeOfferState(
           employeeId: 'e1',
-          clashingIds: const {'e1'},
+          clashes: {'e1': job},
+          selectedIds: const {},
+          alreadyAssignedIds: const {},
+        ),
+        AssigneeOfferState.booked,
+      );
+    });
+
+    test('someone on time off is unavailable', () {
+      expect(
+        assigneeOfferState(
+          employeeId: 'e1',
+          clashes: {'e1': dayOff},
           selectedIds: const {},
           alreadyAssignedIds: const {},
         ),
@@ -189,7 +215,7 @@ void main() {
       expect(
         assigneeOfferState(
           employeeId: 'e1',
-          clashingIds: const {'e1'},
+          clashes: {'e1': dayOff},
           selectedIds: const {},
           alreadyAssignedIds: const {'e1'},
         ),
@@ -203,7 +229,7 @@ void main() {
       expect(
         assigneeOfferState(
           employeeId: 'e1',
-          clashingIds: const {'e1'},
+          clashes: {'e1': dayOff},
           selectedIds: const {'e1'},
           alreadyAssignedIds: const {},
         ),
@@ -217,7 +243,7 @@ void main() {
       expect(
         assigneeOfferState(
           employeeId: 'e1',
-          clashingIds: const {'e1'},
+          clashes: {'e1': dayOff},
           selectedIds: const {},
           alreadyAssignedIds: const {'e1'},
         ),

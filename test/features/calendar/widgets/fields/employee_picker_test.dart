@@ -51,11 +51,7 @@ void main() {
   final disabled = _employee('e2', 'Grace Hopper');
 
   testWidgets('every active employee is offered', (tester) async {
-    await _pump(
-      tester,
-      allEmployees: [active],
-      selectedEmployees: const [],
-    );
+    await _pump(tester, allEmployees: [active], selectedEmployees: const []);
 
     expect(find.text('Ada'), findsOneWidget);
   });
@@ -102,18 +98,6 @@ void main() {
   group('availability', () {
     AppointmentClashFixtures fixtures() => AppointmentClashFixtures();
 
-    testWidgets('nothing is dimmed and no lines render before a date is '
-        'picked', (tester) async {
-      await _pump(
-        tester,
-        allEmployees: [active, _employee('e3', 'Alan Turing')],
-        selectedEmployees: const [],
-      );
-
-      expect(find.byType(Divider), findsNothing);
-      expect(find.textContaining('is off'), findsNothing);
-    });
-
     testWidgets('an unavailable assignee is not tappable', (tester) async {
       final toggled = <String>[];
       await _pump(
@@ -129,36 +113,27 @@ void main() {
       expect(toggled, isEmpty);
     });
 
-    testWidgets('a day off says so, with the DATE range and no clock', (
+    testWidgets('an assignee booked on another job stays tappable', (
       tester,
     ) async {
+      // Double booking is decided at the Save-time prompt, not refused here.
+      final toggled = <String>[];
       await _pump(
         tester,
         allEmployees: [active, _employee('e3', 'Alan Turing')],
         selectedEmployees: const [],
-        availability: fixtures().offToday(active.id),
-      );
-
-      expect(find.text('Ada is off'), findsOneWidget);
-      expect(find.text('26 Aug'), findsOneWidget);
-    });
-
-    testWidgets('a booked job says so, with the window that would free them', (
-      tester,
-    ) async {
-      await _pump(
-        tester,
-        allEmployees: [active, _employee('e3', 'Alan Turing')],
-        selectedEmployees: const [],
+        onToggle: (e) => toggled.add(e.id),
         availability: fixtures().bookedToday(active.id),
       );
+      await tester.tap(find.text('Ada'));
+      await tester.pumpAndSettle();
 
-      expect(find.text('Ada is on another job'), findsOneWidget);
-      expect(find.textContaining('8:00'), findsOneWidget);
+      expect(toggled, ['e1']);
     });
 
-    testWidgets('an ALREADY-ASSIGNED assignee who is off stays tappable and '
-        'says so', (tester) async {
+    testWidgets('an ALREADY-ASSIGNED assignee who is off stays tappable', (
+      tester,
+    ) async {
       // Dimming would make them unremovable, and mergeRetainedAssignees would
       // then silently put them back on every save.
       final toggled = <String>[];
@@ -173,112 +148,32 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(toggled, ['e1']);
-      expect(find.text('Ada is off — still on this job'), findsOneWidget);
     });
 
-    testWidgets('an assignee already on the job who is BOOKED elsewhere reads '
-        'as an explanation, not a refusal', (tester) async {
-      // The ordinary outcome of moving the date after picking the crew. The
-      // chip stays selected and tappable, so the line must not repeat the
-      // sentence used for someone you cannot pick.
-      final toggled = <String>[];
-      await _pump(
-        tester,
-        allEmployees: [active],
-        selectedEmployees: [active],
-        onToggle: (e) => toggled.add(e.id),
-        availability: fixtures().bookedToday(active.id),
-      );
-      await tester.tap(find.text('Ada'));
-      await tester.pumpAndSettle();
-
-      expect(toggled, ['e1'], reason: 'still tappable');
-      expect(
-        find.text('Ada is on another job — still on this one'),
-        findsOneWidget,
-      );
-      expect(find.text('Ada is on another job'), findsNothing);
-    });
-
-    testWidgets('past two clashes the rest collapse behind a count, which '
-        'expands in place', (tester) async {
-      // One line per clash buries Save on a holiday Monday.
-      final blocked = [
-        for (var i = 0; i < 4; i++) _employee('e$i', 'Person$i Last'),
-      ];
-      await _pump(
-        tester,
-        allEmployees: [...blocked, _employee('free', 'Alan Turing')],
-        selectedEmployees: const [],
-        availability: fixtures().allOff([for (final e in blocked) e.id]),
-      );
-
-      expect(find.textContaining('is off'), findsNWidgets(2));
-      expect(find.text("2 more aren't free"), findsOneWidget);
-
-      await tester.tap(find.text("2 more aren't free"));
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('is off'), findsNWidgets(4));
-    });
-
-    testWidgets('with nobody free the lines give way to one sentence', (
+    testWidgets('no availability text renders under the chips', (
       tester,
     ) async {
-      final crew = [
-        for (var i = 0; i < 4; i++) _employee('e$i', 'Person$i Last'),
-      ];
+      final alan = _employee('e3', 'Alan Turing');
       await _pump(
         tester,
-        allEmployees: crew,
+        allEmployees: [active, alan],
         selectedEmployees: const [],
-        availability: fixtures().allOff(
-          [for (final e in crew) e.id],
-          whenLabel: '26 Aug',
+        availability: AssigneeAvailability(
+          clashes: {
+            ...fixtures().offToday(active.id).clashes,
+            ...fixtures().bookedToday(alan.id).clashes,
+          },
         ),
       );
 
-      expect(find.textContaining('Nobody is free on 26 Aug'), findsOneWidget);
+      expect(find.byType(Divider), findsNothing);
       expect(find.textContaining('is off'), findsNothing);
-    });
-
-    testWidgets('one free colleague keeps the per-person lines', (
-      tester,
-    ) async {
-      final crew = [active, _employee('e3', 'Alan Turing')];
-      await _pump(
-        tester,
-        allEmployees: crew,
-        selectedEmployees: const [],
-        availability: fixtures().offToday(active.id),
-      );
-
-      expect(find.text('Ada is off'), findsOneWidget);
-      expect(find.textContaining('Nobody is free'), findsNothing);
-    });
-
-    testWidgets('an all-day job reads "All day", not its stored span', (
-      tester,
-    ) async {
-      // The instants really are midnight to 23:59, which rendered as a
-      // suspiciously precise workday nobody books.
-      await _pump(
-        tester,
-        // A free colleague, or the lines give way to the "nobody free"
-        // sentence and there is no figure to read.
-        allEmployees: [active, _employee('e3', 'Alan Turing')],
-        selectedEmployees: const [],
-        availability: fixtures().allDayToday(active.id),
-      );
-
-      expect(find.text('All day'), findsOneWidget);
-      expect(find.textContaining('11:59'), findsNothing);
+      expect(find.textContaining('another job'), findsNothing);
     });
   });
 }
 
-/// Availability fixtures, built from real records so the widget renders the
-/// same figures the app would.
+/// Availability fixtures, built from real records.
 class AppointmentClashFixtures {
   static final _day = DateTime(2026, 8, 26);
 
@@ -305,21 +200,4 @@ class AppointmentClashFixtures {
       ),
     },
   );
-
-  AssigneeAvailability allDayToday(String id) => AssigneeAvailability(
-    clashes: {
-      id: AppointmentRecord(
-        id: 'job',
-        startTime: _day,
-        endTime: DateTime(2026, 8, 26, 23, 59),
-        isAllDay: true,
-      ),
-    },
-  );
-
-  AssigneeAvailability allOff(List<String> ids, {String whenLabel = ''}) =>
-      AssigneeAvailability(
-        clashes: {for (final id in ids) id: _dayOff()},
-        whenLabel: whenLabel,
-      );
 }

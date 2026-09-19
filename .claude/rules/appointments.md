@@ -952,23 +952,31 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   the history filter shows nothing), so the helper owns only the LOOKUP and each
   caller keeps its own substitute. The edit-sheet copy is the dangerous one — a
   blank name there flows into `mergeRetainedAssignees` and is written back.
-- **The picker DIMS whoever can't take the job on the chosen date, and the
+- **The picker DIMS whoever is on TIME OFF on the chosen date, and the
   already-assigned test WINS over it.** `assigneeOfferState`
   (`calendar/domain/assignee_resolver.dart`, beside the two rules above because
-  all three must agree) returns `free` / `unavailable` / `onTheJob`; only
-  `unavailable` dims, and it is dimmed AND untappable, which is precisely why
-  someone already on the job must never be. A chip that can't be tapped can't
+  all three must agree) returns `free` / `booked` / `unavailable` / `onTheJob`;
+  only `unavailable` dims, and it is dimmed AND untappable, which is precisely
+  why someone already on the job must never be. A chip that can't be tapped can't
   be taken off, and — worse — an assignee who is active but merely un-offered
   is NOT retained by `mergeRetainedAssignees`, so they'd be silently
   unassigned. The "on the job" set is the live selection **union the
   appointment's STORED `employeeIds`**: keyed on the selection alone,
   deselecting an unavailable stored assignee dims their own chip on the next
   rebuild and the toggle is one-way. Same trap as `offerableAssignees`.
-  **ANY clash dims, not just a day off** (owner call, 2026-08-24), and the
-  accepted cost is that deliberate double-booking is no longer reachable from
-  the picker — the Save-time prompt stays as a backstop for races but will
-  rarely fire. If putting two people on one big job turns out to matter, keep
-  BOOKED chips tappable with a warning look and dim only time off.
+  **Someone on another JOB is `booked`, not dimmed — they stay tappable**
+  (owner call, 2026-09-19, reversing the 2026-08-24 "any clash dims"). That
+  rule made deliberate double-booking unreachable from the picker; now the
+  admin picks them and the Save-time "Double Booking — do you still want to
+  book?" prompt (`busy_conflict_dialog.dart`) is where it is decided. Only time
+  off (`clash.isTimeOff`, which `clashesByAssignee` already prefers over a job)
+  stays untappable: booking someone on their day off is not a double booking.
+  **The picker renders NO availability text** (owner call, 2026-09-19): the
+  per-person "is off" / "is on another job" lines, their collapse-behind-a-count
+  row and the "Nobody is free" sentence were all removed, along with
+  `AssigneeAvailabilityNotes` and `AssigneeAvailability.whenLabel`. The dashed,
+  dimmed chip is the only day-off cue; the prompt is the only double-booking
+  one. Don't restore the lines from an older diff.
   **Availability is date-DERIVED, live where it can be, one-shot where it
   can't.** `assigneeAvailabilityProvider` reduces the range the calendar
   ALREADY holds open (`openCalendarRangeProvider`, published by

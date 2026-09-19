@@ -7,7 +7,6 @@ class AssigneeAvailability {
   const AssigneeAvailability({
     this.clashes = const {},
     this.alreadyAssignedIds = const {},
-    this.whenLabel = '',
   });
 
   /// No date picked yet, or the lookup hasn't settled: nothing is dimmed.
@@ -18,8 +17,6 @@ class AssigneeAvailability {
 
   /// Stored assignees that remain tappable even when clashing.
   final Set<String> alreadyAssignedIds;
-
-  final String whenLabel;
 }
 
 /// Returns appointments that block a proposed [start]-[end] job window.

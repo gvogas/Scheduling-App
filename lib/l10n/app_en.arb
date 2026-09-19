@@ -1845,21 +1845,21 @@
       }
     }
   },
-  "calendar_scheduleConflict": "Schedule Conflict",
+  "calendar_scheduleConflict": "Double Booking",
   "@calendar_scheduleConflict": {
-    "description": "Schedule Conflict"
+    "description": "Title of the prompt shown when a picked assignee is already booked at that time"
   },
   "calendar_alreadyBookedThisSlot": "Already booked during this time:",
   "@calendar_alreadyBookedThisSlot": {
     "description": "Already booked during this time:"
   },
-  "calendar_doubleBookingWarning": "Scheduling them anyway will create a double booking.",
+  "calendar_doubleBookingWarning": "You are double booking them. Do you still want to book?",
   "@calendar_doubleBookingWarning": {
-    "description": "Scheduling them anyway will create a double booking."
+    "description": "Double-booking prompt: the question asked before booking an already-booked assignee"
   },
-  "calendar_scheduleAnyway": "Schedule Anyway",
+  "calendar_scheduleAnyway": "Book Anyway",
   "@calendar_scheduleAnyway": {
-    "description": "Schedule Anyway"
+    "description": "Double-booking prompt: confirms the booking despite the clash"
   },
   "settings_deleteAccount": "Delete account",
   "@settings_deleteAccount": {
@@ -3699,51 +3699,6 @@
     "placeholders": {
       "count": {
         "type": "int"
-      }
-    }
-  },
-  "calendar_assigneeOnAnotherJob": "{name} is on another job",
-  "@calendar_assigneeOnAnotherJob": {
-    "description": "Assignee-picker line under a dimmed chip: this person is booked on another appointment during the chosen window. {name} is their short name, matching the chip above.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "calendar_assigneeOffStillOnJob": "{name} is off — still on this job",
-  "@calendar_assigneeOffStillOnJob": {
-    "description": "Assignee-picker line for someone already assigned who has since booked time off. Their chip stays selected and tappable, so this explains rather than forbids.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "calendar_assigneeBookedStillOnJob": "{name} is on another job — still on this one",
-  "@calendar_assigneeBookedStillOnJob": {
-    "description": "Assignee-picker line for someone already on this job who also has another booking in the window — typically because the date was moved after they were picked. Their chip stays selected and tappable, so this explains rather than forbids.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "calendar_assigneesMoreNotFree": "{count, plural, =1{1 more isn't free} other{{count} more aren't free}}",
-  "@calendar_assigneesMoreNotFree": {
-    "description": "Tappable row that expands the remaining assignee-availability lines; count is how many are hidden.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "calendar_nobodyFreeThen": "Nobody is free on {when}. Try another time, or book the job and assign someone later.",
-  "@calendar_nobodyFreeThen": {
-    "description": "Replaces the per-person availability lines when every offered assignee clashes. {when} is the chosen span, for example '26 Aug, 8:00 AM - 12:00 PM'.",
-    "placeholders": {
-      "when": {
-        "type": "String"
       }
     }
   },

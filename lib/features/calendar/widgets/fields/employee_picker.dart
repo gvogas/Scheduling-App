@@ -1,15 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
-import 'package:scheduling/core/utils/date_utils_helper.dart';
-import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
 import 'package:scheduling/features/calendar/domain/assignee_availability.dart';
 import 'package:scheduling/features/calendar/domain/assignee_resolver.dart';
-import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
-import 'package:scheduling/features/calendar/widgets/fields/assignee_availability_notes.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/l10n/l10n.dart';
-import 'package:scheduling/shared/widgets/feedback/warning_note.dart';
 import 'package:scheduling/shared/widgets/primitives/app_avatar.dart';
 
 /// Whether the roster feeding [EmployeePicker.allEmployees] has settled.
@@ -67,7 +62,6 @@ class EmployeePicker extends StatelessWidget {
 
     // Hoist shared inputs used by every chip.
     final selectedIds = {for (final e in selectedEmployees) e.id};
-    final clashingIds = availability.clashes.keys.toSet();
     // Tally names once for short-name disambiguation.
     final names = firstNameTally([for (final e in displayEmployees) e.name]);
     final offers = [
@@ -76,7 +70,7 @@ class EmployeePicker extends StatelessWidget {
           employee: employee,
           state: assigneeOfferState(
             employeeId: employee.id,
-            clashingIds: clashingIds,
+            clashes: availability.clashes,
             selectedIds: selectedIds,
             alreadyAssignedIds: availability.alreadyAssignedIds,
           ),
@@ -134,8 +128,8 @@ class EmployeePicker extends StatelessWidget {
                   isSelected: selectedIds.contains(offer.employee.id),
                   isUnavailable: offer.state == AssigneeOfferState.unavailable,
                   hasError: hasError,
-                  // An unavailable chip is not tappable — dimming means "can't
-                  // pick this", and there is no glyph doing that work for it.
+                  // Only time off is untappable; a booked chip is picked and
+                  // the Save-time double-booking prompt asks.
                   onTap:
                       selectable &&
                           offer.state != AssigneeOfferState.unavailable
@@ -145,121 +139,27 @@ class EmployeePicker extends StatelessWidget {
             ],
           );
 
-    final availabilityBlock = selectable
-        ? _availabilityBlock(context, offers)
-        : null;
-
-    if (errorText == null && availabilityBlock == null) return content;
+    if (errorText == null) return content;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         content,
-        ?availabilityBlock,
-        if (errorText != null)
-          Padding(
-            padding: const EdgeInsets.only(
-              top: AppSpacing.sp4,
-              left: AppSpacing.sp4,
-            ),
-            child: Text(
-              errorText!,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: scheme.error),
-            ),
+        Padding(
+          padding: const EdgeInsets.only(
+            top: AppSpacing.sp4,
+            left: AppSpacing.sp4,
           ),
+          child: Text(
+            errorText!,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: scheme.error),
+          ),
+        ),
       ],
     );
   }
-
-  /// The divider plus either the per-person lines or, when there is nobody left
-  /// to pick, the one amber sentence that replaces them.
-  Widget? _availabilityBlock(BuildContext context, List<_Offer> offers) {
-    final notes = [
-      for (final offer in offers)
-        if (availability.clashes[offer.employee.id] case final clash?)
-          _noteFor(
-            context,
-            name: offer.shortName,
-            clash: clash,
-            onTheJob: offer.state == AssigneeOfferState.onTheJob,
-          ),
-    ];
-    if (notes.isEmpty) return null;
-
-    // "Nobody free" is every OFFERED assignee dimmed — someone kept on the job
-    // despite a clash still leaves a crew here, so the per-person lines are
-    // still the more useful thing to say.
-    final nobodyFree = offers.every(
-      (o) => o.state == AssigneeOfferState.unavailable,
-    );
-
-    return Padding(
-      padding: const EdgeInsets.only(top: AppSpacing.sp12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Divider(height: 1),
-          if (nobodyFree)
-            Padding(
-              padding: const EdgeInsets.only(top: AppSpacing.sp8),
-              child: WarningNote(
-                message: context.l10n.calendar_nobodyFreeThen(
-                  availability.whenLabel,
-                ),
-                filled: false,
-              ),
-            )
-          else
-            AssigneeAvailabilityNotes(notes: notes),
-        ],
-      ),
-    );
-  }
-
-  AssigneeNote _noteFor(
-    BuildContext context, {
-    required String name,
-    required AppointmentRecord clash,
-    required bool onTheJob,
-  }) {
-    final l10n = context.l10n;
-    // Four sentences, not three: someone ALREADY on the job who also has
-    // another booking must not read as a refusal.
-    return AssigneeNote(
-      sentence: switch ((clash.isTimeOff, onTheJob)) {
-        (true, true) => l10n.calendar_assigneeOffStillOnJob(name),
-        (true, false) => l10n.calendar_dayOffIsOff(name),
-        (false, true) => l10n.calendar_assigneeBookedStillOnJob(name),
-        (false, false) => l10n.calendar_assigneeOnAnotherJob(name),
-      },
-      figure: _figureFor(l10n, clash),
-    );
-  }
-
-  /// The clash's own when-line: a day range for time off, the all-day label
-  /// for a block whose stored midnight → 23:59 span would otherwise read as
-  /// a suspiciously precise workday, the clock window for anything else.
-  String _figureFor(AppLocalizations l10n, AppointmentRecord clash) {
-    if (clash.isTimeOff) {
-      return DateUtilsHelper.formatDayRange(
-        clash.startTime,
-        lastWorkDayOf(clash),
-      );
-    }
-    if (clash.isAllDay) return l10n.calendar_allDay;
-    return '${DateUtilsHelper.formatTime(clash.startTime)} – '
-        '${DateUtilsHelper.formatTime(clash.endTime)}';
-  }
 }
-
-/// One offered assignee, with everything the chip and its line both need
-/// resolved once per build rather than per widget.
-typedef _Offer = ({
-  EmployeeRecord employee,
-  AssigneeOfferState state,
-  String shortName,
-});
 
 /// One staff chip. Its own widget so a row rebuilds on its own rather than as
 /// part of a 60-line closure body re-evaluated per employee.

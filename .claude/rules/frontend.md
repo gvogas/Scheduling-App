@@ -152,10 +152,8 @@ Material Design 3 (Flat / Elevation). Use `ColorScheme`, `TextTheme`, and `Theme
   not hold contrast on the container fill.
   **`filled: false` is the same note without the container**, for a caption
   already inside a bordered surface where a second amber panel reads as a
-  nested box: the booking-conflict dialog and the assignee picker's
-  nobody-free line. Both had grown their own hand-rolled copy of exactly that
-  row — which is the drift this class exists to stop — so take the flag rather
-  than spelling a third.
+  nested box — the booking-conflict dialog. Take the flag rather than
+  hand-rolling that row again.
 - `accentPillButtonStyle(context)` (`core/theme/button_styles.dart`) is the
   tinted accent pill that opens an edit sheet from a detail header. The client
   detail's and the team profile card's are the same control — style both through
