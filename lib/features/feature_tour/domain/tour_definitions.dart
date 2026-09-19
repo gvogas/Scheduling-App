@@ -51,7 +51,11 @@ List<TourStepId> _destinationSteps(
     TourStepId.historyRow,
   ],
   HubTab.liveMap => [
-    if (isAdmin) ...[TourStepId.liveMapRoster, TourStepId.liveMapRecenter],
+    if (isAdmin) ...[
+      TourStepId.liveMapRoster,
+      TourStepId.liveMapNotOnMap,
+      TourStepId.liveMapRecenter,
+    ],
   ],
   PushedDestination.settings => [
     TourStepId.settingsAppearance,

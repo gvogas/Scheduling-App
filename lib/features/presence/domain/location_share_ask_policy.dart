@@ -1,15 +1,30 @@
+import 'package:scheduling/core/permissions/location_permission_service.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 
-/// Whether to show the one-time "Be on the team map" page.
-bool shouldAskToShareLocation({
+/// Which version of the team-map page a person gets.
+enum LocationShareAskVariant { turnOn, openSettings, alreadyOn }
+
+/// Whether this app build still owes a real, active account the team-map page.
+bool isLocationShareAskDue({
   required EmployeeRecord? me,
-  required bool alreadyAsked,
-  required bool calendarTourPending,
+  required bool askedThisBuild,
 }) =>
     me != null &&
     me.uid.isNotEmpty &&
     me.isActive &&
     !me.isTestAccount &&
-    !me.locationSharingEnabled &&
-    !alreadyAsked &&
-    !calendarTourPending;
+    !askedThisBuild;
+
+/// The page's version, from the sharing switch and the iOS permission.
+LocationShareAskVariant locationShareAskVariant({
+  required bool sharing,
+  required LocationPermissionResult permission,
+}) => switch (permission) {
+  LocationPermissionResult.permanentlyDenied ||
+  LocationPermissionResult.servicesDisabled =>
+    LocationShareAskVariant.openSettings,
+  LocationPermissionResult.granted when sharing =>
+    LocationShareAskVariant.alreadyOn,
+  LocationPermissionResult.granted ||
+  LocationPermissionResult.denied => LocationShareAskVariant.turnOn,
+};

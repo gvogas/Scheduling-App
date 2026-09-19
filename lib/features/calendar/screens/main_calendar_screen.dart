@@ -435,8 +435,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
 
     // Session listeners are hosted at the calendar shell.
     return LocationShareAskGate(
-      isAdmin: widget.isAdmin,
-      child: RoleUpgradeListener(
+      builder: (_, {required holdsTour}) => RoleUpgradeListener(
         employeeId: widget.employeeId,
         isAdmin: widget.isAdmin,
         child: PhotoUploadFailureListener(
@@ -444,7 +443,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
           child: FeatureTourHost(
             scope: _tour.scope,
             isAdmin: widget.isAdmin,
-            ready: !data.isLoading,
+            ready: !data.isLoading && !holdsTour,
             stepKeys: _tour.keys,
             child: Scaffold(
               floatingActionButton: _addAppointmentFab(context),

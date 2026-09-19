@@ -61,12 +61,7 @@ void main() {
       ).ensureLocation(),
       LocationPermissionResult.granted,
     );
-    expect(
-      await service(
-        
-      ).ensureLocation(),
-      LocationPermissionResult.denied,
-    );
+    expect(await service().ensureLocation(), LocationPermissionResult.denied);
   });
 
   test('fresh while-in-use grant is NOT escalated to Always', () async {
@@ -90,10 +85,9 @@ void main() {
   test('pre-existing Always grant is still honored', () async {
     // Users upgrading from a build that did request Always keep that grant;
     // we just never ask for it again.
-    final svc = escalatingService(
-      [LocationPermission.always],
-      current: LocationPermission.always,
-    );
+    final svc = escalatingService([
+      LocationPermission.always,
+    ], current: LocationPermission.always);
     expect(await svc.ensureLocation(), LocationPermissionResult.granted);
   });
 
@@ -135,5 +129,42 @@ void main() {
     );
 
     expect(await svc.ensureLocation(), LocationPermissionResult.denied);
+  });
+  test('currentStatus reports a refusal without ever prompting', () async {
+    var requested = false;
+    final svc = LocationPermissionService(
+      isServiceEnabled: () async => true,
+      checkPermission: () async => LocationPermission.denied,
+      requestPermission: () async {
+        requested = true;
+        return LocationPermission.whileInUse;
+      },
+    );
+
+    expect(await svc.currentStatus(), LocationPermissionResult.denied);
+    expect(requested, isFalse);
+  });
+
+  test('currentStatus maps each state the team-map page branches on', () async {
+    expect(
+      await service(current: LocationPermission.whileInUse).currentStatus(),
+      LocationPermissionResult.granted,
+    );
+    expect(
+      await service(current: LocationPermission.deniedForever).currentStatus(),
+      LocationPermissionResult.permanentlyDenied,
+    );
+    expect(
+      await service(serviceEnabled: false).currentStatus(),
+      LocationPermissionResult.servicesDisabled,
+    );
+  });
+
+  test('openSettings degrades to false when the plugin throws', () async {
+    final svc = LocationPermissionService(
+      openAppSettings: () async => throw StateError('platform failed'),
+    );
+
+    expect(await svc.openSettings(), isFalse);
   });
 }

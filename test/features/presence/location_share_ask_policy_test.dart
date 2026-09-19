@@ -1,50 +1,90 @@
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:scheduling/core/permissions/location_permission_service.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/features/presence/domain/location_share_ask_policy.dart';
 
 void main() {
   const me = EmployeeRecord(id: 'e1', uid: 'uid-1', status: 'active');
 
-  bool ask({
-    EmployeeRecord? record = me,
-    bool alreadyAsked = false,
-    bool calendarTourPending = false,
-  }) => shouldAskToShareLocation(
-    me: record,
-    alreadyAsked: alreadyAsked,
-    calendarTourPending: calendarTourPending,
-  );
+  group('isLocationShareAskDue', () {
+    bool due({EmployeeRecord? record = me, bool askedThisBuild = false}) =>
+        isLocationShareAskDue(me: record, askedThisBuild: askedThisBuild);
 
-  test('asks an active real account that has not turned sharing on', () {
-    expect(ask(), isTrue);
+    test('is due for an active real account not yet asked on this build', () {
+      expect(due(), isTrue);
+    });
+
+    test('is due for someone already sharing too', () {
+      expect(due(record: me.copyWith(locationSharingEnabled: true)), isTrue);
+    });
+
+    test('is not due twice on the same build', () {
+      expect(due(askedThisBuild: true), isFalse);
+    });
+
+    test('is not due before the record has loaded', () {
+      expect(due(record: null), isFalse);
+    });
+
+    test('is not due for an account that is not active', () {
+      expect(due(record: me.copyWith(status: 'invited')), isFalse);
+    });
+
+    test('is not due for a test account', () {
+      expect(due(record: me.copyWith(isTestAccount: true)), isFalse);
+    });
+
+    test('is not due for a record with no uid to remember it against', () {
+      expect(due(record: me.copyWith(uid: '')), isFalse);
+    });
   });
 
-  test('does not ask before the record has loaded', () {
-    expect(ask(record: null), isFalse);
-  });
+  group('locationShareAskVariant', () {
+    LocationShareAskVariant variant(
+      LocationPermissionResult permission, {
+      required bool sharing,
+    }) => locationShareAskVariant(sharing: sharing, permission: permission);
 
-  test('does not ask an account that is not active', () {
-    expect(ask(record: me.copyWith(status: 'invited')), isFalse);
-  });
+    test('someone sharing with location allowed is told they are on', () {
+      expect(
+        variant(LocationPermissionResult.granted, sharing: true),
+        LocationShareAskVariant.alreadyOn,
+      );
+    });
 
-  test('does not ask a test account', () {
-    expect(ask(record: me.copyWith(isTestAccount: true)), isFalse);
-  });
+    test('sharing off offers Turn on while iOS can still prompt', () {
+      expect(
+        variant(LocationPermissionResult.granted, sharing: false),
+        LocationShareAskVariant.turnOn,
+      );
+      expect(
+        variant(LocationPermissionResult.denied, sharing: false),
+        LocationShareAskVariant.turnOn,
+      );
+    });
 
-  test('does not ask someone already sharing', () {
-    expect(ask(record: me.copyWith(locationSharingEnabled: true)), isFalse);
-  });
+    test(
+      'sharing on but never allowed still offers Turn on, which prompts',
+      () {
+        expect(
+          variant(LocationPermissionResult.denied, sharing: true),
+          LocationShareAskVariant.turnOn,
+        );
+      },
+    );
 
-  test('does not ask twice on this device', () {
-    expect(ask(alreadyAsked: true), isFalse);
-  });
-
-  test('does not ask over a calendar tour that is still to run', () {
-    expect(ask(calendarTourPending: true), isFalse);
-  });
-
-  test('does not ask a record with no uid to remember the answer against', () {
-    expect(ask(record: me.copyWith(uid: '')), isFalse);
+    test('a refusal iOS will not re-ask sends them to Settings', () {
+      for (final sharing in [true, false]) {
+        expect(
+          variant(LocationPermissionResult.permanentlyDenied, sharing: sharing),
+          LocationShareAskVariant.openSettings,
+        );
+        expect(
+          variant(LocationPermissionResult.servicesDisabled, sharing: sharing),
+          LocationShareAskVariant.openSettings,
+        );
+      }
+    });
   });
 }

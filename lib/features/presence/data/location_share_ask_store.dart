@@ -1,18 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Remembers, per device and per uid, that the team-map ask was shown.
+/// Remembers, per device and uid, the app build the team-map page last showed on.
 class LocationShareAskStore {
-  static String _key(String uid) => 'location_share_asked_$uid';
+  static String _key(String uid) => 'location_share_asked_build_$uid';
 
-  Future<bool> hasAsked(String uid) async {
+  Future<bool> hasAsked(String uid, {required String build}) async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_key(uid)) ?? false;
+    return prefs.getString(_key(uid)) == build;
   }
 
-  Future<void> markAsked(String uid) async {
+  Future<void> markAsked(String uid, {required String build}) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_key(uid), true);
+    await prefs.setString(_key(uid), build);
   }
 }
 

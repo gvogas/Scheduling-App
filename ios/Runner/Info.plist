@@ -6,18 +6,6 @@
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<!-- The app ships EN + FR (lib/l10n), and iOS needs telling: without this
-	     the system treats the bundle as English-only, so every OS-drawn string
-	     - the permission prompts in en.lproj/fr.lproj InfoPlist.strings, the
-	     App Store language list - stays English on a French handset. The
-	     NS*UsageDescription values below remain the English source; a locale's
-	     InfoPlist.strings overrides them where it has the key, and falls back
-	     silently where it does not. -->
-	<key>CFBundleLocalizations</key>
-	<array>
-		<string>en</string>
-		<string>fr</string>
-	</array>
 	<key>CFBundleDisplayName</key>
 	<string>ES Pro</string>
 	<key>CFBundleExecutable</key>
@@ -26,6 +14,11 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>fr</string>
+	</array>
 	<key>CFBundleName</key>
 	<string>scheduling</string>
 	<key>CFBundlePackageType</key>
@@ -78,10 +71,10 @@
 	<string>Your location tells you when it is time to leave for your next appointment and shows your position on the staff map. This app only uses your location while you have it open.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>While you have the app open, your location tells you when it is time to leave for your next appointment and shows your position on the staff map.</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app accesses your photo library to attach images to appointments.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>This app saves appointment photos to your photo library when you choose to save them.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>This app accesses your photo library to attach images to appointments.</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>
@@ -90,6 +83,17 @@
 		<false/>
 		<key>UISceneConfigurations</key>
 		<dict>
+			<key>CPTemplateApplicationSceneSessionRoleApplication</key>
+			<array>
+				<dict>
+					<key>UISceneClassName</key>
+					<string>CPTemplateApplicationScene</string>
+					<key>UISceneConfigurationName</key>
+					<string>carplay</string>
+					<key>UISceneDelegateClassName</key>
+					<string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
+				</dict>
+			</array>
 			<key>UIWindowSceneSessionRoleApplication</key>
 			<array>
 				<dict>
@@ -101,17 +105,6 @@
 					<string>FlutterSceneDelegate</string>
 					<key>UISceneStoryboardFile</key>
 					<string>Main</string>
-				</dict>
-			</array>
-			<key>CPTemplateApplicationSceneSessionRoleApplication</key>
-			<array>
-				<dict>
-					<key>UISceneClassName</key>
-					<string>CPTemplateApplicationScene</string>
-					<key>UISceneConfigurationName</key>
-					<string>carplay</string>
-					<key>UISceneDelegateClassName</key>
-					<string>$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate</string>
 				</dict>
 			</array>
 		</dict>

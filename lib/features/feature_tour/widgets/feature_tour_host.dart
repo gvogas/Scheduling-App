@@ -83,13 +83,14 @@ class _FeatureTourHostState extends ConsumerState<FeatureTourHost> {
       if (!seen.contains(id)) id,
   ];
 
-  /// Captured each build in route mode. ModalRoute.of cannot be called from
+  /// Captured each build. ModalRoute.of cannot be called from
   /// a post-frame callback without registering a spurious dependency, so
   /// the one-shot recheck reads this field instead.
   ModalRoute<Object?>? _route;
 
-  /// A hub tab is visible when the shell says so; a pushed destination and a
-  /// create-flow sheet are both visible when their own route is on top — a
+  /// A hub tab is visible when the shell shows it and nothing covers the hub;
+  /// a pushed destination and a create-flow sheet are both visible when their
+  /// own route is on top — a
   /// ModalBottomSheetRoute IS a ModalRoute, so they share one branch. The
   /// sealed type picks the mode — NOT a null HubShellScope, which also
   /// describes a hub screen hosted standalone in a test, where "never start"
@@ -97,7 +98,9 @@ class _FeatureTourHostState extends ConsumerState<FeatureTourHost> {
   bool _isVisible(BuildContext context) {
     switch (widget.scope) {
       case DestinationTour(destination: final HubTab tab):
-        return HubShellScope.currentOf(context) == tab;
+        _route = ModalRoute.of(context);
+        return HubShellScope.currentOf(context) == tab &&
+            (_route?.isCurrent ?? true);
       case DestinationTour() || FormTour():
         // Depends on the route's _ModalScopeStatus, which notifies on
         // isCurrent changes — this dependency is the only rebuild trigger
@@ -108,10 +111,14 @@ class _FeatureTourHostState extends ConsumerState<FeatureTourHost> {
     }
   }
 
-  /// Route mode only (hub mode never sets _route): waits out the page's
-  /// entrance transition so showcase measures settled target positions.
+  /// Waits out the host route's entrance and any page still sliding off it,
+  /// so showcase measures settled target positions.
   Future<void> _routeTransitionSettled() async {
-    final animation = _route?.animation;
+    await _animationSettled(_route?.animation);
+    await _animationSettled(_route?.secondaryAnimation);
+  }
+
+  static Future<void> _animationSettled(Animation<double>? animation) async {
     if (animation == null || !animation.isAnimating) return;
     final completer = Completer<void>();
     void onStatus(AnimationStatus status) {
@@ -207,14 +214,15 @@ class _FeatureTourHostState extends ConsumerState<FeatureTourHost> {
     if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      // Reset _started when the destination's been navigated away from, so
-      // we don't get stuck and can retry later.
+      // Reset _started when the destination's been navigated away from or its
+      // host stopped being ready, so we don't get stuck and can retry later.
       final stillVisible = switch (widget.scope) {
         DestinationTour(destination: final HubTab tab) =>
-          HubShellScope.readCurrentOf(context) == tab,
+          HubShellScope.readCurrentOf(context) == tab &&
+              (_route?.isCurrent ?? true),
         DestinationTour() || FormTour() => _route?.isCurrent ?? false,
       };
-      if (!stillVisible) {
+      if (!stillVisible || !widget.ready) {
         _started = false;
         return;
       }

@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
+import 'package:scheduling/core/permissions/location_permission_service.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/features/presence/application/presence_sync_controller.dart';
+import 'package:scheduling/features/presence/domain/location_share_ask_policy.dart';
 import 'package:scheduling/features/settings/application/my_details_providers.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/primitives/app_avatar.dart';
 
-/// The one-time "Be on the team map" page, pushed over the calendar.
+/// The "Be on the team map" page, pushed over the calendar once per app build.
 class ShareLocationAskScreen extends ConsumerStatefulWidget {
   const ShareLocationAskScreen({super.key});
 
@@ -35,11 +37,33 @@ class _ShareLocationAskScreenState
     if (saved) Navigator.of(context).pop();
   }
 
+  /// iOS will not ask again, so the switch is saved and Settings does the rest.
+  Future<void> _openSettings(EmployeeRecord record) async {
+    final permissions = ref.read(locationPermissionServiceProvider);
+    if (!record.locationSharingEnabled) {
+      setState(() => _busy = true);
+      final saved = await saveLocationSharing(
+        context,
+        ref,
+        record,
+        enabled: true,
+      );
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (!saved) return;
+    }
+    Navigator.of(context).pop();
+    await permissions.openSettings();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final l10n = context.l10n;
     final record = ref.watch(myEmployeeRecordProvider);
+    final permission = ref.watch(locationPermissionStatusProvider).value;
+    final variant = locationShareAskVariant(
+      sharing: record?.locationSharingEnabled ?? false,
+      permission: permission ?? LocationPermissionResult.denied,
+    );
 
     return Scaffold(
       body: SafeArea(
@@ -53,59 +77,102 @@ class _ShareLocationAskScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _MapThumbnail(record: record),
-                      const SizedBox(height: AppSpacing.sp24),
-                      Text(
-                        l10n.onboarding_shareLocationTitle,
-                        style: theme.textTheme.headlineMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.sp8),
-                      Text(
-                        l10n.onboarding_shareLocationBody,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          color: theme.palette.textBody,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.sp24),
-                      _Reassurance(l10n.onboarding_shareLocationOnlyOpen),
-                      _Reassurance(l10n.onboarding_shareLocationOnlyLatest),
-                      _Reassurance(l10n.onboarding_shareLocationOffAnytime),
-                    ],
-                  ),
-                ),
-              ),
+              Expanded(child: _intro(context, variant, record)),
               const SizedBox(height: AppSpacing.sp16),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                ),
-                onPressed: _busy || record == null
-                    ? null
-                    : () => _turnOn(record),
-                child: _busy
-                    ? const AdaptiveProgressIndicator()
-                    : Text(l10n.onboarding_shareLocationTurnOn),
-              ),
-              const SizedBox(height: AppSpacing.sp8),
-              TextButton(
-                style: TextButton.styleFrom(
-                  minimumSize: const Size.fromHeight(48),
-                ),
-                onPressed: _busy ? null : () => Navigator.of(context).pop(),
-                child: Text(l10n.onboarding_shareLocationNotNow),
+              ..._actions(
+                context,
+                variant,
+                record: record,
+                enabled: !_busy && record != null && permission != null,
               ),
             ],
           ),
         ),
       ),
     );
+  }
+
+  Widget _intro(
+    BuildContext context,
+    LocationShareAskVariant variant,
+    EmployeeRecord? record,
+  ) {
+    final theme = Theme.of(context);
+    final l10n = context.l10n;
+    final isOn = variant == LocationShareAskVariant.alreadyOn;
+    final bodyStyle = theme.textTheme.bodyLarge?.copyWith(
+      color: theme.palette.textBody,
+    );
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _MapThumbnail(record: record),
+          const SizedBox(height: AppSpacing.sp24),
+          Text(
+            isOn
+                ? l10n.onboarding_shareLocationOnTitle
+                : l10n.onboarding_shareLocationTitle,
+            style: theme.textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sp8),
+          Text(
+            isOn
+                ? l10n.onboarding_shareLocationOnBody
+                : l10n.onboarding_shareLocationBody,
+            style: bodyStyle,
+          ),
+          if (variant == LocationShareAskVariant.openSettings) ...[
+            const SizedBox(height: AppSpacing.sp8),
+            Text(l10n.onboarding_shareLocationBlocked, style: bodyStyle),
+          ],
+          const SizedBox(height: AppSpacing.sp24),
+          _Reassurance(l10n.onboarding_shareLocationOnlyOpen),
+          _Reassurance(l10n.onboarding_shareLocationOnlyLatest),
+          _Reassurance(l10n.onboarding_shareLocationOffAnytime),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _actions(
+    BuildContext context,
+    LocationShareAskVariant variant, {
+    required EmployeeRecord? record,
+    required bool enabled,
+  }) {
+    final l10n = context.l10n;
+    final (String label, VoidCallback onPressed) = switch (variant) {
+      LocationShareAskVariant.turnOn => (
+        l10n.onboarding_shareLocationTurnOn,
+        () => _turnOn(record!),
+      ),
+      LocationShareAskVariant.openSettings => (
+        l10n.onboarding_shareLocationOpenSettings,
+        () => _openSettings(record!),
+      ),
+      LocationShareAskVariant.alreadyOn => (
+        l10n.common_done,
+        () => Navigator.of(context).pop(),
+      ),
+    };
+    return [
+      FilledButton(
+        style: FilledButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+        onPressed: enabled ? onPressed : null,
+        child: _busy ? const AdaptiveProgressIndicator() : Text(label),
+      ),
+      if (variant != LocationShareAskVariant.alreadyOn) ...[
+        const SizedBox(height: AppSpacing.sp8),
+        TextButton(
+          style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48)),
+          onPressed: _busy ? null : () => Navigator.of(context).pop(),
+          child: Text(l10n.onboarding_shareLocationNotNow),
+        ),
+      ],
+    ];
   }
 }
 

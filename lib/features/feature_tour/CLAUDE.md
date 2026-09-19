@@ -30,7 +30,9 @@ identity, so a rename replays or orphans a tour.
   renaming a `HubTab`, `PushedDestination` or `TourForm` member replays or
   orphans that tour.
   **Its visibility gate is chosen by the scope's sealed type, not
-  by a null `HubShellScope`**: a `HubTab` gates on `HubShellScope.currentOf`;
+  by a null `HubShellScope`**: a `HubTab` gates on `HubShellScope.currentOf`
+  AND on its hosting route being current (2026-09-15: a page pushed over the hub hides the tab without
+  switching it, and the calendar tour started underneath the team-map page);
   a `PushedDestination` **and a `FormTour`** both gate on
   `ModalRoute.of(context)?.isCurrent` — one branch, because a
   `ModalBottomSheetRoute` IS a `ModalRoute`. A null scope is
@@ -63,8 +65,11 @@ identity, so a rename replays or orphans a tour.
   `tourWrap: _tour.stepIf` — a tear-off of the `TourSteps` method, so a new
   step on that surface costs a call at the target, not a parameter threaded
   through two or three widgets and their tests.
-  Route mode also awaits `_routeTransitionSettled()` so showcase measures a
-  page that has finished sliding in. It
+  Every mode awaits `_routeTransitionSettled()` so showcase measures a
+  page that has finished sliding in — including the host route's
+  `secondaryAnimation`, so a hub tour never opens over a page still sliding
+  away — and the post-frame start re-checks `ready`, which can drop between
+  scheduling and starting (the calendar's `holdsTour`). It
   awaits `tourSeenProvider.ready` before acting (the optimistic empty default
   would replay seen tours on cold start), and drops steps whose target isn't
   rendered via `isTargetRendered` — **never `GlobalKey.currentContext`: the

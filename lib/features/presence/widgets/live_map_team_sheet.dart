@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/core/utils/app_language.dart';
+import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
 import 'package:scheduling/features/maps/application/maps_providers.dart';
 import 'package:scheduling/features/presence/domain/live_map_aggregator.dart';
 import 'package:scheduling/features/presence/widgets/live_map_labels.dart';
@@ -25,7 +26,7 @@ class LiveMapTeamSheet extends StatelessWidget {
     required this.scrollController,
     required this.onSelect,
     required this.onCloseSelection,
-    this.headerTourWrap,
+    this.tourWrap,
     super.key,
   });
 
@@ -36,7 +37,9 @@ class LiveMapTeamSheet extends StatelessWidget {
   final ScrollController scrollController;
   final ValueChanged<StaffMapPoint> onSelect;
   final VoidCallback onCloseSelection;
-  final Widget Function(Widget child)? headerTourWrap;
+
+  /// Wraps the header's two tour targets.
+  final Widget Function(TourStepId id, Widget child)? tourWrap;
 
   @override
   Widget build(BuildContext context) {
@@ -59,6 +62,7 @@ class LiveMapTeamSheet extends StatelessWidget {
     final header = _TeamHeader(
       onMapCount: team.onMap.length,
       offMapCount: team.offMapCount,
+      tourWrap: tourWrap,
     );
     const radius = BorderRadius.vertical(top: Radius.circular(AppRadius.r20));
 
@@ -78,7 +82,7 @@ class LiveMapTeamSheet extends StatelessWidget {
               bottom: MediaQuery.paddingOf(context).bottom + AppSpacing.sp16,
             ),
             children: [
-              headerTourWrap?.call(header) ?? header,
+              header,
               if (focus != null) ...[
                 StaffFocusPanel(
                   point: focus,
@@ -146,10 +150,15 @@ class LiveMapTeamSheet extends StatelessWidget {
 }
 
 class _TeamHeader extends StatelessWidget {
-  const _TeamHeader({required this.onMapCount, required this.offMapCount});
+  const _TeamHeader({
+    required this.onMapCount,
+    required this.offMapCount,
+    this.tourWrap,
+  });
 
   final int onMapCount;
   final int offMapCount;
+  final Widget Function(TourStepId id, Widget child)? tourWrap;
 
   @override
   Widget build(BuildContext context) {
@@ -165,35 +174,49 @@ class _TeamHeader extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: AppSpacing.sp8),
-              decoration: BoxDecoration(
-                color: theme.palette.decorFaint,
-                borderRadius: BorderRadius.circular(AppRadius.rFull),
-              ),
-            ),
-          ),
-          Text(
-            l10n.liveMap_teamTitle,
-            style: theme.textTheme.titleLarge?.copyWith(
-              fontWeight: FontWeight.w700,
+          _wrap(
+            TourStepId.liveMapRoster,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: AppSpacing.sp8),
+                    decoration: BoxDecoration(
+                      color: theme.palette.decorFaint,
+                      borderRadius: BorderRadius.circular(AppRadius.rFull),
+                    ),
+                  ),
+                ),
+                Text(
+                  l10n.liveMap_teamTitle,
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: AppSpacing.sp4),
-          Text(
-            '${l10n.liveMap_teamOnMapCount(onMapCount)} · '
-            '${l10n.liveMap_teamOffMapCount(offMapCount)}',
-            style: theme.monoType.data.copyWith(
-              color: theme.palette.textTertiary,
+          _wrap(
+            TourStepId.liveMapNotOnMap,
+            Text(
+              '${l10n.liveMap_teamOnMapCount(onMapCount)} · '
+              '${l10n.liveMap_teamOffMapCount(offMapCount)}',
+              style: theme.monoType.data.copyWith(
+                color: theme.palette.textTertiary,
+              ),
             ),
           ),
         ],
       ),
     );
   }
+
+  Widget _wrap(TourStepId id, Widget child) =>
+      tourWrap?.call(id, child) ?? child;
 }
 
 class _SectionLabel extends StatelessWidget {

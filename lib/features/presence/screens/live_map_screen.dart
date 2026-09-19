@@ -449,15 +449,11 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
                     scrollController: scrollController,
                     onSelect: _focusOn,
                     onCloseSelection: _closeSelection,
-                    headerTourWrap: _tour.has(TourStepId.liveMapRoster)
-                        ? (child) => _tour.step(
-                            TourStepId.liveMapRoster,
-                            targetBorderRadius: BorderRadius.circular(
-                              AppRadius.r20,
-                            ),
-                            child: child,
-                          )
-                        : null,
+                    tourWrap: (id, child) => _tour.stepIf(
+                      id,
+                      child,
+                      targetBorderRadius: BorderRadius.circular(AppRadius.r12),
+                    ),
                   );
                 },
               ),

@@ -230,4 +230,15 @@ void main() {
       reason: 'these ids are in no catalog',
     );
   });
+  test(
+    'the live map tour explains who is missing between its two controls',
+    () {
+      const scope = DestinationTour(HubTab.liveMap);
+      expect(tourStepsFor(scope, isAdmin: true), [
+        TourStepId.liveMapRoster,
+        TourStepId.liveMapNotOnMap,
+        TourStepId.liveMapRecenter,
+      ]);
+    },
+  );
 }

@@ -2726,7 +2726,7 @@
   },
   "onboarding_shareLocationTitle": "Be on the team map",
   "@onboarding_shareLocationTitle": {
-    "description": "Headline of the one-time page asking a teammate to turn location sharing on"
+    "description": "Headline of the team-map page, shown once per app build, asking a teammate to turn location sharing on"
   },
   "onboarding_shareLocationBody": "Share your spot so the office can send whoever is closest to the next job.",
   "@onboarding_shareLocationBody": {
@@ -2750,7 +2750,23 @@
   },
   "onboarding_shareLocationNotNow": "Not now",
   "@onboarding_shareLocationNotNow": {
-    "description": "Secondary button on the location-sharing ask page; the page is never shown again"
+    "description": "Secondary button on the location-sharing ask page; the page comes back after the next app update"
+  },
+  "onboarding_shareLocationOnTitle": "You're on the team map",
+  "@onboarding_shareLocationOnTitle": {
+    "description": "Title of the team-map page for someone already sharing their location with iOS location allowed"
+  },
+  "onboarding_shareLocationOnBody": "The office sees your latest spot while the app is open, so they can send whoever is closest to the next job.",
+  "@onboarding_shareLocationOnBody": {
+    "description": "Body of the team-map page for someone already sharing their location"
+  },
+  "onboarding_shareLocationBlocked": "Location is turned off for this app. Allow it in Settings so your spot can reach the map.",
+  "@onboarding_shareLocationBlocked": {
+    "description": "Extra line on the team-map page when iOS location is refused for the app or Location Services are off"
+  },
+  "onboarding_shareLocationOpenSettings": "Open Settings",
+  "@onboarding_shareLocationOpenSettings": {
+    "description": "Primary button on the team-map page that opens this app's page in iOS Settings"
   },
   "liveMap_you": "You",
   "@liveMap_you": {
@@ -2893,6 +2909,14 @@
   "tour_liveMapRecenterDesc": "Bring the map back to your team after panning around.",
   "@tour_liveMapRecenterDesc": {
     "description": "Tour step description: live-map recenter tile"
+  },
+  "tour_liveMapNotOnMapTitle": "Not on the map?",
+  "@tour_liveMapNotOnMapTitle": {
+    "description": "Tour step title: live-map team count, why someone is missing from the map"
+  },
+  "tour_liveMapNotOnMapDesc": "People show up once they turn on location sharing. The app asks them after every update, and they can switch it on anytime in Settings › Staff map location.",
+  "@tour_liveMapNotOnMapDesc": {
+    "description": "Tour step description: live-map team count, why someone is missing and how staff turn sharing on"
   },
   "tour_settingsAppearanceTitle": "Make it yours",
   "@tour_settingsAppearanceTitle": {

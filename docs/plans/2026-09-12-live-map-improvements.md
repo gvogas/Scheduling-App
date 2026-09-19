@@ -262,6 +262,34 @@ sign-out, account deletion or disable, which is unchanged. **Republish to the
   deleted with `staff_roster_sheet.dart` and `staff_info_card.dart`.
 - The optional `isTestAccount` rules type check was skipped (owner scope), so
   this change needs no backend deploy.
-- The gate's conditions are pinned by `location_share_ask_policy_test.dart`;
-  there is no widget test of `LocationShareAskGate` itself, whose hub-visibility
-  and tour wiring is left to the device pass.
+- The gate's conditions are pinned by `location_share_ask_policy_test.dart`
+  and `location_share_ask_gate_test.dart`; hub-tab switching is left to the
+  device pass.
+- **Revised 2026-09-15 (owner call): the page shows once per app build to
+  everyone, before the calendar tour.** It picks one of three versions: Turn
+  on, Open Settings (a refusal iOS will not re-ask, or Location Services off),
+  or "You're on the team map" with Done for someone already sharing. The
+  calendar tour waits for it. This replaces both "after the calendar tour" and
+  "once per device" above. The first build also skipped anyone already sharing,
+  so the page appeared the moment they switched sharing off in Settings.
+- The admin live map tour gained a middle step, `liveMapNotOnMap`, on the team
+  sheet's count line: why someone is missing and how staff turn sharing on.
+
+### Follow-ups still open (2026-09-15)
+
+Not verifiable in the test harness, so they need a device pass before release:
+
+- [ ] Install a NEW build number over an older one: the team-map page opens
+      first on the calendar, and the calendar tour starts only after it closes.
+- [ ] Relaunch the same build: the page does not come back.
+- [ ] Fresh install, sharing off: Turn on raises the iOS location prompt.
+- [ ] Location refused for the app ("Don't Allow"): the page shows Open
+      Settings, the switch is saved on, and iOS Settings opens on the app.
+- [ ] Location Services off for the whole phone: same Open Settings version.
+- [ ] Already sharing with location allowed: "You're on the team map" + Done.
+- [ ] Launch from a notification tap that opens a job: neither the page nor
+      the calendar tour opens on top of the job sheet; both follow once it closes.
+- [ ] Admin live map tour: the new "Not on the map?" step highlights the count
+      line in the team sheet at rest and in landscape.
+- [ ] French: the three page versions and the new tour step fit at large text.
+- [ ] Add the change to the next CHANGELOG entry (`/release`).

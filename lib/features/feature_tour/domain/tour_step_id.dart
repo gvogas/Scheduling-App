@@ -58,4 +58,6 @@ enum TourStepId {
   jobStart,
   jobMarkDone,
   jobBookAgain,
+  // Why someone is missing from the live map.
+  liveMapNotOnMap,
 }
