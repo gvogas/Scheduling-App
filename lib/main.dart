@@ -33,6 +33,7 @@ import 'package:scheduling/core/logging/unhandled_error_severity.dart';
 import 'package:scheduling/core/navigation/top_route_observer.dart';
 import 'package:scheduling/core/notices/notice_listener.dart';
 import 'package:scheduling/core/notifications/fcm_background_handler.dart';
+import 'package:scheduling/core/performance/performance_trace.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/security/app_lock.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
@@ -109,6 +110,7 @@ Future<void> _recordUnhandledError(
 }
 
 Future<void> main() async {
+  final startup = PerformanceTrace.start(PerformanceOperation.dartToFirstFrame);
   await runZonedGuarded<Future<void>>(
     () async {
       final widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
@@ -175,6 +177,9 @@ Future<void> main() async {
           child: PaulApp(settings: settings),
         ),
       );
+      if (startup != null) {
+        widgetsBinding.addPostFrameCallback((_) => startup.finish());
+      }
     },
     (error, stack) {
       unawaited(

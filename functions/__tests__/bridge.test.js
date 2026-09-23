@@ -115,10 +115,18 @@ describe("syncUsersByUid bridge/presence isolation", () => {
     {exists: false, data: () => null} :
     {exists: true, data: () => data};
 
-  const makeEvent = (userId, before, after) => ({
-    params: {userId},
-    data: {before: makeSnap(before), after: makeSnap(after)},
-  });
+  const makeEvent = (userId, before, after) => {
+    currentUser = after;
+    if (before?.uid && ["active", "disabled"].includes(before.status)) {
+      bridgeRows.set(`usersByUid/${before.uid}`, {
+        docId: userId, role: before.role, status: before.status,
+      });
+    }
+    return {
+      params: {userId},
+      data: {before: makeSnap(before), after: makeSnap(after)},
+    };
+  };
 
   let batch;
   let presenceDelete;
@@ -126,12 +134,21 @@ describe("syncUsersByUid bridge/presence isolation", () => {
   let recursiveDeletes;
   let collectionDeletes;
   let auth;
+  let currentUser;
+  let bridgeRows;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    currentUser = null;
+    bridgeRows = new Map();
     batch = {
-      delete: jest.fn(),
-      set: jest.fn(),
+      get: jest.fn(async (ref) => ref.path.startsWith("users/") ?
+        makeSnap(currentUser) : makeSnap(bridgeRows.get(ref.path) || null)),
+      delete: jest.fn((ref) => {
+        bridgeRows.delete(ref.path);
+        collectionDeletes.push(ref.path);
+      }),
+      set: jest.fn((ref, data) => bridgeRows.set(ref.path, data)),
       commit: jest.fn().mockResolvedValue(undefined),
     };
     presenceDelete = jest.fn().mockRejectedValue(new Error("boom"));
@@ -144,6 +161,8 @@ describe("syncUsersByUid bridge/presence isolation", () => {
       collection: jest.fn((path) => ({
         path,
         doc: jest.fn((id) => ({
+          path: `${path}/${id}`,
+          get: async () => makeSnap(bridgeRows.get(`${path}/${id}`) || null),
           delete: jest.fn(() => {
             collectionDeletes.push(`${path}/${id}`);
             return Promise.resolve(undefined);
@@ -154,8 +173,16 @@ describe("syncUsersByUid bridge/presence isolation", () => {
         recursiveDeletes.push(ref.path);
         return Promise.resolve(undefined);
       }),
-      batch: jest.fn(() => batch),
-      doc: jest.fn(() => ({delete: presenceDelete})),
+      runTransaction: jest.fn(async (fn) => {
+        const result = await fn(batch);
+        await batch.commit();
+        return result;
+      }),
+      doc: jest.fn((path) => ({
+        path,
+        get: async () => makeSnap(currentUser),
+        delete: presenceDelete,
+      })),
     };
     getFirestore.mockReturnValue(db);
     auth = {
@@ -399,4 +426,122 @@ describe("syncUsersByUid bridge/presence isolation", () => {
     expect(batch.set).toHaveBeenCalledTimes(1);
     expect(batch.commit).toHaveBeenCalledTimes(1);
   });
+
+  test("a delayed activation cannot restore a disabled user's access",
+      async () => {
+        const active = {uid: "auth1", status: "active", role: "admin"};
+        const event = makeEvent("u_doc", null, active);
+        currentUser = {...active, status: "disabled"};
+
+        await syncUsersByUid.run(event);
+
+        expect(bridgeRows.get("usersByUid/auth1").status).toBe("disabled");
+        expect(auth.updateUser).toHaveBeenLastCalledWith(
+            "auth1", {disabled: true});
+      });
+
+  test("a delayed activation cannot recreate a deleted user's bridge",
+      async () => {
+        const disabled = {uid: "auth1", status: "disabled", role: "admin"};
+        const event = makeEvent("u_doc", disabled,
+            {...disabled, status: "active"});
+        currentUser = null;
+
+        await syncUsersByUid.run(event);
+
+        expect(bridgeRows.has("usersByUid/auth1")).toBe(false);
+        expect(auth.updateUser).toHaveBeenLastCalledWith(
+            "auth1", {disabled: true});
+      });
+
+  test("a delayed deactivation preserves reactivated access and tokens",
+      async () => {
+        const active = {uid: "auth1", status: "active", role: "employee"};
+        const event = makeEvent("u_doc", active,
+            {...active, status: "disabled"});
+        currentUser = active;
+
+        await syncUsersByUid.run(event);
+
+        expect(bridgeRows.get("usersByUid/auth1").status).toBe("active");
+        expect(recursiveDeletes).toEqual([]);
+        expect(presenceDelete).not.toHaveBeenCalled();
+        expect(auth.updateUser).toHaveBeenLastCalledWith(
+            "auth1", {disabled: false});
+      });
+
+  test("a status change during the Auth write is reconciled again",
+      async () => {
+        const active = {uid: "auth1", status: "active", role: "employee"};
+        const event = makeEvent("u_doc", null, active);
+        auth.updateUser.mockImplementationOnce(async () => {
+          currentUser = {...active, status: "disabled"};
+        });
+
+        await syncUsersByUid.run(event);
+
+        expect(auth.updateUser).toHaveBeenLastCalledWith(
+            "auth1", {disabled: true});
+      });
+
+  test("an old deletion leaves another profile's bridge and Auth alone",
+      async () => {
+        presenceDelete.mockResolvedValue(undefined);
+        const event = makeEvent("u_doc",
+            {uid: "auth1", status: "active", role: "employee"}, null);
+        const owner = {docId: "other", status: "active", role: "employee"};
+        bridgeRows.set("usersByUid/auth1", owner);
+
+        await syncUsersByUid.run(event);
+
+        expect(bridgeRows.get("usersByUid/auth1")).toEqual(owner);
+        expect(auth.updateUser).not.toHaveBeenCalled();
+      });
+
+  test("a delayed uid rotation removes every stale bridge it names",
+      async () => {
+        const active = {uid: "old", status: "active", role: "employee"};
+        const event = makeEvent("u_doc", active, {...active, uid: "middle"});
+        currentUser = {...active, uid: "new"};
+        bridgeRows.set("usersByUid/middle", {
+          docId: "u_doc", status: "active", role: "employee",
+        });
+
+        await syncUsersByUid.run(event);
+
+        expect([...bridgeRows.keys()]).toEqual(["usersByUid/new"]);
+      });
+
+  test("an invalid live role removes its privileged bridge", async () => {
+    const before = {uid: "auth1", status: "active", role: "admin"};
+    await syncUsersByUid.run(makeEvent("u_doc", before,
+        {...before, role: "unknown"}));
+    expect(bridgeRows.has("usersByUid/auth1")).toBe(false);
+  });
+
+  test("a live uid collision cannot overwrite another profile's bridge",
+      async () => {
+        const active = {uid: "auth1", status: "active", role: "employee"};
+        const event = makeEvent("u_doc", null, active);
+        const owner = {docId: "other", status: "active", role: "admin"};
+        bridgeRows.set("usersByUid/auth1", owner);
+        await expect(syncUsersByUid.run(event))
+            .rejects.toThrow("uid belongs to another profile");
+        expect(bridgeRows.get("usersByUid/auth1")).toEqual(owner);
+        expect(auth.updateUser).not.toHaveBeenCalled();
+      });
+
+  test("an unstable Auth profile requests trigger retry after three attempts",
+      async () => {
+        presenceDelete.mockResolvedValue(undefined);
+        const active = {uid: "auth1", status: "active", role: "employee"};
+        const event = makeEvent("u_doc", null, active);
+        auth.updateUser.mockImplementation(async () => {
+          currentUser = {...currentUser,
+            status: currentUser.status === "active" ? "disabled" : "active"};
+        });
+        await expect(syncUsersByUid.run(event))
+            .rejects.toThrow("profile changed during Auth reconciliation");
+        expect(auth.updateUser).toHaveBeenCalledTimes(3);
+      });
 });

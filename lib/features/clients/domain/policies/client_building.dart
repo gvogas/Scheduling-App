@@ -41,8 +41,8 @@ class ClientBuilding {
 
 /// The identity of the building a client sits at, or null when there isn't one.
 ///
-/// Derived, never stored — the same discipline the display-only `overdue`
-/// status keeps. `clients/{id}.address` is the street line, so the key is that
+/// Mirrored by the server-maintained `buildingKey` projection and catalog.
+/// `clients/{id}.address` is the street line, so the key is that
 /// line with the UNIT taken off: "914-4450 Prom. Paton" and
 /// "1207-4450 Prom. Paton" are two units of one building.
 ///

@@ -196,8 +196,8 @@ class _ListInformationState extends ConsumerState<ListInformation> {
                   onClearFilter: () => _applyFilter(const ClientsFilterAll()),
                   count: _visibleCount,
                   isSearching: _searchController.text.trim().isNotEmpty,
-                  // Only the unfiltered list pages; every filtered slice loads
-                  // whole, so its shown count IS its total.
+                  // Filter counts describe loaded rows. Only the full roster
+                  // has a separate count aggregate.
                   total: _filter is ClientsFilterAll ? total : null,
                   filter: _filter,
                   sort: _sort,

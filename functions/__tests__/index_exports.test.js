@@ -45,6 +45,7 @@ const EXPECTED_EXPORTS = [
   "searchHistory",
   "sendDailyJobDigest",
   "sendUpcomingJobReminders",
+  "syncClientBuilding",
   "syncUsersByUid",
   "validateUploadedImage",
   "waveBootstrap",

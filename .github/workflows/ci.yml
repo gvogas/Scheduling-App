@@ -2,11 +2,8 @@ name: CI
 
 on:
   push:
-    # `redesgin` is the long-lived active branch and carries dozens of commits
-    # between merges, so main-only push triggers meant most work was unverified
-    # until PR time. Both are listed rather than using a wildcard: a wildcard
-    # would double every PR run (once for the push, once for the PR).
-    branches: [main, redesgin]
+    # Verify both long-lived development branches as well as main.
+    branches: [main, redesgin, dev]
   pull_request:
 
 jobs:
@@ -85,12 +82,18 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # Same reasoning as the Flutter side: report coverage, don't gate on it.
-      # The modules that resolve a Storage bucket at load can't be required by
-      # jest at all, which is why their logic lives in pure `*_policy.js`
-      # siblings — a threshold here would punish that split.
+      # Coverage thresholds are enforced by functions/jest.config.js.
       - name: Test
         run: npx jest --coverage
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Firebase authorization and concurrency checks
+        working-directory: .
+        run: npx --yes firebase-tools@15.25.1 emulators:exec --project demo-scheduling-review --only auth,firestore,storage "node functions/__tests__/emulator/storage_rules.smoke.js"
 
       - name: Upload coverage
         if: always()

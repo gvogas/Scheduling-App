@@ -87,12 +87,14 @@ void main() {
   setUpAll(() {
     registerFallbackValue(ClientType.unset);
     registerFallbackValue(ClientsSort.name);
+    registerFallbackValue(const ClientsFilterAll());
   });
 
   setUp(() {
     repo = _MockClientsRepo();
     when(
       () => repo.fetchClientsPage(
+        filter: any(named: 'filter'),
         after: any(named: 'after'),
         limit: any(named: 'limit'),
       ),
@@ -155,160 +157,77 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the type filter renders only that type of client', (
+  testWidgets('type pages pass the filter and refresh when the sort changes', (
     tester,
   ) async {
-    when(() => repo.fetchClientsByType(ClientType.commercial)).thenAnswer(
-      (_) async => const [
-        ClientRecord(
-          id: 'v1',
-          name: 'Commercial Client',
-          type: ClientType.commercial,
-        ),
-      ],
-    );
-
-    await tester.pumpWidget(
-      _wrap(repo, filter: const ClientsFilterType(ClientType.commercial)),
-    );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Commercial Client'), findsOneWidget);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('the type filter never touches the paginated list', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      _wrap(repo, filter: const ClientsFilterType(ClientType.commercial)),
-    );
-    await tester.pumpAndSettle();
-
-    // It is a separate bounded read. Filtering the paginated list in Dart would
-    // shorten a full server page and stop paging early.
-    verifyNever(
+    const filter = ClientsFilterType(ClientType.commercial);
+    when(
       () => repo.fetchClientsPage(
-        after: any(named: 'after'),
         limit: any(named: 'limit'),
+        after: any(named: 'after'),
+        sort: any(named: 'sort'),
+        filter: filter,
       ),
+    ).thenAnswer(
+      (invocation) async =>
+          invocation.namedArguments[#sort] == ClientsSort.mostJobs
+          ? const [
+              ClientRecord(id: 'b', name: 'Beta'),
+              ClientRecord(id: 'a', name: 'Alpha'),
+            ]
+          : const [
+              ClientRecord(id: 'a', name: 'Alpha'),
+              ClientRecord(id: 'b', name: 'Beta'),
+            ],
     );
-    verify(() => repo.fetchClientsByType(ClientType.commercial)).called(1);
-  });
-
-  // The repro: with a filter active, picking a sort rebuilt the view but
-  // nothing downstream consumed the new value, so the rows never moved.
-  testWidgets('a sort change RE-ORDERS the filtered list, with no refetch', (
-    tester,
-  ) async {
-    when(() => repo.fetchClientsByType(ClientType.commercial)).thenAnswer(
-      (_) async => const [
-        ClientRecord(
-          id: 'v1',
-          name: 'Alpha Co',
-          type: ClientType.commercial,
-          jobCount: 1,
-        ),
-        ClientRecord(
-          id: 'v2',
-          name: 'Zulu Co',
-          type: ClientType.commercial,
-          jobCount: 9,
-        ),
-      ],
+    await tester.pumpWidget(_wrap(repo, filter: filter));
+    await tester.pumpAndSettle();
+    expect(
+      tester.getTopLeft(find.text('Alpha')).dy,
+      lessThan(tester.getTopLeft(find.text('Beta')).dy),
     );
-
     await tester.pumpWidget(
-      _wrap(repo, filter: const ClientsFilterType(ClientType.commercial)),
+      _wrap(repo, filter: filter, sort: ClientsSort.mostJobs),
     );
     await tester.pumpAndSettle();
     expect(
-      tester.getTopLeft(find.text('Alpha Co')).dy,
-      lessThan(tester.getTopLeft(find.text('Zulu Co')).dy),
-      reason: 'name order puts Alpha first',
+      tester.getTopLeft(find.text('Beta')).dy,
+      lessThan(tester.getTopLeft(find.text('Alpha')).dy),
     );
-
-    await tester.pumpWidget(
-      _wrap(
-        repo,
-        filter: const ClientsFilterType(ClientType.commercial),
+    verify(
+      () => repo.fetchClientsPage(
+        limit: 50,
         sort: ClientsSort.mostJobs,
+        filter: filter,
       ),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      tester.getTopLeft(find.text('Zulu Co')).dy,
-      lessThan(tester.getTopLeft(find.text('Alpha Co')).dy),
-      reason: 'most jobs floats Zulu, which name order buried',
-    );
-
-    // Ordering is a view concern: re-sorting must not cost a second read.
-    verify(() => repo.fetchClientsByType(ClientType.commercial)).called(1);
+    ).called(1);
+    verifyNever(() => repo.fetchClientsByType(any()));
   });
 
-  testWidgets('the archived filter reads its own bounded query', (
-    tester,
-  ) async {
-    when(() => repo.fetchArchivedClients()).thenAnswer(
-      (_) async => const [ClientRecord(id: 'a1', name: 'Retired Co')],
-    );
-
+  testWidgets('archived pages retain their empty state', (tester) async {
     await tester.pumpWidget(_wrap(repo, filter: const ClientsFilterArchived()));
     await tester.pumpAndSettle();
-
-    expect(find.text('Retired Co'), findsOneWidget);
-    // Same shape as the type filter: a separate bounded read, never a Dart
-    // filter over a server page.
-    verifyNever(
-      () => repo.fetchClientsPage(
-        after: any(named: 'after'),
-        limit: any(named: 'limit'),
-      ),
-    );
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('the archived filter shows an empty state when none are', (
-    tester,
-  ) async {
-    when(() => repo.fetchArchivedClients()).thenAnswer((_) async => const []);
-
-    await tester.pumpWidget(_wrap(repo, filter: const ClientsFilterArchived()));
-    await tester.pumpAndSettle();
-
     expect(find.text('No archived clients'), findsOneWidget);
-    expect(tester.takeException(), isNull);
+    verify(
+      () => repo.fetchClientsPage(
+        limit: 50,
+        filter: const ClientsFilterArchived(),
+      ),
+    ).called(1);
   });
 
-  testWidgets('searching within a type filters that type', (tester) async {
-    when(() => repo.fetchClientsByType(ClientType.commercial)).thenAnswer(
-      (_) async => const [
-        ClientRecord(
-          id: 'v1',
-          name: 'Sophie Tremblay',
-          type: ClientType.commercial,
-        ),
-        ClientRecord(
-          id: 'v2',
-          name: 'Marc Gagnon',
-          type: ClientType.commercial,
-        ),
-      ],
-    );
-
-    await tester.pumpWidget(
-      _wrap(
-        repo,
-        filter: const ClientsFilterType(ClientType.commercial),
-        searchQuery: 'sophie',
-      ),
-    );
+  testWidgets('typing in a filter calls scoped search', (tester) async {
+    const filter = ClientsFilterType(ClientType.commercial);
+    when(
+      () => repo.searchClients('sophie', filter: filter),
+    ).thenAnswer((_) async => const [_sophie]);
+    await tester.pumpWidget(_wrap(repo, filter: filter));
     await tester.pumpAndSettle();
-
+    await tester.pumpWidget(_wrap(repo, filter: filter, searchQuery: 'sophie'));
+    await tester.pumpAndSettle();
     expect(find.textContaining('Sophie'), findsOneWidget);
-    expect(find.textContaining('Marc'), findsNothing);
-    // Matched locally against the bounded list, not via a second server query.
-    verifyNever(() => repo.searchClients(any()));
+    verify(() => repo.searchClients('sophie', filter: filter)).called(1);
+    verifyNever(() => repo.fetchClientsByType(any()));
   });
 
   testWidgets('the search skeleton fits a keyboard-shortened body', (
@@ -348,6 +267,7 @@ void main() {
     var buildingReads = 0;
     when(
       () => repo.fetchClientsPage(
+        filter: any(named: 'filter'),
         after: any(named: 'after'),
         limit: any(named: 'limit'),
         sort: any(named: 'sort'),
@@ -374,6 +294,7 @@ void main() {
   testWidgets('passes the sort through to the repository', (tester) async {
     when(
       () => repo.fetchClientsPage(
+        filter: any(named: 'filter'),
         after: any(named: 'after'),
         limit: any(named: 'limit'),
         sort: any(named: 'sort'),
@@ -385,6 +306,7 @@ void main() {
 
     verify(
       () => repo.fetchClientsPage(
+        filter: any(named: 'filter'),
         after: any(named: 'after'),
         limit: any(named: 'limit'),
         sort: ClientsSort.mostJobs,
@@ -401,6 +323,7 @@ void main() {
   ) async {
     when(
       () => repo.fetchClientsPage(
+        filter: any(named: 'filter'),
         after: any(named: 'after'),
         limit: any(named: 'limit'),
         sort: any(named: 'sort'),
@@ -421,9 +344,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('letters a type filter in folded name order, one card each', (
-    tester,
-  ) async {
+  testWidgets('keeps server ordered type pages in one group', (tester) async {
     when(() => repo.fetchClientsByType(any())).thenAnswer(
       (_) async => const [
         ClientRecord(id: 'c1', name: 'Zoe Tremblay'),
@@ -442,9 +363,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('A'), findsOneWidget);
-    expect(find.text('E'), findsOneWidget);
-    expect(find.text('Z'), findsOneWidget);
+    expect(find.text('A'), findsNothing);
+    expect(find.text('E'), findsNothing);
+    expect(find.text('Z'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -453,6 +374,7 @@ void main() {
   ) async {
     when(
       () => repo.fetchClientsPage(
+        filter: any(named: 'filter'),
         after: any(named: 'after'),
         limit: any(named: 'limit'),
         sort: any(named: 'sort'),
@@ -477,7 +399,13 @@ void main() {
   testWidgets('a building filter heads its one group with the street', (
     tester,
   ) async {
-    when(() => repo.fetchClientsByBuilding('k1')).thenAnswer(
+    when(
+      () => repo.fetchClientsPage(
+        limit: any(named: 'limit'),
+        after: any(named: 'after'),
+        filter: const ClientsFilterBuilding('k1'),
+      ),
+    ).thenAnswer(
       (_) async => const [
         ClientRecord(id: 'c1', name: 'Alice Brown'),
         ClientRecord(id: 'c2', name: 'Bob Carter'),
@@ -506,6 +434,7 @@ void main() {
   ) async {
     when(
       () => repo.fetchClientsPage(
+        filter: any(named: 'filter'),
         after: any(named: 'after'),
         limit: any(named: 'limit'),
         sort: any(named: 'sort'),
@@ -534,6 +463,7 @@ void main() {
     int? reported;
     when(
       () => repo.fetchClientsPage(
+        filter: any(named: 'filter'),
         after: any(named: 'after'),
         limit: any(named: 'limit'),
         sort: any(named: 'sort'),

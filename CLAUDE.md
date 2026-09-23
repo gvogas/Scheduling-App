@@ -417,6 +417,11 @@ Secret-Manager `GOOGLE_MAP_API_KEY`, which must never ship in the app.
   `_isFresh`/`_cacheSearch` pairs over identical dials (50 entries, 2 min), and
   neither copy had a test for expiry or eviction. Invalidation policy stays
   per-repo — they legitimately differ on the `_localWrites` poke.
+  Cache reads refresh recency without extending the original TTL. Searches
+  use `getOrLoad` to share pending requests; cache generations prevent reads
+  started before a local write or sign-out from restoring invalidated results.
+  Client and history scan windows apply the same generation check and share
+  their pending reads, with history still keyed by employee/admin scope.
   **Both scan windows PAGE to their cap and then WARN**, the same posture
   `_mapRangeSnapshot` takes for the range streams. Paging is what stops a
   window truncating at one page; the cap is what stops it walking the whole

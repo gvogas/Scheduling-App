@@ -1,5 +1,6 @@
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
+import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 import 'package:scheduling/features/clients/domain/policies/client_building.dart';
 
@@ -50,14 +51,15 @@ abstract class ClientsRepository {
   /// their `clientId` links on existing appointments are untouched.
   Future<void> setClientArchived(String id, {required bool archived});
 
-  /// Archived clients, name-sorted, from the same cached window
-  /// `searchClients` scans — so the Archived chip costs no extra read inside
-  /// the TTL and needs no composite index.
+  /// Bounded indexed archive read for non-paged consumers. The list uses pages.
   Future<List<ClientRecord>> fetchArchivedClients();
 
-  Future<List<ClientRecord>> searchClients(String query);
+  Future<List<ClientRecord>> searchClients(
+    String query, {
+    ClientsFilter filter = const ClientsFilterAll(),
+  });
 
-  /// One page of non-archived clients in [sort] order.
+  /// One server-filtered page in [sort] order. Defaults to non-archived clients.
   ///
   /// [after] is the last record of the previous page; the cursor tuple is
   /// (sort field, doc id), so a page fetched under one sort can never be used
@@ -66,6 +68,7 @@ abstract class ClientsRepository {
     required int limit,
     ClientRecord? after,
     ClientsSort sort = ClientsSort.name,
+    ClientsFilter filter = const ClientsFilterAll(),
   });
 
   /// How many non-archived clients exist, for the list header's "N of M".
@@ -79,18 +82,10 @@ abstract class ClientsRepository {
   /// trends. Legacy docs without `createdAt` (old imports) are excluded.
   Future<List<ClientRecord>> fetchClientsCreatedSince(DateTime since);
 
-  /// Clients of [type], name-sorted, from the same cached window
-  /// `searchClients` scans — so the filter costs no extra read inside the TTL
-  /// and needs no composite index.
-  ///
-  /// A SEPARATE bounded read, deliberately not a filter over `fetchClientsPage`:
-  /// filtering a server page in Dart shortens a page the server actually filled,
-  /// which stops the paginated list early. See the "never removed" invariant in
-  /// CLAUDE.md for the full reasoning.
+  /// Bounded indexed type read for non-paged consumers.
   Future<List<ClientRecord>> fetchClientsByType(ClientType type);
 
-  /// Clients at one building, keyed by `buildingKeyFor`. Same bounded cached
-  /// window as the type filter, so the Building menu costs no extra read.
+  /// Bounded indexed building read, keyed by `buildingKeyFor`.
   Future<List<ClientRecord>> fetchClientsByBuilding(String key);
 
   /// Every address shared by two or more clients, busiest first — the Building

@@ -5,6 +5,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:scheduling/core/images/image_magic.dart';
 import 'package:scheduling/core/images/image_upload_failure.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
+import 'package:scheduling/core/performance/performance_trace.dart';
 import 'package:scheduling/core/validators/text_limits.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
 
@@ -57,7 +58,10 @@ class ImageStorageService {
       cacheControl: 'private, max-age=31536000',
     );
 
-    await ref.putFile(file, metadata);
+    await PerformanceTrace.measure(
+      PerformanceOperation.photoUpload,
+      () => ref.putFile(file, metadata),
+    );
 
     return AppointmentImage(
       storagePath: path,

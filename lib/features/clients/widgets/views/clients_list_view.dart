@@ -60,8 +60,7 @@ class ClientsListView extends ConsumerStatefulWidget {
   /// appear on its own.
   final VoidCallback? onFirstPageSettled;
 
-  /// Order for the paginated list AND for the filtered paths, which apply it in
-  /// Dart over their bounded window. The SEARCH path still ignores it: those
+  /// Server order for the paginated list, including filters. Search ignores it:
   /// results are relevance-ranked, and re-sorting them destroys that ranking.
   final ClientsSort sort;
 
@@ -133,6 +132,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
         after: after,
         limit: _pageSize,
         sort: widget.sort,
+        filter: widget.filter,
       );
     } catch (e, st) {
       logger.warn('CLI-LIST clients page fetch error', e, st);
@@ -145,7 +145,9 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   @override
   void didUpdateWidget(ClientsListView oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.sort != widget.sort) _pagingController.refresh();
+    if (oldWidget.sort != widget.sort || oldWidget.filter != widget.filter) {
+      _pagingController.refresh();
+    }
   }
 
   @override
@@ -354,7 +356,11 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
     }
 
     return ref
-        .watch(clientSearchProvider(query))
+        .watch(
+          widget.filter is ClientsFilterAll
+              ? clientSearchProvider(query)
+              : clientFilteredSearchProvider((query, widget.filter)),
+        )
         .when(
           data: (results) => results.isEmpty
               ? _emptyState(query: query)
@@ -366,80 +372,6 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
           error: (e, _) =>
               local.isEmpty ? _searchError(e, query) : _resultsList(local),
         );
-  }
-
-  // The filtered slice in sort order, memoized on the list identity and the
-  // sort — never the query, so a keystroke re-sorts nothing.
-  List<ClientRecord>? _sortedSource;
-  ClientsSort? _sortedBy;
-  List<ClientRecord> _sorted = const [];
-
-  List<ClientRecord> _sortedFilter(List<ClientRecord> all) {
-    if (!identical(all, _sortedSource) || widget.sort != _sortedBy) {
-      _sortedSource = all;
-      _sortedBy = widget.sort;
-      _sorted = sortClients(all, widget.sort);
-    }
-    return _sorted;
-  }
-
-  // Pre-normalized index over the sorted slice, memoized on its identity for
-  // the same reason _loadedSearchIndex is: re-indexing is the expensive half.
-  List<ClientRecord>? _filterIndexSource;
-  List<ClientSearchEntry> _filterIndex = const [];
-
-  List<ClientSearchEntry> _filterSearchIndex(List<ClientRecord> sorted) {
-    if (!identical(sorted, _filterIndexSource)) {
-      _filterIndexSource = sorted;
-      _filterIndex = [
-        for (final client in sorted) ClientSearchPolicy.index(client),
-      ];
-    }
-    return _filterIndex;
-  }
-
-  // Matching preserves order, so filtering the sorted slice needs no re-sort.
-  List<ClientRecord>? _visibleSource;
-  String? _visibleQuery;
-  List<ClientRecord> _visibleItems = const [];
-
-  List<ClientRecord> _filteredAndSorted(List<ClientRecord> all, String query) {
-    final sorted = _sortedFilter(all);
-    if (identical(sorted, _visibleSource) && query == _visibleQuery) {
-      return _visibleItems;
-    }
-    _visibleSource = sorted;
-    _visibleQuery = query;
-    if (query.isEmpty) return _visibleItems = sorted;
-    final q = ClientSearchPolicy.normalize(query);
-    final qDigits = ClientSearchPolicy.digitsOnly(query);
-    return _visibleItems = [
-      for (final entry in _filterSearchIndex(sorted))
-        if (ClientSearchPolicy.entryMatches(
-          entry,
-          queryText: q,
-          queryDigits: qDigits,
-        ))
-          entry.client,
-    ];
-  }
-
-  // Every non-All filter is a bounded, already-in-memory list, so searching
-  // within it is the shared local matcher rather than a second server query.
-  Widget _buildFromAsync(
-    AsyncValue<List<ClientRecord>> async, {
-    required VoidCallback onRetry,
-    required Widget Function(String query) emptyState,
-  }) {
-    final query = widget.searchQuery.trim();
-    return async.when(
-      data: (all) {
-        final items = _filteredAndSorted(all, query);
-        return items.isEmpty ? emptyState(query) : _resultsList(items);
-      },
-      loading: _fittedSkeleton,
-      error: (e, _) => _errorState(e, onRetry: onRetry),
-    );
   }
 
   Widget _typeEmptyState({required ClientType type, required String query}) =>
@@ -469,7 +401,13 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   // rebuild is already watching it, so it refetches immediately.
   Widget _searchError(Object error, String query) => _errorState(
     error,
-    onRetry: () => ref.invalidate(clientSearchProvider(query)),
+    onRetry: () {
+      if (widget.filter is ClientsFilterAll) {
+        ref.invalidate(clientSearchProvider(query));
+      } else {
+        ref.invalidate(clientFilteredSearchProvider((query, widget.filter)));
+      }
+    },
   );
 
   Widget _errorState(Object error, {required VoidCallback onRetry}) =>
@@ -495,36 +433,22 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
         : context.l10n.common_tryADifferentSearchTerm,
   );
 
-  // The groups as rendered, memoized on the inputs that change their shape.
   List<ClientRecord>? _groupedSource;
-  ClientsSort? _groupedSort;
-  ClientsFilter? _groupedFilter;
-  String? _groupedQuery;
+  String? _groupedHeading;
   List<ClientGroup> _groups = const [];
 
   List<ClientGroup> _groupsFor(List<ClientRecord> items) {
-    final query = widget.searchQuery.trim();
-    if (identical(items, _groupedSource) &&
-        widget.sort == _groupedSort &&
-        widget.filter == _groupedFilter &&
-        query == _groupedQuery) {
+    final heading = widget.filter is ClientsFilterBuilding
+        ? widget.buildingLabel
+        : null;
+    if (identical(items, _groupedSource) && heading == _groupedHeading) {
       return _groups;
     }
     _groupedSource = items;
-    _groupedSort = widget.sort;
-    _groupedFilter = widget.filter;
-    _groupedQuery = query;
-    if (widget.filter is ClientsFilterBuilding) {
-      return _groups = singleGroupOf(items, heading: widget.buildingLabel);
-    }
-    // Letters only over rows Dart sorted by the folded name: the paged list is
-    // server-ordered by the stored name (a person's phone) and search by rank.
-    if (query.isNotEmpty ||
-        widget.sort != ClientsSort.name ||
-        widget.filter is ClientsFilterAll) {
-      return _groups = singleGroupOf(items);
-    }
-    return _groups = letterGroupsOf(items);
+    _groupedHeading = heading;
+    // Stored-name order can differ from display-name order (phone identities),
+    // so letter headings would split or repeat as server pages arrive.
+    return _groups = singleGroupOf(items, heading: heading);
   }
 
   Widget _resultsList(List<ClientRecord> items) {
@@ -548,29 +472,6 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   Widget build(BuildContext context) {
     ref.listen(clientsRefreshProvider, (_, _) => _pagingController.refresh());
 
-    switch (widget.filter) {
-      case ClientsFilterArchived():
-        return _buildFromAsync(
-          ref.watch(archivedClientsProvider),
-          onRetry: () => ref.invalidate(archivedClientsProvider),
-          emptyState: _archivedEmptyState,
-        );
-      case ClientsFilterType(:final type):
-        return _buildFromAsync(
-          ref.watch(clientsByTypeProvider(type)),
-          onRetry: () => ref.invalidate(clientsByTypeProvider(type)),
-          emptyState: (query) => _typeEmptyState(type: type, query: query),
-        );
-      case ClientsFilterBuilding(:final key):
-        return _buildFromAsync(
-          ref.watch(clientsByBuildingProvider(key)),
-          onRetry: () => ref.invalidate(clientsByBuildingProvider(key)),
-          emptyState: (query) => _buildingEmptyState(query: query),
-        );
-      case ClientsFilterAll():
-        break; // falls through to the search / paginated list below
-    }
-
     final query = widget.searchQuery.trim();
     if (query.isNotEmpty) return _buildSearchResults(query);
 
@@ -579,6 +480,13 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
       child: widget.grouped ? _groupedPagedList() : _pagedList(),
     );
   }
+
+  Widget _filteredEmptyState() => switch (widget.filter) {
+    ClientsFilterArchived() => _archivedEmptyState(''),
+    ClientsFilterType(:final type) => _typeEmptyState(type: type, query: ''),
+    ClientsFilterBuilding() => _buildingEmptyState(query: ''),
+    ClientsFilterAll() => _emptyState(query: ''),
+  };
 
   // Cards and headings are slivers, which PagedListView cannot host.
   Widget _groupedPagedList() => PagingListener<int, ClientRecord>(
@@ -599,7 +507,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
             state.error ?? Exception('clients page load failed'),
             onRetry: _pagingController.refresh,
           ),
-          _ => _emptyState(query: ''),
+          _ => _filteredEmptyState(),
         };
       }
       return ClientsSliverList(
@@ -632,7 +540,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
             state.error ?? Exception('clients page load failed'),
             onRetry: _pagingController.refresh,
           ),
-          noItemsFoundIndicatorBuilder: (_) => _emptyState(query: ''),
+          noItemsFoundIndicatorBuilder: (_) => _filteredEmptyState(),
         ),
       );
     },

@@ -164,6 +164,7 @@ class FirebaseEmployeesRepository implements EmployeesRepository {
 
   @override
   Future<void> completeEmployeeSetup({
+    required String newPassword,
     String firstName = '',
     String lastName = '',
     String phone = '',
@@ -175,10 +176,11 @@ class FirebaseEmployeesRepository implements EmployeesRepository {
           'completeEmployeeSetup',
           options: HttpsCallableOptions(timeout: _callableTimeout),
         )
-        // All five keys, always: the server reads the strings leniently (empty
+        // The password is handled under a server lock. Profile strings are lenient (empty
         // == absent) and the flags as `=== true`, so a conditional payload
         // shape would be a second thing to test for no benefit.
         .call<dynamic>({
+          'newPassword': newPassword,
           'firstName': firstName.trim(),
           'lastName': lastName.trim(),
           'phone': phone.trim(),

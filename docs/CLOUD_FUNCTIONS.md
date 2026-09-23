@@ -1,5 +1,10 @@
 # Cloud Functions Reference
 
+**Local changes, 2026-09-23 (not deployed):** source now has 30 exports with
+`syncClientBuilding`, coordinated password setup/reset, client deletion barriers,
+and optional client search filters. Historical deployment counts below describe
+production at their recorded dates. See [audit rollout](audits/AUDIT_ROLLOUT_2026-09-23.md).
+
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
 refreshed 2026-09-19 (release 1.62.0+91 — **still 29 exports, all DEPLOYED**: the
@@ -463,10 +468,11 @@ email-exists` once the person has finished setup, resolving the target **by
 `uid`, not by email** (`users.email` is admin-editable and never synced back to
 Auth, so an email-only check can clear a doc that is not the account Auth hands
 back). The rotation itself is deferred to `resetProvisionedPassword`, which runs
-only after the transaction has claimed the person as still-`invited` — that
-**narrows** the window in which a concurrent setup gets its chosen password
-reverted, but cannot close it, since the Auth call sits outside both
-transactions.
+only after the transaction has claimed the person as still-`invited`. Both
+re-provisioning and setup hold the same durable per-UID operation lock across
+Firestore and Auth calls. Re-provisioning marks `setupRequiresPassword` before
+resetting Auth, preventing an older setup client from activating afterward.
+
 
 If the Firestore write fails after the Auth account was created, the Auth
 account is deleted — but only if *we* just minted it. **A rollback that itself
@@ -504,18 +510,16 @@ removed only because the starting password became a random per-account secret in
 the same change. Don't re-derive it from an old copy of this page, and don't drop
 a comparable check elsewhere on the strength of this precedent alone.
 
-**The caller must have already changed the password.** The server cannot see a
-password, so "you must replace the starting password" is true only because
-`AuthService.completeAccountSetup` calls `User.updatePassword` first and this
-callable is unreachable until that succeeds. Swap the order and an interrupted
-setup leaves an *active* account still on the password the admin read out.
-Nothing server-side verifies the rotation happened — and that is still true
-after 2026-08-21, when the app gained
-`AuthService._refuseIfStillTheStartingPassword`: it reauthenticates with the
-typed password and refuses when that SUCCEEDS (proving it is unchanged), which
-stops an employee retyping what the admin gave them, but it runs on the CLIENT.
-A caller reaching this callable directly still activates an un-rotated account,
-with `enforceAppCheck: true` the only thing in the way.
+**The current app sends `newPassword` to the callable.** It validates the
+password, writes it through Auth while holding `accountOperations/{uid}`, then
+activates the invitation. The app subsequently reauthenticates to renew its
+refresh credential. Passwords are neither persisted in Firestore nor logged.
+The existing client check still refuses reusing the current credential.
+
+Legacy requests without `newPassword` remain accepted for untouched invitations.
+After re-provisioning sets `setupRequiresPassword`, they fail with
+`setup-upgrade-required`. This closes the race with an older app's direct Auth
+password update without making the new payload universally required.
 
 The patch is built by the pure `buildActivationPatch`: it stamps
 `termsAcceptedAt`/`locationConsentAt` **only when the flags are actually sent

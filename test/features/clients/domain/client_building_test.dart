@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 // Pins the building grouping — the derived key, and the reduction the clients
 // list's Address filter and its per-row pill both read.
 //
@@ -30,6 +33,21 @@ ClientRecord _client(
 );
 
 void main() {
+  final cases =
+      jsonDecode(
+            File('test/fixtures/client_building_cases.json').readAsStringSync(),
+          )
+          as List;
+  for (final entry in cases.cast<Map<String, dynamic>>()) {
+    test('server identity parity: ${entry['description']}', () {
+      final client = ClientRecord.fromMap(
+        'fixture',
+        (entry['data'] as Map).cast<String, dynamic>(),
+      );
+      expect(buildingKeyFor(client), entry['key']);
+    });
+  }
+
   group('buildingKeyFor', () {
     test('two units of one building share a key', () {
       expect(
@@ -146,11 +164,7 @@ void main() {
 
     test('clients with no address are skipped, not grouped together', () {
       // They all derive a null key; grouping them would invent a building.
-      final buildings = buildingsOf([
-        _client('a'),
-        _client('b'),
-        _client('c'),
-      ]);
+      final buildings = buildingsOf([_client('a'), _client('b'), _client('c')]);
       expect(buildings, isEmpty);
     });
   });

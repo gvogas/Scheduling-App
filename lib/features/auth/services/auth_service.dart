@@ -72,26 +72,25 @@ class AuthService {
     await _refuseIfStillTheStartingPassword(user, newPassword.trim());
 
     try {
-      await user.updatePassword(newPassword.trim());
-    } catch (e, st) {
-      final failure = _mapSetupError(e);
-      _logger.authFailure(
-        'AUTH-SETUP completeAccountSetup: updatePassword failed',
-        failure,
-        e,
-        st,
-      );
-      throw failure;
-    }
-
-    try {
       await _employees.completeEmployeeSetup(
+        newPassword: newPassword.trim(),
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         phone: phone.trim(),
         termsAccepted: termsAccepted,
         locationConsent: locationConsent,
       );
+      // Admin SDK password changes invalidate refresh tokens. Replace this
+      // session's credential before the setup screen resolves the profile.
+      final email = user.email;
+      if (email != null && email.isNotEmpty) {
+        await user.reauthenticateWithCredential(
+          EmailAuthProvider.credential(
+            email: email,
+            password: newPassword.trim(),
+          ),
+        );
+      }
     } catch (e, st) {
       final failure = _mapSetupError(e);
       // Keep the chosen password even if activation fails.
@@ -154,6 +153,16 @@ class AuthService {
       }
     }
     if (e is FirebaseFunctionsException) {
+      if (e.message == 'invalid-newPassword') {
+        return const AuthFailureWeakPassword();
+      }
+      if (e.message == 'account-operation-in-progress') {
+        return const AuthFailureTooManyRequests();
+      }
+      if (e.message == 'setup-upgrade-required') {
+        return const AuthFailureSetupNotAvailableYet();
+      }
+
       // Replayed setup completion is already successful for the user.
       if (e.message == 'setup-not-pending') {
         return const AuthFailureSetupAlreadyComplete();

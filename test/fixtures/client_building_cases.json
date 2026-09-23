@@ -1,0 +1,7 @@
+[
+  {"description":"unit and accent", "data":{"address":"914-4450 Prom. Paton", "city":"Montréal"}, "key":"4450 prom paton|montreal"},
+  {"description":"legacy locality suffix", "data":{"address":"1207-4450 Prom. Paton, Laval, QC H7W 5J7, Canada", "city":"Laval", "province":"QC", "postalCode":"H7W 5J7", "country":"Canada"}, "key":"4450 prom paton|laval"},
+  {"description":"accented street", "data":{"address":"4564 Av. du Château", "city":"Laval"}, "key":"4564 av du chateau|laval"},
+  {"description":"no fixed address", "data":{"address":"123 Main", "noFixedAddress":true}, "key":null},
+  {"description":"blank address", "data":{"address":"  "}, "key":null}
+]

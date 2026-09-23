@@ -9,6 +9,7 @@ import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
+import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 import 'package:scheduling/features/clients/screens/clients_screen.dart';
 import 'package:scheduling/features/clients/widgets/sheets/clients_filter_sheet.dart';
@@ -249,7 +250,14 @@ void main() {
         sort: any(named: 'sort'),
       ),
     ).thenAnswer((_) async => const []);
-    when(() => repo.fetchClientsByType(ClientType.residential)).thenAnswer(
+    when(
+      () => repo.fetchClientsPage(
+        limit: any(named: 'limit'),
+        after: any(named: 'after'),
+        sort: any(named: 'sort'),
+        filter: const ClientsFilterType(ClientType.residential),
+      ),
+    ).thenAnswer(
       (_) async => const [
         ClientRecord(id: 'r1', name: 'Rita Home', type: ClientType.residential),
       ],

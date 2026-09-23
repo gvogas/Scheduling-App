@@ -3,13 +3,7 @@ const logger = require("firebase-functions/logger");
 const {getFirestore} = require("firebase-admin/firestore");
 const {getAuth} = require("firebase-admin/auth");
 
-// The bridge's pure rules — shared with `scripts/backfill.js`, which repairs
-// the same collection and must agree with this trigger on who gets a row.
-const {
-  VALID_ROLES,
-  shouldHaveBridge,
-  bridgeBody,
-} = require("./bridge_policy");
+const {reconcileBridge, reconcileAuthAccess} = require("./bridge_reconcile");
 
 /**
  * True when the user doc was deleted or an active account was deactivated —
@@ -93,174 +87,49 @@ async function purgeDeliveryState(db, userId) {
   await db.collection("liveActivityCards").doc(userId).delete();
 }
 
-// Mirrors `users` into `usersByUid/{uid}` so security rules can resolve a
-// caller's role from their auth uid alone. `retry: true` is safe here since
-// every path writes absolute values (set/delete on deterministic doc ids).
-//
-// Back on the default 60 s timeout. It was raised to 300 for one step — the
-// Storage download-token rotation, which walked up to 500 appointments' photos
-// — and that step retired with the `url` write it existed to cover. What is
-// left is a handful of deterministic writes and one small `recursiveDelete`,
-// all of which return in milliseconds.
+// Event snapshots identify affected uids; only live profiles grant access.
 const syncUsersByUid = onDocumentWritten(
     {document: "users/{userId}", retry: true},
     async (event) => {
       const userId = event.params.userId;
-      const beforeSnap = event.data?.before;
-      const afterSnap = event.data?.after;
-      const before = beforeSnap?.exists ? beforeSnap.data() : null;
-      const after = afterSnap?.exists ? afterSnap.data() : null;
+      const before = event.data?.before?.exists ?
+        event.data.before.data() : null;
+      const after = event.data?.after?.exists ? event.data.after.data() : null;
+      if (before && after && before.role === after.role &&
+          before.status === after.status && before.uid === after.uid) return;
 
       const db = getFirestore();
-      const bridge = db.collection("usersByUid");
+      const beforeUid = typeof before?.uid === "string" ? before.uid : "";
+      const afterUid = typeof after?.uid === "string" ? after.uid : "";
+      const current = await reconcileBridge(db, userId, [beforeUid, afterUid]);
 
-      const beforeUid =
-        before && typeof before.uid === "string" ? before.uid : "";
-      const afterUid =
-        after && typeof after.uid === "string" ? after.uid : "";
-
-      const staleUid = beforeUid && beforeUid !== afterUid ? beforeUid : "";
-
-      // Mirrors the users doc into the usersByUid bridge — auth-critical, so
-      // it runs first and its errors stay un-swallowed (retry:true re-runs).
-      const mirrorBridge = async () => {
-        // Skip writes with an unexpected role, as a defensive check. The
-        // presence purge below still runs, so PII gets cleaned up regardless.
-        //
-        // FAILS CLOSED on a MISSING role. This tested `after.role &&` first,
-        // which let a doc carrying no role at all through to `bridgeBody` —
-        // where `role: data.role` is written unconditionally, and
-        // `initializeApp()` sets no `ignoreUndefinedProperties`, so the Admin
-        // SDK threw inside a `retry: true` trigger. The bridge was then never
-        // written and every rules gate that resolves through it failed for that
-        // person. Only a console or Admin-SDK write can produce such a doc.
-        if (after && !VALID_ROLES.has(after.role)) {
-          logger.warn("syncUsersByUid: unexpected role; skipping", {
-            userId,
-            role: after.role,
-          });
-          return;
-        }
-
-        // Nothing the bridge MIRRORS has changed, so every branch below would
-        // rewrite the identical {role, docId, status} — `docId` is the trigger
-        // path's own userId, so those three fields are the whole body. This
-        // fires on ANY users write, and the hot writer is My details'
-        // availability panel, which commits per switch with no debounce: five
-        // working days flipped meant five identical bridge writes. Same
-        // discipline as recountClientJobs, which only fires when `clientId`
-        // actually changed.
-        //
-        // Deliberately AFTER the validity checks and BEFORE any write, and
-        // deliberately not folded into shouldPurgePresence/authAccessChange —
-        // those two diff correctly on their own predicates and still run
-        // below. The one thing given up is an incidental self-heal: a bridge
-        // doc deleted out-of-band is no longer rebuilt by an unrelated users
-        // write. `retry: true` covers a failed write, and any role/status/uid
-        // edit still rebuilds it.
-        if (before && after &&
-            before.role === after.role &&
-            before.status === after.status &&
-            beforeUid === afterUid) {
-          return;
-        }
-
-        // On a uid rotation, the stale delete and the new set land in ONE
-        // WriteBatch, so a crash between them can't leave both bridge docs
-        // live. We don't swallow the batch error — retry:true re-runs the
-        // handler.
-        if (after && shouldHaveBridge(after)) {
-          const batch = db.batch();
-          if (staleUid) batch.delete(bridge.doc(staleUid));
-          batch.set(bridge.doc(afterUid), bridgeBody(userId, after));
-          await batch.commit();
-          logger.info("syncUsersByUid: bridge upserted", {
-            userId,
-            uid: afterUid,
-            staleUidRemoved: staleUid || undefined,
-            role: after.role,
-            status: after.status,
-          });
-          return;
-        }
-
-        // No new bridge follows — the deletes below are terminal cleanup and
-        // stay un-swallowed so retry:true can re-run a failed delete.
-        if (staleUid) {
-          await bridge.doc(staleUid).delete();
-        }
-
-        if (!after) {
-          if (beforeUid) {
-            logger.info("syncUsersByUid: user deleted -> bridge removed", {
-              userId,
-              uid: beforeUid,
-            });
-          }
-          return;
-        }
-
-        if (afterUid) {
-          await bridge.doc(afterUid).delete();
-        }
-        logger.debug("syncUsersByUid: no bridge needed", {
-          userId,
-          status: after.status,
-          hasUid: !!afterUid,
-        });
-      };
-
-      await mirrorBridge();
-
-      // Purges PII presence data after the bridge mirror completes. Failures
-      // rethrow so retry:true safely reconverges — mirrorBridge and delete()
-      // are both idempotent.
-      const deactivated = shouldPurgePresence(before, after);
-      if (deactivated) {
+      // A delayed deactivation must not erase a reactivated device's tokens.
+      if (shouldPurgePresence(before, after) && current?.status !== "active") {
         try {
           await db.doc(`users/${userId}/presence/location`).delete();
-          // Stops push/Live Activity delivery along with the account, so a
-          // deactivated tech doesn't keep showing up on a client's Lock
-          // Screen card. Ending the on-device card itself needs APNs (left
-          // to the two functions that bind APNS_SECRETS), so it just expires
-          // on its own TTL.
           await purgeDeliveryState(db, userId);
         } catch (err) {
           logger.warn("syncUsersByUid: presence purge failed", {
-            userId,
-            error: err.message,
+            userId, error: err.message,
           });
           throw err;
         }
       }
 
-      // The Auth credential comes after the bridge mirror so it never blocks
-      // that write.
-      const change = authAccessChange(before, after);
-      const authUid = afterUid || beforeUid;
-      if (change && authUid) {
-        try {
-          await applyAuthAccess(authUid, change, getAuth());
-          logger.info("syncUsersByUid: auth access updated", {userId, change});
-        } catch (err) {
-          // Rethrown so retry:true re-runs — every step above is idempotent.
-          logger.warn("syncUsersByUid: auth access update failed", {
-            userId,
-            change,
-            error: err.message,
-          });
-          throw err;
+      if (authAccessChange(before, after)) {
+        const uid = current?.uid || afterUid || beforeUid;
+        if (uid) {
+          try {
+            await reconcileAuthAccess(db, userId, uid,
+                (id, change) => applyAuthAccess(id, change, getAuth()));
+          } catch (err) {
+            logger.warn("syncUsersByUid: auth access update failed", {
+              userId, error: err.message,
+            });
+            throw err;
+          }
         }
       }
-
-      // NOTE: deactivation used to end by rotating the Storage download token
-      // on every photo this person was assigned to, because `uploadImage`
-      // minted a permanent rules-free download URL per photo and stored it.
-      // Nothing mints or stores one now, and the prod count of legacy rows
-      // that still carried one came back ZERO (2026-08-22), so the rotation
-      // and the field went with it. A photo is fetched through the SDK
-      // against `storage.rules`, which the status gate above already answers.
-      // Do not reinstate a rotation here without a stored link to rotate.
     },
 );
 

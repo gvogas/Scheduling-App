@@ -39,15 +39,20 @@ void main() {
     // account's current one, so the starting-password check refuses to
     // reauthenticate and setup proceeds. Stubbed here rather than per test
     // so every existing case exercises the check instead of skipping it.
-    when(() => user.reauthenticateWithCredential(any())).thenThrow(
-      FirebaseAuthException(code: 'wrong-password'),
-    );
+    var reauthCalls = 0;
+    when(() => user.reauthenticateWithCredential(any())).thenAnswer((_) async {
+      if (reauthCalls++ == 0) {
+        throw FirebaseAuthException(code: 'wrong-password');
+      }
+      return _FakeUserCredential();
+    });
   });
 
   /// Mocktail compares the whole invocation, so the stub has to name every
   /// argument the call site passes.
   When<Future<void>> stubSetup() => when(
     () => employees.completeEmployeeSetup(
+      newPassword: any(named: 'newPassword'),
       firstName: any(named: 'firstName'),
       lastName: any(named: 'lastName'),
       phone: any(named: 'phone'),
@@ -103,6 +108,7 @@ void main() {
       verifyNever(() => user.updatePassword(any()));
       verifyNever(
         () => employees.completeEmployeeSetup(
+          newPassword: any(named: 'newPassword'),
           firstName: any(named: 'firstName'),
           lastName: any(named: 'lastName'),
           phone: any(named: 'phone'),
@@ -127,9 +133,9 @@ void main() {
       // different string from the one that ends up on the account.
       final captured = verify(
         () => user.reauthenticateWithCredential(captureAny()),
-      ).captured.single;
+      ).captured.first;
       expect((captured as EmailAuthCredential).password, 'N3wPassw0rd');
-      verify(() => user.updatePassword('N3wPassw0rd')).called(1);
+      verifyNever(() => user.updatePassword(any()));
     });
 
     for (final code in [
@@ -139,13 +145,17 @@ void main() {
     ]) {
       test('treats $code as "different password" and proceeds', () async {
         stubSetup().thenAnswer((_) async {});
-        when(
-          () => user.reauthenticateWithCredential(any()),
-        ).thenThrow(FirebaseAuthException(code: code));
+        var calls = 0;
+        when(() => user.reauthenticateWithCredential(any())).thenAnswer((
+          _,
+        ) async {
+          if (calls++ == 0) throw FirebaseAuthException(code: code);
+          return _FakeUserCredential();
+        });
 
         await service.completeAccountSetup(newPassword: 'N3wPassw0rd!');
 
-        verify(() => user.updatePassword('N3wPassw0rd!')).called(1);
+        verifyNever(() => user.updatePassword(any()));
       });
     }
 
@@ -175,7 +185,7 @@ void main() {
       // Nothing to build a credential from, so setup must still complete
       // rather than dead-end on a check it cannot perform.
       verifyNever(() => user.reauthenticateWithCredential(any()));
-      verify(() => user.updatePassword('N3wPassw0rd!')).called(1);
+      verifyNever(() => user.updatePassword(any()));
     });
   });
 
@@ -193,8 +203,8 @@ void main() {
       );
 
       verifyInOrder([
-        () => user.updatePassword('N3wPassw0rd!'),
         () => employees.completeEmployeeSetup(
+          newPassword: 'N3wPassw0rd!',
           firstName: 'Zoé',
           lastName: 'Roy',
           phone: '(514) 555-1234',
@@ -202,6 +212,8 @@ void main() {
           locationConsent: true,
         ),
       ]);
+      verify(() => user.reauthenticateWithCredential(any())).called(2);
+      verifyNever(() => user.updatePassword(any()));
     });
 
     test('trims the profile it sends', () async {
@@ -214,9 +226,10 @@ void main() {
         phone: '  (514) 555-1234  ',
       );
 
-      verify(() => user.updatePassword('N3wPassw0rd!')).called(1);
+      verifyNever(() => user.updatePassword(any()));
       verify(
         () => employees.completeEmployeeSetup(
+          newPassword: 'N3wPassw0rd!',
           firstName: 'Zoé',
           lastName: 'Roy',
           phone: '(514) 555-1234',
@@ -226,40 +239,22 @@ void main() {
       ).called(1);
     });
 
-    test('never activates when the password change fails', () async {
-      // ORDER IS THE GUARANTEE: the server cannot see a password, so
-      // "you must replace the temporary default" is true only because activation
-      // is unreachable until updatePassword succeeds.
-      when(() => user.updatePassword(any())).thenThrow(
-        FirebaseAuthException(code: 'weak-password'),
-      );
-      stubSetup().thenAnswer((_) async {});
-
-      await expectLater(
-        service.completeAccountSetup(newPassword: 'abc'),
-        throwsA(isA<AuthFailureWeakPassword>()),
-      );
-      verifyNever(
-        () => employees.completeEmployeeSetup(
-          firstName: any(named: 'firstName'),
-          lastName: any(named: 'lastName'),
-          phone: any(named: 'phone'),
-          termsAccepted: any(named: 'termsAccepted'),
-          locationConsent: any(named: 'locationConsent'),
-        ),
-      );
-    });
-
-    test('maps a stale credential to a session-expired failure', () async {
-      when(() => user.updatePassword(any())).thenThrow(
-        FirebaseAuthException(code: 'requires-recent-login'),
-      );
-
-      await expectLater(
-        service.completeAccountSetup(newPassword: 'N3wPassw0rd!'),
-        throwsA(isA<AuthFailureSessionExpired>()),
-      );
-    });
+    test(
+      'maps server password validation without a client Auth write',
+      () async {
+        stubSetup().thenThrow(
+          FirebaseFunctionsException(
+            code: 'invalid-argument',
+            message: 'invalid-newPassword',
+          ),
+        );
+        await expectLater(
+          service.completeAccountSetup(newPassword: 'abc'),
+          throwsA(isA<AuthFailureWeakPassword>()),
+        );
+        verifyNever(() => user.updatePassword(any()));
+      },
+    );
 
     test('fails when there is no signed-in user to act on', () async {
       when(() => auth.currentUser).thenReturn(null);

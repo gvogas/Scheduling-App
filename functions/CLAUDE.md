@@ -3,8 +3,8 @@
 Loaded when working under `functions/`. Root context: `../CLAUDE.md`.
 
 Functions live in `functions/` (project `schedulingapp-88727`, region
-`us-central1`). `index.js` is now a thin wiring surface that re-exports all 29
-functions under their original names (25 until 2026-09-04, when
+`us-central1`). `index.js` is now a thin wiring surface that re-exports 30
+functions in source (the new `syncClientBuilding` is not yet deployed) under their original names (25 until 2026-09-04, when
 `indexed_search.js` and `appointment_actions.js` added four —
 `docs/DEPLOYMENT.md` uses this count as a deploy abort check, so it is
 operational rather than cosmetic) — the implementations are split into
@@ -87,12 +87,13 @@ while `provisionAuthAccount` reset a different person's account. **And the
 rotation itself is deferred:** `provisionAuthAccount` only RESOLVES the uid for
 an existing account; `resetProvisionedPassword` runs after
 `performCreateAccount`'s transaction has claimed the person as still-`invited`
-— which NARROWS the window in which a setup committing mid-call has its chosen
-password reverted, but does not close it: the Auth call is outside both
-transactions, so a `completeEmployeeSetup` landing between the commit and the
-rotation still leaves an `active` employee on a password the admin was handed
-rather than the one they chose. Auth is not transactional; don't record this as
-fixed.
+. Both reset and setup hold `accountOperations/{uid}` across their
+Firestore/Auth work; `account_operation.js` owns the durable lock. Re-provision
+also stamps `setupRequiresPassword: true`, so older builds cannot activate after
+an admin reset. `newPassword` remains optional for untouched legacy invitations.
+Never add automatic expiry/takeover: Auth cannot enforce a Firestore fencing
+version. A killed worker's lock requires operator recovery; see
+`docs/audits/AUDIT_ROLLOUT_2026-09-23.md`.
 The transaction additionally refuses when the uid already belongs to another
 doc — without that, a second doc carrying a live employee's uid made
 `syncUsersByUid` delete their `usersByUid` bridge and locked them out.

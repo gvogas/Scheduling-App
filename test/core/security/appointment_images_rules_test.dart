@@ -72,12 +72,11 @@ void main() {
       );
       expect(
         block,
-        contains(
-          'allow write: if (isAdmin() || '
-          'isAssignedToAppointment(appointmentId))',
-        ),
+        contains('allow create: if (isAdmin() || (resource == null'),
       );
-      // And only the bytes: delete stays admin-only on BOTH sides.
+      expect(block, contains('&& isAssignedToAppointment(appointmentId)))'));
+      expect(block, contains('allow update: if isAdmin()'));
+      expect(block, isNot(contains('allow write: if')));
       expect(block, contains('allow delete: if isAdmin();'));
     });
 

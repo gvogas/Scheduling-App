@@ -14,6 +14,7 @@
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const {getFirestore} = require("firebase-admin/firestore");
+const {randomUUID} = require("node:crypto");
 
 const {
   requireDocId,
@@ -34,22 +35,41 @@ const DELETE_RATE_WINDOW_MS = 60 * 60 * 1000;
  */
 async function performDeleteClient(db, clientId) {
   const ref = db.collection("clients").doc(clientId);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    throw new HttpsError("not-found", "client-not-found");
-  }
+  // A new attempt may take over a crashed attempt, but only the current owner
+  // may delete or release the barrier. Booking rules read this same document.
+  const token = randomUUID();
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("not-found", "client-not-found");
+    tx.update(ref, {deletionToken: token});
+  });
 
-  const agg = await db
-      .collection("appointments")
-      .where("clientId", "==", clientId)
-      .count()
-      .get();
-  const jobs = agg.data().count;
-  if (jobs > 0) {
-    throw new HttpsError("failed-precondition", "client-has-history");
+  try {
+    const agg = await db
+        .collection("appointments")
+        .where("clientId", "==", clientId)
+        .count()
+        .get();
+    if (agg.data().count > 0) {
+      throw new HttpsError("failed-precondition", "client-has-history");
+    }
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) return;
+      if (snap.data().deletionToken !== token) {
+        throw new HttpsError("aborted", "client-delete-superseded");
+      }
+      tx.delete(ref);
+    });
+  } catch (error) {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists && snap.data().deletionToken === token) {
+        tx.update(ref, {deletionToken: ""});
+      }
+    });
+    throw error;
   }
-
-  await ref.delete();
 }
 
 // Guard order per .claude/rules/security.md: auth -> assertAdmin -> payload ->

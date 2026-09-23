@@ -241,7 +241,8 @@ service cloud.firestore {
       allow update: if (isAdmin() || (isSelf() && isAvailabilityOnlyChange()))
             && !request.resource.data.diff(resource.data)
                  .affectedKeys()
-                 .hasAny(['uid', 'termsAcceptedAt', 'locationConsentAt'])
+                 .hasAny(['uid', 'termsAcceptedAt', 'locationConsentAt',
+                          'setupRequiresPassword'])
             && emailMovesThroughAuth()
             && emergencyFieldNotSet('emergencyContact')
             && emergencyFieldNotSet('emergencyPhone')
@@ -354,6 +355,15 @@ service cloud.firestore {
       return v is string && v.size() <= 128 && !v.matches('.*/.*');
     }
 
+    // Empty client links are used by personal jobs. Existing history remains
+    // editable; only creating or changing a link needs an available client.
+    function canLinkClient(d) {
+      let id = d.get('clientId', '');
+      return id == '' || (isValidDocIdField(id)
+        && getAfter(/databases/$(database)/documents/clients/$(id))
+             .data.get('deletionToken', '') == '');
+    }
+
     function isValidAppointmentSpan(d) {
       return !('startTime' in d.keys()) || !('endTime' in d.keys())
         || (d.startTime is timestamp
@@ -423,6 +433,7 @@ service cloud.firestore {
       allow read: if isAdmin() || isAssignedEmployee(resource.data);
 
       allow create: if isAdmin()
+        && canLinkClient(request.resource.data)
         && (!('pictureCount' in request.resource.data.keys())
             || request.resource.data.pictureCount == 0)
         && !request.resource.data.keys().hasAny(['startedAt', 'completedAt'])
@@ -434,6 +445,8 @@ service cloud.firestore {
         && isValidAppointmentSpan(request.resource.data);
 
       allow update: if (isAdmin()
+            && (request.resource.data.get('clientId', '') == resource.data.get('clientId', '')
+                || canLinkClient(request.resource.data))
             && !request.resource.data.diff(resource.data)
                  .affectedKeys()
                  .hasAny(['pictureCount', 'startedAt', 'completedAt'])
@@ -588,6 +601,7 @@ service cloud.firestore {
       // absolute count() aggregate, so a client write must never touch it.
       allow create: if isAdmin()
         && isValidClientData(request.resource.data)
+        && !request.resource.data.keys().hasAny(['deletionToken', 'buildingKey'])
         && !('waveCustomerId' in request.resource.data.keys())
         && !('wave' in request.resource.data.keys())
         && !('jobCount' in request.resource.data.keys());
@@ -595,9 +609,10 @@ service cloud.firestore {
       // fields — an update that leaves them alone has no affected keys, so it's fine.
       allow update: if isAdmin()
         && isValidClientData(request.resource.data)
+        && resource.data.get('deletionToken', '') == ''
         && !request.resource.data.diff(resource.data)
              .affectedKeys()
-             .hasAny(['waveCustomerId', 'wave', 'jobCount']);
+             .hasAny(['waveCustomerId', 'wave', 'jobCount', 'deletionToken', 'buildingKey']);
       // No delete grant, deliberately. Delete belongs to the `deleteClient`
       // callable, which refuses a client that still has appointments. Rules
       // cannot express "only when this client has no appointments" — there is
@@ -605,6 +620,10 @@ service cloud.firestore {
       // the only place that guarantee can live, and nothing may delete a client
       // directly. The 1.37.1 compat grant that kept this open (for that build's
       // ungated Delete button) retired 2026-08-08; don't restore it.
+    }
+
+    match /clientBuildings/{buildingId} {
+      allow read: if isAdmin();
     }
 
     // ── wave (Wave Accounting connection metadata) ────────────────────────────

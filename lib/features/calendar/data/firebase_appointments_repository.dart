@@ -6,6 +6,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:scheduling/core/data/paged_scan.dart';
 import 'package:scheduling/core/data/search_result_cache.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
+import 'package:scheduling/core/performance/performance_trace.dart';
 import 'package:scheduling/core/search/search_tokens.dart';
 import 'package:scheduling/core/utils/firestore_parsing.dart';
 import 'package:scheduling/core/utils/retry.dart';
@@ -83,6 +84,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       SearchResultCache(clock: _clock);
 
   final Map<String, _CachedHistoryScanWindow> _historyWindows = {};
+  final Map<String, Future<_CachedHistoryScanWindow>> _pendingHistoryScans = {};
 
   /// The map key for a scope: `''` for the admin archive, `'emp:<id>'` for one
   /// person's.
@@ -92,6 +94,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   /// Clears callable search results after local appointment writes.
   void _patchWindow(Map<String, Map<String, dynamic>?> changes) {
     _searchCache.clear();
+    _pendingHistoryScans.clear();
     // EVERY scope's window: a technician's is the same archive narrowed, so a
     // write that changes what history holds changes it for them too.
     for (final scope in _historyWindows.keys.toList()) {
@@ -118,6 +121,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   void clearCaches() {
     _searchCache.clear();
     _historyWindows.clear();
+    _pendingHistoryScans.clear();
   }
 
   final StreamController<void> _localWrites = StreamController.broadcast();
@@ -505,7 +509,10 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   Future<List<AppointmentRecord>> fetchInRange(
     AppointmentDateRange range,
   ) async {
-    final snapshot = await retryAsync(() => _rangeQuery(range).get());
+    final snapshot = await PerformanceTrace.measure(
+      PerformanceOperation.calendarRange,
+      () => retryAsync(() => _rangeQuery(range).get()),
+    );
     return _mapRangeSnapshot(snapshot);
   }
 
@@ -590,28 +597,32 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     // technician are two different answers.
     final scope = _scopeKey(employeeId);
     final cacheKey = '$scope|${ClientSearchPolicy.cacheKey(q)}';
-    final cached = _searchCache.read(cacheKey);
-    if (cached != null) return cached;
+    return await _searchCache.getOrLoad(
+      cacheKey,
+      () => _searchHistory(q, employeeId: employeeId, scope: scope),
+    );
+  }
 
+  Future<List<AppointmentRecord>> _searchHistory(
+    String query, {
+    required String? employeeId,
+    required String scope,
+  }) async {
     final functions = _functions;
     if (functions == null) {
       final window = await _historyScanWindow(employeeId, scope: scope);
-      final matches = matchHistoryDocs(
-        HistorySearchScan(docs: window.docs, query: q),
+      return matchHistoryDocs(
+        HistorySearchScan(docs: window.docs, query: query),
       );
-      _searchCache.write(cacheKey, matches);
-      return matches;
     }
 
-    final payload = <String, Object>{'query': q};
+    final payload = <String, Object>{'query': query};
     if (employeeId != null) payload['employeeId'] = employeeId;
 
     final response = await functions
         .httpsCallable('searchHistory')
         .call<Map<String, dynamic>>(payload);
-    final matches = _appointmentsFromCallable(response.data);
-    _searchCache.write(cacheKey, matches);
-    return matches;
+    return _appointmentsFromCallable(response.data);
   }
 
   @override
@@ -758,6 +769,28 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     if (cached != null && _searchCache.isFresh(cached.fetchedAt)) {
       return cached;
     }
+    final existing = _pendingHistoryScans[scope];
+    if (existing != null) return await existing;
+    final pending = _loadHistoryScanWindow(
+      employeeId,
+      scope: scope,
+      generation: _searchCache.generation,
+    );
+    _pendingHistoryScans[scope] = pending;
+    try {
+      return await pending;
+    } finally {
+      if (identical(_pendingHistoryScans[scope], pending)) {
+        unawaited(_pendingHistoryScans.remove(scope));
+      }
+    }
+  }
+
+  Future<_CachedHistoryScanWindow> _loadHistoryScanWindow(
+    String? employeeId, {
+    required String scope,
+    required int generation,
+  }) async {
     final docs = await pageToCap(
       _historyQuery(employeeId).orderBy('startTime', descending: true),
       pageSize: _historySearchPageSize,
@@ -770,7 +803,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     final window = _CachedHistoryScanWindow([
       for (final doc in docs) (id: doc.id, data: doc.data()),
     ], _clock());
-    _historyWindows[scope] = window;
+    if (generation == _searchCache.generation) _historyWindows[scope] = window;
     return window;
   }
 

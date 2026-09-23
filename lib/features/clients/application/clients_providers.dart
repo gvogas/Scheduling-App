@@ -5,6 +5,7 @@ import 'package:scheduling/features/clients/data/firebase_clients_repository.dar
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
+import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/policies/client_building.dart';
 import 'package:scheduling/features/clients/domain/policies/client_search_policy.dart';
 
@@ -63,7 +64,7 @@ final clientsByTypeProvider = FutureProvider.autoDispose
           .fetchClientsByType(type);
     });
 
-/// Clients at one building, from the same cached window as the type filter.
+/// Bounded indexed building read for non-paged consumers.
 final clientsByBuildingProvider = FutureProvider.autoDispose
     .family<List<ClientRecord>, String>((ref, key) async {
       ref.watch(clientsRefreshProvider);
@@ -72,31 +73,10 @@ final clientsByBuildingProvider = FutureProvider.autoDispose
           .fetchClientsByBuilding(key);
     });
 
-/// Every address two or more clients share — the Building menu's options.
-///
-/// **This is EAGER on Clients-tab open, and that is a decision rather than an
-/// oversight** (owner call, 2026-09-01). `ClientsListView.build` watches this
-/// before the filter switch, so opening the
-/// tab pays the paged `orderBy('name')` scan window (capped at
-/// `_clientScanLimit`, ~700 clients today) on top of the paginated list's
-/// first 50 — roughly 14× read amplification on the first open per session,
-/// where it used to be paid only on a search or a filter-chip tap.
-///
-/// It is not deferrable as the surface stands. `ClientAddressFilterMenu`
-/// renders NOTHING when no address is shared — deliberately, since an empty
-/// menu reads as a broken control — so it cannot decide whether to appear
-/// without the very data a deferral would be withholding. Loading on first
-/// open would mean always showing the chip, which reverses that decision.
-///
-/// The cost is also not wasted: this is the SAME cached, TTL'd window that
-/// search, the type chips and the Archived chip read, so the tab open warms
-/// what the next interaction would have fetched anyway.
-///
-/// Removing it for real means not deriving buildings from the client
-/// collection at all — a small server-maintained `buildings` aggregate would
-/// make both the menu and the per-row pill cost O(buildings) instead of
-/// O(clients). That is a design change (function, backfill, index), not a
-/// tweak here.
+/// Shared addresses from the server-maintained catalog. This reads summary
+/// documents rather than downloading the roster to derive building counts.
+/// Reopening the filter sheet or a local refresh reloads the catalog; backend
+/// projections are eventually consistent with client writes.
 final clientBuildingsProvider =
     FutureProvider.autoDispose<List<ClientBuilding>>((ref) async {
       ref.watch(clientsRefreshProvider);
@@ -110,11 +90,19 @@ final clientsTotalCountProvider = FutureProvider.autoDispose<int>((ref) async {
   return await ref.watch(clientsRepositoryProvider).countClients();
 });
 
-/// Archived clients, read from the same bounded cached window as search and
-/// the type filter — so the Archived chip costs no extra read inside the TTL.
+/// Bounded indexed archive read for non-paged consumers.
 final archivedClientsProvider = FutureProvider.autoDispose<List<ClientRecord>>((
   ref,
 ) async {
   ref.watch(clientsRefreshProvider);
   return await ref.watch(clientsRepositoryProvider).fetchArchivedClients();
 });
+
+/// Scoped server search keeps the read bound independent of roster size.
+final clientFilteredSearchProvider = FutureProvider.autoDispose
+    .family<List<ClientRecord>, (String, ClientsFilter)>((ref, key) async {
+      ref.watch(clientsRefreshProvider);
+      return await ref
+          .watch(clientsRepositoryProvider)
+          .searchClients(key.$1, filter: key.$2);
+    });

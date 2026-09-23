@@ -4,6 +4,7 @@ const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {getAuth} = require("firebase-admin/auth");
 const {getMessaging} = require("firebase-admin/messaging");
 const crypto = require("node:crypto");
+const {withAccountOperation} = require("./account_operation");
 const {
   assertPayloadShape,
   requireString,
@@ -177,6 +178,9 @@ async function performCreateAccount(db, fields, opts) {
       // Refresh the editable fields; status and uid are already right.
       tx.update(existing.ref, {
         name, firstName, lastName, phone, colorValue, jobTitle, role, uid,
+        // A legacy setup changed its password before calling us. Once an
+        // admin resets this invitation, only coordinated setup may activate it.
+        setupRequiresPassword: true,
         updatedAt: serverTimestamp(),
       });
       return {ok: true, docId: existing.id};
@@ -231,66 +235,72 @@ const createEmployeeAccount = onCall(APP_CHECK, async (req) => {
   const db = getFirestore();
   const auth = getAuth();
 
-  // Refuse BEFORE touching Auth when the email belongs to a live account.
-  const existingAuth = await auth.getUserByEmail(email).catch(() => null);
-  if (existingAuth) {
-    // Whose account IS this? Resolve by uid — that is the join the bridge and
-    // every rules gate use.
-    const byUid = await db.collection("users")
-        .where("uid", "==", existingAuth.uid).limit(1).get();
-    if (byUid.empty || byUid.docs[0].data().status !== "invited") {
+  // Lock duplicate creates before minting Auth: a losing request must not
+  // roll back an account a different request has already claimed.
+  const emailLock = "email_" + crypto.createHash("sha256")
+      .update(email).digest("hex");
+  return withAccountOperation(db, emailLock, "create", async () => {
+    // Refuse before touching Auth when the account has finished setup.
+    const existingAuth = await auth.getUserByEmail(email).catch((error) => {
+      if (error.code === "auth/user-not-found") return null;
+      throw error;
+    });
+    if (existingAuth) {
+      // Whose account IS this? Resolve by uid — that is the join the bridge and
+      // every rules gate use.
+      const byUid = await db.collection("users")
+          .where("uid", "==", existingAuth.uid).limit(1).get();
+      if (byUid.empty || byUid.docs[0].data().status !== "invited") {
+        throw new HttpsError("already-exists", "email-exists");
+      }
+    }
+    const claimed = await db.collection("users")
+        .where("email", "==", email).limit(1).get();
+    if (!claimed.empty && claimed.docs[0].data().status !== "invited") {
       throw new HttpsError("already-exists", "email-exists");
     }
-  }
-  const claimed = await db.collection("users")
-      .where("email", "==", email).limit(1).get();
-  if (!claimed.empty && claimed.docs[0].data().status !== "invited") {
-    throw new HttpsError("already-exists", "email-exists");
-  }
 
-  // Resolves the uid; for an EXISTING account this deliberately does not touch
-  // the password yet (see resetProvisionedPassword).
-  const startingPassword = generateStartingPassword();
-  const provisioned = existingAuth ?
+    // Resolve the uid without changing an existing password yet.
+    const startingPassword = generateStartingPassword();
+    const provisioned = existingAuth ?
       {uid: existingAuth.uid, reused: true} :
       await provisionAuthAccount(auth, email, name, startingPassword);
 
-  // The refusal is raised INSIDE the try so one catch owns the rollback — "when
-  // do we un-mint the Auth account" must not have two answers to keep in sync.
-  try {
-    const outcome = await performCreateAccount(
-        db,
-        {name, firstName, lastName, email, phone, colorValue, jobTitle},
-        {
-          uid: provisioned.uid,
-          serverTimestamp: () => FieldValue.serverTimestamp(),
-        },
-    );
-    if (!outcome.ok) throw new HttpsError("already-exists", "email-exists");
-    // The doc is claimed and confirmed still-`invited`, so this is now safe:
-    // nobody's chosen password can be behind this uid.
-    if (provisioned.reused) {
-      await resetProvisionedPassword(
-          auth, provisioned.uid, name, startingPassword);
-    }
-  } catch (e) {
-    if (!provisioned.reused) {
-      // A failed rollback leaves an Auth account with no users doc: invisible
-      // to every admin surface, and it permanently bricks that email for
-      // re-creation (the pre-flight above refuses an Auth account whose uid no
-      // doc claims).
-      await auth.deleteUser(provisioned.uid).catch((rollbackError) => {
-        logger.error(
-            "createEmployeeAccount: orphaned auth account; delete it by hand",
-            {uid: provisioned.uid, err: String(rollbackError)},
+    // Keep refusal and rollback under one owner.
+    try {
+      await withAccountOperation(db, provisioned.uid, "provision", async () => {
+        const outcome = await performCreateAccount(
+            db,
+            {name, firstName, lastName, email, phone, colorValue, jobTitle},
+            {
+              uid: provisioned.uid,
+              serverTimestamp: () => FieldValue.serverTimestamp(),
+            },
         );
+        if (!outcome.ok) throw new HttpsError("already-exists", "email-exists");
+        // Setup holds this same lock across its password write and activation.
+        if (provisioned.reused) {
+          await resetProvisionedPassword(
+              auth, provisioned.uid, name, startingPassword);
+        }
       });
+    } catch (e) {
+      if (!provisioned.reused) {
+        // A failed rollback leaves an Auth account no admin surface can see.
+        // Report it so an operator can recover the orphaned account.
+        await auth.deleteUser(provisioned.uid).catch((rollbackError) => {
+          logger.error(
+              "createEmployeeAccount: orphaned auth account; delete it by hand",
+              {uid: provisioned.uid, err: String(rollbackError)},
+          );
+        });
+      }
+      throw e;
     }
-    throw e;
-  }
-  // The password is returned so the admin surface shows exactly what was set
-  // rather than a constant it hopes still matches the server.
-  return {email, password: startingPassword};
+    // The password is returned so the admin surface shows exactly what was set
+    // rather than a constant it hopes still matches the server.
+    return {email, password: startingPassword};
+  });
 });
 
 /**
@@ -519,7 +529,15 @@ const completeEmployeeSetup = onCall(APP_CHECK, async (req) => {
   // when every account was minted on a shared constant.
   assertPayloadShape(req.data, new Set([
     "firstName", "lastName", "phone", "termsAccepted", "locationConsent",
+    "newPassword",
   ]));
+  const hasPassword = req.data?.newPassword !== undefined;
+  const newPassword = hasPassword ?
+    requireString(req.data, "newPassword", 128) : "";
+  if (hasPassword && (newPassword.length < 8 || !/[A-Z]/.test(newPassword) ||
+      !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword))) {
+    throw new HttpsError("invalid-argument", "invalid-newPassword");
+  }
   const firstName = optionalString(req.data, "firstName", 100);
   const lastName = optionalString(req.data, "lastName", 100);
   // 40 mirrors createEmployeeAccount's server cap (the client caps at
@@ -536,24 +554,38 @@ const completeEmployeeSetup = onCall(APP_CHECK, async (req) => {
 
   const db = getFirestore();
   const uid = req.auth.uid;
-  const outcome = await db.runTransaction(async (tx) => {
-    const found = await tx.get(
-        db.collection("users").where("uid", "==", uid).limit(1),
-    );
-    if (found.empty) return {ok: false, reason: "no-account"};
-    const doc = found.docs[0];
-    const userData = doc.data();
-    // Idempotent-ish by refusal: an already-active account must not have its
-    // consent stamps rewritten by a replayed call.
-    if (userData.status !== "invited") {
+  const outcome = await withAccountOperation(db, uid, "setup", async () => {
+    const current = await db.collection("users")
+        .where("uid", "==", uid).limit(2).get();
+    if (current.empty) return {ok: false, reason: "no-account"};
+    if (current.docs.length !== 1 ||
+        current.docs[0].data().status !== "invited") {
       return {ok: false, reason: "not-pending"};
     }
-    const patch = buildActivationPatch(
-        {firstName, lastName, phone, termsAccepted, locationConsent},
-        {userData, serverTimestamp: () => FieldValue.serverTimestamp()},
-    );
-    tx.update(doc.ref, patch);
-    return {ok: true};
+    // Never log or persist this payload. Auth is the only password store.
+    if (hasPassword) await getAuth().updateUser(uid, {password: newPassword});
+    return db.runTransaction(async (tx) => {
+      const found = await tx.get(
+          db.collection("users").where("uid", "==", uid).limit(1),
+      );
+      if (found.empty) return {ok: false, reason: "no-account"};
+      const doc = found.docs[0];
+      const userData = doc.data();
+      // Idempotent-ish by refusal: an already-active account must not have its
+      // consent stamps rewritten by a replayed call.
+      if (userData.status !== "invited") {
+        return {ok: false, reason: "not-pending"};
+      }
+      if (!hasPassword && userData.setupRequiresPassword === true) {
+        throw new HttpsError("failed-precondition", "setup-upgrade-required");
+      }
+      const patch = buildActivationPatch(
+          {firstName, lastName, phone, termsAccepted, locationConsent},
+          {userData, serverTimestamp: () => FieldValue.serverTimestamp()},
+      );
+      tx.update(doc.ref, patch);
+      return {ok: true};
+    });
   });
 
   if (!outcome.ok) {

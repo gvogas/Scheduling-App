@@ -106,11 +106,19 @@ function makeDb(docs, trace, bridge) {
     ref: {id},
   });
 
+  const locks = new Set();
   const db = {
     collection: (name) => ({
       where: (field, _op, value) => makeQuery(field, value),
       doc: (id) => ({
         id: id || "generated-doc-id",
+        create: async () => {
+          if (locks.has(id)) throw Object.assign(Error("busy"), {code: 6});
+          locks.add(id);
+        },
+        delete: async () => {
+          locks.delete(id);
+        },
         get: async () => (name === "usersByUid" ?
           bridgeSnapOf(id) :
           snapOf(id)),
@@ -178,6 +186,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   FieldValue.serverTimestamp = jest.fn(() => "TS");
   getMessaging.mockReturnValue({});
+  getAuth.mockReturnValue(makeAuth([]));
 });
 
 describe("createEmployeeAccount ordering", () => {
@@ -531,6 +540,7 @@ describe("deleteEmployeeAccount callable", () => {
 
 describe("completeEmployeeSetup activation", () => {
   const SETUP = {
+    newPassword: "ChosenSecret123!",
     firstName: "Ada",
     lastName: "Lovelace",
     phone: "(514) 555-1234",
@@ -539,6 +549,53 @@ describe("completeEmployeeSetup activation", () => {
   };
   const invitedDocs = () => ({
     d1: {email: "ada@example.com", uid: "emp-uid", status: "invited"},
+  });
+
+  test("legacy setup remains compatible before an admin reset", async () => {
+    const docs = invitedDocs();
+    getFirestore.mockReturnValue(makeDb(docs, []));
+    await expect(completeEmployeeSetup.run({
+      data: {firstName: "Ada"}, auth: {uid: "emp-uid"},
+    })).resolves.toEqual({ok: true});
+    expect(getAuth().updateUser).not.toHaveBeenCalled();
+  });
+
+  test("legacy setup cannot activate after an admin reset", async () => {
+    const docs = invitedDocs();
+    docs.d1.setupRequiresPassword = true;
+    getFirestore.mockReturnValue(makeDb(docs, []));
+    await expect(completeEmployeeSetup.run({
+      data: {firstName: "Ada"}, auth: {uid: "emp-uid"},
+    })).rejects.toThrow("setup-upgrade-required");
+    expect(docs.d1.status).toBe("invited");
+    expect(getAuth().updateUser).not.toHaveBeenCalled();
+  });
+
+  test("password failure leaves the invitation pending and releases the lock",
+      async () => {
+        const docs = invitedDocs();
+        const db = makeDb(docs, []);
+        const auth = makeAuth([], {updateUserError: Error("password failed")});
+        getFirestore.mockReturnValue(db);
+        getAuth.mockReturnValue(auth);
+        const req = {data: SETUP, auth: {uid: "emp-uid"}};
+        await expect(completeEmployeeSetup.run(req))
+            .rejects.toThrow("password failed");
+        expect(docs.d1.status).toBe("invited");
+        auth.updateUser.mockResolvedValue({});
+        await expect(completeEmployeeSetup.run(req))
+            .resolves.toEqual({ok: true});
+      });
+
+  test("setup refuses a concurrent provisioning operation", async () => {
+    const db = makeDb(invitedDocs(), []);
+    await db.collection("accountOperations").doc("emp-uid").create({});
+    getFirestore.mockReturnValue(db);
+    await expect(completeEmployeeSetup.run({
+      data: SETUP, auth: {uid: "emp-uid"},
+    }))
+        .rejects.toThrow("account-operation-in-progress");
+    expect(getAuth().updateUser).not.toHaveBeenCalled();
   });
 
   test("activates a caller presenting no email claim at all", async () => {

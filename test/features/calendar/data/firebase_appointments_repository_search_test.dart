@@ -1,6 +1,8 @@
 // Mocktail fakes must subclass cloud_firestore's sealed query/snapshot types.
 // ignore_for_file: subtype_of_sealed_class
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -78,6 +80,39 @@ void main() {
 
   FirebaseAppointmentsRepository repo() =>
       FirebaseAppointmentsRepository(firestore);
+
+  test('different concurrent queries share their history scan', () async {
+    final r = repo();
+    final response = Completer<QuerySnapshot<Map<String, dynamic>>>();
+    when(() => query.get()).thenAnswer((_) => response.future);
+    final sophie = r.searchHistory('sophie');
+    final john = r.searchHistory('john');
+    response.complete(snapshot);
+    expect((await sophie).map((a) => a.id), ['a1']);
+    expect((await john).map((a) => a.id), ['a2']);
+    verify(() => query.get()).called(1);
+  });
+
+  test('a scan completing after clear cannot repopulate history', () async {
+    final r = repo();
+    final response = Completer<QuerySnapshot<Map<String, dynamic>>>();
+    when(() => query.get()).thenAnswer((_) => response.future);
+    final old = r.searchHistory('sophie');
+    r.clearCaches();
+    response.complete(snapshot);
+    await old;
+    when(() => snapshot.docs).thenReturn([]);
+    when(() => query.get()).thenAnswer((_) async => snapshot);
+    expect(await r.searchHistory('sophie'), isEmpty);
+  });
+
+  test('an unsuccessful scan is released for the next request', () async {
+    final r = repo();
+    when(() => query.get()).thenThrow(StateError('offline'));
+    await expectLater(r.searchHistory('sophie'), throwsStateError);
+    when(() => query.get()).thenAnswer((_) async => snapshot);
+    expect((await r.searchHistory('sophie')).map((a) => a.id), ['a1']);
+  });
 
   test('returns empty without querying for a blank query', () async {
     expect(await repo().searchHistory('   '), isEmpty);

@@ -18,6 +18,7 @@ const waveTriggers = require("./wave/triggers");
 const clientPropagation = require("./client_propagation");
 const clientJobCount = require("./client_job_count");
 const clients = require("./clients");
+const clientBuildings = require("./client_buildings");
 const appointmentImages = require("./appointment_images");
 const notifications = require("./notifications");
 const indexedSearch = require("./indexed_search");
@@ -34,6 +35,7 @@ exports.cascadeDeleteAppointmentImages =
 exports.recountAppointmentPictures =
   appointmentImages.recountAppointmentPictures;
 exports.deleteClient = clients.deleteClient;
+exports.syncClientBuilding = clientBuildings.syncClientBuilding;
 exports.searchClients = indexedSearch.searchClients;
 exports.searchHistory = indexedSearch.searchHistory;
 exports.findAppointmentConflicts = indexedSearch.findAppointmentConflicts;

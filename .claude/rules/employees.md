@@ -15,6 +15,14 @@ paths:
 Loaded when working on employee records, account provisioning, or
 self-service settings. Root context: `../../CLAUDE.md`.
 
+- **Authorization uses the live user document, not a trigger snapshot.**
+  `bridge_reconcile.js` transactionally reads the current profile and bridge
+  rows before changing authorization. Firestore events may arrive out of order;
+  an old activation must not restore a disabled or deleted account. Preserve
+  bridge ownership checks when removing stale uids. Auth writes are separate,
+  so re-check the live profile after applying access and retry reconciliation
+  when it changes. Invited accounts must remain able to complete setup.
+
 - **Employee accounts: the admin invites, the employee sets up** (P4c,
   2026-08-02 — this REPLACED the one-time signup-code flow entirely). The
   admin's person sheet calls `createEmployeeAccount`, which mints a **Firebase
@@ -45,23 +53,22 @@ self-service settings. Root context: `../../CLAUDE.md`.
   signs in normally; both gates see `invited` and route to
   `AccountSetupScreen`, where they **choose their own password** and fill in
   name/phone/consent → `completeEmployeeSetup` flips the doc to `active`.
-  **ORDER IS THE APP-LAYER GUARANTEE: the password is replaced FIRST,
-  client-side, then the account is activated.** The server cannot see a
-  password, so "you must replace the starting password" holds because
-  `AuthService.completeAccountSetup` calls `User.updatePassword` before the
-  callable — swap the two and an interrupted setup leaves an *active* account
-  still on the password the admin read out. Pinned by a test (`verifyInOrder`,
-  plus the half that matters: a thrown `updatePassword` must `verifyNever` the
-  activation).
-  **Be precise about how strong this is: it is client-side ordering, NOT a
-  server check.** `completeEmployeeSetup` verifies auth + a matching doc +
-  `status == 'invited'`; it does not verify that the password
-  actually rotated, so anything reaching the callable directly activates an
-  un-rotated account. The reauth check above is client-side too — it closes
-  the case of an employee retyping their starting password IN THE APP, not
-  the case of someone calling the callable directly. `enforceAppCheck: true` is all that stands in the way
-  there, and App Check is attestation, not authorization.
-  Don't build on the ordering as if the server enforced it.
+  **Password writes and activation now share a server lock** (2026-09-23,
+  local audit changes). The app sends `newPassword` to `completeEmployeeSetup`;
+  the callable holds `accountOperations/{uid}` across the Auth password update
+  and activation transaction. Admin re-provisioning holds the same lock across
+  its invitation re-check and starting-password reset. Duplicate creates also
+  take an email-hash lock before minting Auth. The app reauthenticates with the
+  chosen password after success to replace its revoked refresh credential.
+  `newPassword` remains optional for older builds. Re-provisioning stamps the
+  server-owned `setupRequiresPassword` flag BEFORE rotating Auth; legacy setup
+  may activate only invitations without that flag. Once flagged, it gets
+  `setup-upgrade-required` and must use the new app. Never clear the flag in a
+  client write or silently fall back to the uncoordinated password path.
+  The different-from-current-password check remains client-side. Auth and
+  Firestore are still separate stores: partial failures can leave an invited
+  account using the chosen password. Locks have no TTL or automatic takeover;
+  recovery instructions are in `docs/audits/AUDIT_ROLLOUT_2026-09-23.md`.
   **Three `AccountSetupScreen` guards that look redundant and are not.**
   Consent is re-checked inside `_submit`, not only by the disabled CTA — the
   confirm-password field's keyboard submit reaches `_submit` without consulting
@@ -93,7 +100,7 @@ self-service settings. Root context: `../../CLAUDE.md`.
   `auth_setUpYourAccountBody` promised them "the temporary one stops working
   once you finish".
   **The replacement is `AuthService._refuseIfStillTheStartingPassword`**, which
-  reauthenticates with the typed value BEFORE `updatePassword`: reauth succeeds
+  reauthenticates with the typed value BEFORE the setup callable: reauth succeeds
   only while that value is still the account's current credential, so success
   means they retyped what they were given →
   `AuthFailureStartingPasswordReused`, surfaced as a FIELD error on the
@@ -132,14 +139,9 @@ self-service settings. Root context: `../../CLAUDE.md`.
   uid denylist restated for the one path that bypasses rules). And resetting
   before the claim meant a setup committing in that window left the person
   active on a password nobody told them had been reverted.
-  **Be precise about what the deferral bought: the window is NARROWED, not
-  closed.** Firestore serializes the two transactions, but the Auth call sits
-  outside both — a `completeEmployeeSetup` that commits between
-  `performCreateAccount` committing and `resetProvisionedPassword` returning
-  still ends with an `active` employee on the freshly issued starting password
-  rather than the one they just chose. That residue is
-  milliseconds wide instead of a whole round trip, and it cannot be closed
-  from here (Auth is not transactional); don't write it up as fixed.
+  The former post-transaction reset race is closed by `withAccountOperation`
+  and the legacy setup barrier described above. Keep the lock held through the
+  Auth call; releasing at the Firestore commit would reopen that race.
   `deleteEmployeeAccount` likewise
   only works while `invited` (transactional, so a setup that commits first makes
   the delete refuse); after that the no-delete invariant applies and disable is

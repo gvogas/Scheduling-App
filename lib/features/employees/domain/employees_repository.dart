@@ -45,6 +45,7 @@ abstract class EmployeesRepository {
   /// cannot see the password, so the order is what makes "you must replace the
   /// default" true.
   Future<void> completeEmployeeSetup({
+    required String newPassword,
     String firstName,
     String lastName,
     String phone,

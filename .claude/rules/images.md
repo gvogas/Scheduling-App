@@ -11,6 +11,13 @@ paths:
 
 Loaded when working on the image pipeline. Root context: `../../CLAUDE.md`.
 
+- **Employee photo uploads must not overwrite existing objects.** Storage's
+  create rule requires `resource == null` on the assignee branch; operation
+  names alone are insufficient because a byte upload can be evaluated as
+  create even at an existing path. Only admins may replace bytes, edit
+  metadata or delete objects. The emulator checks under
+  `functions/__tests__/emulator/` exercise all of these operations.
+
 - **Image validation:** Reject uploads where first 4 bytes aren't JPEG
   (`FF D8 FF`) or PNG (`89 50 4E`). Extension alone is not sufficient.
 - **An uploaded photo's `cacheControl` is `private`, never `public`** (2026-08-25).

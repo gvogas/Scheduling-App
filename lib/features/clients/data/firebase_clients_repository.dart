@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 
 import 'package:scheduling/core/data/paged_scan.dart';
 import 'package:scheduling/core/data/search_result_cache.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
+import 'package:scheduling/core/performance/performance_trace.dart';
 import 'package:scheduling/core/search/search_tokens.dart';
 import 'package:scheduling/core/validators/email_format.dart';
 import 'package:scheduling/core/validators/phone_format.dart';
@@ -11,6 +14,7 @@ import 'package:scheduling/features/clients/domain/clients_failure.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
+import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 import 'package:scheduling/features/clients/domain/policies/client_building.dart';
 import 'package:scheduling/features/clients/domain/policies/client_search_policy.dart';
@@ -24,12 +28,14 @@ class FirebaseClientsRepository implements ClientsRepository {
     DateTime Function()? clock,
     bool? useCallableSearch,
   }) : _clients = firestore.collection('clients'),
+       _firestore = firestore,
        _functions = functions,
        _logger = logger ?? AppLogger(),
        _clock = clock ?? DateTime.now,
        _useCallableSearch = useCallableSearch ?? functions != null;
 
   final CollectionReference<Map<String, dynamic>> _clients;
+  final FirebaseFirestore _firestore;
   final FirebaseFunctions? _functions;
   final AppLogger _logger;
   final bool _useCallableSearch;
@@ -50,6 +56,7 @@ class FirebaseClientsRepository implements ClientsRepository {
 
   // Shared name-ordered scan window serving all queries within the TTL.
   _CachedClientScanWindow? _scanWindow;
+  Future<_CachedClientScanWindow>? _pendingScan;
 
   static const int _clientScanPageSize = 500;
 
@@ -68,23 +75,33 @@ class FirebaseClientsRepository implements ClientsRepository {
 
   // For local writes we patch the written doc into the scan window directly, so
   // search can recompute without an extra read.
-  void _patchWindow(String id, {Map<String, dynamic>? data}) {
+  void _patchWindow(
+    String id, {
+    Map<String, dynamic>? data,
+    bool partial = false,
+  }) {
     final window = _scanWindow;
     if (window != null && _isFresh(window.fetchedAt)) {
       final previous = window.docs
           .where((doc) => doc.id == id)
           .firstOrNull
           ?.data;
+      if (partial && previous == null) {
+        // A patch cannot reconstruct a record outside the loaded window.
+        clearCaches();
+        return;
+      }
       final docs = [
         for (final doc in window.docs)
           if (doc.id != id) doc,
         if (data != null) (id: id, data: {...?previous, ...data}),
       ];
-      _scanWindow = window.patched(docs, id, at: _patchedFetchedAt(window));
+      _scanWindow = window.patched(docs, at: _patchedFetchedAt(window));
     } else {
       _scanWindow = null;
     }
     _searchCache.clear();
+    _pendingScan = null;
   }
 
   /// The raw stored value of each page's LAST document's sort field, keyed by
@@ -103,6 +120,7 @@ class FirebaseClientsRepository implements ClientsRepository {
   void clearCaches() {
     _searchCache.clear();
     _scanWindow = null;
+    _pendingScan = null;
     _pageBoundaryValues.clear();
   }
 
@@ -111,9 +129,10 @@ class FirebaseClientsRepository implements ClientsRepository {
     required int limit,
     ClientRecord? after,
     ClientsSort sort = ClientsSort.name,
+    ClientsFilter filter = const ClientsFilterAll(),
   }) async {
-    var query = _clients
-        .where('archived', isEqualTo: false)
+    final generation = _searchCache.generation;
+    var query = _filteredQuery(filter)
         .orderBy(sort.field, descending: sort.descending)
         .orderBy(FieldPath.documentId);
     if (after != null) {
@@ -123,9 +142,12 @@ class FirebaseClientsRepository implements ClientsRepository {
         after.id,
       ]);
     }
-    final snapshot = await query.limit(limit).get();
+    final snapshot = await PerformanceTrace.measure(
+      PerformanceOperation.clientsPage,
+      () => query.limit(limit).get(),
+    );
     final docs = snapshot.docs;
-    if (docs.isNotEmpty) {
+    if (docs.isNotEmpty && generation == _searchCache.generation) {
       final last = docs.last;
       final cacheKey = '${sort.name}:${last.id}';
       _pageBoundaryValues.remove(cacheKey);
@@ -135,6 +157,24 @@ class FirebaseClientsRepository implements ClientsRepository {
       _pageBoundaryValues[cacheKey] = last.data()[sort.field];
     }
     return docs.map((doc) => ClientRecord.fromMap(doc.id, doc.data())).toList();
+  }
+
+  Query<Map<String, dynamic>> _filteredQuery(ClientsFilter filter) {
+    final query = _clients.where(
+      'archived',
+      isEqualTo: filter is ClientsFilterArchived,
+    );
+    return switch (filter) {
+      ClientsFilterType(:final type) => query.where(
+        'type',
+        isEqualTo: type.raw,
+      ),
+      ClientsFilterBuilding(:final key) => query.where(
+        'buildingKey',
+        isEqualTo: key,
+      ),
+      _ => query,
+    };
   }
 
   @override
@@ -249,73 +289,105 @@ class FirebaseClientsRepository implements ClientsRepository {
       'archived': archived,
       'updatedAt': FieldValue.serverTimestamp(),
     });
-    _patchWindow(id, data: {'archived': archived});
+    _patchWindow(id, data: {'archived': archived}, partial: true);
+  }
+
+  /// Compatibility read for non-paged consumers. Lists and search use bounded queries.
+  Future<List<ClientRecord>> _readFiltered(ClientsFilter filter) async {
+    final docs = await pageToCap(
+      _filteredQuery(filter).orderBy('name').orderBy(FieldPath.documentId),
+      pageSize: _clientScanPageSize,
+      cap: _clientScanLimit,
+      onCapReached: () =>
+          _logger.warn('CLI-FILTER matching clients reached the display cap'),
+    );
+    return docs.map((doc) => ClientRecord.fromMap(doc.id, doc.data())).toList();
   }
 
   @override
-  Future<List<ClientRecord>> fetchArchivedClients() async {
-    final window = await _clientScanWindow();
-    if (window == null) return const [];
-    return sortClients([
-      for (final doc in window.docs)
-        if (doc.data['archived'] == true)
-          ClientRecord.fromMap(doc.id, doc.data),
-    ], ClientsSort.name);
+  Future<List<ClientRecord>> fetchArchivedClients() =>
+      _readFiltered(const ClientsFilterArchived());
+
+  @override
+  Future<List<ClientRecord>> fetchClientsByType(ClientType type) async =>
+      type == ClientType.unset
+      ? const []
+      : await _readFiltered(ClientsFilterType(type));
+
+  @override
+  Future<List<ClientRecord>> fetchClientsByBuilding(String key) async =>
+      key.trim().isEmpty
+      ? const []
+      : await _readFiltered(ClientsFilterBuilding(key));
+
+  @override
+  Future<List<ClientBuilding>> fetchBuildings() async {
+    final docs = await pageToCap(
+      _firestore
+          .collection('clientBuildings')
+          .where('clientCount', isGreaterThanOrEqualTo: 2)
+          .orderBy('clientCount', descending: true),
+      pageSize: _clientScanPageSize,
+      cap: _clientScanLimit,
+      onCapReached: () =>
+          _logger.warn('CLI-BUILDINGS catalog reached the display cap'),
+    );
+    final buildings =
+        [
+          for (final doc in docs)
+            ClientBuilding(
+              key: doc.data()['key'] as String,
+              street: doc.data()['street'] as String,
+              city: doc.data()['city'] as String,
+              clientCount: (doc.data()['clientCount'] as num).toInt(),
+            ),
+        ]..sort((a, b) {
+          final count = b.clientCount.compareTo(a.clientCount);
+          return count != 0 ? count : a.street.compareTo(b.street);
+        });
+    return buildings;
   }
 
   @override
-  Future<List<ClientRecord>> fetchClientsByType(ClientType type) async {
-    if (type == ClientType.unset) return const [];
-    final records = await _windowRecords();
-    return sortClients([
-      for (final record in records)
-        if (record.type == type) record,
-    ], ClientsSort.name);
-  }
-
-  @override
-  Future<List<ClientRecord>> fetchClientsByBuilding(String key) async {
-    if (key.trim().isEmpty) return const [];
-    final window = await _clientScanWindow();
-    if (window == null) return const [];
-    // The keys are already on the window — deriving them again here was a
-    // second full O(window) pass on every building-filter selection.
-    final matches = [
-      for (final record in window.records)
-        if (window.buildingKeys[record.id] == key) record,
-    ];
-    return sortClients(matches, ClientsSort.name);
-  }
-
-  @override
-  Future<List<ClientBuilding>> fetchBuildings() async =>
-      (await _clientScanWindow())?.buildings ?? const [];
-
-  /// The cached scan window as live records, archived clients dropped — the
-  /// shape the type filter and the Building menu both reduce over.
-  Future<List<ClientRecord>> _windowRecords() async =>
-      (await _clientScanWindow())?.records ?? const [];
-
-  @override
-  Future<List<ClientRecord>> searchClients(String query) async {
+  Future<List<ClientRecord>> searchClients(
+    String query, {
+    ClientsFilter filter = const ClientsFilterAll(),
+  }) async {
     final q = query.trim();
     if (!ClientSearchPolicy.shouldSearch(q)) return [];
 
-    final cacheKey = ClientSearchPolicy.cacheKey(q);
-    final cached = _searchCache.read(cacheKey);
-    if (cached != null) return cached;
-
-    final results = _useCallableSearch
-        ? await _searchClientsCallable(q)
-        : await _searchClientsLocal(q);
-    _searchCache.write(cacheKey, results);
-    return results;
+    final cacheKey = jsonEncode([
+      ClientSearchPolicy.cacheKey(q),
+      _filterPayload(filter),
+    ]);
+    return await _searchCache.getOrLoad(
+      cacheKey,
+      () => _useCallableSearch
+          ? _searchClientsCallable(q, filter)
+          : _searchClientsLocal(q, filter),
+    );
   }
 
-  Future<List<ClientRecord>> _searchClientsCallable(String query) async {
+  Map<String, Object> _filterPayload(ClientsFilter filter) => switch (filter) {
+    ClientsFilterAll() => {},
+    ClientsFilterArchived() => {'archived': true},
+    ClientsFilterType(:final type) => {'archived': false, 'type': type.raw},
+    ClientsFilterBuilding(:final key) => {
+      'archived': false,
+      'buildingKey': key,
+    },
+  };
+
+  Future<List<ClientRecord>> _searchClientsCallable(
+    String query,
+    ClientsFilter filter,
+  ) async {
     final response = await _callables
         .httpsCallable('searchClients')
-        .call<Map<String, dynamic>>({'query': query});
+        .call<Map<String, dynamic>>({
+          'query': query,
+          ..._filterPayload(filter),
+        });
     final records = _clientsFromCallable(response.data);
     // The callable ends `orderBy("name")`, so without this the closest number
     // on a fallback rung can land third. This re-ranks the 25 it chose; WHICH
@@ -343,17 +415,45 @@ class FirebaseClientsRepository implements ClientsRepository {
     return [for (final entry in ranked) entry.record];
   }
 
-  Future<List<ClientRecord>> _searchClientsLocal(String query) async {
+  Future<List<ClientRecord>> _searchClientsLocal(
+    String query,
+    ClientsFilter filter,
+  ) async {
     final window = await _clientScanWindow();
-    if (window == null) return const [];
-    return matchClientDocs(ClientSearchScan(docs: window.docs, query: query));
+    final docs = window.docs
+        .where(
+          (doc) => switch (filter) {
+            ClientsFilterAll() => true,
+            ClientsFilterArchived() => doc.data['archived'] == true,
+            ClientsFilterType(:final type) =>
+              doc.data['archived'] != true &&
+                  ClientType.fromRaw(doc.data['type'] as String?) == type,
+            ClientsFilterBuilding(:final key) =>
+              doc.data['archived'] != true &&
+                  buildingKeyFor(ClientRecord.fromMap(doc.id, doc.data)) == key,
+          },
+        )
+        .toList();
+    return matchClientDocs(ClientSearchScan(docs: docs, query: query));
   }
 
-  Future<_CachedClientScanWindow?> _clientScanWindow() async {
+  Future<_CachedClientScanWindow> _clientScanWindow() async {
     final cached = _scanWindow;
     if (cached != null && _isFresh(cached.fetchedAt)) return cached;
+    final existing = _pendingScan;
+    if (existing != null) return await existing;
     _scanWindow = null;
 
+    final pending = _loadClientScanWindow(_searchCache.generation);
+    _pendingScan = pending;
+    try {
+      return await pending;
+    } finally {
+      if (identical(_pendingScan, pending)) _pendingScan = null;
+    }
+  }
+
+  Future<_CachedClientScanWindow> _loadClientScanWindow(int generation) async {
     try {
       final scanned = await pageToCap(
         _clients.orderBy('name').orderBy(FieldPath.documentId),
@@ -361,7 +461,7 @@ class FirebaseClientsRepository implements ClientsRepository {
         cap: _clientScanLimit,
         onCapReached: () => _logger.warn(
           'CLI-SEARCH scan window hit the $_clientScanLimit-doc cap - '
-          'clients past it are invisible to search and to the filter chips',
+          'clients past it are invisible to local fallback search',
         ),
         advance: (query, last) =>
             query.startAfter([(last.data()['name'] ?? '').toString(), last.id]),
@@ -370,11 +470,11 @@ class FirebaseClientsRepository implements ClientsRepository {
         for (final doc in scanned) (id: doc.id, data: doc.data()),
       ];
       final window = _CachedClientScanWindow(docs, _clock());
-      _scanWindow = window;
+      if (generation == _searchCache.generation) _scanWindow = window;
       return window;
     } on FirebaseException catch (e, st) {
       _logger.warn('CLI-SEARCH searchClients failed', e, st);
-      return null;
+      rethrow;
     }
   }
 
@@ -490,86 +590,14 @@ class _CachedClientScanWindow {
     this.docs,
     this.fetchedAt,
     this.firstFetchedAt,
-    this._records,
-    this._buildingKeys,
   );
 
   final List<RawClientDoc> docs;
-
-  /// When this window was last considered current.
   final DateTime fetchedAt;
-
-  /// When the underlying Firestore read actually happened.
   final DateTime firstFetchedAt;
 
-  List<ClientRecord>? _records;
-  Map<String, String?>? _buildingKeys;
-  List<ClientBuilding>? _buildings;
-
-  /// Materialized once per window.
-  List<ClientRecord> get records => _records ??= [
-    for (final doc in docs)
-      if (doc.data['archived'] != true) ClientRecord.fromMap(doc.id, doc.data),
-  ];
-
-  /// Every record's building key, derived ONCE per window.
-  Map<String, String?> get buildingKeys =>
-      _buildingKeys ??= buildingKeysIn(records);
-
-  /// `buildingsIn` runs `buildingKeyFor` over every record, so it is memoized
-  /// on the same key rather than recomputed per Building-menu build — and it
-  /// reads [buildingKeys] rather than deriving them again.
-  List<ClientBuilding> get buildings =>
-      _buildings ??= buildingsIn(records, keys: buildingKeys);
-
-  /// The window after a local write, carrying the derived maps ACROSS it.
   _CachedClientScanWindow patched(
-    List<RawClientDoc> next,
-    String changedId, {
+    List<RawClientDoc> next, {
     required DateTime at,
-  }) {
-    final cachedRecords = _records;
-    // Nothing has read the derived maps yet, so there is nothing to carry and a
-    // plain window is both correct and free.
-    if (cachedRecords == null) {
-      return _CachedClientScanWindow._patched(
-        next,
-        at,
-        firstFetchedAt,
-        null,
-        null,
-      );
-    }
-
-    final doc = next.where((d) => d.id == changedId).firstOrNull;
-    // Absent (a delete) or archived: it leaves `records`, which excludes
-    // archived clients, so the key map must lose the entry rather than keep a
-    // stale one.
-    final record = doc == null || doc.data['archived'] == true
-        ? null
-        : ClientRecord.fromMap(doc.id, doc.data);
-
-    final records = [
-      for (final r in cachedRecords)
-        if (r.id != changedId) r,
-      ?record,
-    ];
-
-    final cachedKeys = _buildingKeys;
-    final buildingKeys = cachedKeys == null
-        ? null
-        : {
-            for (final entry in cachedKeys.entries)
-              if (entry.key != changedId) entry.key: entry.value,
-            if (record != null) record.id: buildingKeyFor(record),
-          };
-
-    return _CachedClientScanWindow._patched(
-      next,
-      at,
-      firstFetchedAt,
-      records,
-      buildingKeys,
-    );
-  }
+  }) => _CachedClientScanWindow._patched(next, at, firstFetchedAt);
 }

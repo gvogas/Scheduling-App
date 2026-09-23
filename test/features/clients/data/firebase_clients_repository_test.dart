@@ -1,6 +1,8 @@
 // Mocktail fakes must subclass cloud_firestore's sealed query/snapshot types.
 // ignore_for_file: subtype_of_sealed_class
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -11,6 +13,7 @@ import 'package:scheduling/features/clients/data/firebase_clients_repository.dar
 import 'package:scheduling/features/clients/domain/clients_failure.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
+import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 
 class _RecordingLogger extends AppLogger {
@@ -102,6 +105,9 @@ void main() {
     when(
       () => query.orderBy(any(), descending: any(named: 'descending')),
     ).thenReturn(query);
+    when(
+      () => query.where(any(), isEqualTo: any(named: 'isEqualTo')),
+    ).thenReturn(query);
     when(() => query.startAfter(any())).thenReturn(query);
     when(() => query.limit(any())).thenReturn(query);
     when(() => query.get()).thenAnswer((_) async => snapshot);
@@ -142,6 +148,59 @@ void main() {
         country: 'Canada',
         postalCode: 'H1H 1H1',
       );
+
+  group('in-flight scan windows', () {
+    test('concurrent local searches share one Firestore scan', () async {
+      final r = repo();
+      final response = Completer<QuerySnapshot<Map<String, dynamic>>>();
+      when(() => query.get()).thenAnswer((_) => response.future);
+      final search = r.searchClients('smith');
+      final archived = r.searchClients('archived');
+      final buildings = r.searchClients('building');
+      response.complete(snapshot);
+      await Future.wait<Object>([search, archived, buildings]);
+      verify(() => query.get()).called(1);
+    });
+
+    test('a scan completing after sign-out cannot repopulate caches', () async {
+      final r = repo();
+      final response = Completer<QuerySnapshot<Map<String, dynamic>>>();
+      final oldSnapshot = _MockQuerySnapshot();
+      final oldDocs = [
+        doc('old', {'name': 'Smith', 'archived': true}),
+      ];
+      when(() => oldSnapshot.docs).thenReturn(oldDocs);
+      when(() => query.get()).thenAnswer((_) => response.future);
+      final old = r.searchClients('smith');
+      r.clearCaches();
+      response.complete(oldSnapshot);
+      await old;
+      when(() => query.get()).thenAnswer((_) async => snapshot);
+      expect(await r.searchClients('smith'), isEmpty);
+      expect(await r.fetchArchivedClients(), isEmpty);
+    });
+
+    test('a local write invalidates scans already in flight', () async {
+      final r = repo();
+      final response = Completer<QuerySnapshot<Map<String, dynamic>>>();
+      final oldSnapshot = _MockQuerySnapshot();
+      final oldDocs = [
+        doc('c1', {'name': 'Smith', 'archived': false}),
+      ];
+      when(() => oldSnapshot.docs).thenReturn(oldDocs);
+      when(() => query.get()).thenAnswer((_) => response.future);
+      final old = r.fetchArchivedClients();
+      await r.setClientArchived('c1', archived: true);
+      response.complete(oldSnapshot);
+      await old;
+      final currentDocs = [
+        doc('c1', {'name': 'Smith', 'archived': true}),
+      ];
+      when(() => snapshot.docs).thenReturn(currentDocs);
+      when(() => query.get()).thenAnswer((_) async => snapshot);
+      expect((await r.fetchArchivedClients()).map((c) => c.id), ['c1']);
+    });
+  });
 
   group('addClient', () {
     test('writes normalized email with createdAt and updatedAt', () async {
@@ -588,295 +647,120 @@ void main() {
     });
   });
 
-  group('building filtering', () {
-    List<QueryDocumentSnapshot<Map<String, dynamic>>> paton() => [
-      doc('c1', {
-        'name': 'Zeta',
-        'address': '914-4450 Prom. Paton',
-        'city': 'Laval',
-        'province': 'QC',
-        'postalCode': 'H7W 5J7',
-        'country': 'Canada',
-      }),
-      doc('c2', {
-        'name': 'Alpha',
-        // Legacy shape — the locality is in `address` AND in its own fields,
-        // which is exactly what makes it reduce to the same building.
-        'address': '1207-4450 Prom. Paton, Laval, QC H7W 5J7, Canada',
-        'city': 'Laval',
-        'province': 'QC',
-        'postalCode': 'H7W 5J7',
-        'country': 'Canada',
-      }),
-      doc('c3', {
-        'name': 'Elsewhere',
-        'address': '7 Rue Seule',
-        'city': 'Laval',
-        'province': 'QC',
-      }),
-    ];
+  group('indexed filters', () {
+    test('building page constrains the server query before limiting', () async {
+      await repo().fetchClientsPage(
+        limit: 50,
+        filter: const ClientsFilterBuilding('street|city'),
+      );
+      verify(() => collection.where('archived', isEqualTo: false)).called(1);
+      verify(
+        () => query.where('buildingKey', isEqualTo: 'street|city'),
+      ).called(1);
+      verify(() => query.limit(50)).called(1);
+      verifyNever(
+        () => collection.orderBy(any(), descending: any(named: 'descending')),
+      );
+    });
 
-    test('fetchBuildings groups shared addresses only', () async {
-      // Built before `when` — `doc()` stubs internally, and mocktail refuses a
-      // `when` inside a stub response.
-      final docs = paton();
+    test('type filter uses indexed equality', () async {
+      await repo().fetchClientsByType(ClientType.commercial);
+      verify(() => collection.where('archived', isEqualTo: false)).called(1);
+      verify(() => query.where('type', isEqualTo: 'commercial')).called(1);
+    });
+
+    test('unset type and blank building need no reads', () async {
+      final r = repo();
+      expect(await r.fetchClientsByType(ClientType.unset), isEmpty);
+      expect(await r.fetchClientsByBuilding(' '), isEmpty);
+      verifyNever(() => query.get());
+    });
+
+    test('building menu reads summaries instead of client documents', () async {
+      final catalog = _MockCollection();
+      when(() => firestore.collection('clientBuildings')).thenReturn(catalog);
+      when(
+        () => catalog.where('clientCount', isGreaterThanOrEqualTo: 2),
+      ).thenReturn(query);
+      final docs = [
+        doc('building', {
+          'key': 'street|city',
+          'street': 'Street',
+          'city': 'City',
+          'clientCount': 17,
+        }),
+      ];
       when(() => snapshot.docs).thenReturn(docs);
-
       final buildings = await repo().fetchBuildings();
-
-      expect(buildings, hasLength(1));
-      expect(buildings.single.street, '4450 Prom. Paton');
-      expect(buildings.single.clientCount, 2);
+      expect(buildings.single.clientCount, 17);
+      verifyNever(
+        () => collection.orderBy(any(), descending: any(named: 'descending')),
+      );
+      verify(() => query.orderBy('clientCount', descending: true)).called(1);
     });
 
-    test('fetchClientsByBuilding returns both shapes, name-sorted', () async {
-      final docs = paton();
-      when(() => snapshot.docs).thenReturn(docs);
-      final key = (await repo().fetchBuildings()).single.key;
+    test(
+      'archive outside the scan invalidates instead of inserting a partial row',
+      () async {
+        final r = repo();
+        await r.searchClients('Smith');
+        await r.setClientArchived('unloaded', archived: false);
+        final docs = [
+          doc('unloaded', {'name': 'Smith', 'jobCount': 4}),
+        ];
+        when(() => snapshot.docs).thenReturn(docs);
+        final result = await r.searchClients('Smith');
+        expect(result.single.name, 'Smith');
+        expect(result.single.jobCount, 4);
+        verify(() => query.get()).called(2);
+      },
+    );
 
-      final clients = await repo().fetchClientsByBuilding(key);
-
-      expect(clients.map((c) => c.name), ['Alpha', 'Zeta']);
-    });
-
-    test('an archived client is not counted or listed', () async {
-      // Same rule the type filter keeps: the Archived chip is where they live.
-      final docs = [
-        doc('c1', {
-          'name': 'Live',
-          'address': '914-4450 Prom. Paton',
-          'city': 'Laval',
-        }),
-        doc('c2', {
-          'name': 'Gone',
-          'address': '1207-4450 Prom. Paton',
-          'city': 'Laval',
-          'archived': true,
-        }),
-      ];
-      when(() => snapshot.docs).thenReturn(docs);
-
-      // One live client at that address is not a building.
-      expect(await repo().fetchBuildings(), isEmpty);
-    });
-
-    test('an empty key selects nothing', () async {
-      final docs = paton();
-      when(() => snapshot.docs).thenReturn(docs);
-      expect(await repo().fetchClientsByBuilding(''), isEmpty);
-    });
-
-    test('a client with no address at all forms no building', () async {
-      final docs = [
-        ...paton(),
-        doc('c4', {'name': 'Nowhere'}),
-      ];
-      when(() => snapshot.docs).thenReturn(docs);
+    test('failed scans surface the error and remain retryable', () async {
       final r = repo();
-
-      final key = (await r.fetchBuildings()).single.key;
-
-      expect(
-        (await r.fetchClientsByBuilding(key)).map((c) => c.id),
-        unorderedEquals(['c1', 'c2']),
+      when(() => query.get()).thenThrow(
+        FirebaseException(plugin: 'cloud_firestore', code: 'unavailable'),
       );
+      await expectLater(
+        r.searchClients('Smith'),
+        throwsA(isA<FirebaseException>()),
+      );
+      when(() => query.get()).thenAnswer((_) async => snapshot);
+      expect(await r.searchClients('Smith'), isEmpty);
+      verify(() => query.get()).called(2);
     });
 
-    test('the selection agrees with the count the menu offers', () async {
-      // They come off one cached window and one derivation; a disagreement
-      // between them would show a building the filter cannot fill.
-      final docs = paton();
-      when(() => snapshot.docs).thenReturn(docs);
-      final r = repo();
-
-      final building = (await r.fetchBuildings()).single;
-
-      expect(
-        await r.fetchClientsByBuilding(building.key),
-        hasLength(building.clientCount),
-      );
-    });
-
-    // `_patchWindow` carries the already-materialized records and building keys
-    // across a local write and re-derives only the one client that changed,
-    // rather than discarding the window's memos and rebuilding every record and
-    // key on the UI isolate.
-    group('a local write patches the derived maps in place', () {
-      ClientRecord patonClient(String id, String name, String address) =>
-          ClientRecord(
-            id: id,
-            name: name,
-            address: address,
-            city: 'Laval',
-            province: 'QC',
-            postalCode: 'H7W 5J7',
-            country: 'Canada',
-          );
-
-      test(
-        'an edit that moves a client INTO the building recounts it',
-        () async {
-          final docs = paton();
-          when(() => snapshot.docs).thenReturn(docs);
-          final r = repo();
-          // Materialize the memos first — this is the state the patch reuses.
-          expect((await r.fetchBuildings()).single.clientCount, 2);
-
-          await r.updateClient(
-            patonClient('c3', 'Elsewhere', '88-4450 Prom. Paton'),
-          );
-
-          final buildings = await r.fetchBuildings();
-          expect(buildings.single.clientCount, 3);
-          // The two clients that did not change stay in the building.
-          expect(
-            (await r.fetchClientsByBuilding(buildings.single.key))
-                .map((c) => c.id),
-            containsAll(['c1', 'c2', 'c3']),
-          );
-        },
-      );
-
-      test(
-        'an edit that moves a client OUT drops it from the building',
-        () async {
-          final docs = paton();
-          when(() => snapshot.docs).thenReturn(docs);
-          final r = repo();
-          final key = (await r.fetchBuildings()).single.key;
-
-          // A street nothing else in the window shares, so moving c1 there can
-          // only dissolve Paton rather than form a second building with c3.
-          await r.updateClient(patonClient('c1', 'Zeta', '12 Rue Unique'));
-
-          expect(
-            (await r.fetchClientsByBuilding(key)).map((c) => c.id),
-            ['c2'],
-          );
-          // One client left at Paton is below the 2-client minimum.
-          expect(await r.fetchBuildings(), isEmpty);
-        },
-      );
-
-      test('an untouched client is NOT rebuilt across a write', () async {
-        // The point of the patch, asserted the only way it can be from outside:
-        // a record the write did not touch comes back as the SAME instance,
-        // which is only true if the window carried it across instead of
-        // re-running `ClientRecord.fromMap` over the whole scan.
-        final docs = paton();
+    test(
+      'local search scopes before result limiting and caches each scope separately',
+      () async {
+        final docs = [
+          doc('active', {
+            'name': 'Smith',
+            'archived': false,
+            'type': 'commercial',
+          }),
+          doc('archived', {'name': 'Smith', 'archived': true}),
+        ];
         when(() => snapshot.docs).thenReturn(docs);
         final r = repo();
-        final key = (await r.fetchBuildings()).single.key;
-        final before = (await r.fetchClientsByBuilding(
-          key,
-        )).firstWhere((c) => c.id == 'c2');
-
-        await r.updateClient(patonClient('c1', 'Zeta', '12 Rue Unique'));
-
-        final after = (await r.fetchClientsByBuilding(
-          key,
-        )).firstWhere((c) => c.id == 'c2');
-        expect(identical(before, after), isTrue);
-      });
-
-      test('archiving removes the client from the derived maps', () async {
-        final docs = paton();
-        when(() => snapshot.docs).thenReturn(docs);
-        final r = repo();
-        expect((await r.fetchBuildings()).single.clientCount, 2);
-
-        await r.setClientArchived('c1', archived: true);
-
-        // Archived clients are excluded from `records`, so the derived maps
-        // must lose the entry rather than keep a stale one.
-        expect(await r.fetchBuildings(), isEmpty);
-      });
-
-      test('deleting removes the client from the derived maps', () async {
-        final docs = paton();
-        when(() => snapshot.docs).thenReturn(docs);
-        final r = repo();
-        expect((await r.fetchBuildings()).single.clientCount, 2);
-
-        await r.deleteClient('c1');
-
-        expect(await r.fetchBuildings(), isEmpty);
-      });
-    });
-  });
-
-  group('type filtering', () {
-    test('fetchClientsByType returns only that type, name-sorted', () async {
-      final docs = [
-        doc('c1', {'name': 'Zeta', 'type': 'commercial'}),
-        doc('c2', {'name': 'Untyped'}),
-        doc('c3', {'name': 'Alpha', 'type': 'commercial'}),
-        doc('c4', {'name': 'Other', 'type': 'residential'}),
-      ];
-      when(() => snapshot.docs).thenReturn(docs);
-
-      final typed = await repo().fetchClientsByType(ClientType.commercial);
-
-      expect(typed.map((c) => c.name), ['Alpha', 'Zeta']);
-    });
-
-    test('a doc with no type is in no type filter', () async {
-      final docs = [
-        doc('c1', {'name': 'Legacy'}),
-      ];
-      when(() => snapshot.docs).thenReturn(docs);
-
-      for (final type in ClientType.pickable) {
-        expect(await repo().fetchClientsByType(type), isEmpty);
-      }
-    });
-
-    test('an unknown stored type falls into no filter', () async {
-      final docs = [
-        doc('c1', {'name': 'Odd', 'type': 'industrial'}),
-      ];
-      when(() => snapshot.docs).thenReturn(docs);
-
-      for (final type in ClientType.pickable) {
-        expect(await repo().fetchClientsByType(type), isEmpty);
-      }
-    });
-
-    test('filtering on unset reads nothing rather than everything', () async {
-      final docs = [
-        doc('c1', {'name': 'A', 'type': 'commercial'}),
-        doc('c2', {'name': 'B'}),
-      ];
-      when(() => snapshot.docs).thenReturn(docs);
-
-      expect(await repo().fetchClientsByType(ClientType.unset), isEmpty);
-    });
-
-    test('property mgmt maps from its stored raw value', () async {
-      final docs = [
-        doc('c1', {'name': 'Gestion', 'type': 'building'}),
-      ];
-      when(() => snapshot.docs).thenReturn(docs);
-
-      final typed = await repo().fetchClientsByType(ClientType.building);
-
-      expect(typed.single.name, 'Gestion');
-    });
-
-    test('the type filter shares the search scan window (one read)', () async {
-      final docs = [
-        doc('c1', {'name': 'A', 'type': 'commercial'}),
-      ];
-      when(() => snapshot.docs).thenReturn(docs);
-
-      final r = repo();
-      await r.fetchClientsByType(ClientType.commercial);
-      await r.fetchClientsByType(ClientType.residential);
-      await r.searchClients('A');
-
-      // The filter costs no extra Firestore read inside the cache TTL.
-      verify(() => query.get()).called(1);
-    });
+        expect((await r.searchClients('Smith')).length, 2);
+        expect(
+          (await r.searchClients(
+            'Smith',
+            filter: const ClientsFilterArchived(),
+          )).single.id,
+          'archived',
+        );
+        expect(
+          (await r.searchClients(
+            'Smith',
+            filter: const ClientsFilterType(ClientType.commercial),
+          )).single.id,
+          'active',
+        );
+        verify(() => query.get()).called(1);
+      },
+    );
   });
 
   group('archiving', () {
@@ -913,43 +797,13 @@ void main() {
       },
     );
 
-    test('fetchArchivedClients returns only archived, name-sorted', () async {
-      final docs = [
-        doc('c1', {'name': 'Zeta', 'archived': true}),
-        doc('c2', {'name': 'Acme', 'archived': true}),
-        doc('c3', {'name': 'Bell', 'archived': false}),
-        doc('c4', {'name': 'Legacy'}),
-      ];
-      when(() => snapshot.docs).thenReturn(docs);
-
-      final result = await repo().fetchArchivedClients();
-
-      expect(result.map((c) => c.name), ['Acme', 'Zeta']);
-    });
-
-    test('fetchArchivedClients shares the search scan window', () async {
-      final docs = [
-        doc('c1', {'name': 'Acme', 'archived': true}),
-      ];
-      when(() => snapshot.docs).thenReturn(docs);
-
-      final r = repo();
-      await r.fetchArchivedClients();
-      await r.searchClients('Acme');
-
-      verify(() => query.get()).called(1);
-    });
-
-    test('fetchClientsByType excludes archived clients', () async {
-      final docs = [
-        doc('c1', {'name': 'Acme', 'type': 'commercial', 'archived': false}),
-        doc('c2', {'name': 'Bell', 'type': 'commercial', 'archived': true}),
-      ];
-      when(() => snapshot.docs).thenReturn(docs);
-
-      final result = await repo().fetchClientsByType(ClientType.commercial);
-
-      expect(result.map((c) => c.name), ['Acme']);
+    test('archived page constrains the query on the server', () async {
+      await repo().fetchClientsPage(
+        limit: 50,
+        filter: const ClientsFilterArchived(),
+      );
+      verify(() => collection.where('archived', isEqualTo: true)).called(1);
+      verify(() => query.limit(50)).called(1);
     });
 
     test('searchClients still returns archived clients', () async {

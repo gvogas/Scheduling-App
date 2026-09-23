@@ -30,7 +30,7 @@ class ClientsListHeader extends StatelessWidget {
 
   /// The roster size, when it is known and larger than [count] — the list
   /// pages, so the rows it holds are not "all" of anything until they are.
-  /// Null for the filtered slices, which load whole.
+  /// Null when no separate total has been fetched for the selected filter.
   final int? total;
 
   /// True while a search narrows the unfiltered list: [count] is its matches.

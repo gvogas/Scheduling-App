@@ -306,16 +306,16 @@ void main() {
   );
 
   group('completeEmployeeSetup', () {
-    test('always sends all five keys', () async {
+    test('sends the password and all profile keys', () async {
       // The server reads the strings leniently (empty == absent) and the flags
       // as `=== true`, so a conditional payload shape would be a second thing
       // to test for no benefit.
       final callable = stubCallable('completeEmployeeSetup');
 
-      await repo().completeEmployeeSetup();
+      await repo().completeEmployeeSetup(newPassword: 'ChosenSecret123!');
 
       final captured = capturedPayload(callable);
-      expect(captured.keys, hasLength(5));
+      expect(captured.keys, hasLength(6));
       expect(captured['firstName'], '');
       expect(captured['termsAccepted'], isFalse);
       expect(captured['locationConsent'], isFalse);
@@ -325,6 +325,7 @@ void main() {
       final callable = stubCallable('completeEmployeeSetup');
 
       await repo().completeEmployeeSetup(
+        newPassword: 'ChosenSecret123!',
         firstName: 'Zoé',
         lastName: 'Roy',
         phone: '(514) 555-1234',
@@ -344,6 +345,7 @@ void main() {
       final callable = stubCallable('completeEmployeeSetup');
 
       await repo().completeEmployeeSetup(
+        newPassword: 'ChosenSecret123!',
         firstName: '  Zoe ',
         lastName: ' Roy ',
         phone: ' (514) 555-1234 ',

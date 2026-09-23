@@ -56,7 +56,13 @@ service firebase.storage {
       // (`validateUploadedImage`), which deletes a non-JPEG/PNG object
       // server-side. `firestore.rules` grants the matching row create at the
       // same path.
-      allow write: if (isAdmin() || isAssignedToAppointment(appointmentId))
+      allow create: if (isAdmin() || (resource == null
+            && isAssignedToAppointment(appointmentId)))
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/(jpeg|png)');
+
+      // Assignees may add evidence, but only admins may replace existing bytes.
+      allow update: if isAdmin()
         && request.resource.size < 10 * 1024 * 1024
         && request.resource.contentType.matches('image/(jpeg|png)');
 
