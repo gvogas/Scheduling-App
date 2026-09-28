@@ -176,6 +176,24 @@ void main() {
       verifyNever(() => user.updatePassword(any()));
     });
 
+    test('a failed session renewal after activation still completes', () async {
+      stubSetup().thenAnswer((_) async {});
+      var calls = 0;
+      when(() => user.reauthenticateWithCredential(any())).thenAnswer((
+        _,
+      ) async {
+        if (calls++ == 0) throw FirebaseAuthException(code: 'wrong-password');
+        throw FirebaseAuthException(code: 'network-request-failed');
+      });
+
+      // The server already set the password and activated the account, so
+      // reporting this as a failure would send a retry to `not-pending`.
+      await expectLater(
+        service.completeAccountSetup(newPassword: 'N3wPassw0rd!'),
+        completes,
+      );
+    });
+
     test('skips the check when the account carries no email', () async {
       stubSetup().thenAnswer((_) async {});
       when(() => user.email).thenReturn(null);

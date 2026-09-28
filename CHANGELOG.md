@@ -10,6 +10,40 @@ All notable changes to this project are documented here.
 The `+N` build number after the version (e.g. `1.1.0+5`) is the store version
 code; it increments by one on every store upload regardless of the semver part.
 
+## [1.62.1+92] - 2026-09-28
+
+Client filters that reach the whole list, a sturdier first sign-in for new
+team members, and tighter protection for job photos.
+
+### Changed
+- **Client filters now load the whole list, page by page.** Filtering by
+  type, by address or to Archived used to read a large batch of clients up
+  front. It now loads like the full list does, 50 at a time, and every sort
+  works under every filter.
+- **Searching with a filter on searches only that filter.** A search while
+  "Commercial" or an address is picked looks through those clients only, and
+  no longer stops short on a very large client list.
+- **A filtered client list is one card, without letter headings**, the same
+  as the unfiltered list.
+- **The address filter's list of shared addresses comes from a running
+  tally.** Opening the filter no longer reads the whole client list first. A
+  just-edited address can take a moment to move to its new group.
+
+### Fixed
+- **Setting up a new account can no longer end on the wrong password.** The
+  password a new team member picks is now saved in the same step that
+  finishes their setup. If an admin issues a new starting password while the
+  person is part-way through, setup can no longer finish on the old password
+  or skip the new one.
+- **Crew members can add job photos but can no longer replace existing
+  ones.** Replacing or removing a photo stays with admins.
+- **Search results no longer go stale.** A search you repeat often now
+  refreshes on schedule instead of showing the same answer indefinitely, and
+  a search that was still loading when you saved or signed out can no longer
+  bring back the old results.
+- **A client being deleted can no longer get a new job booked in the
+  meantime**, and can't be edited until the delete finishes or is refused.
+
 ## [1.62.0+91] - 2026-09-19
 
 A month-end review for jobs nobody closed, a crew map that shows who is

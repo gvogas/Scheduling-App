@@ -1,13 +1,16 @@
 # Cloud Functions Reference
 
-**Local changes, 2026-09-23 (not deployed):** source now has 30 exports with
-`syncClientBuilding`, coordinated password setup/reset, client deletion barriers,
-and optional client search filters. Historical deployment counts below describe
-production at their recorded dates. See [audit rollout](audits/AUDIT_ROLLOUT_2026-09-23.md).
-
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
-refreshed 2026-09-19 (release 1.62.0+91 — **still 29 exports, all DEPLOYED**: the
+refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
+and NOT YET DEPLOYED; the other 29 are deployed at `bec23b85`**, though five of
+their bodies changed in source and are also undeployed: `createEmployeeAccount`
+and `completeEmployeeSetup` (per-account operation lock, optional `newPassword`),
+`syncUsersByUid` (transactional live reconciliation), `deleteClient` (deletion
+barrier) and `searchClients` (optional `archived`/`type`/`buildingKey` filters).
+Deploy ordering — rules, then the nine new client composites READY, then
+functions, then `functions/scripts/backfill-client-buildings.js` — is in
+[audit rollout](audits/AUDIT_ROLLOUT_2026-09-23.md). Previously refreshed 2026-09-19 (release 1.62.0+91 — **still 29 exports, all DEPLOYED**: the
 month-end overdue rider on `sendDailyJobDigest` and Wave Phase 4 (the `worker.js`
 split, the guarded import updates, the cadence deleted and
 `waveSetImportSchedule` retired to a no-op) went live 2026-09-19 16:37Z
@@ -193,7 +196,13 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
   *count* never moved (25 throughout, `index.js` untouched), so a count check
   looked clean for three days while prod ran older bodies — check the deploy
   log, not the count.
-- **29 functions defined and 29 DEPLOYED**, verified by NAME rather than by
+- **30 functions defined, 29 DEPLOYED** (2026-09-28, release 1.62.1+92):
+  `syncClientBuilding` is the only export not live, and five deployed bodies
+  changed in source since `bec23b85` (see the refresh stamp above). Until that
+  deploy no `clientBuildings` catalog exists and `archived`/`buildingKey` are
+  unstamped, so rules, indexes, functions and `backfill-client-buildings.js` go
+  out in the rollout doc's order.
+- **29 functions defined and 29 DEPLOYED** as of 2026-09-13, verified by NAME rather than by
   count on 2026-09-07 and again on 2026-09-13 after `38c8225b`
   (`functions_list_functions` diffed against the 29 `exports.` in `index.js`:
   zero missing, zero orphans). The 25 -> 29 deploy ran
@@ -307,20 +316,21 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
 | `placesGetDetails` | callable | `onCall` | `places.js` | `google_places_repository.dart` (address selected) | `GOOGLE_MAP_API_KEY` | App Check ✓ · admin · durable 40/15min |
 | `placesReverseGeocode` | callable | `onCall` | `places.js` | live staff-location map (admin) | `GOOGLE_MAP_API_KEY` | App Check ✓ · admin · durable 120/hr |
 | `deleteAccount` | callable | `onCall` | `account.js` | `account_deletion_service.dart` | — | App Check ✓ · reauth ≤5min · durable 5/15min |
-| `createEmployeeAccount` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (invite sheet, roster row Reset password) | — | App Check ✓ · admin · durable 20/hr·uid |
-| `completeEmployeeSetup` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` → `auth_service.dart` (account setup screen) | — | App Check ✓ · authed (own doc) · durable 5/15min·uid |
+| `createEmployeeAccount` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (invite sheet, roster row Reset password) | — | App Check ✓ · admin · durable 20/hr·uid · `accountOperations` locks (email hash + uid) |
+| `completeEmployeeSetup` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` → `auth_service.dart` (account setup screen) | — | App Check ✓ · authed (own doc) · durable 5/15min·uid · `accountOperations` lock · optional `newPassword` |
 | `deleteEmployeeAccount` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (pending-account row) | — | App Check ✓ · admin · durable 20/hr·uid |
 | `changeEmployeeEmail` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (inside `updateEmployee`, when the email changed on a doc with a `uid`); `self_email_service.dart` (a person changing their own) | — | App Check ✓ · admin **or self** · non-admin also needs re-auth <5 min · durable 5/hr·uid |
 | `waveBootstrap` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` | `WAVE_FULL_ACCESS_TOKEN`, `WAVE_BUSINESS_NAME` | App Check ✓ · admin · durable 10/hr |
 | `waveGetConnection` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (Settings mount) | — | App Check ✓ · admin · durable 60/hr |
 | `waveSetImportSchedule` | callable | `onCall` | `wave/callables.js` | none in the current app; builds ≤ 1.61.0 (Settings cadence picker) | — | App Check ✓ · admin · RETIRED no-op, `#compat-1.61.0` |
 | `waveImportCustomers` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (`syncCustomers`, Settings "Sync with Wave") | `WAVE_FULL_ACCESS_TOKEN` | App Check ✓ · admin · durable 5/hr · 300s |
-| `searchClients` | callable | `onCall` | `indexed_search.js` | `firebase_clients_repository.dart` (`searchClients`, the debounced clients/history search bar) | — | App Check ✓ · `assertAdminCall` (clients are PII) |
+| `searchClients` | callable | `onCall` | `indexed_search.js` | `firebase_clients_repository.dart` (`searchClients`, the debounced clients/history search bar) | — | App Check ✓ · `assertAdminCall` (clients are PII) · optional `archived`/`type`/`buildingKey` filters |
 | `searchHistory` | callable | `onCall` | `indexed_search.js` | `firebase_appointments_repository.dart` (`searchHistory`, History screen + the technician's own History) | — | App Check ✓ · `assertActiveCall` · scope from role: `all:` for admin, own doc id for an employee |
 | `findAppointmentConflicts` | callable | `onCall` | `indexed_search.js` | `firebase_appointments_repository.dart` (`findClashingAppointments`/`findBusyEmployees`, pre-save clash check + assignee picker) | — | App Check ✓ · `assertActiveCall` · a non-admin is narrowed to their own doc id |
 | `restoreAppointmentStatus` | callable | `onCall` | `appointment_actions.js` | `firebase_appointments_repository.dart` (`restoreAppointmentStatus`, the mark-complete Undo) | — | App Check ✓ · `assertActiveCall` · admin **or assigned** · target must be `pending`/`in_progress` |
-| `deleteClient` | callable | `onCall` | `clients.js` | `firebase_clients_repository.dart` | — | App Check ✓ · admin · durable 20/hr |
-| `syncUsersByUid` | trigger | `onDocumentWritten users/{id}` | `bridge.js` | any `users` doc write | — | `retry: true` |
+| `deleteClient` | callable | `onCall` | `clients.js` | `firebase_clients_repository.dart` | — | App Check ✓ · admin · durable 20/hr · deletion-token barrier |
+| `syncUsersByUid` | trigger | `onDocumentWritten users/{id}` | `bridge.js` | any `users` doc write | — | `retry: true` · transactional live reconcile |
+| `syncClientBuilding` | trigger | `onDocumentWritten clients/{clientId}` | `client_buildings.js` | any `clients` doc write (early-returns unless `archived`, the building key or a filter field moved) | — | `retry: true` · **NOT YET DEPLOYED** |
 | `propagateClientEdits` | trigger | `onDocumentUpdated clients/{id}` | `client_propagation.js` | any `clients` doc edit | — | `retry: true` |
 | `recountClientJobs` | trigger | `onDocumentWritten appointments/{id}` | `client_job_count.js` | a write that changes `clientId`, or flips a job's cancelled-ness | — | `retry: true` |
 | `waveUpsertCustomer` | trigger | `onDocumentWritten clients/{id}` | `wave/triggers.js` | any `clients` doc write | `WAVE_FULL_ACCESS_TOKEN` | `retry: true` · 300s · enqueues **and pushes** |
@@ -441,7 +451,16 @@ of `PASSWORD_ALPHABET` so a mint carries exactly ONE symbol — the admin
 dictates the value aloud — and the set avoids bracket pairs, dash/underscore
 confusion and URL- or shell-significant glyphs. It is drawn **once per call** and handed to whichever
 path runs — new account or re-provision — so the value echoed back is always the
-value Auth was actually set to. The duplicate lookup and the doc write share one
+value Auth was actually set to. The whole call runs under a durable
+`accountOperations/{email_<sha256(email)>}` lock (`withAccountOperation`,
+`account_operation.js`), so a losing duplicate request is refused
+(`aborted / account-operation-in-progress`) BEFORE it can mint Auth and roll
+back an account another request claimed; provisioning and the reset then take a
+second lock keyed by the uid. Lock docs have no TTL on purpose — Auth cannot
+check a fencing token, so a terminated invocation leaves one for an operator to
+delete rather than risk overlapping writers (a failed release is
+`logger.error`-ed). `getUserByEmail` rethrows anything but
+`auth/user-not-found`. The duplicate lookup and the doc write share one
 transaction, so two admins creating the same person can't both win.
 
 **No role is read off the payload** (2026-08-21): the doc is always written
@@ -510,8 +529,9 @@ removed only because the starting password became a random per-account secret in
 the same change. Don't re-derive it from an old copy of this page, and don't drop
 a comparable check elsewhere on the strength of this precedent alone.
 
-**The current app sends `newPassword` to the callable.** It validates the
-password, writes it through Auth while holding `accountOperations/{uid}`, then
+**The current app sends `newPassword` to the callable** (optional key, at most
+128 chars). It validates the password (8+ chars with an uppercase, a lowercase
+and a digit, else `invalid-argument / invalid-newPassword`), writes it through Auth while holding `accountOperations/{uid}`, then
 activates the invitation. The app subsequently reauthenticates to renew its
 refresh credential. Passwords are neither persisted in Firestore nor logged.
 The existing client check still refuses reusing the current credential.
@@ -644,7 +664,14 @@ Server-side client search, replacing a capped client-side scan. Queries
 `clients.searchTokens` with `array-contains-any` over at most 10 query tokens,
 reads `SEARCH_READ_LIMIT` (**200**, `orderBy("name")`) and warns at the cap,
 re-verifies each hit with `recordMatchesQuery` against the full stored
-document, ranks and returns 25. **Admin-only** via
+document, ranks and returns 25. **Optional filters (2026-09-23):** `archived`
+(boolean), `type` (`residential`/`commercial`/`building`) and `buildingKey`
+are ANDed on as equality `where`s; `type` + `buildingKey` together, a
+non-boolean `archived` or an unknown `type` is `invalid-argument /
+invalid-client-filter`. Adding keys to the allowlist is non-breaking. The
+filtered shapes are served by three of the nine new client composites
+(`archived` [+ `type`|`buildingKey`] + `searchTokens` + `name`), which must be
+READY first. **Admin-only** via
 `assertAdminCall`: clients are PII, and the old scan was already admin-gated by
 the rules it read through. The prefilter/verify split is load-bearing — a prefix
 token matches strictly more than the query does, so returning the raw token hits
@@ -991,9 +1018,14 @@ sweep's budget either.
 `users/{id}` write trigger that mirrors each user into `usersByUid/{uid}` so
 security rules can resolve a caller's role from their auth uid alone (rules can
 only `get` by full path, and `users` docs use generated ids). Suppresses the
-bridge for `invited` users (no uid yet) and unknown statuses; handles uid
-rotation (stale delete + new set in one batch). `retry: true` — all writes are
-absolute, so retries converge.
+bridge for `invited` users (no uid yet) and unknown statuses. **Since 2026-09-23
+the bridge is reconciled from the LIVE profile, not the event snapshots**
+(`reconcileBridge`, `bridge_reconcile.js`): one transaction reads `users/{id}`
+plus the `usersByUid` rows for the event's before/after uids and the current
+uid, then sets, deletes or leaves each, so a delayed or reordered event cannot
+resurrect a stale bridge; a row owned by a different profile is never deleted by
+this one, and a live uid owned by another profile throws (retried). `retry:
+true` — all writes are absolute, so retries converge.
 
 It also owns **deactivation enforcement**, all of it strictly after the
 auth-critical bridge write and each step independently idempotent: leaving
@@ -1004,7 +1036,11 @@ subcollections (`recursiveDelete`, so >500 rows can't fail partway), and the
 `auth/user-not-found` is swallowed — `deleteAccount` removes the Auth user
 before the Firestore doc, so the trigger's later revoke is a no-op rather than a
 retry loop. Without this the rules' `status == 'active'` gates would still be
-reachable with a stale credential.
+reachable with a stale credential. Auth writes cannot join the transaction, so
+`reconcileAuthAccess` re-reads the profile after each one and repeats (up to 3
+attempts, then throws so the event retries) when `uid` or `status` moved
+meanwhile; it skips an `invited` profile and a uid whose bridge row belongs to
+another profile.
 
 Deactivation used to additionally **rotate the Storage download tokens** on
 every photo of every appointment the person was assigned to
@@ -1055,6 +1091,27 @@ wrong, and each was hand-copied (and had drifted) before it was extracted:
   possible time. All ten scripts now print it.
 
 ## Client → appointment propagation
+
+### `syncClientBuilding` — `client_buildings.js`
+`clients/{clientId}` write trigger (`retry: true`, no secrets) that maintains
+the building catalog behind the clients list's Building filter:
+`clientBuildingMemberships/{clientId}` (`{key}`) and `clientBuildings/{sha256(key)}`
+(`{key, street, city, clientCount}`). It reconciles from the LIVE client doc and
+the stored membership inside one transaction, never from event deltas, so
+duplicate or out-of-order delivery and a backfill running beside it cannot
+double-count. An archived client belongs to no building; a summary reaching 0 is
+deleted. Each run also stamps the projection the filtered queries need onto the
+client doc — `buildingKey` (`''` when none; mirrors Dart `buildingKeyFor`), a
+boolean `archived`, and a trimmed `type` — because a Firestore equality filter
+excludes docs missing the field. **Early-returns with no transaction** when
+`archived`, the building key and the projection already agree (Wave state or
+`jobCount` edits, and its own projection write re-firing once). Rules:
+`clientBuildings` is admin-read only, clients may not write
+`buildingKey`/`deletionToken`, and the membership collection has no grant (Admin
+SDK only). Needs the nine new `clients` composites READY, and
+`scripts/backfill-client-buildings.js` (rerunnable; `--dry-run` reads only) for
+existing docs. **NOT YET DEPLOYED**; see
+[audit rollout](audits/AUDIT_ROLLOUT_2026-09-23.md).
 
 ### `propagateClientEdits` — `client_propagation.js`
 `clients/{id}` update trigger that propagates a client's edited `clientName` /
@@ -1128,9 +1185,17 @@ Delete button) was retired 2026-08-08, closing the orphaning hole; see
 docs/DEPLOYMENT.md. The callable exists because rules cannot express
 "only when this client has
 no appointments" — there is no cheap way to count a foreign collection there.
-Refuses with `failed-precondition / client-has-history` when a **live `count()`
-aggregate** over `appointments where clientId == …` returns non-zero, and with
-`not-found` when the doc is already gone. The count is deliberately NOT the
+**It takes a barrier first (2026-09-23):** a transaction stamps a random
+`deletionToken` on the client doc (`not-found` if it is gone), which
+`firestore.rules` reads — client updates are refused while it is set, and an
+appointment create or `clientId` change to that client fails `canLinkClient`
+— so no booking can land between the count and the delete. It then refuses with
+`failed-precondition / client-has-history` when a **live `count()` aggregate**
+over `appointments where clientId == …` returns non-zero; otherwise a second
+transaction deletes only if the token is still its own (`aborted /
+client-delete-superseded` if a later attempt took over). Any failure releases
+the barrier (a further transaction, again only if still the owner). Cost: 2–3
+transactions plus the count, up from one get, count and delete. The count is deliberately NOT the
 denormalized `jobCount`: that field is lazily backfilled by `recountClientJobs`,
 so it can be stale, missing, or wrong on a client whose appointments were
 reassigned out-of-band — deleting on a stale zero is exactly the orphaned-history

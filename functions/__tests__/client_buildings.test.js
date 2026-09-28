@@ -98,23 +98,28 @@ test("backfill dry-run writes nothing; applying twice preserves counts",
 test("canonical filters preserve existing parser behavior for legacy fields",
     () => {
       expect(filterPatchFor({address: "123 Main", type: " commercial "}))
-          .toEqual({buildingKey: "123 main|", archived: false, type: "commercial"});
+          .toEqual({
+            buildingKey: "123 main|", archived: false, type: "commercial",
+          });
       expect(filterPatchFor({buildingKey: "", archived: true, type: "unknown"}))
           .toEqual({});
     });
 
-test("irrelevant edits and projection echoes do no Firestore work", async () => {
-  getFirestore.mockClear();
-  const data = {address: "123 Main", archived: false, buildingKey: "123 main|"};
-  const snap = (fields) => ({exists: true, data: () => fields});
-  await syncClientBuilding.run({
-    params: {clientId: "a"}, data: {
-      before: snap({...data, buildingKey: undefined}),
-      after: snap({...data, jobCount: 8}),
-    },
-  });
-  expect(getFirestore).not.toHaveBeenCalled();
-});
+test("irrelevant edits and projection echoes do no Firestore work",
+    async () => {
+      getFirestore.mockClear();
+      const data = {
+        address: "123 Main", archived: false, buildingKey: "123 main|",
+      };
+      const snap = (fields) => ({exists: true, data: () => fields});
+      await syncClientBuilding.run({
+        params: {clientId: "a"}, data: {
+          before: snap({...data, buildingKey: undefined}),
+          after: snap({...data, jobCount: 8}),
+        },
+      });
+      expect(getFirestore).not.toHaveBeenCalled();
+    });
 
 test("a delayed deletion event reconciles a recreated client's live address",
     async () => {

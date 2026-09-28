@@ -25,11 +25,12 @@ function buildingFor(data) {
 /**
  * Canonical fields needed for indexed filters to include legacy documents.
  * @param {!Object} data Source fields.
+ * @param {?Object=} building `buildingFor(data)`, when already computed.
  * @return {!Object} Only fields that differ from the app's existing parsing.
  */
-function filterPatchFor(data) {
+function filterPatchFor(data, building = buildingFor(data)) {
   const patch = {};
-  const key = buildingFor(data)?.key || "";
+  const key = building?.key || "";
   if (data.buildingKey !== key) patch.buildingKey = key;
   if (typeof data.archived !== "boolean") {
     patch.archived = data.archived === true;
@@ -67,9 +68,10 @@ async function reconcileClientBuilding(db, clientId) {
     const previous = membership.exists ? membership.data().key : null;
     const nextKey = next?.key || null;
     const changed = previous !== nextKey;
-    const oldSummary = changed && previous ?
-      await tx.get(summary(previous)) : null;
-    const newSummary = changed && next ? await tx.get(summary(next.key)) : null;
+    const [oldSummary, newSummary] = await Promise.all([
+      changed && previous ? tx.get(summary(previous)) : null,
+      changed && next ? tx.get(summary(next.key)) : null,
+    ]);
     if (changed) {
       if (oldSummary?.exists) {
         const count = oldSummary.data().clientCount - 1;
@@ -85,7 +87,7 @@ async function reconcileClientBuilding(db, clientId) {
         tx.delete(member);
       }
     }
-    const patch = data ? filterPatchFor(data) : {};
+    const patch = data ? filterPatchFor(data, building) : {};
     if (client.exists && Object.keys(patch).length > 0) {
       tx.update(source, patch);
     }
@@ -100,11 +102,12 @@ const syncClientBuilding = onDocumentWritten(
       if (before?.exists && after?.exists) {
         const oldData = before.data();
         const newData = after.data();
+        const building = buildingFor(newData);
         // Wave status/job-count edits and our own projection writes need no
         // transaction when membership and canonical filter fields agree.
         if ((oldData.archived === true) === (newData.archived === true) &&
-            buildingFor(oldData)?.key === buildingFor(newData)?.key &&
-            Object.keys(filterPatchFor(newData)).length === 0) return;
+            buildingFor(oldData)?.key === building?.key &&
+            Object.keys(filterPatchFor(newData, building)).length === 0) return;
       }
       await reconcileClientBuilding(getFirestore(), event.params.clientId);
     },

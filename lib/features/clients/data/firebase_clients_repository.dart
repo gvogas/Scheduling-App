@@ -292,34 +292,6 @@ class FirebaseClientsRepository implements ClientsRepository {
     _patchWindow(id, data: {'archived': archived}, partial: true);
   }
 
-  /// Compatibility read for non-paged consumers. Lists and search use bounded queries.
-  Future<List<ClientRecord>> _readFiltered(ClientsFilter filter) async {
-    final docs = await pageToCap(
-      _filteredQuery(filter).orderBy('name').orderBy(FieldPath.documentId),
-      pageSize: _clientScanPageSize,
-      cap: _clientScanLimit,
-      onCapReached: () =>
-          _logger.warn('CLI-FILTER matching clients reached the display cap'),
-    );
-    return docs.map((doc) => ClientRecord.fromMap(doc.id, doc.data())).toList();
-  }
-
-  @override
-  Future<List<ClientRecord>> fetchArchivedClients() =>
-      _readFiltered(const ClientsFilterArchived());
-
-  @override
-  Future<List<ClientRecord>> fetchClientsByType(ClientType type) async =>
-      type == ClientType.unset
-      ? const []
-      : await _readFiltered(ClientsFilterType(type));
-
-  @override
-  Future<List<ClientRecord>> fetchClientsByBuilding(String key) async =>
-      key.trim().isEmpty
-      ? const []
-      : await _readFiltered(ClientsFilterBuilding(key));
-
   @override
   Future<List<ClientBuilding>> fetchBuildings() async {
     final docs = await pageToCap(
@@ -332,20 +304,18 @@ class FirebaseClientsRepository implements ClientsRepository {
       onCapReached: () =>
           _logger.warn('CLI-BUILDINGS catalog reached the display cap'),
     );
-    final buildings =
-        [
-          for (final doc in docs)
-            ClientBuilding(
-              key: doc.data()['key'] as String,
-              street: doc.data()['street'] as String,
-              city: doc.data()['city'] as String,
-              clientCount: (doc.data()['clientCount'] as num).toInt(),
-            ),
-        ]..sort((a, b) {
-          final count = b.clientCount.compareTo(a.clientCount);
-          return count != 0 ? count : a.street.compareTo(b.street);
-        });
-    return buildings;
+    return [
+      for (final data in docs.map((doc) => doc.data()))
+        ClientBuilding(
+          key: data['key'] as String,
+          street: data['street'] as String,
+          city: data['city'] as String,
+          clientCount: (data['clientCount'] as num).toInt(),
+        ),
+    ]..sort((a, b) {
+      final count = b.clientCount.compareTo(a.clientCount);
+      return count != 0 ? count : a.street.compareTo(b.street);
+    });
   }
 
   @override

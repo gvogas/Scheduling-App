@@ -171,8 +171,8 @@ alwaysApply: true
     the breadcrumb for `AuthFailureStartingPasswordReused`, the load-bearing
     guard.)
   - Appointments: `APPT-BUSY`, `APPT-COUNT`, `APPT-IMG`, `APPT-RANGE`
-  - Clients / history: `CLI-SEARCH`, `CLI-CONTACT-SAVE`, `CLI-CONTACT-SYNC`,
-    `HIST-SEARCH`
+  - Clients / history: `CLI-SEARCH`, `CLI-BUILDINGS`, `CLI-CONTACT-SAVE`,
+    `CLI-CONTACT-SYNC`, `HIST-SEARCH`
   - Employees / self: `EMP-EMERGENCY`, `EMP-LOAD`, `EMP-TODAY`, `MYDET`
   - Presence / map: `LIVEMAP-MARKERS`, `PRESENCE`
   - Images: `IMG-DEL`, `IMG-DISK`, `IMG-LOAD`, `IMG-PICK`, `IMG-SAVE`,

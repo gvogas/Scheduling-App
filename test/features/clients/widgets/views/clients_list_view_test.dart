@@ -83,9 +83,8 @@ Widget _wrap(
 void main() {
   late _MockClientsRepo repo;
 
-  // mocktail needs a concrete instance before any(<ClientType>) is usable.
+  // mocktail needs a concrete instance before any(<T>) is usable.
   setUpAll(() {
-    registerFallbackValue(ClientType.unset);
     registerFallbackValue(ClientsSort.name);
     registerFallbackValue(const ClientsFilterAll());
   });
@@ -98,9 +97,6 @@ void main() {
         after: any(named: 'after'),
         limit: any(named: 'limit'),
       ),
-    ).thenAnswer((_) async => const []);
-    when(
-      () => repo.fetchClientsByType(any()),
     ).thenAnswer((_) async => const []);
   });
 
@@ -201,7 +197,6 @@ void main() {
         filter: filter,
       ),
     ).called(1);
-    verifyNever(() => repo.fetchClientsByType(any()));
   });
 
   testWidgets('archived pages retain their empty state', (tester) async {
@@ -227,7 +222,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Sophie'), findsOneWidget);
     verify(() => repo.searchClients('sophie', filter: filter)).called(1);
-    verifyNever(() => repo.fetchClientsByType(any()));
   });
 
   testWidgets('the search skeleton fits a keyboard-shortened body', (
@@ -345,7 +339,13 @@ void main() {
   });
 
   testWidgets('keeps server ordered type pages in one group', (tester) async {
-    when(() => repo.fetchClientsByType(any())).thenAnswer(
+    when(
+      () => repo.fetchClientsPage(
+        filter: any(named: 'filter'),
+        after: any(named: 'after'),
+        limit: any(named: 'limit'),
+      ),
+    ).thenAnswer(
       (_) async => const [
         ClientRecord(id: 'c1', name: 'Zoe Tremblay'),
         ClientRecord(id: 'c2', name: 'Émile Roy'),

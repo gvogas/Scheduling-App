@@ -587,6 +587,13 @@ describe("completeEmployeeSetup activation", () => {
             .resolves.toEqual({ok: true});
       });
 
+  test("accepts an accented capital the app's checklist accepts", async () => {
+    getFirestore.mockReturnValue(makeDb(invitedDocs(), []));
+    await expect(completeEmployeeSetup.run({
+      data: {...SETUP, newPassword: "Éric2024"}, auth: {uid: "emp-uid"},
+    })).resolves.toEqual({ok: true});
+  });
+
   test("setup refuses a concurrent provisioning operation", async () => {
     const db = makeDb(invitedDocs(), []);
     await db.collection("accountOperations").doc("emp-uid").create({});

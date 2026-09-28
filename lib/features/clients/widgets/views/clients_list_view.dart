@@ -356,11 +356,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
     }
 
     return ref
-        .watch(
-          widget.filter is ClientsFilterAll
-              ? clientSearchProvider(query)
-              : clientFilteredSearchProvider((query, widget.filter)),
-        )
+        .watch(clientSearchProvider((query, widget.filter)))
         .when(
           data: (results) => results.isEmpty
               ? _emptyState(query: query)
@@ -401,13 +397,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   // rebuild is already watching it, so it refetches immediately.
   Widget _searchError(Object error, String query) => _errorState(
     error,
-    onRetry: () {
-      if (widget.filter is ClientsFilterAll) {
-        ref.invalidate(clientSearchProvider(query));
-      } else {
-        ref.invalidate(clientFilteredSearchProvider((query, widget.filter)));
-      }
-    },
+    onRetry: () => ref.invalidate(clientSearchProvider((query, widget.filter))),
   );
 
   Widget _errorState(Object error, {required VoidCallback onRetry}) =>

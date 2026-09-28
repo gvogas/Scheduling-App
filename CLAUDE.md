@@ -429,10 +429,9 @@ Secret-Manager `GOOGLE_MAP_API_KEY`, which must never ship in the app.
   commits deleted every ceiling and every warn when they added the paging, and
   both were restored the same day at 5000. It matters most on clients: that
   window is `orderBy('name')`, so at the cap it is the alphabetically FIRST N
-  clients, and everything past that point goes invisible to search, to the
-  type-filter chips and to the Archived chip at once, with no error anywhere.
-  It arrives gradually as the roster grows, which is the kind of failure
-  nobody reports. Never add a bounded read here without the warn, and never
+  clients, and everything past that point goes invisible to the fallback
+  search with no error anywhere. (The list FILTERS stopped reading it
+  2026-09-23 — they page server-side, see `.claude/rules/clients.md`.) Never add a bounded read here without the warn, and never
   replace a ceiling with an unbounded `while (true)` paging loop —
   `fetchClientHistory` (`_clientHistoryScanLimit`, 1000) and
   `fetchClientsCreatedSince` carry the same pair.
@@ -599,6 +598,13 @@ app build, because `assertPayloadShape` rejects unknown keys), the
 old-build-compatibility check, rollback, and the deploy log recording what
 production actually runs. Read it before any deploy that touches a callable
 payload or a rules cap.
+
+**`syncClientBuilding` was ADDED 2026-09-23 (29 → 30, a `clients` trigger
+maintaining the `clientBuildings` catalog and each client's `buildingKey`).**
+Its rules, the nine client composites and `backfill-client-buildings.js` must
+all be live before the app build that reads them ships; the ordering and the
+`accountOperations` lock recovery are in
+`docs/audits/AUDIT_ROLLOUT_2026-09-23.md`.
 
 **Four callables were ADDED 2026-09-04** — `searchClients`, `searchHistory`,
 `findAppointmentConflicts` (`indexed_search.js`) and `restoreAppointmentStatus`

@@ -64,7 +64,8 @@ Root context: `../../CLAUDE.md`.
   doc is by definition invisible on the screen where you would notice it. One
   turned up on 2026-09-10 (see the deploy log); both create paths stamp the
   field, so a doc without it is an anomaly worth naming, not a legacy
-  straggler to count.
+  straggler to count. Since 2026-09-23 `syncClientBuilding` also stamps a
+  boolean `archived` on any client write that lacks one.
   The filter is server-side **specifically so `fetchClientsPage` keeps returning
   a plain `List`**: the server still fills a whole page, so `items.last` stays
   the true cursor and the list's `pages.last.length < pageSize` end-of-list test
@@ -79,6 +80,14 @@ Root context: `../../CLAUDE.md`.
   "only when this client has no appointments" (no cheap foreign-collection
   count), so the callable is the only place that guarantee can live and
   **nothing deletes a client directly**.
+  **The count and the delete are fenced by a `deletionToken`** (2026-09-23):
+  the callable stamps a fresh token in a transaction, counts, deletes only
+  while it still owns that token, and clears its own token on any failure.
+  `firestore.rules` refuses a booking or `clientId` relink onto a client whose
+  token is set (`canLinkClient`, a `getAfter`) and refuses any client update
+  while it is set — without that, a job booked between the count and the
+  delete was orphaned. A retry after a killed attempt takes a new token and
+  proceeds; never clear another attempt's token.
   **`allow delete` on `/clients` is now WITHDRAWN** (2026-08-08). It had
   survived as a `#compat-1.37.1` shim entry for that build's ungated Delete
   button, and while it did the hole was real — an admin on the old build could
@@ -137,13 +146,9 @@ Root context: `../../CLAUDE.md`.
   colour when picked. **The radio glyph stays**, because fill and label colour
   alone would make colour the only cue for which of a one-of group is on.
   **`ClientsFilterSheet` is the ONLY watcher of `clientBuildingsProvider`.**
-  `ClientsListView` used to watch it and `clientBuildingKeysProvider` before
-  the filter switch, so opening the tab paid the paged `orderBy('name')` scan
-  (~700 docs) on top of the paginated first 50 — roughly 14x read
-  amplification on first open. Moving the watch onto the sheet takes it off the
-  path everyone walks onto one almost nobody opens; it does NOT remove the
-  scan, which still needs the server-maintained `buildings` aggregate. Don't
-  watch either provider from a list row or from `ClientsListView` again.
+  It reads the server-maintained `clientBuildings` catalog (below), never the
+  roster, but it is still a read nobody walking onto the tab needs — don't
+  watch it from a list row or from `ClientsListView`.
 - **The count line says what it can actually prove.** The list pages, so
   `onCountChanged` reports ROWS LOADED — which read "Showing all 500 clients"
   while 500 was just how far someone had scrolled, and said 50 on arrival. The
@@ -152,7 +157,8 @@ Root context: `../../CLAUDE.md`.
   — not a scan: reading the roster to count it would cost more than the list),
   and renders `clients_showingSome` ("50 of 717 clients") until the two agree,
   then `clients_showingAll`. **`total` is passed ONLY under `ClientsFilterAll`**:
-  every filtered slice loads whole, so there its shown count IS its total.
+  it is the one `count()` aggregate there is, so a filtered slice shows its
+  loaded rows with no "of M".
   **Page size is 50 under EVERY sort** (owner call — a 250-row first page was
   tried and rejected the same day).
 - **`ClientsListView` carries no chrome.** The Filter button, the ✕ and the
@@ -174,30 +180,23 @@ Root context: `../../CLAUDE.md`.
   number, not two.
 
 - **Grouping is OPT-IN: `ClientsListView(grouped:)`, default false**
-  (2026-09-11). Grouped, the rows arrive in white cards under letter headings
-  (`letterGroupsOf` / `singleGroupOf` in `domain/client_grouping.dart`, rendered by
-  `ClientsSliverList`); ungrouped it is today's flat list, which is what a host
+  (2026-09-11). Grouped, the rows arrive in white cards (`singleGroupOf` in
+  `domain/client_grouping.dart`, rendered by `ClientsSliverList`); ungrouped it is today's flat list, which is what a host
   that wants rows and no chrome gets without passing anything. Only
   `clients_screen.dart` passes `grouped: true`.
-  **Letters only under the Name sort.** Most jobs and Recently added are one
-  card with no headings, a building filter is one card headed by the street the
-  screen hands down as `buildingLabel` (this view still must never watch the
-  building scan), and a SEARCH is one card because those results are
-  relevance-ranked — letters over them would head runs that are not runs.
-  **Letters head ONLY rows Dart sorted, so the UNFILTERED paged list is one
-  card** (release review, 2026-09-12, owner pick). The page is
-  `orderBy('name')` on the STORED name, and for a person that IS their bare
-  phone number while the heading reads `displayName` (first + last) — so under
-  letters the main list rendered a card per row, M · A · M…, in phone order.
-  Letters survive on the Type and Archived filters, whose bounded windows
-  `sortClients` orders by the SAME accent-folded `displayName` key
-  `clientInitialOf` reads; keep those two keys identical or a run splits (an
-  unfolded sort put "Émile" after "Zoé" under a second E card). Re-sorting the
-  loaded pages client-side was rejected: rows jump into earlier cards as
-  pages arrive. `letterGroupsOf` still never re-orders.
+  **There are no letter headings any more** (2026-09-23): every list — the
+  paged roster, every filter, every search — is ONE card, and a building
+  filter's card is headed by the street the screen hands down as
+  `buildingLabel`. Letters died with the Dart-sorted filter windows: pages are
+  server-ordered on the STORED name, which for a person IS their bare phone
+  number while a heading would read `displayName`, so letters over server
+  pages split into a card per row (M · A · M…). Re-sorting loaded pages
+  client-side was rejected — rows jump into earlier cards as pages arrive.
+  `letterGroupsOf`/`clientInitialOf`/`sortClients` are deleted; don't restore
+  them without a stored, display-ordered sort key.
   **The card is a `DecoratedSliver` around a `SliverList`, never a `Container`
-  around a `Column`.** One card can hold every loaded row — the whole type
-  filter's bounded window, or the paged list at scroll depth — and a `Column`
+  around a `Column`.** One card can hold every loaded row — the paged list at
+  scroll depth — and a `Column`
   builds all of them eagerly on every rebuild, keystrokes included.
   **`DecoratedSliver` paints its decoration BEHIND the sliver and does not clip
   it**, while a row is a square `Material` + `InkWell` — so the first and last
@@ -206,8 +205,7 @@ Root context: `../../CLAUDE.md`.
   page colour. `ClientsSliverList._clipEndRows` rounds those two rows inside
   the item builder; per row, because clipping the whole group would mean a box
   around it and that is the `Column` this design exists to avoid.
-  **Both grouped paths memoize through `RowCache`** (below) — `letterGroupsOf`
-  is two regex passes and an accent fold per row.
+  **The grouped path memoizes through `RowCache`** (below).
   That is also why the grouped path drives the pager ITSELF instead of using
   `PagedListView`, which cannot host a sliver: **`PagedSliverPrefetch` +
   `PagedListFooter` (`widgets/lists/paged_sliver_driver.dart`) own the
@@ -230,24 +228,25 @@ Root context: `../../CLAUDE.md`.
   **`fetchClientsPage`'s cursor tuple follows the sort**, and its boundary
   cache is keyed `"<sort>:<docId>"` — a boundary captured under `name` would
   resume a `jobCount` query from a string. Don't collapse it back to one map.
-- **The clients type filter is a SEPARATE bounded read, never a filter over the
-  paginated list.** `fetchClientsByType` scans the same cached 5000-doc window
-  `searchClients` uses, so the filter and its results cost no extra Firestore
-  read inside the 2-minute TTL and need no composite index. `fetchArchivedClients`
-  (the Archived option) is the same shape over the same window, and the options
-  are ONE sealed `ClientsFilter` — "archived AND commercial" is unexpressible,
-  not merely unhandled. The type filter **excludes archived clients** (the
-  Archived option is where they live); `searchClients` deliberately does **not** — archived
-  clients stay findable and bookable, which is why the row badges them.
-  Routing it through `fetchClientsPage` instead would filter a server page in
-  Dart, shortening a page the server actually filled — which is exactly what
-  stops `ClientsListView` paging early and hides every client below the first
-  non-matching one. The window bound is the same one search already lives with:
-  past ~5000 clients the filter sees a prefix, not the whole roster. The chips
-  offer the fixed `ClientType.pickable` set, so there is no vocabulary to
-  discover and no spelling to reconcile — searching *within* an active filter
-  runs in Dart over that same bounded list via `ClientSearchPolicy`, indexed
-  once per result set rather than per keystroke.
+- **Every list filter is a SERVER `where` on the paged query, never a Dart
+  filter over a page** (2026-09-23 — this REVERSED the bounded in-memory window
+  the type/building/Archived filters used to read). `fetchClientsPage(filter:)`
+  builds one query from the sealed `ClientsFilter`: `archived == (filter is
+  Archived)`, plus `type ==` or `buildingKey ==`, then the sort's `orderBy`
+  and the `__name__` tiebreak. A Dart post-query filter would shorten a page
+  the server actually filled and stop the list at the first non-matching
+  client, which is why the where-clause is the only acceptable shape. Each
+  filter × sort needs its composite (`(archived, type|buildingKey, <sort
+  field>, __name__)`), and a SEARCH within a filter sends the same keys to
+  `searchClients` (`archived`/`type`/`buildingKey`, served by
+  `(archived[, type|buildingKey], searchTokens, name)`). The options are ONE
+  sealed `ClientsFilter` — "archived AND commercial" is unexpressible, not
+  merely unhandled. The type and building filters **exclude archived
+  clients** (Archived is where they live); an UNFILTERED search deliberately
+  does **not** — archived clients stay findable and bookable, which is why the
+  row badges them. A legacy doc without a boolean `archived`, or with a padded
+  `type`, is invisible to an equality filter; `syncClientBuilding` normalizes
+  both on its next write and `backfill-client-buildings.js` fixes the rest.
   **A write patches that cached window by MERGING over the stored doc, never
   replacing it** (`_patchWindow`): `ClientRecord.toMap()` emits user-owned
   fields only, so a plain substitution drops the function-owned `jobCount` and
@@ -269,13 +268,21 @@ Root context: `../../CLAUDE.md`.
   If a row ever turns up, map it forward — never re-add the old value to make
   a read pass.
 
-- **Clients are GROUPED BY BUILDING, and the key is DERIVED, never stored**
-  (2026-08-28). `buildingKeyFor` / `buildingsIn` / `buildingCountsIn`
-  (`clients/domain/policies/client_building.dart`) reduce the street line down
-  to the address without its unit — "914-4450 Prom. Paton" and
-  "1207-4450 Prom. Paton" are two units of one building. Same discipline as the
-  display-only `overdue` status: nothing is written, so there is no field to
-  backfill and no field the console can corrupt.
+- **Clients are GROUPED BY BUILDING, and the key is a SERVER-OWNED
+  projection** (2026-09-23; derived-never-stored from 2026-08-28 until then).
+  `buildingKeyFor` (`clients/domain/policies/client_building.dart`) reduces the
+  street line to the address without its unit — "914-4450 Prom. Paton" and
+  "1207-4450 Prom. Paton" are two units of one building — and is hand-mirrored
+  by `buildingFor` in `functions/client_buildings.js`. Both suites read
+  `test/fixtures/client_building_cases.json`; change a case there, never in
+  one suite. `syncClientBuilding` stamps `buildingKey` on the client and keeps
+  `clientBuildings/{sha256(key)}` (key/street/city/`clientCount`) and
+  `clientBuildingMemberships/{clientId}` in step in ONE transaction,
+  reconciling from the LIVE doc and the stored membership rather than the
+  event delta, so a retried or reordered event cannot double-count.
+  `firestore.rules` refuses `buildingKey` and `deletionToken` on every client
+  write. Never derive the catalog in the app again: that was a 5000-doc roster
+  scan on the first filter open.
   **The CITY is part of the key.** Two towns hold the same civic number, and
   without it a Laval client turns up under a Montréal address with nothing on
   screen explaining why.
@@ -307,14 +314,14 @@ Root context: `../../CLAUDE.md`.
   type badge, address, then phone and job count — so the badge has its own
   corner instead of a share of the subtitle. The rest of the 2026-09-07 call
   STANDS: the Building pill and the shared-address count are still gone, and
-  nothing is to re-derive a count per row. Grouping itself is
-  untouched — `buildingKeyFor`/`buildingsIn`, `clientBuildingsProvider` and
-  `fetchClientsByBuilding` all still back the sheet's address section.
-  **`fetchClientsByBuilding` / `fetchBuildings` read the SAME bounded cached
-  window as the type filter**, so the whole feature costs no extra Firestore
-  read inside the TTL and needs no index. It inherits that window's bound: past
-  the cap the sheet sees a prefix of the roster. Archived clients are excluded,
-  the same rule the type filter keeps.
+  nothing is to re-derive a count per row. The sheet's address section is
+  `clientBuildingsProvider` over the catalog, and picking one pages the list
+  through `buildingKey ==`.
+  **`fetchBuildings` reads `clientBuildings where clientCount >= 2`** (capped
+  at 5000 with a `CLI-BUILDINGS` warn), busiest first with the street as the
+  Dart tiebreak. It is EVENTUALLY consistent — a just-edited address moves
+  groups once the trigger lands, and reopening the sheet reloads it. Archived
+  clients are excluded from the counts, the same rule the filters keep.
 - **The Wave sync badge needs a LIVE doc read, and `ClientDetailView` is the one
   surface that has one** (2026-08-07). Every other client surface is a one-shot
   read — a paginated page, or the repository's cached scan window — and

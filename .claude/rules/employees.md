@@ -58,8 +58,14 @@ self-service settings. Root context: `../../CLAUDE.md`.
   the callable holds `accountOperations/{uid}` across the Auth password update
   and activation transaction. Admin re-provisioning holds the same lock across
   its invitation re-check and starting-password reset. Duplicate creates also
-  take an email-hash lock before minting Auth. The app reauthenticates with the
-  chosen password after success to replace its revoked refresh credential.
+  take an email-hash lock before minting Auth. The app then reauthenticates with
+  the chosen password to replace its revoked refresh credential, BEST-EFFORT
+  (`_renewSessionAfterSetup`): the account is already active, so a failed
+  renewal logs and completes — reporting it as a setup failure sent a retry to
+  `not-pending` on an account still holding the FIRST password.
+  The server's letter classes are Unicode (`\p{Lu}`/`\p{Ll}`) to match
+  `PasswordRequirement`; an ASCII class refused `Éric2024` behind a green
+  checklist.
   `newPassword` remains optional for older builds. Re-provisioning stamps the
   server-owned `setupRequiresPassword` flag BEFORE rotating Auth; legacy setup
   may activate only invitations without that flag. Once flagged, it gets

@@ -177,7 +177,6 @@ void main() {
       await old;
       when(() => query.get()).thenAnswer((_) async => snapshot);
       expect(await r.searchClients('smith'), isEmpty);
-      expect(await r.fetchArchivedClients(), isEmpty);
     });
 
     test('a local write invalidates scans already in flight', () async {
@@ -189,7 +188,8 @@ void main() {
       ];
       when(() => oldSnapshot.docs).thenReturn(oldDocs);
       when(() => query.get()).thenAnswer((_) => response.future);
-      final old = r.fetchArchivedClients();
+      const archived = ClientsFilterArchived();
+      final old = r.searchClients('smith', filter: archived);
       await r.setClientArchived('c1', archived: true);
       response.complete(oldSnapshot);
       await old;
@@ -198,7 +198,10 @@ void main() {
       ];
       when(() => snapshot.docs).thenReturn(currentDocs);
       when(() => query.get()).thenAnswer((_) async => snapshot);
-      expect((await r.fetchArchivedClients()).map((c) => c.id), ['c1']);
+      expect(
+        (await r.searchClients('smith', filter: archived)).map((c) => c.id),
+        ['c1'],
+      );
     });
   });
 
@@ -664,16 +667,12 @@ void main() {
     });
 
     test('type filter uses indexed equality', () async {
-      await repo().fetchClientsByType(ClientType.commercial);
+      await repo().fetchClientsPage(
+        limit: 50,
+        filter: const ClientsFilterType(ClientType.commercial),
+      );
       verify(() => collection.where('archived', isEqualTo: false)).called(1);
       verify(() => query.where('type', isEqualTo: 'commercial')).called(1);
-    });
-
-    test('unset type and blank building need no reads', () async {
-      final r = repo();
-      expect(await r.fetchClientsByType(ClientType.unset), isEmpty);
-      expect(await r.fetchClientsByBuilding(' '), isEmpty);
-      verifyNever(() => query.get());
     });
 
     test('building menu reads summaries instead of client documents', () async {

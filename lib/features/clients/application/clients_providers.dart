@@ -4,7 +4,6 @@ import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/features/clients/data/firebase_clients_repository.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
-import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/policies/client_building.dart';
 import 'package:scheduling/features/clients/domain/policies/client_search_policy.dart';
@@ -43,34 +42,16 @@ final clientStreamProvider = StreamProvider.autoDispose
       (ref, id) => ref.watch(clientsRepositoryProvider).watchClient(id),
     );
 
-/// Full client search with relevance scoring. AutoDispose frees the results once each
-/// query instance is no longer watched.
+/// Full client search with relevance scoring, scoped to one list filter.
+/// AutoDispose frees the results once each query instance is no longer watched.
 final clientSearchProvider = FutureProvider.autoDispose
-    .family<List<ClientRecord>, String>((ref, query) async {
+    .family<List<ClientRecord>, (String, ClientsFilter)>((ref, key) async {
+      final (query, filter) = key;
       if (!ClientSearchPolicy.shouldSearch(query)) return const [];
       // Watching bump invalidates results so deleted clients don't linger.
       ref.watch(clientsRefreshProvider);
       final repo = ref.watch(clientsRepositoryProvider);
-      return await repo.searchClients(query);
-    });
-
-/// Clients of one type, for the list's filter row. AutoDispose frees it as soon
-/// as the filter is cleared.
-final clientsByTypeProvider = FutureProvider.autoDispose
-    .family<List<ClientRecord>, ClientType>((ref, type) async {
-      ref.watch(clientsRefreshProvider);
-      return await ref
-          .watch(clientsRepositoryProvider)
-          .fetchClientsByType(type);
-    });
-
-/// Bounded indexed building read for non-paged consumers.
-final clientsByBuildingProvider = FutureProvider.autoDispose
-    .family<List<ClientRecord>, String>((ref, key) async {
-      ref.watch(clientsRefreshProvider);
-      return await ref
-          .watch(clientsRepositoryProvider)
-          .fetchClientsByBuilding(key);
+      return await repo.searchClients(query, filter: filter);
     });
 
 /// Shared addresses from the server-maintained catalog. This reads summary
@@ -89,20 +70,3 @@ final clientsTotalCountProvider = FutureProvider.autoDispose<int>((ref) async {
   ref.watch(clientsRefreshProvider);
   return await ref.watch(clientsRepositoryProvider).countClients();
 });
-
-/// Bounded indexed archive read for non-paged consumers.
-final archivedClientsProvider = FutureProvider.autoDispose<List<ClientRecord>>((
-  ref,
-) async {
-  ref.watch(clientsRefreshProvider);
-  return await ref.watch(clientsRepositoryProvider).fetchArchivedClients();
-});
-
-/// Scoped server search keeps the read bound independent of roster size.
-final clientFilteredSearchProvider = FutureProvider.autoDispose
-    .family<List<ClientRecord>, (String, ClientsFilter)>((ref, key) async {
-      ref.watch(clientsRefreshProvider);
-      return await ref
-          .watch(clientsRepositoryProvider)
-          .searchClients(key.$1, filter: key.$2);
-    });

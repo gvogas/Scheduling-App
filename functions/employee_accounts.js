@@ -534,8 +534,9 @@ const completeEmployeeSetup = onCall(APP_CHECK, async (req) => {
   const hasPassword = req.data?.newPassword !== undefined;
   const newPassword = hasPassword ?
     requireString(req.data, "newPassword", 128) : "";
-  if (hasPassword && (newPassword.length < 8 || !/[A-Z]/.test(newPassword) ||
-      !/[a-z]/.test(newPassword) || !/[0-9]/.test(newPassword))) {
+  // Mirrors the app's PasswordRequirement, Unicode letters included.
+  if (hasPassword && (newPassword.length < 8 || !/\p{Lu}/u.test(newPassword) ||
+      !/\p{Ll}/u.test(newPassword) || !/[0-9]/.test(newPassword))) {
     throw new HttpsError("invalid-argument", "invalid-newPassword");
   }
   const firstName = optionalString(req.data, "firstName", 100);

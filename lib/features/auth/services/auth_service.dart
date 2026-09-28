@@ -80,17 +80,6 @@ class AuthService {
         termsAccepted: termsAccepted,
         locationConsent: locationConsent,
       );
-      // Admin SDK password changes invalidate refresh tokens. Replace this
-      // session's credential before the setup screen resolves the profile.
-      final email = user.email;
-      if (email != null && email.isNotEmpty) {
-        await user.reauthenticateWithCredential(
-          EmailAuthProvider.credential(
-            email: email,
-            password: newPassword.trim(),
-          ),
-        );
-      }
     } catch (e, st) {
       final failure = _mapSetupError(e);
       // Keep the chosen password even if activation fails.
@@ -101,6 +90,25 @@ class AuthService {
         st,
       );
       throw failure;
+    }
+    await _renewSessionAfterSetup(user, newPassword.trim());
+  }
+
+  /// Admin SDK password changes revoke refresh tokens, so re-sign-in here.
+  /// Setup already committed: a failure only costs a later sign-in.
+  Future<void> _renewSessionAfterSetup(User user, String password) async {
+    final email = user.email;
+    if (email == null || email.isEmpty) return;
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: password),
+      );
+    } catch (e, st) {
+      _logger.warn(
+        'AUTH-SETUP completeAccountSetup: session renewal failed',
+        e,
+        st,
+      );
     }
   }
 
@@ -141,6 +149,16 @@ class AuthService {
       code == 'invalid-credential' ||
       code == 'invalid-login-credentials';
 
+  /// Setup callable refusals, keyed by the message the server throws.
+  static const _setupFailuresByMessage = <String, AuthFailure>{
+    'invalid-newPassword': AuthFailureWeakPassword(),
+    'account-operation-in-progress': AuthFailureTooManyRequests(),
+    'setup-upgrade-required': AuthFailureSetupNotAvailableYet(),
+    'setup-not-pending': AuthFailureSetupAlreadyComplete(),
+    'account-not-found': AuthFailureNoAccountRecord(),
+    'email-not-verified': AuthFailureSetupNotAvailableYet(),
+  };
+
   /// Maps setup-only auth failures before falling back to the shared mapper.
   AuthFailure _mapSetupError(Object e) {
     if (e is FirebaseAuthException) {
@@ -153,27 +171,8 @@ class AuthService {
       }
     }
     if (e is FirebaseFunctionsException) {
-      if (e.message == 'invalid-newPassword') {
-        return const AuthFailureWeakPassword();
-      }
-      if (e.message == 'account-operation-in-progress') {
-        return const AuthFailureTooManyRequests();
-      }
-      if (e.message == 'setup-upgrade-required') {
-        return const AuthFailureSetupNotAvailableYet();
-      }
-
-      // Replayed setup completion is already successful for the user.
-      if (e.message == 'setup-not-pending') {
-        return const AuthFailureSetupAlreadyComplete();
-      }
-      if (e.message == 'account-not-found') {
-        return const AuthFailureNoAccountRecord();
-      }
-      // Old-backend compatibility for the setup availability guard.
-      if (e.message == 'email-not-verified') {
-        return const AuthFailureSetupNotAvailableYet();
-      }
+      final byMessage = _setupFailuresByMessage[e.message];
+      if (byMessage != null) return byMessage;
       if (e.code == 'resource-exhausted') {
         return const AuthFailureTooManyRequests();
       }

@@ -19,16 +19,18 @@ async function reconcileBridge(db, userId, eventUids) {
     const uids = [...new Set([...eventUids, currentUid].filter(Boolean))];
     const refs = uids.map((uid) => db.collection("usersByUid").doc(uid));
     const snapshots = await Promise.all(refs.map((ref) => tx.get(ref)));
+    const wanted = shouldHaveBridge(current);
     for (let i = 0; i < uids.length; i++) {
       const stored = snapshots[i].exists ? snapshots[i].data() : null;
+      const keep = wanted && uids[i] === currentUid;
       // Delayed events cannot remove another profile's bridge.
       if (stored && stored.docId !== userId) {
-        if (uids[i] === currentUid && shouldHaveBridge(current)) {
+        if (keep) {
           throw new Error("syncUsersByUid: uid belongs to another profile");
         }
         continue;
       }
-      if (uids[i] === currentUid && shouldHaveBridge(current)) {
+      if (keep) {
         const body = bridgeBody(userId, current);
         if (!bridgeMatches(stored, body)) tx.set(refs[i], body);
       } else if (stored) {

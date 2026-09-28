@@ -1,5 +1,4 @@
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
-import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 import 'package:scheduling/features/clients/domain/policies/client_building.dart';
@@ -51,9 +50,6 @@ abstract class ClientsRepository {
   /// their `clientId` links on existing appointments are untouched.
   Future<void> setClientArchived(String id, {required bool archived});
 
-  /// Bounded indexed archive read for non-paged consumers. The list uses pages.
-  Future<List<ClientRecord>> fetchArchivedClients();
-
   Future<List<ClientRecord>> searchClients(
     String query, {
     ClientsFilter filter = const ClientsFilterAll(),
@@ -82,13 +78,7 @@ abstract class ClientsRepository {
   /// trends. Legacy docs without `createdAt` (old imports) are excluded.
   Future<List<ClientRecord>> fetchClientsCreatedSince(DateTime since);
 
-  /// Bounded indexed type read for non-paged consumers.
-  Future<List<ClientRecord>> fetchClientsByType(ClientType type);
-
-  /// Bounded indexed building read, keyed by `buildingKeyFor`.
-  Future<List<ClientRecord>> fetchClientsByBuilding(String key);
-
-  /// Every address shared by two or more clients, busiest first — the Building
-  /// menu's options and the per-row pill's counts.
+  /// Every address shared by two or more clients, busiest first — the filter
+  /// sheet's address section, read from the server-maintained catalog.
   Future<List<ClientBuilding>> fetchBuildings();
 }
