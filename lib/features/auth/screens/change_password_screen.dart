@@ -121,6 +121,16 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
         await _routeIntoApp();
         return;
       }
+      if (failure is AuthFailureStartingPasswordReused) {
+        setState(() {
+          _isLoading = false;
+          _passwordError = failure.toLocalizedMessageInContext(
+            context,
+            AuthErrorContext.register,
+          );
+        });
+        return;
+      }
       setState(() {
         _isLoading = false;
         _bannerError = failure.toLocalizedMessageInContext(

@@ -67,8 +67,7 @@ class SearchResultCache<T> {
     _entries[key] = _CachedSearch(results, _clock());
   }
 
-  /// Rewrites each fresh entry through [patch] (null evicts it), keeping its
-  /// recency and TTL; bumps [generation] like [clear] so older loads can't land.
+  /// Rewrites fresh entries through [patch] (null evicts); bumps [generation].
   void patchAll(List<T>? Function(String key, List<T> results) patch) {
     _generation++;
     _pending.clear();

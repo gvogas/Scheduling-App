@@ -396,12 +396,6 @@ void main() {
   });
 
   group('completePasswordReset', () {
-    setUp(() {
-      when(
-        () => user.reauthenticateWithCredential(any()),
-      ).thenAnswer((_) async => _FakeUserCredential());
-    });
-
     test(
       'sends the trimmed password, then renews the session with it',
       () async {
@@ -414,18 +408,34 @@ void main() {
         verify(() => employees.completePasswordReset('N3wPassw0rd')).called(1);
         final captured = verify(
           () => user.reauthenticateWithCredential(captureAny()),
-        ).captured.single;
-        expect((captured as EmailAuthCredential).password, 'N3wPassw0rd');
+        ).captured;
+        expect(captured, hasLength(2));
+        expect((captured.last as EmailAuthCredential).password, 'N3wPassw0rd');
       },
     );
+
+    test('refuses the temporary password and never calls the server', () async {
+      when(
+        () => user.reauthenticateWithCredential(any()),
+      ).thenAnswer((_) async => _FakeUserCredential());
+
+      await expectLater(
+        service.completePasswordReset('Wh4tTheyGave'),
+        throwsA(isA<AuthFailureStartingPasswordReused>()),
+      );
+      verifyNever(() => employees.completePasswordReset(any()));
+    });
 
     test('a failed session renewal still completes', () async {
       when(
         () => employees.completePasswordReset(any()),
       ).thenAnswer((_) async {});
-      when(
-        () => user.reauthenticateWithCredential(any()),
-      ).thenThrow(FirebaseAuthException(code: 'network-request-failed'));
+      var calls = 0;
+      when(() => user.reauthenticateWithCredential(any())).thenAnswer((_) {
+        throw FirebaseAuthException(
+          code: calls++ == 0 ? 'wrong-password' : 'network-request-failed',
+        );
+      });
 
       await expectLater(
         service.completePasswordReset('N3wPassw0rd'),

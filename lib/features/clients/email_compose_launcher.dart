@@ -42,10 +42,7 @@ class EmailComposeLauncher {
 
     final errorMessage = context.l10n.error_couldNotOpenEmail;
 
-    // On iOS we show a native CupertinoActionSheet; on Android a Material sheet with a
-    // drag handle. Either way, the chosen URI gets launched below.
-    final Uri? chosen;
-    chosen = await showAdaptiveActionSheet<Uri>(
+    final chosen = await showAdaptiveActionSheet<Uri>(
       context,
       title: context.l10n.clients_emailWith,
       message: address,

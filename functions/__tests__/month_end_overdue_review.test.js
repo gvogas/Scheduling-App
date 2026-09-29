@@ -7,10 +7,8 @@ const {
   MONTH_END_SCAN_MAX,
 } = require("../notification_policy");
 const {buildOverdueReviewMessage} = require("../notification_messages");
-const {
-  runMonthEndOverdueReview,
-  sendToActiveAdmins,
-} = require("../notification_utils");
+const {sendToActiveAdmins} = require("../notification_utils");
+const {runMonthEndOverdueReview} = require("../notification_sweeps");
 
 /**
  * An instant given as Toronto wall-clock parts, via the zone's offset then.

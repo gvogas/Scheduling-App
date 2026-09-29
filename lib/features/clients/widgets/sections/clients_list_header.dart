@@ -28,9 +28,7 @@ class ClientsListHeader extends StatelessWidget {
   /// follows.
   final int? count;
 
-  /// How many clients the selected [filter] matches, when known — the list
-  /// pages, so the rows it holds are not "all" of anything until they are.
-  /// Ignored while searching: [count] is then matches, not loaded rows.
+  /// How many clients [filter] matches, when known; ignored while searching.
   final int? total;
 
   /// True while a search narrows the unfiltered list: [count] is its matches.

@@ -10,6 +10,34 @@ All notable changes to this project are documented here.
 The `+N` build number after the version (e.g. `1.1.0+5`) is the store version
 code; it increments by one on every store upload regardless of the semver part.
 
+## [1.63.0+93] - 2026-09-29
+
+Admins can reset a team member's password, plus clearer client counts and
+friendlier password errors.
+
+### Added
+- **Reset a team member's password.** An admin can tap Reset password in a
+  person's profile. The person is signed out on every device, and the app
+  shows a new temporary password to share with them. At their next sign-in
+  they choose their own password before anything else, and the app won't
+  accept the temporary one again.
+
+### Changed
+- **A client's Job history opens faster.** It reads only the recent visits it
+  lists, and no longer reloads when someone adds a photo or crew notes.
+
+### Fixed
+- **Filtered client lists show the real total.** The header reads "50 of 120
+  Commercial clients" while the list is still loading, instead of counting up
+  as you scroll.
+- **New clients show up in the "Most jobs" sort right away**, instead of only
+  after their first booking.
+- **Password fields stop at 128 characters** instead of rejecting a long
+  passphrase as too weak, and a password the server refuses during account
+  setup now says why instead of showing a generic error.
+- **Deleting a client with past jobs always offers to archive them instead**,
+  even when the cleanup behind the refusal fails.
+
 ## [1.62.1+92] - 2026-09-28
 
 Client filters that reach the whole list, a sturdier first sign-in for new

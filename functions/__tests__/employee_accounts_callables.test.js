@@ -1183,25 +1183,27 @@ describe("resetEmployeePassword", () => {
     expect(docs[EMP].passwordResetRequired).toBeUndefined();
   });
 
-  test("a failed revoke logs a uid hash and still rejects", async () => {
-    const docs = staff();
-    const auth = makeAuth([], {revokeError: Error("revoke down")});
-    getFirestore.mockReturnValue(makeDb(docs, []));
-    getAuth.mockReturnValue(auth);
+  test("a failed revoke logs a uid hash and still returns the password",
+      async () => {
+        const docs = staff();
+        const auth = makeAuth([], {revokeError: Error("revoke down")});
+        getFirestore.mockReturnValue(makeDb(docs, []));
+        getAuth.mockReturnValue(auth);
 
-    await expect(run({docId: EMP})).rejects.toThrow("revoke down");
+        const out = await run({docId: EMP});
 
-    expect(logger.error).toHaveBeenCalledWith(
-        expect.stringContaining("revoke failed"),
-        expect.objectContaining({
-          uidHash: expect.stringMatching(/^[0-9a-f]{12}$/),
-        }));
-    const password = auth.updateUser.mock.calls[0][1].password;
-    const logged = JSON.stringify(logger.error.mock.calls);
-    expect(logged).not.toContain(password);
-    expect(logged).not.toContain("emp-uid");
-    expect(docs[EMP].passwordResetRequired).toBe(true);
-  });
+        expect(logger.error).toHaveBeenCalledWith(
+            expect.stringContaining("revoke failed"),
+            expect.objectContaining({
+              uidHash: expect.stringMatching(/^[0-9a-f]{12}$/),
+            }));
+        const password = auth.updateUser.mock.calls[0][1].password;
+        expect(out.password).toBe(password);
+        const logged = JSON.stringify(logger.error.mock.calls);
+        expect(logged).not.toContain(password);
+        expect(logged).not.toContain("emp-uid");
+        expect(docs[EMP].passwordResetRequired).toBe(true);
+      });
 
   test("a doc re-bound to another uid is refused in the transaction",
       async () => {
@@ -1299,13 +1301,30 @@ describe("completePasswordReset", () => {
     await expect(completePasswordReset.run(req()))
         .resolves.toEqual({ok: true});
 
-    expect(trace).toEqual(["auth.updateUser", "db.update"]);
+    expect(trace).toEqual(["auth.updateUser", "db.update", "db.commit"]);
     expect(auth.updateUser).toHaveBeenCalledWith(
         "emp-uid", {password: CHOSEN});
     expect(docs["emp-doc"]).toMatchObject({
       passwordResetRequired: false, updatedAt: "TS", status: "active",
     });
   });
+
+  test("a doc disabled after the password change keeps its flag",
+      async () => {
+        const docs = flagged();
+        const auth = makeAuth([]);
+        auth.updateUser.mockImplementation(async () => {
+          docs["emp-doc"].status = "disabled";
+          return {};
+        });
+        getFirestore.mockReturnValue(makeDb(docs, [], BRIDGE));
+        getAuth.mockReturnValue(auth);
+
+        await expect(completePasswordReset.run(req())).rejects.toMatchObject({
+          code: "failed-precondition", message: "not-required",
+        });
+        expect(docs["emp-doc"].passwordResetRequired).toBe(true);
+      });
 
   test("spends the setup budget, keyed on the caller", async () => {
     getFirestore.mockReturnValue(makeDb(flagged(), [], BRIDGE));

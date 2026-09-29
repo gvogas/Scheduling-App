@@ -165,10 +165,11 @@ final List<_WriteCase> _writeCases = [
 ];
 
 /// The writes that touch only a subcollection, so wake `onLocalWrite` alone.
-const _subcollectionOnly = {
+const _noRecordEvent = {
   'appendAppointmentPictures',
   'removeAppointmentPictures',
   'appendFieldNote',
+  'updateFieldNotes',
 };
 
 void main() {
@@ -309,7 +310,7 @@ void main() {
         expect(wakes, greaterThan(0));
       });
 
-      final isPoke = _subcollectionOnly.contains(c.method);
+      final isPoke = _noRecordEvent.contains(c.method);
       test(
         '${c.method} ${isPoke ? 'does NOT wake' : 'wakes'} onRecordWrite',
         () async {

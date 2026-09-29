@@ -199,9 +199,10 @@ employee-completes-setup),
 `image_magic.js`), `notifications.js` (FCM push triggers, backed by
 `notification_utils.js` and — for the travel-time reminder sweep —
 `travel_utils.js`; the three scheduled sweeps (`runOverduePromptSweep`,
-`runDailyDigest`, `runMonthEndOverdueReview`) live in `notification_sweeps.js`,
-which `notification_utils.js` re-exports through lazy getters to avoid a
-require cycle, and the pure travel decisions plus their constants
+`runDailyDigest`, `runMonthEndOverdueReview`) live in `notification_sweeps.js`
+and are imported from THERE — `notification_sweeps.js` requires
+`notification_utils.js`, so the reverse re-export would be a require cycle
+(the lazy getters that papered over it were removed 2026-09-29) — and the pure travel decisions plus their constants
 (`PRESENCE_STALE_MINUTES` — module-private, read by the Dart mirror test —
 `TRAVEL_SWEEP_MAX`, `CONTEXT_QUERY_MAX`) live in `travel_policy.js`;
 `travel_utils.js` re-exports the decision functions (2026-09-28).

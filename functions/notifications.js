@@ -15,12 +15,12 @@ const logger = require("firebase-functions/logger");
 const {getFirestore} = require("firebase-admin/firestore");
 const {getMessaging} = require("firebase-admin/messaging");
 
+const {handleAppointmentWrite} = require("./notification_utils");
 const {
-  handleAppointmentWrite,
   runDailyDigest,
   runMonthEndOverdueReview,
   runOverduePromptSweep,
-} = require("./notification_utils");
+} = require("./notification_sweeps");
 const {runTravelAwareReminderSweep} = require("./travel_utils");
 // The one owner of the business time zone. Never re-inline the literal here:
 // these are the only three Cloud Scheduler jobs left, so a bare string would

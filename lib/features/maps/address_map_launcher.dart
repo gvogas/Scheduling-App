@@ -58,8 +58,7 @@ class AddressMapLauncher {
 
     if (!context.mounted) return;
 
-  final Uri? chosen;
-    chosen = await showAdaptiveActionSheet<Uri>(
+    final chosen = await showAdaptiveActionSheet<Uri>(
       context,
       title: context.l10n.maps_openAddressWith,
       message: displayAddress,
@@ -73,7 +72,6 @@ class AddressMapLauncher {
       ],
     );
 
-
     if (chosen == null || !context.mounted) return;
     // launchUrl can throw and an unguarded throw here would be fatal, so log
     // it before we even check mounted.
@@ -83,9 +81,7 @@ class AddressMapLauncher {
     try {
       opened = await launchUrl(chosen, mode: LaunchMode.externalApplication);
       if (opened) {
-        analytics.logContactAction(
-          action: AnalyticsContactActions.directions,
-        );
+        analytics.logContactAction(action: AnalyticsContactActions.directions);
       }
     } catch (e, st) {
       // Same reason as `launchExternalUri`: the chosen URI is a Maps route

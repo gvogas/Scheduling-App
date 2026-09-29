@@ -29,6 +29,8 @@ jest.mock("firebase-functions/logger", () => ({
 }));
 jest.mock("../notification_utils", () => ({
   handleAppointmentWrite: jest.fn(),
+}));
+jest.mock("../notification_sweeps", () => ({
   runDailyDigest: jest.fn(),
   runOverduePromptSweep: jest.fn(),
   runMonthEndOverdueReview: jest.fn(),
@@ -47,7 +49,7 @@ jest.mock("../wave/triggers", () => ({
 const {getFirestore} = require("firebase-admin/firestore");
 const {getMessaging} = require("firebase-admin/messaging");
 const logger = require("firebase-functions/logger");
-const policy = require("../notification_utils");
+const policy = require("../notification_sweeps");
 const travel = require("../travel_utils");
 const registry = require("../live_activity_registry");
 const waveTriggers = require("../wave/triggers");

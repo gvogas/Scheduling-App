@@ -738,13 +738,11 @@ const resetEmployeePassword = onCall(APP_CHECK, async (req) => {
   await withAccountOperation(db, uid, "password-reset", async () => {
     await markPasswordResetRequired(db, docId, uid);
     record = await auth.updateUser(uid, {password});
-    try {
-      await auth.revokeRefreshTokens(uid);
-    } catch (e) {
+    // Past this point the password is set, so the admin must still get it.
+    await auth.revokeRefreshTokens(uid).catch((e) => {
       logger.error("resetEmployeePassword: password changed, revoke failed",
           {uidHash: shortHash(uid), err: String(e)});
-      throw e;
-    }
+    });
   });
   logger.info("resetEmployeePassword: password reset",
       {uidHash: shortHash(uid)});
@@ -773,9 +771,16 @@ const completePasswordReset = onCall(APP_CHECK, async (req) => {
     }
     // Never log or persist this payload. Auth is the only password store.
     await setSetupPassword(getAuth(), uid, newPassword);
-    await found.docs[0].ref.update({
-      passwordResetRequired: false,
-      updatedAt: FieldValue.serverTimestamp(),
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(found.docs[0].ref);
+      const live = (snap.exists && snap.data()) || {};
+      if (live.status !== "active" || live.uid !== uid) {
+        throw new HttpsError("failed-precondition", "not-required");
+      }
+      tx.update(snap.ref, {
+        passwordResetRequired: false,
+        updatedAt: FieldValue.serverTimestamp(),
+      });
     });
   });
   return {ok: true};

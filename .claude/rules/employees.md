@@ -44,7 +44,10 @@ self-service settings. Root context: `../../CLAUDE.md`.
   `generateStartingPassword()` value, then `revokeRefreshTokens`. The order is
   fail-safe: an Auth failure leaves the flag set, so the worst case is being asked
   to change a password that did not change; a revoke failure after the password
-  changed logs `logger.error` with `uidHash` and rethrows. The response carries
+  changed logs `logger.error` with `uidHash` and still RETURNS the credentials
+  (2026-09-29) — the password is already set, so rethrowing locked the person out
+  behind a password nobody had seen, and `updateUser` with a password already
+  invalidates their sessions. The response carries
   the email off the Auth record `updateUser` returns, never the Firestore copy,
   which can disagree with Auth on older docs (and may be empty). The admin reads the
   result off `NewAccountDialog` (title `employees_passwordReset`, caption
@@ -57,7 +60,8 @@ self-service settings. Root context: `../../CLAUDE.md`.
   fast-path past the screen. `ChangePasswordScreen` (`auth/screens/`) calls
   `completePasswordReset` (`assertActiveCall`; the SAME `isStrongPassword` as
   setup; the `setSetupPassword` policy-code mapping to `invalid-newPassword`; Auth
-  first, then the flag clear; `not-required` reads as already done),
+  first, then the flag clear in a TRANSACTION that re-checks `active` + `uid`, so
+  a doc disabled mid-change keeps its flag; `not-required` reads as already done),
   reauthenticates best-effort (`_renewSession`) and routes in through
   `resumeAfterSignUp`, which now also refuses a still-flagged doc. It surfaces
   offline through its own banner, and logs ONCE through `logger.authFailure`
@@ -69,10 +73,13 @@ self-service settings. Root context: `../../CLAUDE.md`.
   `updateEmployee` emits it — never add it to a client write path. Status never
   moves, so `syncUsersByUid` and the Auth-access reconcile have nothing to do and
   S1's active-to-invited revoke never fires. Builds <= 1.62.x ignore the flag and
-  simply keep the temporary password. `ChangePasswordScreen` deliberately does
-  NOT refuse re-entering the temporary password (unlike setup's
-  `_refuseIfStillTheStartingPassword`) — the admin can simply reset again, so
-  don't "fix" or re-flag it as a hole. The splash cached-identity fast path does
+  simply keep the temporary password. **`completePasswordReset` in `AuthService`
+  REFUSES the temporary password** through the same
+  `_refuseIfStillTheStartingPassword` reauth probe as setup (owner call,
+  2026-09-29, reversing the earlier "the admin can just reset again" note):
+  otherwise the forced change completes on a password the admin read off
+  `NewAccountDialog`. `ChangePasswordScreen` shows it as a password-field error,
+  never a banner. The splash cached-identity fast path does
   not read the flag: a device that signed in with the temporary password on a
   pre-1.63 build and then upgrades keeps its cache and skips Change password until
   it signs out — accepted, consistent with old builds ignoring the flag.

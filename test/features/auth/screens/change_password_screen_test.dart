@@ -223,6 +223,26 @@ void main() {
     expect(find.text('main calendar'), findsNothing);
   });
 
+  testWidgets('the temporary password is a field error, not a banner', (
+    tester,
+  ) async {
+    when(
+      () => auth.completePasswordReset(any()),
+    ).thenThrow(const AuthFailureStartingPasswordReused());
+    await tester.pumpWidget(_harness(auth: auth));
+    await tester.pumpAndSettle();
+    await _fill(tester);
+
+    await _submit(tester);
+
+    expect(
+      find.text('Choose a different password from the one you were given'),
+      findsOneWidget,
+    );
+    expect(tester.widget<AuthBanner>(find.byType(AuthBanner)).message, isNull);
+    expect(find.text('main calendar'), findsNothing);
+  });
+
   testWidgets('an already-cleared flag walks them into the app', (
     tester,
   ) async {

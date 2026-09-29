@@ -15,29 +15,21 @@ Future<void> showNewAccountDialog(
   String? title,
   String? caption,
 }) {
-  final heading = title ?? context.l10n.employees_accountCreatedTitle;
+  final dialog = _NewAccountDialog(
+    name: name,
+    credentials: credentials,
+    title: title ?? context.l10n.employees_accountCreatedTitle,
+    caption: caption,
+  );
+  Widget builder(BuildContext _) => dialog;
   if (context.isCupertino) {
-    // showCupertinoDialog is non-dismissible by default, which matches what
-    // we do in the Material branch.
-    return showCupertinoDialog<void>(
-      context: context,
-      builder: (ctx) => _NewAccountDialog(
-        name: name,
-        credentials: credentials,
-        title: heading,
-        caption: caption,
-      ),
-    );
+    // showCupertinoDialog is non-dismissible by default, like the Material one.
+    return showCupertinoDialog<void>(context: context, builder: builder);
   }
   return showDialog<void>(
     context: context,
     barrierDismissible: false,
-    builder: (ctx) => _NewAccountDialog(
-      name: name,
-      credentials: credentials,
-      title: heading,
-      caption: caption,
-    ),
+    builder: builder,
   );
 }
 

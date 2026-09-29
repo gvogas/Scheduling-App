@@ -92,7 +92,10 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       employeeId == null ? '' : 'emp:$employeeId';
 
   /// Patches cached search answers and scan windows after a local write.
-  void _patchWindow(Map<String, Map<String, dynamic>?> changes) {
+  void _patchWindow(
+    Map<String, Map<String, dynamic>?> changes, {
+    bool isRecordWrite = true,
+  }) {
     _searchCache.patchAll(
       (key, results) => _patchSearchResults(key, results, changes),
     );
@@ -110,7 +113,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
         _clock(),
       );
     }
-    if (!_recordWrites.isClosed) _recordWrites.add(null);
+    if (isRecordWrite && !_recordWrites.isClosed) _recordWrites.add(null);
     if (!_localWrites.isClosed) _localWrites.add(null);
   }
 
@@ -364,9 +367,10 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       'fieldNotes': notes,
       'updatedAt': FieldValue.serverTimestamp(),
     });
+    // Crew notes are not shown in Job history, so no record event.
     _patchWindow({
       id: {'fieldNotes': notes},
-    });
+    }, isRecordWrite: false);
   }
 
   @override

@@ -67,12 +67,7 @@ abstract class ClientsRepository {
     ClientsFilter filter = const ClientsFilterAll(),
   });
 
-  /// How many clients [filter] matches — by default the non-archived roster —
-  /// for the list header's "N of M".
-  ///
-  /// A count aggregate over the same `where` as [fetchClientsPage], not a
-  /// scan: the list pages, so the rows it holds are never the slice's size, and
-  /// reading the slice to count it would cost more than the list itself.
+  /// A `count()` over [fetchClientsPage]'s `where`, for the header's "N of M".
   Future<int> countClients({ClientsFilter filter = const ClientsFilterAll()});
 
   /// One-shot fetch of clients created since [since], used for dashboard

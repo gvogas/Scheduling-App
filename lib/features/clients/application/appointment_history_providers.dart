@@ -57,8 +57,7 @@ final historySearchProvider = FutureProvider.autoDispose
 /// last visit. The form renders two lines off this.
 const int kClientBookingHistoryVisits = 20;
 
-/// The newest [kClientBookingHistoryVisits] visits, future bookings included,
-/// for the booking form; hints on an open form, so it never self-invalidates.
+/// The booking form's newest visits; never self-invalidates on an open form.
 final clientBookingHistoryProvider = FutureProvider.autoDispose
     .family<List<AppointmentRecord>, String>((ref, clientId) async {
       final repo = ref.watch(appointmentsRepositoryProvider);

@@ -69,7 +69,11 @@ class AuthService {
     final user = _auth.currentUser;
     if (user == null) throw const AuthFailureSessionExpired();
 
-    await _refuseIfStillTheStartingPassword(user, newPassword.trim());
+    await _refuseIfStillTheStartingPassword(
+      user,
+      newPassword.trim(),
+      label: 'AUTH-SETUP completeAccountSetup',
+    );
 
     try {
       await _employees.completeEmployeeSetup(
@@ -103,6 +107,11 @@ class AuthService {
     final user = _auth.currentUser;
     if (user == null) throw const AuthFailureSessionExpired();
     final password = newPassword.trim();
+    await _refuseIfStillTheStartingPassword(
+      user,
+      password,
+      label: 'AUTH-CHANGEPW completePasswordReset',
+    );
     try {
       await _employees.completePasswordReset(password);
     } catch (e, st) {
@@ -133,11 +142,12 @@ class AuthService {
     }
   }
 
-  /// Refuses a setup password that is still the admin-issued credential.
+  /// Refuses a new password that is still the admin-issued credential.
   Future<void> _refuseIfStillTheStartingPassword(
     User user,
-    String candidate,
-  ) async {
+    String candidate, {
+    required String label,
+  }) async {
     final email = user.email;
     if (email == null || email.isEmpty) return;
     try {
@@ -148,7 +158,7 @@ class AuthService {
       if (_isWrongPasswordCode(e.code)) return;
       final failure = _mapSetupError(e);
       _logger.authFailure(
-        'AUTH-SETUP completeAccountSetup: starting-password check failed',
+        '$label: starting-password check failed',
         failure,
         e,
         StackTrace.current,
@@ -158,8 +168,7 @@ class AuthService {
     // Reauth SUCCEEDED, so the password is unchanged.
     const failure = AuthFailureStartingPasswordReused();
     _logger.breadcrumb(
-      'AUTH-SETUP completeAccountSetup: refused the starting password '
-      '(${failure.runtimeType})',
+      '$label: refused the starting password (${failure.runtimeType})',
     );
     throw failure;
   }

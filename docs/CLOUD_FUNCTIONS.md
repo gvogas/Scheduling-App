@@ -2,9 +2,10 @@
 
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
-refreshed 2026-09-29 (**32 exports in source, 30 deployed**: `resetEmployeePassword`
-and `completePasswordReset` ADDED and NOT YET DEPLOYED; `syncClientBuilding` went
-live 2026-09-29 at `e70b494d`). Previously refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
+refreshed 2026-09-29 (release 1.63.0+93 — **32 exports, all 32 deployed**:
+`resetEmployeePassword` and `completePasswordReset` went live at `306ed848`; the
+release's review fixes to both bodies are in source and NOT YET DEPLOYED — see the
+deploy log). Earlier 2026-09-29: `syncClientBuilding` went live at `e70b494d`. Previously refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
 and NOT YET DEPLOYED; the other 29 are deployed at `bec23b85`**, though five of
 their bodies changed in source and are also undeployed: `createEmployeeAccount`
 and `completeEmployeeSetup` (per-account operation lock, optional `newPassword`),
@@ -198,9 +199,10 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
   *count* never moved (25 throughout, `index.js` untouched), so a count check
   looked clean for three days while prod ran older bodies — check the deploy
   log, not the count.
-- **32 functions defined, 30 DEPLOYED** (2026-09-29): `resetEmployeePassword` and
-  `completePasswordReset` are new in source and ship with a
-  `functions,firestore:rules` deploy BEFORE the app build that calls them.
+- **32 functions defined, 32 DEPLOYED** (2026-09-29, `306ed848`). Release
+  1.63.0+93 then changed the bodies of `resetEmployeePassword` (a failed revoke
+  no longer rethrows) and `completePasswordReset` (transactional flag clear) in
+  source; redeploy `functions` BEFORE that app build.
 - **30 functions defined, 29 DEPLOYED** (2026-09-28, release 1.62.1+92):
   `syncClientBuilding` is the only export not live, and five deployed bodies
   changed in source since `bec23b85` (see the refresh stamp above). Until that
@@ -677,7 +679,8 @@ locked out. Under the `accountOperations/{uid}` lock: a transaction re-checks
 `revokeRefreshTokens` (signed out everywhere at the next token refresh). A
 failure after the flag leaves it set — the worst case is a forced change of a
 password that did not change; a revoke failure after the password changed logs
-`logger.error` and rethrows. Returns `{email, password}` in
+`logger.error` and still returns the credentials (the password is already set,
+and `updateUser` with a password already invalidates sessions). Returns `{email, password}` in
 `createEmployeeAccount`'s shape; logs only `shortHash(uid)`, never the password.
 
 ### `completePasswordReset` — `employee_accounts.js`
@@ -688,9 +691,12 @@ burns no slot. Under the `accountOperations/{uid}` lock it requires exactly one
 `active` users doc for the caller with `passwordResetRequired === true`
 (`failed-precondition / not-required` otherwise, which the app treats as
 "already done"), sets the password via `setSetupPassword` (Auth policy refusals
-→ `invalid-argument / invalid-newPassword`), then clears the flag. Auth first,
-flag second: a flag clear that fails after the password landed is retried by
-the person and converges. Returns `{ok: true}`.
+→ `invalid-argument / invalid-newPassword`), then clears the flag in a
+transaction that re-checks `active` + the same `uid` (a doc disabled mid-change
+keeps its flag and the call is `not-required`). Auth first, flag second: a flag
+clear that fails after the password landed is retried by the person and
+converges. The app refuses the temporary password itself before calling
+(`AuthService._refuseIfStillTheStartingPassword`). Returns `{ok: true}`.
 
 ## Maps / Places proxies
 

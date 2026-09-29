@@ -13,10 +13,7 @@ final placesRepositoryProvider = Provider<PlacesRepository>(
 /// Roster rows show only a city, so they key on a ~1.1 km cell.
 const int kCoarseGeocodePrecision = 2;
 
-/// Family key for [reverseGeocodeProvider]. Rounds coordinates to a cell (3
-/// decimals ~110 m by default, 2 ~1.1 km via `kCoarseGeocodePrecision`) so
-/// nearby GPS fixes share one billable lookup, and carries [locale] so a
-/// language switch doesn't serve back a cached address in the wrong language.
+/// Family key for [reverseGeocodeProvider]: a rounded cell plus the locale.
 @immutable
 class ReverseGeocodeQuery {
   ReverseGeocodeQuery({

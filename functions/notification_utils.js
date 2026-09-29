@@ -709,15 +709,4 @@ module.exports = {
   loadRecipient: _loadRecipient,
   canReachRecipient: _canReachRecipient,
   fetchEmployeeWidgetWindow,
-  // Lazy: notification_sweeps requires this module, so a top-level require
-  // here would be a cycle.
-  get runDailyDigest() {
-    return require("./notification_sweeps").runDailyDigest;
-  },
-  get runMonthEndOverdueReview() {
-    return require("./notification_sweeps").runMonthEndOverdueReview;
-  },
-  get runOverduePromptSweep() {
-    return require("./notification_sweeps").runOverduePromptSweep;
-  },
 };

@@ -421,7 +421,9 @@ Secret-Manager `GOOGLE_MAP_API_KEY`, which must never ship in the app.
   window; an answer is DROPPED when a listed doc's searchable fields
   (`clientName`/`clientPhone`/`employeeNames`) change or a doc it lacks may now
   belong in it — nothing is ever INSERTED, since only the query can decide
-  membership. It fires the new `onRecordWrite` as well as `onLocalWrite`.
+  membership. It fires the new `onRecordWrite` as well as `onLocalWrite`,
+  except with `isRecordWrite: false` — the crew-notes (`fieldNotes`) write, which
+  must still patch the cached docs but changes nothing Job history lists.
   `_notifyLocalWrite()` is the narrow alternative, for a write that provably
   changes no field `matchHistoryDocs` reads — the two photo paths; it fires
   `onLocalWrite` only.
