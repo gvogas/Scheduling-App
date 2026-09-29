@@ -35,6 +35,9 @@ function filterPatchFor(data, building = buildingFor(data)) {
   if (typeof data.archived !== "boolean") {
     patch.archived = data.archived === true;
   }
+  if (data.jobCount === undefined || data.jobCount === null) {
+    patch.jobCount = 0;
+  }
   if (typeof data.type === "string") {
     const type = data.type.trim();
     if (type !== data.type &&

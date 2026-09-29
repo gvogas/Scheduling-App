@@ -1,7 +1,7 @@
 # Audit rollout and recovery
 
-These changes are local. No production deployment, backfill, or app release has
-been performed. Follow the existing [release runbook](../DEPLOYMENT.md) as well
+Steps 1–5 are DONE (backend deployed and backfill run 2026-09-29, see the
+`docs/DEPLOYMENT.md` log). Step 6, the app release, has not been performed. Follow the existing [release runbook](../DEPLOYMENT.md) as well
 as this change-specific ordering.
 
 ## Release order

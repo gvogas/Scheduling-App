@@ -97,12 +97,27 @@ test("backfill dry-run writes nothing; applying twice preserves counts",
 
 test("canonical filters preserve existing parser behavior for legacy fields",
     () => {
-      expect(filterPatchFor({address: "123 Main", type: " commercial "}))
-          .toEqual({
-            buildingKey: "123 main|", archived: false, type: "commercial",
-          });
-      expect(filterPatchFor({buildingKey: "", archived: true, type: "unknown"}))
-          .toEqual({});
+      expect(filterPatchFor({
+        address: "123 Main", type: " commercial ", jobCount: 2,
+      })).toEqual({
+        buildingKey: "123 main|", archived: false, type: "commercial",
+      });
+      expect(filterPatchFor({
+        buildingKey: "", archived: true, type: "unknown", jobCount: 0,
+      })).toEqual({});
+    });
+
+test("a client created without jobCount is stamped 0; a real count is kept",
+    async () => {
+      // Wave imports and app-added clients are both created without it, and
+      // the Most jobs sort orders by it, so they were invisible there.
+      const {db, rows} = store();
+      rows.set("clients/new", {address: "123 Main"});
+      rows.set("clients/counted", {address: "9 Elm", jobCount: 4});
+      await reconcileClientBuilding(db, "new");
+      await reconcileClientBuilding(db, "counted");
+      expect(rows.get("clients/new").jobCount).toBe(0);
+      expect(rows.get("clients/counted").jobCount).toBe(4);
     });
 
 test("irrelevant edits and projection echoes do no Firestore work",

@@ -4,7 +4,7 @@ Loaded when working under `functions/`. Root context: `../CLAUDE.md`.
 
 Functions live in `functions/` (project `schedulingapp-88727`, region
 `us-central1`). `index.js` is now a thin wiring surface that re-exports 30
-functions in source (the new `syncClientBuilding` is not yet deployed) under their original names (25 until 2026-09-04, when
+functions in source, all deployed (`syncClientBuilding` went live 2026-09-29) under their original names (25 until 2026-09-04, when
 `indexed_search.js` and `appointment_actions.js` added four —
 `docs/DEPLOYMENT.md` uses this count as a deploy abort check, so it is
 operational rather than cosmetic) — the implementations are split into
