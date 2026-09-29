@@ -30,6 +30,12 @@ abstract final class TextLimits {
   /// records keep [email] (320), matching `isValidClientData`.
   static const int authEmail = 254;
 
+  /// A NEW password's cap, matching `completeEmployeeSetup`'s `newPassword`.
+  ///
+  /// Applied only where a password is chosen: sign-in must accept whatever an
+  /// existing account already holds.
+  static const int password = 128;
+
   static const int aptUnit = 32;
   static const int city = 100;
   static const int province = 100;

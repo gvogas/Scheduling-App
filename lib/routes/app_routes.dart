@@ -4,6 +4,7 @@ import 'package:scheduling/core/navigation/app_destination.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/auth/application/is_active_admin_provider.dart';
 import 'package:scheduling/features/auth/screens/account_setup_screen.dart';
+import 'package:scheduling/features/auth/screens/change_password_screen.dart';
 import 'package:scheduling/features/auth/screens/forgot_password_screen.dart';
 import 'package:scheduling/features/auth/screens/login_screen.dart';
 import 'package:scheduling/features/calendar/screens/day_route_screen.dart';
@@ -22,6 +23,7 @@ class AppRoutes {
   static const String login = '/login';
   static const String forgotPassword = '/forgot-password';
   static const String accountSetup = '/account-setup';
+  static const String changePassword = '/change-password';
   static const String mainCalendar = '/calendar';
   static const String employees = '/employees';
   static const String clients = '/clients';
@@ -57,6 +59,12 @@ class AppRoutes {
             firstName: args?.firstName ?? '',
             lastName: args?.lastName ?? '',
           ),
+        );
+
+      case changePassword:
+        return AppPageRoute(
+          settings: settings,
+          builder: (_) => const ChangePasswordScreen(),
         );
 
       case dashboard:

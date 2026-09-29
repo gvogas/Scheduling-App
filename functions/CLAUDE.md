@@ -3,8 +3,10 @@
 Loaded when working under `functions/`. Root context: `../CLAUDE.md`.
 
 Functions live in `functions/` (project `schedulingapp-88727`, region
-`us-central1`). `index.js` is now a thin wiring surface that re-exports 30
-functions in source, all deployed (`syncClientBuilding` went live 2026-09-29) under their original names (25 until 2026-09-04, when
+`us-central1`). `index.js` is now a thin wiring surface that re-exports 32
+functions in source — 30 deployed (`syncClientBuilding` went live 2026-09-29;
+`resetEmployeePassword` and `completePasswordReset` were added 2026-09-29 and deploy
+before the app build that calls them) — under their original names (25 until 2026-09-04, when
 `indexed_search.js` and `appointment_actions.js` added four —
 `docs/DEPLOYMENT.md` uses this count as a deploy abort check, so it is
 operational rather than cosmetic) — the implementations are split into
@@ -159,6 +161,24 @@ not the change set — the change set is employees-only because an admin normall
 makes those edits themselves, and here the admin is a *different* person from
 the one whose sign-in is moving. It is a courtesy, **not** a guarantee: no live
 FCM token means no notice, so the admin still has to tell them).
+**Admin password reset (2026-09-29).** `resetEmployeePassword` opens with
+`assertAdminCall(req, {docId})` → `requireDocId` → the 20/hr create/delete
+budget, refuses the caller's own doc (`self-reset`) and any doc that is not
+`active` with a `uid` (`not-active`), then under `withAccountOperation(uid,
+"password-reset")` runs `markPasswordResetRequired` (transactional re-check that
+lets a deactivate committing first win) → `auth.updateUser(password)` →
+`revokeRefreshTokens` (a revoke failure after the password changed logs
+`logger.error` with `shortHash(uid)` and rethrows); only `shortHash(uid)` is
+ever logged. `completePasswordReset`
+opens with `assertActiveCall(req, {newPassword})` → `requireString(…, 128)` →
+`isStrongPassword` (shared with `completeEmployeeSetup` — never spell the regexes
+twice) → the 5/15 min setup budget, then under the same lock requires exactly
+one `active` doc with `passwordResetRequired === true` (`not-required`), sets the
+password through `setSetupPassword` (policy codes → `invalid-newPassword`) and
+clears the flag. Both are pinned in
+`employee_accounts_callables.test.js`; the emulator runner (`safety_checks.js`)
+checks the rules denylist and a reset → sign-in step.
+
 Pure helpers `performCreateAccount`, `performDeleteAccount`,
 `performChangeEmail` and
 `buildActivationPatch` are exported for unit tests; the last one owns the
@@ -178,7 +198,14 @@ employee-completes-setup),
 (image validation + history purge; the pure JPEG/PNG magic-byte check lives in
 `image_magic.js`), `notifications.js` (FCM push triggers, backed by
 `notification_utils.js` and — for the travel-time reminder sweep —
-`travel_utils.js`. **The pure decisions behind push live one level down in
+`travel_utils.js`; the three scheduled sweeps (`runOverduePromptSweep`,
+`runDailyDigest`, `runMonthEndOverdueReview`) live in `notification_sweeps.js`,
+which `notification_utils.js` re-exports through lazy getters to avoid a
+require cycle, and the pure travel decisions plus their constants
+(`PRESENCE_STALE_MINUTES` — module-private, read by the Dart mirror test —
+`TRAVEL_SWEEP_MAX`, `CONTEXT_QUERY_MAX`) live in `travel_policy.js`;
+`travel_utils.js` re-exports the decision functions (2026-09-28).
+**The pure decisions behind push live one level down in
 `notification_policy.js`** (2026-08-02): the clock/data rules
 (`diffAppointmentForNotifications`, `selectOverdueCandidates`,
 `groupTomorrowsJobsByEmployee`, `tomorrowWindowToronto`, `ledgerBody`,
@@ -343,7 +370,7 @@ decisions on. `for await (const doc of scanByName(collection, {pageSize}))`.
 REQUIRE time against whatever credentials were ambient, so no test could load
 it; its `audit` already took an injected `db`, and the guard was the only thing
 standing between it and being testable.
-- `syncUsersByUid` — Firestore trigger: mirrors `users/{id}` into `usersByUid/{uid}` bridge collection so security rules can resolve roles from auth UID alone. **It also owns deactivation:** on `active` → anything else it disables the Firebase Auth account + `revokeRefreshTokens` and purges every delivery artifact (`presence/location`, `fcmTokens`, `liveActivityTokens` via `recursiveDelete`, and the `liveActivityCards` marker); `→ active` symmetrically re-enables the account. This is load-bearing, not cleanup — the rules gates below assume a *live* status check can't be reached with a stale credential, and `deactivateEmployee` only flips the Firestore field. All of it runs AFTER the auth-critical bridge write and is idempotent (`retry: true`; `auth/user-not-found` is swallowed so the delete-account ordering converges). **Deactivation used to also ROTATE the Storage download tokens on that person's job photos** (`rotateAssignedImageTokens`, `appointment_image_tokens.js`) — that module, its trigger's raised `timeoutSeconds`, and the `(employeeIds CONTAINS, endTime DESC)` composite it needed were all **deleted at the photo-subcollection CONTRACT step**, which is what it was always scheduled to retire with. It existed because `ImageStorageService.uploadImage` minted a `getDownloadURL()` link per photo and persisted it into `pictures[]`: that link's `firebaseStorageDownloadTokens` value is stable per object, never expires and is served with no auth and NO `storage.rules` evaluation, so every assigned device held permanent rules-free copies that revoking the credential did not reach. **The app no longer mints or stores one**, so no NEW photo carries such a link — those are fetched through the SDK against `storage.rules`, which this branch's status flip already answers. **That is not the same as "nothing is left to invalidate", and this bullet used to claim it was:** legacy `appointments/*/images` rows with a `url` and no `storagePath` still exist (the backfill keeps them on purpose, the rules still accept the field, the client fallback is permanent), and those strings stay live after deactivation with nothing rotating them. Closing it needs a prod count of exactly those rows first — see `.claude/rules/images.md`. Don't reintroduce a broad rotation pass without first reintroducing the write that made one necessary; a scoped one over just those legacy objects is the open option. Two things it taught, worth keeping: a `deps` field resolved after entry is a branch no test can reach (the resolved bucket landed in a local while the callee read `deps.bucket`, so the control reported "nothing rotated" while rotating nothing, 2026-08-16); and a per-appointment parent write fans out to `notifyAppointmentChanges`, which stays a genuine no-op only because `diffAppointmentForNotifications` emits nothing for a photo-only diff — pinned by "a pictures-only rewrite emits nothing" in `notification_utils.test.js`.
+- `syncUsersByUid` — Firestore trigger: mirrors `users/{id}` into `usersByUid/{uid}` bridge collection so security rules can resolve roles from auth UID alone. **It also owns deactivation:** on `active` → anything else it disables the Firebase Auth account + `revokeRefreshTokens` and purges every delivery artifact (`presence/location`, `fcmTokens`, `liveActivityTokens` via `recursiveDelete`, and the `liveActivityCards` marker); `→ active` symmetrically re-enables the account. **An `invited` doc is no longer skipped (2026-09-28):** `reconcileAuthAccess` returns early only on a uid mismatch, so active → invited is included and revokes the credential again, while a newly created invited doc is never disabled (it is only called when `authAccessChange(before, after)` is non-null); only an `active` doc ever restores. This is load-bearing, not cleanup — the rules gates below assume a *live* status check can't be reached with a stale credential, and `deactivateEmployee` only flips the Firestore field. All of it runs AFTER the auth-critical bridge write and is idempotent (`retry: true`; `auth/user-not-found` is swallowed so the delete-account ordering converges). **Deactivation used to also ROTATE the Storage download tokens on that person's job photos** (`rotateAssignedImageTokens`, `appointment_image_tokens.js`) — that module, its trigger's raised `timeoutSeconds`, and the `(employeeIds CONTAINS, endTime DESC)` composite it needed were all **deleted at the photo-subcollection CONTRACT step**, which is what it was always scheduled to retire with. It existed because `ImageStorageService.uploadImage` minted a `getDownloadURL()` link per photo and persisted it into `pictures[]`: that link's `firebaseStorageDownloadTokens` value is stable per object, never expires and is served with no auth and NO `storage.rules` evaluation, so every assigned device held permanent rules-free copies that revoking the credential did not reach. **The app no longer mints or stores one**, so no NEW photo carries such a link — those are fetched through the SDK against `storage.rules`, which this branch's status flip already answers. **That is not the same as "nothing is left to invalidate", and this bullet used to claim it was:** legacy `appointments/*/images` rows with a `url` and no `storagePath` still exist (the backfill keeps them on purpose, the rules still accept the field, the client fallback is permanent), and those strings stay live after deactivation with nothing rotating them. Closing it needs a prod count of exactly those rows first — see `.claude/rules/images.md`. Don't reintroduce a broad rotation pass without first reintroducing the write that made one necessary; a scoped one over just those legacy objects is the open option. Two things it taught, worth keeping: a `deps` field resolved after entry is a branch no test can reach (the resolved bucket landed in a local while the callee read `deps.bucket`, so the control reported "nothing rotated" while rotating nothing, 2026-08-16); and a per-appointment parent write fans out to `notifyAppointmentChanges`, which stays a genuine no-op only because `diffAppointmentForNotifications` emits nothing for a photo-only diff — pinned by "a pictures-only rewrite emits nothing" in `notification_utils.test.js`.
 **The bridge's pure rules moved to `bridge_policy.js`** — `shouldHaveBridge`, `bridgeBody`, `bridgeMatches` and `classifyBridgeRow` — shared with `scripts/backfill.js`, which repairs the same collection and had byte-identical copies of the first three under a comment claiming the duplication was deliberate (its stated reason, folding the role check in up front, stopped being a difference once this trigger gained the same check). `classifyBridgeRow` is the three-way decision guarding that script's `--prune-orphans` delete: `current` / `retained` (a uid claimed by a users doc the run SKIPPED — deleting it locks a live employee out of everything) / `orphan`. It was the only script here that deletes and the only one with no test.
 - **Disabled employees must not read their old jobs.** `isAssignedEmployee` (`firestore.rules`) and `isAssignedToAppointment` (`storage.rules`) both gate on `status == 'active'`, NOT on bridge-doc existence — the bridge doc is deliberately retained for `disabled` users, so an existence-only check leaves a terminated tech reading client PII and job photos indefinitely. Keep the two helpers in lockstep.
 - **`cascadeDeleteAppointmentImages` + `recountAppointmentPictures`** — see
@@ -364,7 +391,8 @@ standing between it and being testable.
   push-to-start token lifecycle, and the Siri snapshot schema. They span JS,
   Dart and Swift, so that rule is scoped across all three rather than living
   here. Modules: `notifications.js`, `notification_utils.js`,
-  `notification_policy.js`, `travel_utils.js`, `live_activity*.js`,
+  `notification_policy.js`, `notification_sweeps.js`, `travel_utils.js`,
+  `travel_policy.js`, `live_activity*.js`,
   `widget_payload_utils.js`.
 - **Wave Accounting** (`functions/wave/*`) lives in `.claude/rules/wave.md`
   (moved 2026-08-19) — the callables, the outbox/worker model and its inline

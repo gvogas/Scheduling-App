@@ -202,6 +202,17 @@ describe("buildAppointmentPatch", () => {
     expect(patch.historySearchScopes).not.toContain("all:t:ada");
   });
 
+  test("patches clientPhone alone and indexes the phone tokens", () => {
+    const patch = buildAppointmentPatch(
+        {clientPhone: "5145554321"},
+        {clientPhone: "5140000000", clientName: "Ada", employeeIds: ["e1"]},
+    );
+    expect(patch.clientPhone).toBe("5145554321");
+    expect(patch.clientName).toBeUndefined();
+    expect(patch.historySearchScopes).toContain("all:p:5145554321");
+    expect(patch.historySearchScopes).not.toContain("all:p:5140000000");
+  });
+
   test("leaves the tokens alone for an address-only patch", () => {
     const patch = buildAppointmentPatch(
         {address: {from: "1 Old St", to: "2 New Rd"}},

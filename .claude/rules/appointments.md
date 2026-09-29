@@ -352,7 +352,7 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   reason — "job finished?" is the wrong question for a dentist appointment.
   Keep those two in sync. **`isAllDay` is threaded through all four off-screen
   mirrors** (2026-07-31), and each one needs it for a different reason:
-  - **Reminder sweep** — `selectTravelCandidates` (`functions/travel_utils.js`)
+  - **Reminder sweep** — `selectTravelCandidates` (`functions/travel_policy.js`)
     skips all-day records. Without it the midnight start put the block inside
     the 90-min window at ~23:30 the night before and fired a "time to leave"
     push for something that has no departure time. A *timed* personal job keeps
@@ -541,7 +541,8 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   inequality excludes a single-day job, which has no such field, and day 1,
   which stores 1 — so no backfill was needed), served by the
   `(clientId ASC, dayIndex ASC)` composite; `fetchClientHistory` filters
-  `dayIndex <= 1` in DART, because a server-side inequality would drop every
+  `dayIndex <= 1` in DART (the Job history window carries 10 docs of headroom
+  for it), because a server-side inequality would drop every
   document written before the field existed. A document count made a
   Monday-to-Friday booking read as five jobs on a badge captioned "jobs".
   Known and accepted: nothing renumbers the pair after a this-day-only delete,

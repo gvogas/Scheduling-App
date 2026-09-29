@@ -178,11 +178,10 @@ class FirebaseClientsRepository implements ClientsRepository {
   }
 
   @override
-  Future<int> countClients() async {
-    final snapshot = await _clients
-        .where('archived', isEqualTo: false)
-        .count()
-        .get();
+  Future<int> countClients({
+    ClientsFilter filter = const ClientsFilterAll(),
+  }) async {
+    final snapshot = await _filteredQuery(filter).count().get();
     return snapshot.count ?? 0;
   }
 
@@ -364,8 +363,8 @@ class FirebaseClientsRepository implements ClientsRepository {
     // 25 come back is still the server's alphabetical read cap.
     final queryText = ClientSearchPolicy.normalize(query);
     final queryDigits = ClientSearchPolicy.digitsOnly(query);
-    // Decorate-sort-undecorate, like `sortClients`: scoring inside the
-    // comparator re-normalizes both operands on every comparison.
+    // Decorate-sort-undecorate: scoring inside the comparator would
+    // re-normalize both operands on every comparison.
     final ranked =
         [
           for (final record in records)

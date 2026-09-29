@@ -81,13 +81,10 @@ class ClientJobHistorySection extends ConsumerWidget {
 class _JobList extends StatelessWidget {
   const _JobList({required this.jobs, required this.colorMap});
 
+  /// Already bounded by `kClientJobHistoryVisits`: this eager `Column` builds
+  /// every row it is given.
   final List<AppointmentRecord> jobs;
   final Map<String, Color> colorMap;
-
-  /// This section is a plain `Column` inside the detail body's own scroll view,
-  /// so every row it emits is built whether or not it is on screen — and the
-  /// repository scans a client's history up to its 1000-doc ceiling.
-  static const int _maxRendered = 50;
 
   @override
   Widget build(BuildContext context) {
@@ -95,7 +92,7 @@ class _JobList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (final job in jobs.take(_maxRendered)) ...[
+        for (final job in jobs) ...[
           Padding(
             padding: const EdgeInsets.only(bottom: AppSpacing.sp4),
             child: Text(

@@ -67,6 +67,24 @@ class SearchResultCache<T> {
     _entries[key] = _CachedSearch(results, _clock());
   }
 
+  /// Rewrites each fresh entry through [patch] (null evicts it), keeping its
+  /// recency and TTL; bumps [generation] like [clear] so older loads can't land.
+  void patchAll(List<T>? Function(String key, List<T> results) patch) {
+    _generation++;
+    _pending.clear();
+    for (final key in _entries.keys.toList()) {
+      final cached = _entries[key]!;
+      final next = isFresh(cached.fetchedAt)
+          ? patch(key, cached.results)
+          : null;
+      if (next == null) {
+        _entries.remove(key);
+      } else {
+        _entries[key] = _CachedSearch(next, cached.fetchedAt);
+      }
+    }
+  }
+
   /// Forgets every entry. Invalidation policy stays with the caller.
   void clear() {
     _generation++;

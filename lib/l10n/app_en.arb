@@ -28,6 +28,18 @@
   "@auth_finishSetup": {
     "description": "Primary button on the account setup screen"
   },
+  "auth_changePasswordTitle": "Choose a new password",
+  "@auth_changePasswordTitle": {
+    "description": "Title of the forced Change password screen after an admin reset"
+  },
+  "auth_changePasswordBody": "Your admin reset your password. Choose a new one to continue.",
+  "@auth_changePasswordBody": {
+    "description": "Explains why the Change password screen is shown"
+  },
+  "auth_saveNewPassword": "Save password",
+  "@auth_saveNewPassword": {
+    "description": "Primary button on the Change password screen"
+  },
   "auth_signIn": "Sign In",
   "@auth_signIn": {
     "description": "Sign In"
@@ -1941,6 +1953,10 @@
   "@error_introChangeEmployeeStatus": {
     "description": "Error intro for EMP-STATUS"
   },
+  "error_introResetPassword": "Couldn't reset the password",
+  "@error_introResetPassword": {
+    "description": "Error intro for EMP-RESETPW"
+  },
   "employees_emergencyLoadFailed": "Couldn't load the emergency contact. Close and reopen to try again — saving now would leave it unchanged.",
   "@employees_emergencyLoadFailed": {
     "description": "Shown in the edit-person sheet when the emergency-contact read fails, so a failed read is never mistaken for none on file"
@@ -3642,6 +3658,19 @@
   "@employees_newPasswordIssued": {
     "description": "Caption under the credentials stating the password was just re-issued"
   },
+  "employees_resetPasswordConfirmTitle": "Reset {name}'s password?",
+  "@employees_resetPasswordConfirmTitle": {
+    "description": "Confirm-dialog title before an admin resets an active person's password",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "employees_resetPasswordConfirmBody": "They'll be signed out on every device and must choose a new password at next sign-in.",
+  "@employees_resetPasswordConfirmBody": {
+    "description": "Confirm-dialog body explaining what an admin password reset does"
+  },
   "wave_outboxPending": "{count, plural, =1{1 client waiting to sync} other{{count} clients waiting to sync}}",
   "@wave_outboxPending": {
     "description": "Settings > Wave: how many client edits are queued for Wave.",
@@ -4072,6 +4101,33 @@
     "description": "How many clients the list is showing under a shared-address filter.",
     "placeholders": {
       "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clients_showingSomeType": "{count} of {total} {type} clients",
+  "@clients_showingSomeType": {
+    "description": "How many clients a type or archived filter is showing while more pages remain, against how many match that filter. Once every page is in, it says clients_showingType instead.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "clients_inThisBuildingSome": "{count} of {total} clients in this building",
+  "@clients_inThisBuildingSome": {
+    "description": "How many clients a shared-address filter is showing while more pages remain, against how many are at that address. Once every page is in, it says clients_inThisBuilding instead.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "total": {
         "type": "int"
       }
     }

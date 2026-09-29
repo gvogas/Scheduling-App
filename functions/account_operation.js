@@ -3,6 +3,7 @@
 const {HttpsError} = require("firebase-functions/v2/https");
 const {FieldValue} = require("firebase-admin/firestore");
 const logger = require("firebase-functions/logger");
+const {shortHash} = require("./security");
 
 /**
  * Serializes credential writes across containers. No expiring lease: Auth
@@ -29,8 +30,10 @@ async function withAccountOperation(db, uid, operation, work) {
   } finally {
     // Do not turn successful provisioning into a rollback if only release
     // fails. The retained lock fails closed until an operator clears it.
+    // Hashed: an email lock's key is an unsalted, reversible email digest.
     await ref.delete().catch(() => {
-      logger.error("Account operation lock needs recovery", {uid, operation});
+      logger.error("Account operation lock needs recovery",
+          {keyHash: shortHash(uid), operation});
     });
   }
 }

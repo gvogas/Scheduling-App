@@ -193,4 +193,110 @@ void main() {
     await tester.pumpAndSettle();
     expect(cleared, 1);
   });
+  // A filtered slice pages at 50 too, so its loaded rows are not its size.
+  group('a filtered slice while paging', () {
+    testWidgets('counts a type filter against its own total', (tester) async {
+      const filter = ClientsFilterType(ClientType.commercial);
+      await tester.pumpWidget(_harness(count: 50, total: 120, filter: filter));
+      await tester.pumpAndSettle();
+
+      final l10n = _l10n(tester);
+      final type = clientTypeLabel(l10n, ClientType.commercial);
+      expect(
+        find.text(l10n.clients_showingSomeType(50, 120, type)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('counts the Archived filter against its own total', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _harness(count: 50, total: 80, filter: const ClientsFilterArchived()),
+      );
+      await tester.pumpAndSettle();
+
+      final l10n = _l10n(tester);
+      expect(
+        find.text(
+          l10n.clients_showingSomeType(50, 80, l10n.clients_filterArchived),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('counts a building filter against its own total', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _harness(
+          count: 50,
+          total: 64,
+          filter: const ClientsFilterBuilding('k1'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(_l10n(tester).clients_inThisBuildingSome(50, 64)),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('drops the total once every page is in', (tester) async {
+      const filter = ClientsFilterType(ClientType.commercial);
+      await tester.pumpWidget(_harness(count: 120, total: 120, filter: filter));
+      await tester.pumpAndSettle();
+
+      final l10n = _l10n(tester);
+      expect(
+        find.text(
+          l10n.clients_showingType(
+            120,
+            clientTypeLabel(l10n, ClientType.commercial),
+          ),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a building count drops its total once every page is in', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _harness(
+          count: 64,
+          total: 64,
+          filter: const ClientsFilterBuilding('k1'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(_l10n(tester).clients_inThisBuilding(64)),
+        findsOneWidget,
+      );
+    });
+
+    // While searching, the count is matches, so "of M" would compare two
+    // different things.
+    testWidgets('ignores the total while searching within a filter', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _harness(
+          count: 3,
+          total: 64,
+          isSearching: true,
+          filter: const ClientsFilterBuilding('k1'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(_l10n(tester).clients_inThisBuilding(3)),
+        findsOneWidget,
+      );
+    });
+  });
 }

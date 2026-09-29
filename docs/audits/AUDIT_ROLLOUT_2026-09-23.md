@@ -73,7 +73,11 @@ confirm the owning invocation has ended and no credential write remains in
 flight, and inspect the current Auth user plus `users` profile. Remove only that
 specific stale lock after reconciling the account, then retry. Never bulk-delete
 the lock collection or add TTL expiration. A release failure is logged without
-turning a successful creation into a destructive rollback.
+turning a successful creation into a destructive rollback. **The failure log
+carries `keyHash: shortHash(docId)` plus `operation`, never the doc id**
+(2026-09-28: an email lock's id is an unsalted, reversible email digest). To find
+the stuck doc, list `accountOperations` and match `shortHash(docId)`, or use
+`operation` plus the doc's `createdAt`.
 
 Auth and Firestore remain separate services. If the password write succeeds but
 activation fails, the chosen password remains valid and the account may still

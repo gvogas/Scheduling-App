@@ -142,8 +142,14 @@ class _ListInformationState extends ConsumerState<ListInformation> {
       controller: _searchController,
       hintText: context.l10n.clients_searchAllFields,
     );
-    // Watched under every filter so a round trip through one re-counts nothing.
-    final total = ref.watch(clientsTotalCountProvider).value;
+    // The roster count stays watched under every filter, so a round trip
+    // through one re-counts nothing.
+    final rosterTotal = ref
+        .watch(clientsTotalCountProvider(const ClientsFilterAll()))
+        .value;
+    final total = _filter is ClientsFilterAll
+        ? rosterTotal
+        : ref.watch(clientsTotalCountProvider(_filter)).value;
     return FeatureTourHost(
       scope: _tour.scope,
       isAdmin: widget.isAdmin,
@@ -196,9 +202,7 @@ class _ListInformationState extends ConsumerState<ListInformation> {
                   onClearFilter: () => _applyFilter(const ClientsFilterAll()),
                   count: _visibleCount,
                   isSearching: _searchController.text.trim().isNotEmpty,
-                  // Filter counts describe loaded rows. Only the full roster
-                  // has a separate count aggregate.
-                  total: _filter is ClientsFilterAll ? total : null,
+                  total: total,
                   filter: _filter,
                   sort: _sort,
                   onSortChanged: (next) {

@@ -11,8 +11,10 @@ const {
   requireDocId,
   optionalString,
   assertAdminCall,
+  assertActiveCall,
   enforceDurableRateLimit,
   assertFreshReauth,
+  shortHash,
   APP_CHECK,
 } = require("./security");
 // index.js already loads notifications.js in every container, so this costs no
@@ -520,6 +522,40 @@ function buildActivationPatch(fields, opts) {
   return patch;
 }
 
+/**
+ * Mirrors the app's PasswordRequirement, Unicode letters included.
+ * @param {string} password The trimmed candidate.
+ * @return {boolean} True for 8+ chars with an upper, a lower and a digit.
+ */
+function isStrongPassword(password) {
+  return password.length >= 8 && /\p{Lu}/u.test(password) &&
+    /\p{Ll}/u.test(password) && /[0-9]/.test(password);
+}
+
+// Admin-SDK codes for a password Auth refuses; neither is an HttpsError.
+const REFUSED_PASSWORD_CODES = new Set([
+  "auth/password-does-not-meet-requirements",
+  "auth/invalid-password",
+]);
+
+/**
+ * Sets a caller-chosen password, surfacing an Auth policy refusal as weak.
+ * @param {!Object} auth Admin Auth instance.
+ * @param {string} uid the caller's Auth uid.
+ * @param {string} password the validated new password.
+ * @return {!Promise<void>}
+ */
+async function setSetupPassword(auth, uid, password) {
+  try {
+    await auth.updateUser(uid, {password});
+  } catch (e) {
+    if (e && REFUSED_PASSWORD_CODES.has(e.code)) {
+      throw new HttpsError("invalid-argument", "invalid-newPassword");
+    }
+    throw e;
+  }
+}
+
 const completeEmployeeSetup = onCall(APP_CHECK, async (req) => {
   if (!req.auth || !req.auth.uid) {
     throw new HttpsError("unauthenticated", "auth-required");
@@ -534,9 +570,7 @@ const completeEmployeeSetup = onCall(APP_CHECK, async (req) => {
   const hasPassword = req.data?.newPassword !== undefined;
   const newPassword = hasPassword ?
     requireString(req.data, "newPassword", 128) : "";
-  // Mirrors the app's PasswordRequirement, Unicode letters included.
-  if (hasPassword && (newPassword.length < 8 || !/\p{Lu}/u.test(newPassword) ||
-      !/\p{Ll}/u.test(newPassword) || !/[0-9]/.test(newPassword))) {
+  if (hasPassword && !isStrongPassword(newPassword)) {
     throw new HttpsError("invalid-argument", "invalid-newPassword");
   }
   const firstName = optionalString(req.data, "firstName", 100);
@@ -564,7 +598,7 @@ const completeEmployeeSetup = onCall(APP_CHECK, async (req) => {
       return {ok: false, reason: "not-pending"};
     }
     // Never log or persist this payload. Auth is the only password store.
-    if (hasPassword) await getAuth().updateUser(uid, {password: newPassword});
+    if (hasPassword) await setSetupPassword(getAuth(), uid, newPassword);
     return db.runTransaction(async (tx) => {
       const found = await tx.get(
           db.collection("users").where("uid", "==", uid).limit(1),
@@ -657,12 +691,104 @@ const deleteEmployeeAccount = onCall(APP_CHECK, async (req) => {
   return {ok: true};
 });
 
+/**
+ * Flags an active account for a forced password change, re-checked in a tx.
+ * @param {!Object} db Firestore instance.
+ * @param {string} docId users-doc id.
+ * @param {string} uid the Auth uid the doc must still carry.
+ * @return {!Promise<void>}
+ */
+async function markPasswordResetRequired(db, docId, uid) {
+  await db.runTransaction(async (tx) => {
+    const ref = db.collection("users").doc(docId);
+    const snap = await tx.get(ref);
+    const data = (snap.exists && snap.data()) || {};
+    if (data.status !== "active" || data.uid !== uid) {
+      throw new HttpsError("failed-precondition", "not-active");
+    }
+    tx.update(ref, {
+      passwordResetRequired: true,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+}
+
+const resetEmployeePassword = onCall(APP_CHECK, async (req) => {
+  const callerUid = await assertAdminCall(req, new Set(["docId"]));
+  const docId = requireDocId(req.data, "docId");
+  await enforceDurableRateLimit(
+      "resetEmployeePassword", callerUid, CREATE_RATE_MAX,
+      CREATE_RATE_WINDOW_MS);
+
+  const db = getFirestore();
+  const snap = await db.collection("users").doc(docId).get();
+  const data = (snap.exists && snap.data()) || {};
+  const uid = typeof data.uid === "string" ? data.uid : "";
+  if (uid !== "" && uid === callerUid) {
+    throw new HttpsError("failed-precondition", "self-reset");
+  }
+  if (uid === "" || data.status !== "active") {
+    throw new HttpsError("failed-precondition", "not-active");
+  }
+
+  const auth = getAuth();
+  const password = generateStartingPassword();
+  let record;
+  // Flag first: a failed Auth write then only forces an unneeded change.
+  await withAccountOperation(db, uid, "password-reset", async () => {
+    await markPasswordResetRequired(db, docId, uid);
+    record = await auth.updateUser(uid, {password});
+    try {
+      await auth.revokeRefreshTokens(uid);
+    } catch (e) {
+      logger.error("resetEmployeePassword: password changed, revoke failed",
+          {uidHash: shortHash(uid), err: String(e)});
+      throw e;
+    }
+  });
+  logger.info("resetEmployeePassword: password reset",
+      {uidHash: shortHash(uid)});
+  // Auth owns sign-in; the Firestore copy can lag on older docs.
+  return {email: (record && record.email) || data.email || "", password};
+});
+
+const completePasswordReset = onCall(APP_CHECK, async (req) => {
+  const profile = await assertActiveCall(req, new Set(["newPassword"]));
+  const newPassword = requireString(req.data, "newPassword", 128);
+  if (!isStrongPassword(newPassword)) {
+    throw new HttpsError("invalid-argument", "invalid-newPassword");
+  }
+  await enforceDurableRateLimit(
+      "completePasswordReset", profile.uid, SETUP_RATE_MAX,
+      SETUP_RATE_WINDOW_MS);
+
+  const db = getFirestore();
+  const uid = profile.uid;
+  await withAccountOperation(db, uid, "password-reset", async () => {
+    const found = await db.collection("users")
+        .where("uid", "==", uid).limit(2).get();
+    const data = found.docs.length === 1 ? found.docs[0].data() || {} : {};
+    if (data.status !== "active" || data.passwordResetRequired !== true) {
+      throw new HttpsError("failed-precondition", "not-required");
+    }
+    // Never log or persist this payload. Auth is the only password store.
+    await setSetupPassword(getAuth(), uid, newPassword);
+    await found.docs[0].ref.update({
+      passwordResetRequired: false,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  });
+  return {ok: true};
+});
+
 module.exports = {
   generateStartingPassword,
   createEmployeeAccount,
   completeEmployeeSetup,
   deleteEmployeeAccount,
   changeEmployeeEmail,
+  resetEmployeePassword,
+  completePasswordReset,
   // Exported for unit tests of the transactional flows and the pure patch.
   provisionAuthAccount,
   resetProvisionedPassword,
@@ -672,4 +798,5 @@ module.exports = {
   resolveEmailChangeCaller,
   notifyEmailChanged,
   buildActivationPatch,
+  isStrongPassword,
 };

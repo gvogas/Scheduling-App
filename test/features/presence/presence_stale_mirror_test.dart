@@ -19,7 +19,7 @@ import 'package:scheduling/features/presence/domain/live_map_aggregator.dart';
 /// the same mechanism `appointment_span_rules_test.dart` uses for CEL.
 void main() {
   test('presenceStaleAfter mirrors PRESENCE_STALE_MINUTES', () {
-    final source = File('functions/travel_utils.js').readAsStringSync();
+    final source = File('functions/travel_policy.js').readAsStringSync();
     final match = RegExp(
       r'const PRESENCE_STALE_MINUTES\s*=\s*(\d+)\s*;',
     ).firstMatch(source);
@@ -29,7 +29,7 @@ void main() {
       isNotNull,
       reason:
           'PRESENCE_STALE_MINUTES was renamed or removed in '
-          'functions/travel_utils.js — update this mirror test with it',
+          'functions/travel_policy.js — update this mirror test with it',
     );
     expect(int.parse(match!.group(1)!), presenceStaleAfter.inMinutes);
   });

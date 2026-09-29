@@ -163,6 +163,31 @@ class FirebaseEmployeesRepository implements EmployeesRepository {
   }
 
   @override
+  Future<NewAccountCredentials> resetEmployeePassword(String docId) async {
+    final res = await _functions
+        .httpsCallable(
+          'resetEmployeePassword',
+          options: HttpsCallableOptions(timeout: _callableTimeout),
+        )
+        .call<dynamic>({'docId': docId});
+    final data = (res.data as Map?)?.cast<String, dynamic>();
+    if (data == null) throw const EmployeesFailureUnknown();
+    final credentials = NewAccountCredentials.fromMap(data);
+    if (!credentials.isComplete) throw const EmployeesFailureUnknown();
+    return credentials;
+  }
+
+  @override
+  Future<void> completePasswordReset(String newPassword) async {
+    await _functions
+        .httpsCallable(
+          'completePasswordReset',
+          options: HttpsCallableOptions(timeout: _callableTimeout),
+        )
+        .call<dynamic>({'newPassword': newPassword});
+  }
+
+  @override
   Future<void> completeEmployeeSetup({
     required String newPassword,
     String firstName = '',

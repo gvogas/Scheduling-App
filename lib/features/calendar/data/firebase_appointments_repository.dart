@@ -91,9 +91,11 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   static String _scopeKey(String? employeeId) =>
       employeeId == null ? '' : 'emp:$employeeId';
 
-  /// Clears callable search results after local appointment writes.
+  /// Patches cached search answers and scan windows after a local write.
   void _patchWindow(Map<String, Map<String, dynamic>?> changes) {
-    _searchCache.clear();
+    _searchCache.patchAll(
+      (key, results) => _patchSearchResults(key, results, changes),
+    );
     _pendingHistoryScans.clear();
     // EVERY scope's window: a technician's is the same archive narrowed, so a
     // write that changes what history holds changes it for them too.
@@ -108,10 +110,11 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
         _clock(),
       );
     }
+    if (!_recordWrites.isClosed) _recordWrites.add(null);
     if (!_localWrites.isClosed) _localWrites.add(null);
   }
 
-  /// Wakes `onLocalWrite` without touching the search cache.
+  /// Wakes `onLocalWrite` only: a photo or crew-note write changes no field.
   void _notifyLocalWrite() {
     if (!_localWrites.isClosed) _localWrites.add(null);
   }
@@ -125,12 +128,17 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   }
 
   final StreamController<void> _localWrites = StreamController.broadcast();
+  final StreamController<void> _recordWrites = StreamController.broadcast();
 
   @override
   Stream<void> get onLocalWrite => _localWrites.stream;
 
+  @override
+  Stream<void> get onRecordWrite => _recordWrites.stream;
+
   void dispose() {
     unawaited(_localWrites.close());
+    unawaited(_recordWrites.close());
   }
 
   @override
@@ -549,18 +557,25 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     required String clientId,
     int limit = _clientHistoryPageSize,
     int? cap,
+    bool pastOnly = false,
   }) async {
     if (clientId.isEmpty) return const [];
     final scanCap = cap ?? _clientHistoryScanLimit;
+    var query = _appointments.where('clientId', isEqualTo: clientId);
+    if (pastOnly) {
+      // Same `(clientId, startTime DESC)` composite as the orderBy below.
+      query = query.where(
+        'startTime',
+        isLessThan: Timestamp.fromDate(_clock()),
+      );
+    }
     // The warn belongs to the DEFAULT cap, which is a silent truncation of a
     // list meant to be complete. An explicit cap is a deliberate window — the
     // booking form asks for the newest 20 — and reaching it is the normal case
     // for exactly the repeat clients it serves, so warning there files a
     // Crashlytics non-fatal on every form open and buries the real one.
     final docs = await pageToCap(
-      _appointments
-          .where('clientId', isEqualTo: clientId)
-          .orderBy('startTime', descending: true),
+      query.orderBy('startTime', descending: true),
       pageSize: limit,
       cap: scanCap,
       onCapReached: () {
@@ -847,6 +862,70 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     }
     return next;
   }
+
+  /// A cached answer patched like the window; null when it may now be short.
+  List<AppointmentRecord>? _patchSearchResults(
+    String cacheKey,
+    List<AppointmentRecord> results,
+    Map<String, Map<String, dynamic>?> changes,
+  ) {
+    final scope = cacheKey.substring(0, cacheKey.indexOf('|'));
+    final seen = <String>{};
+    final next = <AppointmentRecord>[];
+    for (final record in results) {
+      final id = record.id;
+      if (id == null || !changes.containsKey(id)) {
+        next.add(record);
+        continue;
+      }
+      seen.add(id);
+      final patch = changes[id];
+      if (patch == null) continue;
+      final data = {
+        ..._rawOf(record),
+        for (final e in patch.entries)
+          if (e.value is! FieldValue) e.key: e.value,
+      };
+      if (!_belongsInHistoryScope(data, scope)) continue;
+      // A renamed client or crew may no longer match the query.
+      if (_movesSearchFields(record, patch)) return null;
+      next.add(AppointmentRecord.fromMap(id, data));
+    }
+    for (final entry in changes.entries) {
+      final data = entry.value;
+      if (seen.contains(entry.key) || data == null) continue;
+      // Only the query knows whether a newly terminal doc matches it.
+      final mayJoin = firestoreDateTime(data['startTime']) != null
+          ? _belongsInHistoryScope(data, scope)
+          : isTerminalStatusRaw((data['status'] ?? '').toString());
+      if (mayJoin) return null;
+    }
+    return next;
+  }
+
+  /// Whether [patch] changes a field `historyEntryOf` reads.
+  static bool _movesSearchFields(
+    AppointmentRecord record,
+    Map<String, dynamic> patch,
+  ) {
+    bool moved(String key, String current) =>
+        patch.containsKey(key) && (patch[key] ?? '').toString() != current;
+    return moved('clientName', record.clientName) ||
+        moved('clientPhone', record.clientPhone) ||
+        (patch.containsKey('employeeNames') &&
+            firestoreStringList(patch['employeeNames']).join('\n') !=
+                record.employeeNames.join('\n'));
+  }
+
+  /// A record's fields in stored shape, including those `toMap` leaves out.
+  static Map<String, dynamic> _rawOf(AppointmentRecord record) => {
+    ...record.toMap(),
+    'createdAt': record.createdAt,
+    'updatedAt': record.updatedAt,
+    'pictureCount': record.pictureCount,
+    'startedAt': record.startedAt,
+    'completedAt': record.completedAt,
+  };
 
   /// Where [doc] belongs in a `startTime` DESC window.
   static int _insertIndexFor(

@@ -62,12 +62,19 @@ async function performDeleteClient(db, clientId) {
       tx.delete(ref);
     });
   } catch (error) {
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      if (snap.exists && snap.data().deletionToken === token) {
-        tx.update(ref, {deletionToken: ""});
-      }
-    });
+    try {
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (snap.exists && snap.data().deletionToken === token) {
+          tx.update(ref, {deletionToken: ""});
+        }
+      });
+    } catch (cleanupError) {
+      // The original refusal must reach the caller; a stuck token blocks edits.
+      logger.error("deleteClient: deletion token release failed", {
+        clientId, error: String(cleanupError && cleanupError.message),
+      });
+    }
     throw error;
   }
 }

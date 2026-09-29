@@ -3,6 +3,7 @@
 jest.mock("firebase-functions/logger", () => ({error: jest.fn()}));
 const logger = require("firebase-functions/logger");
 const {withAccountOperation} = require("../account_operation");
+const {shortHash} = require("../security");
 
 /** @return {!Object} Atomic create fake and release spy. */
 function lockStore() {
@@ -61,7 +62,7 @@ test("release failure is reported without rolling back successful work",
           .resolves.toBe("ok");
       expect(logger.error).toHaveBeenCalledWith(
           "Account operation lock needs recovery",
-          {uid: "uid", operation: "setup"});
+          {keyHash: shortHash("uid"), operation: "setup"});
       await expect(withAccountOperation(db, "uid", "setup", jest.fn()))
           .rejects.toThrow("account-operation-in-progress");
     });
@@ -76,3 +77,14 @@ test("unexpected acquire failure never runs work or removes a lock",
       expect(work).not.toHaveBeenCalled();
       expect(ref.delete).not.toHaveBeenCalled();
     });
+
+test("a failed release never logs the raw lock key", async () => {
+  const {db, ref} = lockStore();
+  ref.delete.mockRejectedValue(Error("offline"));
+  const key = "email_" + "ab".repeat(32);
+  await withAccountOperation(db, key, "create", async () => "ok");
+  const logged = JSON.stringify(logger.error.mock.calls);
+  expect(logged).not.toContain(key);
+  expect(logged).not.toContain("ab".repeat(32));
+  expect(logged).toContain(shortHash(key));
+});

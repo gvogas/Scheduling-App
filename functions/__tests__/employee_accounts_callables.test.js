@@ -31,6 +31,21 @@ jest.mock("../security", () => {
     actual.assertPayloadShape(req.data, allowedKeys);
     return req.auth.uid;
   });
+  mock.assertActiveCall = jest.fn(async (req, allowedKeys) => {
+    const {HttpsError} = require("firebase-functions/v2/https");
+    if (!req.auth || !req.auth.uid) {
+      throw new HttpsError("unauthenticated", "auth-required");
+    }
+    actual.assertPayloadShape(req.data, allowedKeys);
+    const {getFirestore} = require("firebase-admin/firestore");
+    const snap = await getFirestore()
+        .collection("usersByUid").doc(req.auth.uid).get();
+    const data = snap.exists ? snap.data() : null;
+    if (!data || data.status !== "active") {
+      throw new HttpsError("permission-denied", "inactive-user");
+    }
+    return {...data, uid: req.auth.uid};
+  });
   return mock;
 });
 jest.mock("../notification_utils", () => ({
@@ -40,6 +55,7 @@ jest.mock("../notification_utils", () => ({
 }));
 
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
+const {HttpsError} = require("firebase-functions/v2/https");
 const {getAuth} = require("firebase-admin/auth");
 const {getMessaging} = require("firebase-admin/messaging");
 const logger = require("firebase-functions/logger");
@@ -53,6 +69,8 @@ const {
   completeEmployeeSetup,
   changeEmployeeEmail,
   deleteEmployeeAccount,
+  resetEmployeePassword,
+  completePasswordReset,
 } = require("../employee_accounts");
 
 const ADMIN = {uid: "admin-uid"};
@@ -79,11 +97,21 @@ function makeDb(docs, trace, bridge) {
   const bridgeDocs = bridge || {
     "admin-uid": {role: "admin", status: "active", docId: "admin-doc"},
   };
+  const refOf = (id) => ({
+    id,
+    update: async (patch) => {
+      trace.push("db.update");
+      if (!Object.prototype.hasOwnProperty.call(docs, id)) {
+        throw Object.assign(Error("no document"), {code: 5});
+      }
+      docs[id] = {...docs[id], ...patch};
+    },
+  });
   const snapOf = (id) => ({
     id,
     exists: Object.prototype.hasOwnProperty.call(docs, id),
     data: () => docs[id],
-    ref: {id},
+    ref: refOf(id),
   });
   const queryFor = (field, value) => {
     const matches = Object.keys(docs)
@@ -107,6 +135,7 @@ function makeDb(docs, trace, bridge) {
   });
 
   const locks = new Set();
+  const lockLog = [];
   const db = {
     collection: (name) => ({
       where: (field, _op, value) => makeQuery(field, value),
@@ -115,6 +144,7 @@ function makeDb(docs, trace, bridge) {
         create: async () => {
           if (locks.has(id)) throw Object.assign(Error("busy"), {code: 6});
           locks.add(id);
+          lockLog.push(id);
         },
         delete: async () => {
           locks.delete(id);
@@ -146,6 +176,7 @@ function makeDb(docs, trace, bridge) {
       trace.push("db.commit");
       return out;
     },
+    lockLog,
   };
   return db;
 }
@@ -170,14 +201,18 @@ function makeAuth(trace, opts = {}) {
       if (opts.createUserError) throw opts.createUserError;
       return {uid: "new-uid"};
     }),
-    updateUser: jest.fn(async () => {
+    updateUser: jest.fn(async (uid) => {
       trace.push("auth.updateUser");
       if (opts.updateUserError) throw opts.updateUserError;
-      return {};
+      return {uid, email: opts.authEmail};
     }),
     deleteUser: jest.fn(async () => {
       trace.push("auth.deleteUser");
       if (opts.deleteUserError) throw opts.deleteUserError;
+    }),
+    revokeRefreshTokens: jest.fn(async () => {
+      trace.push("auth.revokeRefreshTokens");
+      if (opts.revokeError) throw opts.revokeError;
     }),
   };
 }
@@ -587,6 +622,27 @@ describe("completeEmployeeSetup activation", () => {
             .resolves.toEqual({ok: true});
       });
 
+  test.each([
+    "auth/password-does-not-meet-requirements",
+    "auth/invalid-password",
+  ])("an Auth %s refusal reaches the app as a weak password", async (code) => {
+    const docs = invitedDocs();
+    const db = makeDb(docs, []);
+    const auth = makeAuth([], {
+      updateUserError: Object.assign(Error("refused"), {code}),
+    });
+    getFirestore.mockReturnValue(db);
+    getAuth.mockReturnValue(auth);
+    const req = {data: SETUP, auth: {uid: "emp-uid"}};
+    await expect(completeEmployeeSetup.run(req)).rejects.toMatchObject({
+      code: "invalid-argument", message: "invalid-newPassword",
+    });
+    expect(docs.d1.status).toBe("invited");
+    auth.updateUser.mockResolvedValue({});
+    await expect(completeEmployeeSetup.run(req))
+        .resolves.toEqual({ok: true});
+  });
+
   test("accepts an accented capital the app's checklist accepts", async () => {
     getFirestore.mockReturnValue(makeDb(invitedDocs(), []));
     await expect(completeEmployeeSetup.run({
@@ -895,5 +951,467 @@ describe("changeEmployeeEmail caller branches", () => {
     await changeEmployeeEmail.run({data: PAYLOAD, auth: ADMIN});
 
     expect(auth.updateUser).toHaveBeenCalled();
+  });
+});
+
+describe("resetEmployeePassword", () => {
+  const EMP = "emp-doc";
+  const staff = () => ({
+    [EMP]: {status: "active", uid: "emp-uid", email: "ada@example.com"},
+    "admin-doc": {status: "active", uid: "admin-uid", role: "admin"},
+  });
+  const run = (data) => resetEmployeePassword.run({data, auth: ADMIN});
+
+  beforeEach(() => {
+    security.assertAdmin.mockResolvedValue(undefined);
+    security.enforceDurableRateLimit.mockResolvedValue({
+      refund: jest.fn().mockResolvedValue(undefined),
+    });
+  });
+
+  test("opens with the admin composer on a docId-only payload", async () => {
+    getFirestore.mockReturnValue(makeDb(staff(), []));
+    getAuth.mockReturnValue(makeAuth([]));
+
+    await run({docId: EMP});
+
+    expect(security.assertAdminCall).toHaveBeenCalledWith(
+        expect.objectContaining({auth: ADMIN}), new Set(["docId"]));
+    expect(security.assertAdmin).toHaveBeenCalledWith(ADMIN.uid);
+  });
+
+  // Mutation check: delete the assertAdminCall line and this fails.
+  test("a non-admin resets nothing and burns no rate-limit slot", async () => {
+    const trace = [];
+    const docs = staff();
+    getFirestore.mockReturnValue(makeDb(docs, trace));
+    getAuth.mockReturnValue(makeAuth(trace));
+    security.assertAdmin.mockRejectedValueOnce(new Error("admin-required"));
+
+    await expect(run({docId: EMP})).rejects.toThrow(/admin-required/);
+
+    expect(trace).toEqual([]);
+    expect(docs[EMP].passwordResetRequired).toBeUndefined();
+    expect(security.enforceDurableRateLimit).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    [{docId: EMP, evil: 1}, /unexpected-field/],
+    [{docId: "users/x"}, /invalid-docId/],
+    [{}, /invalid-docId/],
+  ])("rejects %j before consuming a rate-limit slot", async (data, error) => {
+    getFirestore.mockReturnValue(makeDb(staff(), []));
+    getAuth.mockReturnValue(makeAuth([]));
+
+    await expect(run(data)).rejects.toThrow(error);
+
+    expect(security.enforceDurableRateLimit).not.toHaveBeenCalled();
+  });
+
+  test("spends the per-admin create/delete budget", async () => {
+    getFirestore.mockReturnValue(makeDb(staff(), []));
+    getAuth.mockReturnValue(makeAuth([]));
+
+    await run({docId: EMP});
+
+    expect(security.enforceDurableRateLimit).toHaveBeenCalledWith(
+        "resetEmployeePassword", "admin-uid", 20, 60 * 60 * 1000);
+  });
+
+  test("refuses the caller's own account", async () => {
+    const trace = [];
+    getFirestore.mockReturnValue(makeDb(staff(), trace));
+    getAuth.mockReturnValue(makeAuth(trace));
+
+    await expect(run({docId: "admin-doc"})).rejects.toMatchObject({
+      code: "failed-precondition", message: "self-reset",
+    });
+    expect(trace).toEqual([]);
+  });
+
+  test.each([
+    ["an invited", {status: "invited", uid: "x-uid"}],
+    ["a disabled", {status: "disabled", uid: "x-uid"}],
+    ["a uid-less", {status: "active"}],
+  ])("refuses %s account as not-active", async (_label, doc) => {
+    const trace = [];
+    getFirestore.mockReturnValue(makeDb({"x-doc": doc}, trace));
+    getAuth.mockReturnValue(makeAuth(trace));
+
+    await expect(run({docId: "x-doc"})).rejects.toMatchObject({
+      code: "failed-precondition", message: "not-active",
+    });
+    expect(trace).toEqual([]);
+  });
+
+  test("refuses a missing doc as not-active", async () => {
+    const trace = [];
+    getFirestore.mockReturnValue(makeDb(staff(), trace));
+    getAuth.mockReturnValue(makeAuth(trace));
+
+    await expect(run({docId: "gone-doc"})).rejects.toMatchObject({
+      code: "failed-precondition", message: "not-active",
+    });
+    expect(trace).toEqual([]);
+  });
+
+  test("flags the doc BEFORE the password, then revokes sessions", async () => {
+    const trace = [];
+    const docs = staff();
+    const auth = makeAuth(trace);
+    getFirestore.mockReturnValue(makeDb(docs, trace));
+    getAuth.mockReturnValue(auth);
+
+    await run({docId: EMP});
+
+    expect(trace).toEqual([
+      "db.update", "db.commit", "auth.updateUser", "auth.revokeRefreshTokens",
+    ]);
+    expect(docs[EMP]).toMatchObject({
+      status: "active", passwordResetRequired: true, updatedAt: "TS",
+    });
+    expect(auth.revokeRefreshTokens).toHaveBeenCalledWith("emp-uid");
+  });
+
+  test("falls back to the stored email and returns the password", async () => {
+    const auth = makeAuth([]);
+    getFirestore.mockReturnValue(makeDb(staff(), []));
+    getAuth.mockReturnValue(auth);
+
+    const out = await run({docId: EMP});
+
+    expect(out).toEqual({
+      email: "ada@example.com",
+      password: expect.stringMatching(/^[A-Za-z0-9!@$?*]{12}$/),
+    });
+    expect(auth.updateUser).toHaveBeenCalledWith(
+        "emp-uid", {password: out.password});
+  });
+
+  test("returns the Auth email when the stored copy disagrees", async () => {
+    getFirestore.mockReturnValue(makeDb(staff(), []));
+    getAuth.mockReturnValue(makeAuth([], {authEmail: "real@example.com"}));
+
+    const out = await run({docId: EMP});
+
+    expect(out.email).toBe("real@example.com");
+  });
+
+  test("returns the Auth email when the stored copy is empty", async () => {
+    getFirestore.mockReturnValue(makeDb({
+      [EMP]: {status: "active", uid: "emp-uid", email: ""},
+    }, []));
+    getAuth.mockReturnValue(makeAuth([], {authEmail: "real@example.com"}));
+
+    const out = await run({docId: EMP});
+
+    expect(out.email).toBe("real@example.com");
+  });
+
+  test("never logs the password or the raw uid", async () => {
+    getFirestore.mockReturnValue(makeDb(staff(), []));
+    getAuth.mockReturnValue(makeAuth([]));
+
+    const out = await run({docId: EMP});
+
+    const logged = JSON.stringify([
+      logger.info.mock.calls, logger.warn.mock.calls,
+      logger.error.mock.calls, logger.debug.mock.calls,
+    ]);
+    expect(logged).not.toContain(out.password);
+    expect(logged).not.toContain("emp-uid");
+  });
+
+  test("a failed password write keeps the flag, frees the lock", async () => {
+    const docs = staff();
+    const auth = makeAuth([], {updateUserError: Error("auth down")});
+    getFirestore.mockReturnValue(makeDb(docs, []));
+    getAuth.mockReturnValue(auth);
+
+    await expect(run({docId: EMP})).rejects.toThrow("auth down");
+    expect(docs[EMP].passwordResetRequired).toBe(true);
+    expect(auth.revokeRefreshTokens).not.toHaveBeenCalled();
+
+    auth.updateUser.mockResolvedValue({});
+    await expect(run({docId: EMP}))
+        .resolves.toMatchObject({email: "ada@example.com"});
+  });
+
+  test("a deactivate that commits first wins", async () => {
+    const trace = [];
+    const docs = staff();
+    const db = makeDb(docs, trace);
+    const collection = db.collection;
+    db.collection = (name) => {
+      const col = collection(name);
+      if (name !== "users") return col;
+      return {...col, doc: (id) => ({
+        ...col.doc(id),
+        get: async () => {
+          const before = {...docs[id]};
+          docs[id] = {...docs[id], status: "disabled"};
+          return {id, exists: true, data: () => before, ref: {id}};
+        },
+      })};
+    };
+    getFirestore.mockReturnValue(db);
+    getAuth.mockReturnValue(makeAuth(trace));
+
+    await expect(run({docId: EMP})).rejects.toMatchObject({
+      code: "failed-precondition", message: "not-active",
+    });
+    expect(trace).toEqual([]);
+    expect(docs[EMP].passwordResetRequired).toBeUndefined();
+  });
+
+  test("a refused rate-limit slot locks and resets nothing", async () => {
+    const trace = [];
+    const docs = staff();
+    const db = makeDb(docs, trace);
+    const auth = makeAuth(trace);
+    getFirestore.mockReturnValue(db);
+    getAuth.mockReturnValue(auth);
+    security.enforceDurableRateLimit.mockRejectedValueOnce(
+        new HttpsError("resource-exhausted", "rate-limited"));
+
+    await expect(run({docId: EMP}))
+        .rejects.toMatchObject({code: "resource-exhausted"});
+    expect(db.lockLog).toEqual([]);
+    expect(trace).toEqual([]);
+    expect(auth.updateUser).not.toHaveBeenCalled();
+    expect(auth.revokeRefreshTokens).not.toHaveBeenCalled();
+    expect(docs[EMP].passwordResetRequired).toBeUndefined();
+  });
+
+  test("a failed revoke logs a uid hash and still rejects", async () => {
+    const docs = staff();
+    const auth = makeAuth([], {revokeError: Error("revoke down")});
+    getFirestore.mockReturnValue(makeDb(docs, []));
+    getAuth.mockReturnValue(auth);
+
+    await expect(run({docId: EMP})).rejects.toThrow("revoke down");
+
+    expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining("revoke failed"),
+        expect.objectContaining({
+          uidHash: expect.stringMatching(/^[0-9a-f]{12}$/),
+        }));
+    const password = auth.updateUser.mock.calls[0][1].password;
+    const logged = JSON.stringify(logger.error.mock.calls);
+    expect(logged).not.toContain(password);
+    expect(logged).not.toContain("emp-uid");
+    expect(docs[EMP].passwordResetRequired).toBe(true);
+  });
+
+  test("a doc re-bound to another uid is refused in the transaction",
+      async () => {
+        const trace = [];
+        const docs = staff();
+        const db = makeDb(docs, trace);
+        const auth = makeAuth(trace);
+        const collection = db.collection;
+        db.collection = (name) => {
+          const col = collection(name);
+          if (name !== "users") return col;
+          return {...col, doc: (id) => ({
+            ...col.doc(id),
+            get: async () => {
+              const before = {...docs[id]};
+              docs[id] = {...docs[id], uid: "other-uid"};
+              return {id, exists: true, data: () => before, ref: {id}};
+            },
+          })};
+        };
+        getFirestore.mockReturnValue(db);
+        getAuth.mockReturnValue(auth);
+
+        await expect(run({docId: EMP})).rejects.toMatchObject({
+          code: "failed-precondition", message: "not-active",
+        });
+        expect(trace).toEqual([]);
+        expect(auth.updateUser).not.toHaveBeenCalled();
+        expect(auth.revokeRefreshTokens).not.toHaveBeenCalled();
+        expect(docs[EMP].passwordResetRequired).toBeUndefined();
+      });
+
+  test("refuses while another account operation holds the lock", async () => {
+    const db = makeDb(staff(), []);
+    const auth = makeAuth([]);
+    await db.collection("accountOperations").doc("emp-uid").create({});
+    getFirestore.mockReturnValue(db);
+    getAuth.mockReturnValue(auth);
+
+    await expect(run({docId: EMP}))
+        .rejects.toThrow("account-operation-in-progress");
+    expect(auth.updateUser).not.toHaveBeenCalled();
+  });
+});
+
+describe("completePasswordReset", () => {
+  const BRIDGE = {
+    "emp-uid": {role: "employee", status: "active", docId: "emp-doc"},
+  };
+  const flagged = () => ({
+    "emp-doc": {status: "active", uid: "emp-uid", passwordResetRequired: true},
+  });
+  const CHOSEN = "Chosen1pass";
+  const req = (newPassword = CHOSEN) => ({
+    data: {newPassword}, auth: {uid: "emp-uid"},
+  });
+
+  beforeEach(() => {
+    security.enforceDurableRateLimit.mockResolvedValue({
+      refund: jest.fn().mockResolvedValue(undefined),
+    });
+  });
+
+  test("opens with the active-account composer", async () => {
+    getFirestore.mockReturnValue(makeDb(flagged(), [], BRIDGE));
+
+    await completePasswordReset.run(req());
+
+    expect(security.assertActiveCall).toHaveBeenCalledWith(
+        expect.objectContaining({auth: {uid: "emp-uid"}}),
+        new Set(["newPassword"]));
+  });
+
+  test("an inactive caller changes nothing and burns no slot", async () => {
+    const docs = flagged();
+    getFirestore.mockReturnValue(makeDb(docs, [], {
+      "emp-uid": {...BRIDGE["emp-uid"], status: "disabled"},
+    }));
+
+    await expect(completePasswordReset.run(req()))
+        .rejects.toThrow(/inactive-user/);
+
+    expect(security.enforceDurableRateLimit).not.toHaveBeenCalled();
+    expect(getAuth().updateUser).not.toHaveBeenCalled();
+    expect(docs["emp-doc"].passwordResetRequired).toBe(true);
+  });
+
+  test("sets the password FIRST, then clears the flag", async () => {
+    const trace = [];
+    const docs = flagged();
+    const auth = makeAuth(trace);
+    getFirestore.mockReturnValue(makeDb(docs, trace, BRIDGE));
+    getAuth.mockReturnValue(auth);
+
+    await expect(completePasswordReset.run(req()))
+        .resolves.toEqual({ok: true});
+
+    expect(trace).toEqual(["auth.updateUser", "db.update"]);
+    expect(auth.updateUser).toHaveBeenCalledWith(
+        "emp-uid", {password: CHOSEN});
+    expect(docs["emp-doc"]).toMatchObject({
+      passwordResetRequired: false, updatedAt: "TS", status: "active",
+    });
+  });
+
+  test("spends the setup budget, keyed on the caller", async () => {
+    getFirestore.mockReturnValue(makeDb(flagged(), [], BRIDGE));
+
+    await completePasswordReset.run(req());
+
+    expect(security.enforceDurableRateLimit).toHaveBeenCalledWith(
+        "completePasswordReset", "emp-uid", 5, 15 * 60 * 1000);
+  });
+
+  test("refuses an account with no reset pending", async () => {
+    const docs = flagged();
+    delete docs["emp-doc"].passwordResetRequired;
+    getFirestore.mockReturnValue(makeDb(docs, [], BRIDGE));
+
+    await expect(completePasswordReset.run(req())).rejects.toMatchObject({
+      code: "failed-precondition", message: "not-required",
+    });
+    expect(getAuth().updateUser).not.toHaveBeenCalled();
+  });
+
+  test("a replay after success is not-required", async () => {
+    getFirestore.mockReturnValue(makeDb(flagged(), [], BRIDGE));
+
+    await completePasswordReset.run(req());
+
+    await expect(completePasswordReset.run(req())).rejects.toMatchObject({
+      code: "failed-precondition", message: "not-required",
+    });
+  });
+
+  test.each([
+    ["too short", "Short1a"],
+    ["no uppercase", "alllower1x"],
+    ["no lowercase", "ALLUPPER1X"],
+    ["no digit", "NoDigitsHere"],
+    ["over 128 chars", "Aa1" + "b".repeat(126)],
+  ])("refuses a password that is %s before a slot", async (_label, pw) => {
+    const docs = flagged();
+    getFirestore.mockReturnValue(makeDb(docs, [], BRIDGE));
+
+    await expect(completePasswordReset.run(req(pw))).rejects.toMatchObject({
+      code: "invalid-argument", message: "invalid-newPassword",
+    });
+    expect(security.enforceDurableRateLimit).not.toHaveBeenCalled();
+    expect(getAuth().updateUser).not.toHaveBeenCalled();
+    expect(docs["emp-doc"].passwordResetRequired).toBe(true);
+  });
+
+  test.each([
+    "auth/password-does-not-meet-requirements",
+    "auth/invalid-password",
+  ])("an Auth %s refusal reaches the app as a weak password", async (code) => {
+    const docs = flagged();
+    getFirestore.mockReturnValue(makeDb(docs, [], BRIDGE));
+    getAuth.mockReturnValue(makeAuth([], {
+      updateUserError: Object.assign(Error("refused"), {code}),
+    }));
+
+    await expect(completePasswordReset.run(req())).rejects.toMatchObject({
+      code: "invalid-argument", message: "invalid-newPassword",
+    });
+    expect(docs["emp-doc"].passwordResetRequired).toBe(true);
+  });
+
+  test("a failed password write keeps the flag, frees the lock", async () => {
+    const docs = flagged();
+    const auth = makeAuth([], {updateUserError: Error("auth down")});
+    getFirestore.mockReturnValue(makeDb(docs, [], BRIDGE));
+    getAuth.mockReturnValue(auth);
+
+    await expect(completePasswordReset.run(req())).rejects.toThrow("auth down");
+    expect(docs["emp-doc"].passwordResetRequired).toBe(true);
+
+    auth.updateUser.mockResolvedValue({});
+    await expect(completePasswordReset.run(req()))
+        .resolves.toEqual({ok: true});
+    expect(docs["emp-doc"].passwordResetRequired).toBe(false);
+  });
+
+  test("a refused rate-limit slot takes no lock and changes nothing",
+      async () => {
+        const trace = [];
+        const docs = flagged();
+        const db = makeDb(docs, trace, BRIDGE);
+        const auth = makeAuth(trace);
+        getFirestore.mockReturnValue(db);
+        getAuth.mockReturnValue(auth);
+        security.enforceDurableRateLimit.mockRejectedValueOnce(
+            new HttpsError("resource-exhausted", "rate-limited"));
+
+        await expect(completePasswordReset.run(req()))
+            .rejects.toMatchObject({code: "resource-exhausted"});
+        expect(db.lockLog).toEqual([]);
+        expect(trace).toEqual([]);
+        expect(auth.updateUser).not.toHaveBeenCalled();
+        expect(docs["emp-doc"].passwordResetRequired).toBe(true);
+      });
+
+  test("refuses while another account operation holds the lock", async () => {
+    const db = makeDb(flagged(), [], BRIDGE);
+    await db.collection("accountOperations").doc("emp-uid").create({});
+    getFirestore.mockReturnValue(db);
+
+    await expect(completePasswordReset.run(req()))
+        .rejects.toThrow("account-operation-in-progress");
+    expect(getAuth().updateUser).not.toHaveBeenCalled();
   });
 });

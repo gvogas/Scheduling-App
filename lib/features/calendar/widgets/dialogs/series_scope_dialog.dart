@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/dialogs/app_dialog_frame.dart';
+import 'package:scheduling/shared/widgets/dialogs/dialog_action_pair.dart';
 
 enum SeriesScopeChoice { thisOnly, thisAndFuture }
 
@@ -92,36 +93,19 @@ class _SeriesScopeDialogState extends State<_SeriesScopeDialog> {
               setState(() => _choice = SeriesScopeChoice.thisAndFuture),
         ),
         const SizedBox(height: AppSpacing.sp24),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 44),
-                ),
-                onPressed: () => Navigator.pop(context),
-                child: Text(context.l10n.common_back),
-              ),
-            ),
-            const SizedBox(width: AppSpacing.sp12),
-            Expanded(
-              child: FilledButton(
-                style: FilledButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 44),
-                  // dangerFill, never scheme.error — that slot is the
-                  // lifted foreground red and is unreadable as a fill.
-                  backgroundColor: widget.destructive
-                      ? theme.palette.dangerFill
-                      : scheme.primary,
-                  foregroundColor: widget.destructive
-                      ? theme.palette.onDangerFill
-                      : scheme.onPrimary,
-                ),
-                onPressed: () => Navigator.pop(context, _choice),
-                child: Text(widget.primaryLabelFor(_choice)),
-              ),
-            ),
-          ],
+        DialogActionPair(
+          secondaryLabel: context.l10n.common_back,
+          onSecondary: () => Navigator.pop(context),
+          primaryLabel: widget.primaryLabelFor(_choice),
+          onPrimary: () => Navigator.pop(context, _choice),
+          // dangerFill, never scheme.error — that slot is the lifted
+          // foreground red and is unreadable as a fill.
+          primaryBackgroundColor: widget.destructive
+              ? theme.palette.dangerFill
+              : scheme.primary,
+          primaryForegroundColor: widget.destructive
+              ? theme.palette.onDangerFill
+              : scheme.onPrimary,
         ),
       ],
     );

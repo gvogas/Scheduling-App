@@ -104,6 +104,12 @@ Secret-Manager `GOOGLE_MAP_API_KEY`, which must never ship in the app.
   just used is the one it needs. The test is `employee.isInvited`, an **exact**
   match checked BEFORE the active gate, so an empty or unknown status still
   gets the old sign-out. Tests pin both halves.
+  **An `active` doc with `passwordResetRequired: true` (admin reset, 2026-09-29)
+  routes to `ChangePasswordScreen` and KEEPS the session** at both gates,
+  checked AFTER the invited and active gates; sign-in clears the identity cache
+  there so a cold start cannot fast-path past it. The flag is server-owned
+  (`resetEmployeePassword` sets it, `completePasswordReset` clears it) and sits
+  in both `/users` rules denylists. See `.claude/rules/employees.md`.
 - **Live account-deletion signal (kick-out) needs a populated→empty transition.**
   `isAccountDeletionSignal` (`account_status_provider.dart`) fires the runtime
   sign-out only when the current doc is a *settled* empty following a
@@ -410,14 +416,22 @@ Secret-Manager `GOOGLE_MAP_API_KEY`, which must never ship in the app.
   `status whereIn terminalStatusQueryValues`, so a create or a reopen does not
   belong in it), and a new doc is inserted at its `startTime` position, because
   the window is `startTime` DESC and `searchHistory` returns it unsorted.
+  **`_patchWindow` also patches the cached `searchHistory` ANSWERS** (2026-09-28,
+  `SearchResultCache.patchAll`), with the same drop/merge rules as the scan
+  window; an answer is DROPPED when a listed doc's searchable fields
+  (`clientName`/`clientPhone`/`employeeNames`) change or a doc it lacks may now
+  belong in it — nothing is ever INSERTED, since only the query can decide
+  membership. It fires the new `onRecordWrite` as well as `onLocalWrite`.
   `_notifyLocalWrite()` is the narrow alternative, for a write that provably
-  changes no field `matchHistoryDocs` reads — the two photo paths.
+  changes no field `matchHistoryDocs` reads — the two photo paths; it fires
+  `onLocalWrite` only.
   **The LRU itself is `SearchResultCache<T>` (`core/data/search_result_cache.dart`),
   shared with the clients repository**: the two carried byte-identical
   `_isFresh`/`_cacheSearch` pairs over identical dials (50 entries, 2 min), and
   neither copy had a test for expiry or eviction. Invalidation policy stays
   per-repo — they legitimately differ on the `_localWrites` poke.
-  Cache reads refresh recency without extending the original TTL. Searches
+  Cache reads refresh recency without extending the original TTL; `patchAll`
+  keeps recency and TTL too but bumps the generation like `clear()`. Searches
   use `getOrLoad` to share pending requests; cache generations prevent reads
   started before a local write or sign-out from restoring invalidated results.
   Client and history scan windows apply the same generation check and share
@@ -458,10 +472,11 @@ Secret-Manager `GOOGLE_MAP_API_KEY`, which must never ship in the app.
   `isOfflineProvider`, pushes the standard offline notice and returns true so
   the caller returns. The block was copy-pasted at six sites. It takes no
   `tag`: notices carry no support code (2026-08-04), so a tag now lives only in
-  the `logger.warn` label at the same site. **There are exactly TWO carve-outs,
+  the `logger.warn` label at the same site. **There are exactly THREE carve-outs,
   and this list is meant to be exact** — a stale entry here is what made the
   previous version read as drift. `AccountSetupScreen` surfaces offline through
-  its own banner (`_bannerError`) rather than a notice; and
+  its own banner (`_bannerError`) rather than a notice; `ChangePasswordScreen`
+  (2026-09-29) does the same, being the same kind of auth screen; and
   `WaveSettingsSection._blockedOffline` surfaces
   `WaveNetwork().toLocalizedMessage` instead of `composeErrorNotice`, because
   the typed-`Failure`-branch-first rule gives it a better sentence than the
@@ -598,6 +613,13 @@ app build, because `assertPayloadShape` rejects unknown keys), the
 old-build-compatibility check, rollback, and the deploy log recording what
 production actually runs. Read it before any deploy that touches a callable
 payload or a rules cap.
+
+**Two callables were ADDED 2026-09-29 (30 → 32)** — `resetEmployeePassword` (admin,
+`assertAdminCall`) and `completePasswordReset` (self-service, `assertActiveCall`)
+in `employee_accounts.js`, with `passwordResetRequired` added to the `/users`
+create and update denylists. Deploy `functions,firestore:rules` BEFORE the app
+build that calls them; they are new callables, so there is no payload-superset
+concern, and no backfill (an absent flag means "not required").
 
 **`syncClientBuilding` was ADDED 2026-09-23 (29 → 30, a `clients` trigger
 maintaining the `clientBuildings` catalog and each client's `buildingKey`).**

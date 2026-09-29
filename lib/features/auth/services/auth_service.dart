@@ -91,12 +91,37 @@ class AuthService {
       );
       throw failure;
     }
-    await _renewSessionAfterSetup(user, newPassword.trim());
+    await _renewSession(
+      user,
+      newPassword.trim(),
+      label: 'AUTH-SETUP completeAccountSetup: session renewal failed',
+    );
   }
 
-  /// Admin SDK password changes revoke refresh tokens, so re-sign-in here.
-  /// Setup already committed: a failure only costs a later sign-in.
-  Future<void> _renewSessionAfterSetup(User user, String password) async {
+  /// Replaces an admin-issued temporary password on an active account.
+  Future<void> completePasswordReset(String newPassword) async {
+    final user = _auth.currentUser;
+    if (user == null) throw const AuthFailureSessionExpired();
+    final password = newPassword.trim();
+    try {
+      await _employees.completePasswordReset(password);
+    } catch (e, st) {
+      // Logged once, by the screen, through logger.authFailure.
+      Error.throwWithStackTrace(_mapSetupError(e), st);
+    }
+    await _renewSession(
+      user,
+      password,
+      label: 'AUTH-CHANGEPW completePasswordReset: session renewal failed',
+    );
+  }
+
+  /// Admin SDK password changes revoke refresh tokens; best-effort re-sign-in.
+  Future<void> _renewSession(
+    User user,
+    String password, {
+    required String label,
+  }) async {
     final email = user.email;
     if (email == null || email.isEmpty) return;
     try {
@@ -104,11 +129,7 @@ class AuthService {
         EmailAuthProvider.credential(email: email, password: password),
       );
     } catch (e, st) {
-      _logger.warn(
-        'AUTH-SETUP completeAccountSetup: session renewal failed',
-        e,
-        st,
-      );
+      _logger.warn(label, e, st);
     }
   }
 
@@ -155,6 +176,7 @@ class AuthService {
     'account-operation-in-progress': AuthFailureTooManyRequests(),
     'setup-upgrade-required': AuthFailureSetupNotAvailableYet(),
     'setup-not-pending': AuthFailureSetupAlreadyComplete(),
+    'not-required': AuthFailureSetupAlreadyComplete(),
     'account-not-found': AuthFailureNoAccountRecord(),
     'email-not-verified': AuthFailureSetupNotAvailableYet(),
   };

@@ -143,6 +143,34 @@ void main() {
     expect(result.map((a) => a.id), ['a1', 'a2', 'a3']);
   });
 
+  group('pastOnly', () {
+    setUp(() {
+      when(
+        () => query.where('startTime', isLessThan: any(named: 'isLessThan')),
+      ).thenReturn(query);
+    });
+
+    test('bounds startTime below the injected clock', () async {
+      final now = DateTime(2026, 9, 28, 14, 30);
+      await FirebaseAppointmentsRepository(
+        firestore,
+        clock: () => now,
+      ).fetchClientHistory(clientId: 'c1', pastOnly: true);
+
+      verify(
+        () => query.where('startTime', isLessThan: Timestamp.fromDate(now)),
+      ).called(1);
+    });
+
+    test('is off by default, so upcoming bookings still come back', () async {
+      await repo().fetchClientHistory(clientId: 'c1');
+
+      verifyNever(
+        () => query.where('startTime', isLessThan: any(named: 'isLessThan')),
+      );
+    });
+  });
+
   test('returns empty without querying for a blank clientId', () async {
     expect(await repo().fetchClientHistory(clientId: ''), isEmpty);
     verifyNever(() => query.get());

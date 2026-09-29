@@ -38,6 +38,12 @@ abstract class EmployeesRepository {
   /// for a set-up account: disable is the only removal.
   Future<void> deleteEmployeeAccount(String docId);
 
+  /// Issues a new temporary password for an ACTIVE account and flags it for a forced change.
+  Future<NewAccountCredentials> resetEmployeePassword(String docId);
+
+  /// Replaces the signed-in user's temporary password and clears the reset flag.
+  Future<void> completePasswordReset(String newPassword);
+
   /// Activates the signed-in user's own account, carrying the setup profile
   /// and consent flags the server stamps onto the users doc.
   ///

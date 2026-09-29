@@ -72,6 +72,18 @@ const _unknownStatusDoc = UserUidMatch(
   },
 );
 
+const _flaggedDoc = UserUidMatch(
+  id: 'doc1',
+  data: <String, dynamic>{
+    'name': 'Reset User',
+    'email': 'user@test.com',
+    'status': 'active',
+    'role': 'employee',
+    'uid': 'u1',
+    'passwordResetRequired': true,
+  },
+);
+
 void main() {
   setUpAll(() {
     registerFallbackValue(const EmployeeRecord(id: '_', name: '_'));
@@ -90,6 +102,7 @@ void main() {
     storage = _MockSecureStorage();
 
     when(() => cache.save(any())).thenAnswer((_) async {});
+    when(() => cache.clear()).thenAnswer((_) async {});
     when(() => storage.write(any(), any())).thenAnswer((_) async {});
     when(() => auth.signOut()).thenAnswer((_) async {});
 
@@ -123,6 +136,75 @@ void main() {
   }
 
   group('signIn', () {
+    test(
+      'routes a reset account to Change password and KEEPS the session',
+      () async {
+        stubSignedIn();
+        when(
+          () => repo.findUserByUid('u1'),
+        ).thenAnswer((_) async => _flaggedDoc);
+
+        final outcome = await notifier().signIn(
+          email: 'user@test.com',
+          password: 'Tmp2pass!wd9',
+        );
+
+        expect(outcome, isA<SignInNeedsPasswordChange>());
+        verifyNever(() => auth.signOut());
+        expect(state().inProgress, isFalse);
+      },
+    );
+
+    test(
+      'clears the identity cache so a cold start cannot skip the change',
+      () async {
+        stubSignedIn();
+        when(
+          () => repo.findUserByUid('u1'),
+        ).thenAnswer((_) async => _flaggedDoc);
+
+        await notifier().signIn(
+          email: 'user@test.com',
+          password: 'Tmp2pass!wd9',
+        );
+
+        verify(() => cache.clear()).called(1);
+        verifyNever(() => cache.save(any()));
+      },
+    );
+
+    test('a failing cache clear still routes to Change password', () async {
+      stubSignedIn();
+      when(() => repo.findUserByUid('u1')).thenAnswer((_) async => _flaggedDoc);
+      when(
+        () => cache.clear(),
+      ).thenAnswer((_) async => throw Exception('keystore'));
+
+      final outcome = await notifier().signIn(
+        email: 'user@test.com',
+        password: 'Tmp2pass!wd9',
+      );
+
+      expect(outcome, isA<SignInNeedsPasswordChange>());
+    });
+
+    test('an invited doc carrying the flag still goes to setup', () async {
+      stubSignedIn();
+      when(() => repo.findUserByUid('u1')).thenAnswer(
+        (_) async => UserUidMatch(
+          id: 'doc1',
+          data: {..._invitedDoc.data, 'passwordResetRequired': true},
+        ),
+      );
+
+      final outcome = await notifier().signIn(
+        email: 'user@test.com',
+        password: 'password123',
+      );
+
+      expect(outcome, isA<SignInNeedsAccountSetup>());
+    });
+
     test('returns success with the resolved employee and caches it', () async {
       stubSignedIn();
       when(() => repo.findUserByUid('u1')).thenAnswer((_) async => _activeDoc);
@@ -352,6 +434,24 @@ void main() {
   });
 
   group('resumeAfterSignUp', () {
+    test(
+      'a still-flagged doc reports a pending profile, never success',
+      () async {
+        final user = _MockUser();
+        when(() => user.uid).thenReturn('u1');
+        when(() => auth.currentUser).thenReturn(user);
+        when(
+          () => repo.findUserByUid('u1'),
+        ).thenAnswer((_) async => _flaggedDoc);
+
+        expect(
+          await notifier().resumeAfterSignUp(),
+          isA<SignInProfilePending>(),
+        );
+        verifyNever(() => cache.save(any()));
+      },
+    );
+
     test('reports no session when nobody is signed in', () async {
       when(() => auth.currentUser).thenReturn(null);
 

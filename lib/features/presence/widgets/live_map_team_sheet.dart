@@ -281,6 +281,7 @@ class _OnMapRow extends ConsumerWidget {
           lat: point.lat,
           lng: point.lng,
           locale: serverLocaleOf(Localizations.localeOf(context).languageCode),
+          decimals: kCoarseGeocodePrecision,
         ),
       ),
     );

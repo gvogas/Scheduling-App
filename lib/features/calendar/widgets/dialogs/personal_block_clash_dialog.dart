@@ -15,6 +15,7 @@ import 'package:scheduling/features/employees/application/employees_providers.da
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/dialogs/app_dialog_frame.dart';
+import 'package:scheduling/shared/widgets/dialogs/dialog_action_pair.dart';
 import 'package:scheduling/shared/widgets/primitives/app_avatar.dart';
 
 /// Offers crew swaps on the client jobs a just-saved personal block hit.
@@ -287,29 +288,12 @@ class _PersonalBlockClashDialogState
     return rows;
   }
 
-  Widget _actions(BuildContext context, ThemeData theme) => Row(
-    children: [
-      Expanded(
-        child: OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 44),
-          ),
-          onPressed: () => Navigator.pop(context),
-          // Never "Cancel": that would read as cancelling the time off.
-          child: Text(context.l10n.calendar_leaveThem),
-        ),
-      ),
-      const SizedBox(width: AppSpacing.sp12),
-      Expanded(
-        child: FilledButton(
-          style: FilledButton.styleFrom(
-            minimumSize: const Size(double.infinity, 44),
-          ),
-          onPressed: () => Navigator.pop(context),
-          child: Text(context.l10n.common_done),
-        ),
-      ),
-    ],
+  // Never "Cancel": that would read as cancelling the time off.
+  Widget _actions(BuildContext context, ThemeData theme) => DialogActionPair(
+    secondaryLabel: context.l10n.calendar_leaveThem,
+    onSecondary: () => Navigator.pop(context),
+    primaryLabel: context.l10n.common_done,
+    onPrimary: () => Navigator.pop(context),
   );
 
   /// Who else could take [job]; a failed scan fails CLOSED to the stuck row.

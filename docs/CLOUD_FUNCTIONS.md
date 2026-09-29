@@ -2,7 +2,9 @@
 
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
-refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
+refreshed 2026-09-29 (**32 exports in source, 30 deployed**: `resetEmployeePassword`
+and `completePasswordReset` ADDED and NOT YET DEPLOYED; `syncClientBuilding` went
+live 2026-09-29 at `e70b494d`). Previously refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
 and NOT YET DEPLOYED; the other 29 are deployed at `bec23b85`**, though five of
 their bodies changed in source and are also undeployed: `createEmployeeAccount`
 and `completeEmployeeSetup` (per-account operation lock, optional `newPassword`),
@@ -196,6 +198,9 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
   *count* never moved (25 throughout, `index.js` untouched), so a count check
   looked clean for three days while prod ran older bodies — check the deploy
   log, not the count.
+- **32 functions defined, 30 DEPLOYED** (2026-09-29): `resetEmployeePassword` and
+  `completePasswordReset` are new in source and ship with a
+  `functions,firestore:rules` deploy BEFORE the app build that calls them.
 - **30 functions defined, 29 DEPLOYED** (2026-09-28, release 1.62.1+92):
   `syncClientBuilding` is the only export not live, and five deployed bodies
   changed in source since `bec23b85` (see the refresh stamp above). Until that
@@ -320,6 +325,8 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
 | `completeEmployeeSetup` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` → `auth_service.dart` (account setup screen) | — | App Check ✓ · authed (own doc) · durable 5/15min·uid · `accountOperations` lock · optional `newPassword` |
 | `deleteEmployeeAccount` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (pending-account row) | — | App Check ✓ · admin · durable 20/hr·uid |
 | `changeEmployeeEmail` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (inside `updateEmployee`, when the email changed on a doc with a `uid`); `self_email_service.dart` (a person changing their own) | — | App Check ✓ · admin **or self** · non-admin also needs re-auth <5 min · durable 5/hr·uid |
+| `resetEmployeePassword` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (edit-person sheet, Reset password on an active person) | — | App Check ✓ · admin · durable 20/hr·uid · `accountOperations` lock (uid) · refuses self and non-active |
+| `completePasswordReset` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` → `auth_service.dart` (Change password screen) | — | App Check ✓ · active caller (`assertActiveCall`) · durable 5/15min·uid · `accountOperations` lock · requires `passwordResetRequired` |
 | `waveBootstrap` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` | `WAVE_FULL_ACCESS_TOKEN`, `WAVE_BUSINESS_NAME` | App Check ✓ · admin · durable 10/hr |
 | `waveGetConnection` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (Settings mount) | — | App Check ✓ · admin · durable 60/hr |
 | `waveSetImportSchedule` | callable | `onCall` | `wave/callables.js` | none in the current app; builds ≤ 1.61.0 (Settings cadence picker) | — | App Check ✓ · admin · RETIRED no-op, `#compat-1.61.0` |
@@ -657,6 +664,34 @@ too. Tapping it just opens the calendar (`_handlePushTap` treats a missing
 guarantee**: an employee with no live FCM token learns when their old address
 stops signing them in, so the admin should still tell them directly.
 
+### `resetEmployeePassword` — `employee_accounts.js`
+Admin-only. Resets an ACTIVE employee's password (their email is not a real
+inbox, so Forgot password cannot help). Guard order auth → `assertAdmin` →
+payload (`docId` only, `/` rejected) → durable 20/hr per admin uid → work.
+Refuses the caller's own account (`failed-precondition / self-reset`) and a doc
+that is missing, has no `uid` or is not `active` (`failed-precondition /
+not-active`) — invited accounts keep the pending-row Reset, disabled ones stay
+locked out. Under the `accountOperations/{uid}` lock: a transaction re-checks
+`active` + the same `uid` and writes `passwordResetRequired: true`; THEN
+`auth.updateUser` with a `generateStartingPassword()` value; THEN
+`revokeRefreshTokens` (signed out everywhere at the next token refresh). A
+failure after the flag leaves it set — the worst case is a forced change of a
+password that did not change; a revoke failure after the password changed logs
+`logger.error` and rethrows. Returns `{email, password}` in
+`createEmployeeAccount`'s shape; logs only `shortHash(uid)`, never the password.
+
+### `completePasswordReset` — `employee_accounts.js`
+Self-service. Opens with `assertActiveCall(req, {newPassword})`, then
+`requireString(newPassword, 128)` and the shared `isStrongPassword` (8+, `\p{Lu}`,
+`\p{Ll}`, a digit) BEFORE the durable 5/15 min limiter, so a malformed payload
+burns no slot. Under the `accountOperations/{uid}` lock it requires exactly one
+`active` users doc for the caller with `passwordResetRequired === true`
+(`failed-precondition / not-required` otherwise, which the app treats as
+"already done"), sets the password via `setSetupPassword` (Auth policy refusals
+→ `invalid-argument / invalid-newPassword`), then clears the flag. Auth first,
+flag second: a flag clear that fails after the password landed is retried by
+the person and converges. Returns `{ok: true}`.
+
 ## Maps / Places proxies
 
 ### `searchClients` — `indexed_search.js`
@@ -952,7 +987,7 @@ wrong-role or tokenless employee cost a 200-doc query and a full widget-payload
 build/JSON encode every day for a send that returns 0. Both reads land in the
 same per-run cache, so asking costs nothing extra.
 
-### The month-end overdue review — `notification_utils.js` (rides `sendDailyJobDigest`)
+### The month-end overdue review — `notification_sweeps.js` (rides `sendDailyJobDigest`)
 **Not its own export** (2026-09-13). `runMonthEndOverdueReview` is rider 3, in
 its own `try/catch` after the TTL prune and BEFORE `runWaveDaily`, because all
 riders share the 540 s timeout. It does nothing unless `isLastDayOfBusinessMonth`
@@ -1055,13 +1090,14 @@ with **no auth and no `storage.rules` evaluation**, so revoking the credential
 did not reach the links already on that person's device. The app no longer mints or stores one, the
 subcollection rules now REJECT the field, and the prod count of legacy rows
 that still carried one came back **zero** (2026-08-22,
-`scripts/count-legacy-image-urls.js`), so there is nothing left for a rotation
+`scripts/count-legacy-image-urls.js`, deleted 2026-09-28), so there is nothing left for a rotation
 to invalidate — photos are fetched through the SDK, where this branch's status
 flip is the gate. Two things that does NOT cover: a URL captured under an older
 build is still live on its object unless someone rotates it by hand, and the
 `pictures[]` arrays themselves are cleared by
-`scripts/clear-appointment-picture-arrays.js`, which is step 4 of the runbook
-in `docs/DEPLOYMENT.md` and is the irreversible one.
+`scripts/clear-appointment-picture-arrays.js` (deleted 2026-09-28; in git
+history), which was step 4 of the runbook in `docs/DEPLOYMENT.md` and the
+irreversible one.
 
 The bridge's pure rules live in `bridge_policy.js` (`shouldHaveBridge`,
 `bridgeBody`, `bridgeMatches`, `classifyBridgeRow`), shared with

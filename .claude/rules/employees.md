@@ -22,7 +22,62 @@ self-service settings. Root context: `../../CLAUDE.md`.
   bridge ownership checks when removing stale uids. Auth writes are separate,
   so re-check the live profile after applying access and retry reconciliation
   when it changes. Invited accounts must remain able to complete setup.
+  **`reconcileAuthAccess` no longer short-circuits on a live `invited` doc**
+  (2026-09-28): only a uid mismatch returns early, and an invited doc computes
+  "revoke", so this path never re-enables an invited account and an
+  active-to-invited demotion revokes the credential again. Setup is unaffected
+  because it is only called when `authAccessChange(before, after)` is non-null,
+  so a newly created invited doc is never disabled. **Open, owner decision:**
+  resetting the password of an account an admin demoted active-to-invited in the
+  console does not re-enable the disabled credential (`resetProvisionedPassword`
+  sets only password/displayName).
 
+- **Admin password reset for an ACTIVE account** (2026-09-29). Employee emails are not
+  real inboxes, so Forgot password can never reach anyone. Reset password in the
+  account footer of `edit_person_sheet.dart` (shown only for an `active` doc with
+  a `uid` that is NOT the signed-in admin; hidden while that uid is unknown) goes
+  through `EmployeeFormController.resetPassword` (sealed `PasswordResetIssued` /
+  `Failed` / `Busy`) to `resetEmployeePassword`, which refuses self and non-active,
+  then under `accountOperations/{uid}` (`password-reset`) re-checks `active` + the
+  same `uid` in a transaction and writes the server-owned
+  **`passwordResetRequired: true`** FIRST, then sets a
+  `generateStartingPassword()` value, then `revokeRefreshTokens`. The order is
+  fail-safe: an Auth failure leaves the flag set, so the worst case is being asked
+  to change a password that did not change; a revoke failure after the password
+  changed logs `logger.error` with `uidHash` and rethrows. The response carries
+  the email off the Auth record `updateUser` returns, never the Firestore copy,
+  which can disagree with Auth on older docs (and may be empty). The admin reads the
+  result off `NewAccountDialog` (title `employees_passwordReset`, caption
+  `employees_newPasswordIssued`). Both gates
+  (`splash_controller.dart`, `sign_in_controller.dart`) route
+  `active && passwordResetRequired` to `AppRoutes.changePassword` AFTER the
+  unchanged `invited` and `!isActive` checks (so an inactive flagged account is
+  still signed out) and KEEP the session; sign-in also **clears the identity
+  cache** on that branch, because a stale `AuthCache` hit lets a cold start
+  fast-path past the screen. `ChangePasswordScreen` (`auth/screens/`) calls
+  `completePasswordReset` (`assertActiveCall`; the SAME `isStrongPassword` as
+  setup; the `setSetupPassword` policy-code mapping to `invalid-newPassword`; Auth
+  first, then the flag clear; `not-required` reads as already done),
+  reauthenticates best-effort (`_renewSession`) and routes in through
+  `resumeAfterSignUp`, which now also refuses a still-flagged doc. It surfaces
+  offline through its own banner, and logs ONCE through `logger.authFailure`
+  (`AUTH-CHANGEPW`; the service does not double-file). **Log out on that screen
+  deregisters the device (`deregisterThisDevice`) BEFORE `signOut()` and restores
+  it if the sign-out fails**, the same order as account exit, because the account
+  is active and holds push, presence and Live Activity registrations. The flag is
+  in BOTH `/users` rules denylists and neither `EmployeeRecord.toMap()` nor
+  `updateEmployee` emits it — never add it to a client write path. Status never
+  moves, so `syncUsersByUid` and the Auth-access reconcile have nothing to do and
+  S1's active-to-invited revoke never fires. Builds <= 1.62.x ignore the flag and
+  simply keep the temporary password. `ChangePasswordScreen` deliberately does
+  NOT refuse re-entering the temporary password (unlike setup's
+  `_refuseIfStillTheStartingPassword`) — the admin can simply reset again, so
+  don't "fix" or re-flag it as a hole. The splash cached-identity fast path does
+  not read the flag: a device that signed in with the temporary password on a
+  pre-1.63 build and then upgrades keeps its cache and skips Change password until
+  it signs out — accepted, consistent with old builds ignoring the flag.
+  **S4 (an invited-account re-provision reset does not set `disabled: false`, noted above) is still OPEN** — this flow does
+  not touch it. Tags: `EMP-RESETPW` (notice), `AUTH-CHANGEPW` (log-only).
 - **Employee accounts: the admin invites, the employee sets up** (P4c,
   2026-08-02 — this REPLACED the one-time signup-code flow entirely). The
   admin's person sheet calls `createEmployeeAccount`, which mints a **Firebase
@@ -60,12 +115,20 @@ self-service settings. Root context: `../../CLAUDE.md`.
   its invitation re-check and starting-password reset. Duplicate creates also
   take an email-hash lock before minting Auth. The app then reauthenticates with
   the chosen password to replace its revoked refresh credential, BEST-EFFORT
-  (`_renewSessionAfterSetup`): the account is already active, so a failed
+  (`_renewSession(label:)`): the account is already active, so a failed
   renewal logs and completes — reporting it as a setup failure sent a retry to
   `not-pending` on an account still holding the FIRST password.
   The server's letter classes are Unicode (`\p{Lu}`/`\p{Ll}`) to match
   `PasswordRequirement`; an ASCII class refused `Éric2024` behind a green
-  checklist.
+  checklist. **The Admin SDK bypasses the console password policy**, so that
+  server check (8+, an uppercase and a lowercase Unicode letter, a digit) must stay at least as strict as
+  the console policy, which is binding config living nowhere in the repo;
+  `completeEmployeeSetup` maps Auth's `auth/password-does-not-meet-requirements`
+  and `auth/invalid-password` to `invalid-argument` `invalid-newPassword`
+  (`AuthFailureWeakPassword`) instead of an internal error.
+  `TextLimits.password` (128) matches the callable's `newPassword` cap and is
+  bound only on the two `AccountSetupScreen` fields — sign-in stays uncapped
+  deliberately; pinned by `text_limits_test.dart`.
   `newPassword` remains optional for older builds. Re-provisioning stamps the
   server-owned `setupRequiresPassword` flag BEFORE rotating Auth; legacy setup
   may activate only invitations without that flag. Once flagged, it gets

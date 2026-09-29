@@ -140,6 +140,9 @@ class _LoginState extends ConsumerState<Login> {
       // still live — the setup screen needs exactly that credential.
       case SignInNeedsAccountSetup(:final firstName, :final lastName):
         await _routeToAccountSetup(firstName: firstName, lastName: lastName);
+      // A reset account; the session is kept for the Change password screen.
+      case SignInNeedsPasswordChange():
+        await Navigator.pushReplacementNamed(context, AppRoutes.changePassword);
       // These only come from resumeAfterSignUp() — signIn() never produces them.
       case SignInNoSession() || SignInProfilePending():
         break;

@@ -1,6 +1,7 @@
 "use strict";
 
 const {
+  cancelCustomerUpsert,
   enqueueCustomerUpsert,
   shouldEnqueueClientWrite,
 } = require("../wave/enqueue");
@@ -223,5 +224,47 @@ describe("shouldEnqueueClientWrite", () => {
     };
     const before = {...base};
     expect(shouldEnqueueClientWrite(before, after)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// cancelCustomerUpsert
+// ---------------------------------------------------------------------------
+
+describe("cancelCustomerUpsert", () => {
+  /**
+   * Fake db whose transaction reads one job doc.
+   * @param {Object|null} data Stored job data, or null for a missing doc.
+   * @return {{db: !Object, tx: !Object, ref: !Object}}
+   */
+  function cancelDb(data) {
+    const ref = {id: "customerUpsert__c1"};
+    const tx = {
+      get: jest.fn(async () => ({exists: data !== null, data: () => data})),
+      delete: jest.fn(),
+    };
+    const db = {
+      collection: jest.fn(() => ({doc: jest.fn(() => ref)})),
+      runTransaction: jest.fn((fn) => fn(tx)),
+    };
+    return {db, tx, ref};
+  }
+
+  test("returns false when no job exists", async () => {
+    const {db, tx} = cancelDb(null);
+    expect(await cancelCustomerUpsert("c1", {db})).toBe(false);
+    expect(tx.delete).not.toHaveBeenCalled();
+  });
+
+  test("leaves an inflight job alone", async () => {
+    const {db, tx} = cancelDb({status: "inflight"});
+    expect(await cancelCustomerUpsert("c1", {db})).toBe(false);
+    expect(tx.delete).not.toHaveBeenCalled();
+  });
+
+  test("deletes a queued job", async () => {
+    const {db, tx, ref} = cancelDb({status: "queued"});
+    expect(await cancelCustomerUpsert("c1", {db})).toBe(true);
+    expect(tx.delete).toHaveBeenCalledWith(ref);
   });
 });

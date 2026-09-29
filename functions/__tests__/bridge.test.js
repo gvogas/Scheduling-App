@@ -544,4 +544,53 @@ describe("syncUsersByUid bridge/presence isolation", () => {
             .rejects.toThrow("profile changed during Auth reconciliation");
         expect(auth.updateUser).toHaveBeenCalledTimes(3);
       });
+
+  test("active -> invited revokes the Auth credential", async () => {
+    presenceDelete.mockResolvedValue(undefined);
+    const before = {uid: "auth1", status: "active", role: "employee"};
+
+    await syncUsersByUid.run(makeEvent("u_doc", before,
+        {...before, status: "invited"}));
+
+    expect(auth.updateUser).toHaveBeenCalledWith("auth1", {disabled: true});
+    expect(auth.revokeRefreshTokens).toHaveBeenCalledWith("auth1");
+    expect(bridgeRows.has("usersByUid/auth1")).toBe(false);
+  });
+
+  test("a newly created invited account keeps its credential enabled",
+      async () => {
+        const invited = {uid: "auth1", status: "invited", role: "employee"};
+
+        await syncUsersByUid.run(makeEvent("u_doc", null, invited));
+
+        expect(auth.updateUser).not.toHaveBeenCalled();
+        expect(auth.revokeRefreshTokens).not.toHaveBeenCalled();
+      });
+
+  test("a delayed activation never re-enables a now-invited account",
+      async () => {
+        const disabled = {uid: "auth1", status: "disabled", role: "employee"};
+        const event = makeEvent("u_doc", disabled,
+            {...disabled, status: "active"});
+        currentUser = {...disabled, status: "invited"};
+
+        await syncUsersByUid.run(event);
+
+        expect(auth.updateUser).not.toHaveBeenCalledWith(
+            "auth1", {disabled: false});
+        expect(auth.updateUser).toHaveBeenLastCalledWith(
+            "auth1", {disabled: true});
+      });
+
+  test("setup's invited -> active activation restores the credential",
+      async () => {
+        const invited = {uid: "auth1", status: "invited", role: "employee"};
+
+        await syncUsersByUid.run(makeEvent("u_doc", invited,
+            {...invited, status: "active"}));
+
+        expect(auth.updateUser).toHaveBeenCalledWith(
+            "auth1", {disabled: false});
+        expect(auth.revokeRefreshTokens).not.toHaveBeenCalled();
+      });
 });

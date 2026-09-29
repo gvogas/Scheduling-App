@@ -64,9 +64,12 @@ final clientBuildingsProvider =
       return await ref.watch(clientsRepositoryProvider).fetchBuildings();
     });
 
-/// How many non-archived clients exist, so the list header can say "250 of
+/// How many clients a list filter matches, so the list header can say "250 of
 /// 500" rather than calling the rows it happens to have loaded "all".
-final clientsTotalCountProvider = FutureProvider.autoDispose<int>((ref) async {
-  ref.watch(clientsRefreshProvider);
-  return await ref.watch(clientsRepositoryProvider).countClients();
-});
+final clientsTotalCountProvider = FutureProvider.autoDispose
+    .family<int, ClientsFilter>((ref, filter) async {
+      ref.watch(clientsRefreshProvider);
+      return await ref
+          .watch(clientsRepositoryProvider)
+          .countClients(filter: filter);
+    });

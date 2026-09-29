@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:scheduling/core/animations/animated_form_field_wrapper.dart';
 import 'package:scheduling/core/animations/app_animation_constants.dart';
@@ -152,10 +153,14 @@ class AuthPasswordField extends StatelessWidget {
     this.textInputAction = TextInputAction.done,
     this.autofillHints = const [AutofillHints.password],
     this.showLabel = false,
+    this.maxLength,
     super.key,
   });
 
   final String label;
+
+  /// Caps the field without a counter; null leaves it uncapped.
+  final int? maxLength;
 
   /// Renders [label] above the field instead of only as the hint.
   final bool showLabel;
@@ -187,6 +192,10 @@ class AuthPasswordField extends StatelessWidget {
           enableIMEPersonalizedLearning: kCredentialImePersonalizedLearning,
           textInputAction: textInputAction,
           autofillHints: autofillHints,
+          inputFormatters: [
+            if (maxLength case final cap?)
+              LengthLimitingTextInputFormatter(cap),
+          ],
           enabled: enabled,
           onSubmitted: (_) => onSubmitted(),
           onChanged: (_) => onChanged(),

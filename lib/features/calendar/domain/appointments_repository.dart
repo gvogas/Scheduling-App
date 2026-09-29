@@ -117,15 +117,20 @@ abstract class AppointmentsRepository {
   ///
   /// [limit] is the PAGE size; [cap] is how far the scan will page in total.
   /// A caller that only needs a recent slice passes both, so it doesn't buy
-  /// the whole archive to render two lines.
+  /// the whole archive to render two lines. [pastOnly] drops visits that have
+  /// not started yet.
   Future<List<AppointmentRecord>> fetchClientHistory({
     required String clientId,
     int limit,
     int? cap,
+    bool pastOnly,
   });
 
-  /// Fires after local writes so search providers invalidate stale results immediately.
+  /// Fires after every local write, including photo and crew-note appends.
   Stream<void> get onLocalWrite;
+
+  /// Fires only after a local write that changed appointment fields.
+  Stream<void> get onRecordWrite;
 
   Stream<List<AppointmentRecord>> watchForEmployeeInRange(
     String employeeId,

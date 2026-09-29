@@ -16,6 +16,7 @@ const {
   notifyEmailChanged,
   buildActivationPatch,
   generateStartingPassword,
+  isStrongPassword,
 } = require("../employee_accounts");
 const {buildEmailChangedMessage, buildSelfEmailChangedMessage} =
   require("../notification_messages");
@@ -169,6 +170,25 @@ describe("generateStartingPassword", () => {
         .filter((pw) => /[A-Z]/.test(pw[0])).length;
     expect(upperFirst).toBeGreaterThan(20);
     expect(upperFirst).toBeLessThan(180);
+  });
+});
+
+describe("isStrongPassword", () => {
+  test.each([
+    ["Chosen1pass", true],
+    ["Éric2024", true],
+    ["Short1a", false],
+    ["alllower1x", false],
+    ["ALLUPPER1X", false],
+    ["NoDigitsHere", false],
+  ])("%s -> %s", (password, expected) => {
+    expect(isStrongPassword(password)).toBe(expected);
+  });
+
+  test("every generated starting password passes it", () => {
+    for (let i = 0; i < 200; i++) {
+      expect(isStrongPassword(generateStartingPassword())).toBe(true);
+    }
   });
 });
 

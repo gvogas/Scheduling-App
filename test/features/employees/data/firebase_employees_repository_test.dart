@@ -415,6 +415,46 @@ void main() {
     });
   });
 
+  group('resetEmployeePassword', () {
+    test('sends the doc id and returns the issued credentials', () async {
+      final callable = stubCallable(
+        'resetEmployeePassword',
+        data: {'email': 'a@b.test', 'password': 'Tmp2pass!wd9'},
+      );
+
+      final credentials = await repo().resetEmployeePassword('doc-1');
+
+      expect(capturedPayload(callable), {'docId': 'doc-1'});
+      expect(credentials.email, 'a@b.test');
+      expect(credentials.password, 'Tmp2pass!wd9');
+    });
+
+    test('rejects a half-blank credential payload', () async {
+      stubCallable(
+        'resetEmployeePassword',
+        data: {'email': 'a@b.test', 'password': ''},
+      );
+
+      await expectLater(
+        repo().resetEmployeePassword('doc-1'),
+        throwsA(isA<EmployeesFailureUnknown>()),
+      );
+    });
+  });
+
+  group('completePasswordReset', () {
+    test('sends the new password and nothing else', () async {
+      final callable = stubCallable(
+        'completePasswordReset',
+        data: {'ok': true},
+      );
+
+      await repo().completePasswordReset('Chosen1pass');
+
+      expect(capturedPayload(callable), {'newPassword': 'Chosen1pass'});
+    });
+  });
+
   group('updateEmployee', () {
     test(
       'throws EmployeesFailureEmailAlreadyExists when another employee has same email',

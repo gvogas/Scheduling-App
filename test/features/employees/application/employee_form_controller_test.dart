@@ -429,4 +429,57 @@ void main() {
       expect(activity().isDeletingAccount, isFalse);
     });
   });
+
+  group('resetPassword', () {
+    const issued = NewAccountCredentials(
+      email: 'alex@test.com',
+      password: 'Tmp2pass!wd9',
+    );
+
+    test('returns the issued credentials and clears the busy flag', () async {
+      when(
+        () => repo.resetEmployeePassword('e1'),
+      ).thenAnswer((_) async => issued);
+
+      final outcome = await notifier().resetPassword('e1');
+
+      expect(
+        outcome,
+        isA<PasswordResetIssued>().having(
+          (o) => o.credentials,
+          'credentials',
+          issued,
+        ),
+      );
+      expect(activity().isResettingPassword, isFalse);
+    });
+
+    test('a server failure is a Failed outcome carrying the error', () async {
+      final error = Exception('boom');
+      when(() => repo.resetEmployeePassword('e1')).thenThrow(error);
+
+      final outcome = await notifier().resetPassword('e1');
+
+      expect(
+        outcome,
+        isA<PasswordResetFailed>().having((o) => o.error, 'error', error),
+      );
+      expect(activity().isResettingPassword, isFalse);
+    });
+
+    test('a second tap while one is in flight is Busy', () async {
+      final gate = Completer<NewAccountCredentials>();
+      when(
+        () => repo.resetEmployeePassword('e1'),
+      ).thenAnswer((_) => gate.future);
+
+      final first = notifier().resetPassword('e1');
+      expect(activity().isResettingPassword, isTrue);
+      expect(await notifier().resetPassword('e1'), isA<PasswordResetBusy>());
+
+      gate.complete(issued);
+      expect(await first, isA<PasswordResetIssued>());
+      verify(() => repo.resetEmployeePassword('e1')).called(1);
+    });
+  });
 }

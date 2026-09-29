@@ -1,5 +1,10 @@
 "use strict";
 
+jest.mock("firebase-functions/logger", () => ({
+  info: jest.fn(),
+  error: jest.fn(),
+}));
+const logger = require("firebase-functions/logger");
 const {performDeleteClient} = require("../clients");
 
 /**
@@ -94,4 +99,21 @@ test("superseded delete cannot delete or release the current barrier",
       await expect(performDeleteClient(db, "c1")).rejects.toThrow("superseded");
       expect(db.state().deletionToken).toBe("new");
       expect(db.state().exists).toBe(true);
+    });
+
+test("a failed barrier release logs and keeps the original refusal",
+    async () => {
+      const db = fakeDb({count: 2});
+      const runTransaction = db.runTransaction;
+      let calls = 0;
+      db.runTransaction = async (work) => {
+        calls++;
+        if (calls === 2) throw Error("release offline");
+        return runTransaction(work);
+      };
+      await expect(performDeleteClient(db, "c1"))
+          .rejects.toMatchObject({message: "client-has-history"});
+      expect(logger.error).toHaveBeenCalledWith(
+          "deleteClient: deletion token release failed",
+          {clientId: "c1", error: "release offline"});
     });

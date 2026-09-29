@@ -5,6 +5,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
+import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 
 class _MockClientsRepo extends Mock implements ClientsRepository {}
@@ -12,6 +13,8 @@ class _MockClientsRepo extends Mock implements ClientsRepository {}
 void main() {
   late _MockClientsRepo repo;
   late ProviderContainer container;
+
+  setUpAll(() => registerFallbackValue(const ClientsFilterAll()));
 
   setUp(() {
     repo = _MockClientsRepo();
@@ -54,6 +57,46 @@ void main() {
 
       expect(await container.read(clientSearchProvider(key).future), isEmpty);
       verify(() => repo.searchClients('sophie')).called(1);
+    });
+  });
+  group('clientsTotalCountProvider', () {
+    const commercial = ClientsFilterType(ClientType.commercial);
+
+    test('counts the filter it is keyed on', () async {
+      when(
+        () => repo.countClients(filter: any(named: 'filter')),
+      ).thenAnswer((_) async => 120);
+
+      expect(
+        await container.read(clientsTotalCountProvider(commercial).future),
+        120,
+      );
+      verify(() => repo.countClients(filter: commercial)).called(1);
+    });
+
+    test('a clientsRefresh bump (archive, delete, save) re-counts', () async {
+      when(
+        () => repo.countClients(filter: any(named: 'filter')),
+      ).thenAnswer((_) async => 120);
+      final sub = container.listen(
+        clientsTotalCountProvider(commercial),
+        (_, _) {},
+      );
+      addTearDown(sub.close);
+      expect(
+        await container.read(clientsTotalCountProvider(commercial).future),
+        120,
+      );
+
+      when(
+        () => repo.countClients(filter: any(named: 'filter')),
+      ).thenAnswer((_) async => 119);
+      container.read(clientsRefreshProvider.notifier).bump();
+
+      expect(
+        await container.read(clientsTotalCountProvider(commercial).future),
+        119,
+      );
     });
   });
 }

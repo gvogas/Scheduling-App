@@ -249,6 +249,7 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
           SignInNoProfile() ||
           SignInAccountDisabled() ||
           SignInNeedsAccountSetup() ||
+          SignInNeedsPasswordChange() ||
           SignInError():
         setState(() {
           _isLoading = false;
@@ -376,6 +377,7 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
       showLabel: true,
       textInputAction: TextInputAction.next,
       autofillHints: const [AutofillHints.newPassword],
+      maxLength: TextLimits.password,
       controller: _passwordController,
       focusNode: _passwordFocus,
       enabled: !_isLoading,
@@ -392,6 +394,7 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
       showLabel: true,
       prefixIcon: Icons.lock_reset_outlined,
       autofillHints: const [AutofillHints.newPassword],
+      maxLength: TextLimits.password,
       controller: _confirmController,
       focusNode: _confirmFocus,
       enabled: !_isLoading,

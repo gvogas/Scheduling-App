@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:scheduling/core/adaptive/adaptive.dart';
 import 'package:scheduling/core/adaptive/adaptive_action_sheet.dart';
 import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/launchers/external_uri_launcher.dart';
-import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
 /// Bottom-sheet chooser for composing email (system mail app, Gmail, or Outlook).
@@ -47,69 +45,19 @@ class EmailComposeLauncher {
     // On iOS we show a native CupertinoActionSheet; on Android a Material sheet with a
     // drag handle. Either way, the chosen URI gets launched below.
     final Uri? chosen;
-    if (context.isCupertino) {
-      chosen = await showAdaptiveActionSheet<Uri>(
-        context,
-        title: context.l10n.clients_emailWith,
-        message: address,
-        actions: [
-          for (final option in options)
-            AdaptiveSheetAction(
-              value: option.uri,
-              label: option.label,
-              icon: option.icon,
-            ),
-        ],
-      );
-    } else {
-      chosen = await showModalBottomSheet<Uri>(
-        context: context,
-        showDragHandle: true,
-        sheetAnimationStyle: AppMotion.sheetStyle,
-        builder: (sheetContext) {
-          final theme = Theme.of(sheetContext);
-
-          return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.sp16,
-                AppSpacing.sp4,
-                AppSpacing.sp16,
-                AppSpacing.sp16,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context.l10n.clients_emailWith,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sp4),
-                  Text(
-                    address,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sp12),
-                  ...options.map(
-                    (option) => ListTile(
-                      leading: Icon(option.icon),
-                      title: Text(option.label),
-                      contentPadding: EdgeInsets.zero,
-                      onTap: () => Navigator.pop(sheetContext, option.uri),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    }
+    chosen = await showAdaptiveActionSheet<Uri>(
+      context,
+      title: context.l10n.clients_emailWith,
+      message: address,
+      actions: [
+        for (final option in options)
+          AdaptiveSheetAction(
+            value: option.uri,
+            label: option.label,
+            icon: option.icon,
+          ),
+      ],
+    );
 
     if (chosen == null || !context.mounted) return;
     await launchExternalUri(

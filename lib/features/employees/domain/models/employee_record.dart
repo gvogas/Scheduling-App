@@ -41,6 +41,8 @@ abstract class EmployeeRecord with _$EmployeeRecord {
     @Default(false) bool isTestAccount,
     // Admin-only opt-in for the month-end overdue review push.
     @Default(false) bool monthEndReviewPush,
+    // Server-owned: set by resetEmployeePassword, cleared by completePasswordReset.
+    @Default(false) bool passwordResetRequired,
     // NOTE: emergencyContact/emergencyPhone are NOT here — they live in
     // users/{docId}/private/emergency so rules can gate them to the admin and
     // the person themselves.
@@ -87,6 +89,7 @@ abstract class EmployeeRecord with _$EmployeeRecord {
       locationSharingEnabled: data['locationSharingEnabled'] == true,
       isTestAccount: data['isTestAccount'] == true,
       monthEndReviewPush: data['monthEndReviewPush'] == true,
+      passwordResetRequired: data['passwordResetRequired'] == true,
       createdAt: firestoreDateTime(data['createdAt']),
     );
   }

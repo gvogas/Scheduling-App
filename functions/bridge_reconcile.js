@@ -43,6 +43,7 @@ async function reconcileBridge(db, userId, eventUids) {
 
 /**
  * Rechecks the profile after Auth writes, which cannot join a transaction.
+ * Call only when authAccessChange is non-null, or a new invite is disabled.
  * @param {!Object} db Firestore instance.
  * @param {string} userId User document id.
  * @param {string} uid Auth account to reconcile.
@@ -54,11 +55,10 @@ async function reconcileAuthAccess(db, userId, uid, apply) {
   for (let attempt = 0; attempt < 3; attempt++) {
     const snap = await ref.get();
     const current = snap.exists ? snap.data() : null;
-    if (current && (current.uid !== uid || current.status === "invited")) {
-      return;
-    }
+    if (current && current.uid !== uid) return;
     const bridge = await db.collection("usersByUid").doc(uid).get();
     if (bridge.exists && bridge.data().docId !== userId) return;
+    // Only an active doc restores, so an invited one is revoked, never enabled.
     const change = current?.status === "active" ? "restore" : "revoke";
     await apply(uid, change);
     const latest = await ref.get();

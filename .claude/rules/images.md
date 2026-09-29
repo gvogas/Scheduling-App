@@ -71,7 +71,8 @@ Loaded when working on the image pipeline. Root context: `../../CLAUDE.md`.
   Each such string was a rules-free, non-expiring, transferable link surviving
   deactivation with nothing left to rotate it. **The deciding fact was a count of the SUBCOLLECTION,
   and it came back ZERO** (2026-08-22,
-  `functions/scripts/count-legacy-image-urls.js`: 14 image documents scanned,
+  `functions/scripts/count-legacy-image-urls.js`, deleted 2026-09-28 and in git
+  history: 14 image documents scanned,
   0 with a url and no storagePath), so all three went with it — the rules
   allowlist is `['storagePath', 'fileName', 'uploadedAt']`, the loader keys and
   fetches on `storagePath` alone, `AppointmentImagesStore` never writes the
@@ -246,7 +247,10 @@ Loaded when working on the image pipeline. Root context: `../../CLAUDE.md`.
   lands, instead of only ever reading the subcollection once at `build()`.
   `onLocalWrite` is the ONE broadcast stream on the singleton repository, poked
   by nine write paths (see the root `CLAUDE.md`'s `_patchWindow`/
-  `_notifyLocalWrite` rule), so this subscription also means posting a crew
+  `_notifyLocalWrite` rule; a sibling `onRecordWrite` fires only for writes that
+  change appointment fields, excluding photo/note writes, and the controller
+  stays on `onLocalWrite` because it needs the photo writes), so this
+  subscription also means posting a crew
   note or flipping a status costs an `appointments/{id}/images` subcollection
   read while a detail sheet is open — bounded and accepted, but previously
   unstated. `_loadStoredPictures`'s existing `_lastKnownImages` guard already
@@ -295,7 +299,8 @@ Loaded when working on the image pipeline. Root context: `../../CLAUDE.md`.
   an explicit `0` at create (the one client write the rules allow — `allow
   create` accepts the key only as 0), `recountAppointmentPictures` owns it from
   the first photo onwards as an absolute `count()` aggregate, and
-  `functions/scripts/clear-appointment-picture-arrays.js` re-stamps it from the
+  `functions/scripts/clear-appointment-picture-arrays.js` (deleted 2026-09-28)
+  re-stamped it from the
   subcollection on **every** document it scans — including the ones carrying no
   array, which it used to `continue` straight past (`needsRecount`, pinned).
   `toMap()` must never emit it, and the rules reject an update that touches
@@ -330,7 +335,8 @@ Loaded when working on the image pipeline. Root context: `../../CLAUDE.md`.
   the recount warn past it. The picker's own
   `AppointmentFormConcerns.maxImagesPerAppointment` (10) means only a modified
   client gets near either. Keep the two hundreds equal.
-  Scripts: `functions/scripts/backfill-appointment-images.js` copies an array
+  Scripts (both deleted 2026-09-28, migration closed; in git history):
+  `functions/scripts/backfill-appointment-images.js` copied an array
   into the subcollection (copy-only, `--dry-run`, atomic per appointment) and
   `clear-appointment-picture-arrays.js` deletes the array afterwards (its work
   is DONE as of 2026-09-06 — a prod run now clears nothing). They are
@@ -424,10 +430,11 @@ Loaded when working on the image pipeline. Root context: `../../CLAUDE.md`.
   see them. Each was a permanent, non-expiring, rules-free link readable off
   the appointment document by any assigned employee and surviving
   deactivation, with nothing left to rotate it.
-  `clear-appointment-picture-arrays.js` ran against prod on 2026-08-27 and
+  `clear-appointment-picture-arrays.js` (deleted 2026-09-28) ran against prod on 2026-08-27 and
   cleared **14 entries across 11 appointments (67 scanned)**, so no such link
   remains in the database at all. `countArrayUrls` in
-  `count-legacy-image-urls.js` is how you re-check that, and it is read-only.
+  `count-legacy-image-urls.js` (deleted 2026-09-28; recover it from git history)
+  was how you re-checked that, and it was read-only.
   **What this does NOT reach, and never could:** a URL somebody captured under
   a pre-1.49 build is still live on its object unless rotated by hand. "No
   rules-free link remains" is a statement about the DATABASE, not about every

@@ -6,8 +6,12 @@ const {initializeApp, deleteApp} = require("firebase-admin/app");
 const {getFirestore} = require("firebase-admin/firestore");
 const {performDeleteClient} = require("../../clients");
 const {withAccountOperation} = require("../../account_operation");
-const {createEmployeeAccount, completeEmployeeSetup} =
-  require("../../employee_accounts");
+const {
+  createEmployeeAccount,
+  completeEmployeeSetup,
+  resetEmployeePassword,
+  completePasswordReset,
+} = require("../../employee_accounts");
 const {reconcileClientBuilding} = require("../../client_buildings");
 const {backfillBuildings} = require("../../scripts/backfill-client-buildings");
 
@@ -140,6 +144,45 @@ async function verifySafety(project, firestore, auth, admin) {
         .doc(uid).get();
     assert.equal(releasedLock.exists, false);
     console.log("Account setup: contention and chosen credential checked.");
+    const signInStatus = async (password) => {
+      const response = await fetch(`${auth}/identitytoolkit.googleapis.com/` +
+        "v1/accounts:signInWithPassword?key=demo-key", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({email, password}),
+      });
+      await response.arrayBuffer();
+      return response.status;
+    };
+    const flagMask = "?updateMask.fieldPaths=passwordResetRequired";
+    assert.equal(await write(`users/${person.id}`, {
+      passwordResetRequired: {booleanValue: true},
+    }, flagMask), 403);
+    assert.equal(await write(`users/${prefix}-flagged`, {
+      name: {stringValue: "Flagged"},
+      passwordResetRequired: {booleanValue: true},
+    }), 403);
+    assert.equal(await write(`users/${prefix}-plain`, {
+      name: {stringValue: "Plain"},
+    }), 200);
+    const reset = await resetEmployeePassword.run({
+      auth: {uid: admin.uid}, data: {docId: person.id},
+    });
+    assert.equal((await person.ref.get()).data().passwordResetRequired, true);
+    assert.equal(await write(`users/${person.id}`, {
+      passwordResetRequired: {booleanValue: false},
+    }, flagMask), 403);
+    assert.equal(await signInStatus(reset.password), 200);
+    await db.collection("usersByUid").doc(uid).set(
+        {docId: person.id, role: "employee", status: "active"}, {merge: true});
+    const changed = "ChangedPassword123!";
+    await completePasswordReset.run({
+      auth: {uid}, data: {newPassword: changed},
+    });
+    assert.equal((await person.ref.get()).data().passwordResetRequired, false);
+    assert.equal(await signInStatus(changed), 200);
+    assert.equal(await signInStatus(reset.password), 400);
+    console.log("Password reset: denylist, flag and credential checked.");
 
     const first = db.collection("clients").doc(`${prefix}-building-1`);
     const second = db.collection("clients").doc(`${prefix}-building-2`);

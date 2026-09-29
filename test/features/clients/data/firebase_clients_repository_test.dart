@@ -58,6 +58,10 @@ class _MockDocRef extends Mock
 
 class _FakeFieldValue extends Fake implements FieldValue {}
 
+class _MockAggregateQuery extends Mock implements AggregateQuery {}
+
+class _MockAggregateSnapshot extends Mock implements AggregateQuerySnapshot {}
+
 class _MockFunctions extends Mock implements FirebaseFunctions {}
 
 class _MockCallable extends Mock implements HttpsCallable {}
@@ -882,6 +886,61 @@ void main() {
         repo().deleteClient('c1'),
         throwsA(isA<FirebaseFunctionsException>()),
       );
+    });
+  });
+  group('countClients', () {
+    late _MockAggregateQuery aggregate;
+
+    setUp(() {
+      aggregate = _MockAggregateQuery();
+      final result = _MockAggregateSnapshot();
+      when(() => query.count()).thenReturn(aggregate);
+      when(() => aggregate.get()).thenAnswer((_) async => result);
+      when(() => result.count).thenReturn(120);
+    });
+
+    test('counts the unfiltered roster as the non-archived clients', () async {
+      expect(await repo().countClients(), 120);
+
+      verify(() => collection.where('archived', isEqualTo: false)).called(1);
+      verifyNever(() => query.where(any(), isEqualTo: any(named: 'isEqualTo')));
+    });
+
+    // The same `where` the paged list reads, so the header's "N of M" counts
+    // exactly the slice being scrolled.
+    test('counts a type filter with the where the paged list uses', () async {
+      await repo().countClients(
+        filter: const ClientsFilterType(ClientType.commercial),
+      );
+
+      verify(() => collection.where('archived', isEqualTo: false)).called(1);
+      verify(
+        () => query.where('type', isEqualTo: ClientType.commercial.raw),
+      ).called(1);
+    });
+
+    test('counts a building filter by its key', () async {
+      await repo().countClients(
+        filter: const ClientsFilterBuilding('street|city'),
+      );
+
+      verify(
+        () => query.where('buildingKey', isEqualTo: 'street|city'),
+      ).called(1);
+    });
+
+    test('counts the archived clients under the Archived filter', () async {
+      await repo().countClients(filter: const ClientsFilterArchived());
+
+      verify(() => collection.where('archived', isEqualTo: true)).called(1);
+    });
+
+    test('an absent count reads as zero', () async {
+      final empty = _MockAggregateSnapshot();
+      when(() => aggregate.get()).thenAnswer((_) async => empty);
+      when(() => empty.count).thenReturn(null);
+
+      expect(await repo().countClients(), 0);
     });
   });
 }

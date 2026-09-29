@@ -137,7 +137,8 @@ service cloud.firestore {
       allow create: if isAdmin()
             && !request.resource.data.keys()
                  .hasAny(['uid', 'termsAcceptedAt', 'locationConsentAt',
-                          'emergencyContact', 'emergencyPhone'])
+                          'emergencyContact', 'emergencyPhone',
+                          'passwordResetRequired'])
             && isValidUserData(request.resource.data);
 
       // Rejects a colorValue write that isn't a valid integer string — otherwise a bad
@@ -242,7 +243,7 @@ service cloud.firestore {
             && !request.resource.data.diff(resource.data)
                  .affectedKeys()
                  .hasAny(['uid', 'termsAcceptedAt', 'locationConsentAt',
-                          'setupRequiresPassword'])
+                          'setupRequiresPassword', 'passwordResetRequired'])
             && emailMovesThroughAuth()
             && emergencyFieldNotSet('emergencyContact')
             && emergencyFieldNotSet('emergencyPhone')

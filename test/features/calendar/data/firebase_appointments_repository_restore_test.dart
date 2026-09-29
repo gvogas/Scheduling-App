@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/features/calendar/data/firebase_appointments_repository.dart';
+import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 
 class _MockFirestore extends Mock implements FirebaseFirestore {}
 
@@ -126,22 +127,74 @@ void main() {
     });
   });
 
-  test('an undo patches the history search cache', () async {
-    // History is where a completed job lives, so the Undo has to reach the
-    // cached answer the admin is looking at — otherwise the row they just
-    // reopened keeps reading as done until the 2-minute TTL expires.
-    final r = repo();
-    await r.searchHistory('sophie');
-    await r.searchHistory('sophie');
-    verify(
+  group('a status write PATCHES cached searchHistory answers', () {
+    // Re-running the callable costs up to 200 reads and a rate-limit
+    // transaction, for a write that touched one document.
+    int searchCalls() => verify(
       () => search.call<Map<String, dynamic>>(any<Map<String, Object>>()),
-    ).called(1);
+    ).callCount;
 
-    await r.restoreAppointmentStatus(id: 'a1', previousStatus: 'pending');
-    await r.searchHistory('sophie');
+    test(
+      'an undo drops the reopened row without re-running the search',
+      () async {
+        final r = repo();
+        await r.searchHistory('sophie');
+        searchCalls();
 
-    verify(
-      () => search.call<Map<String, dynamic>>(any<Map<String, Object>>()),
-    ).called(1);
+        await r.restoreAppointmentStatus(id: 'a1', previousStatus: 'pending');
+        final after = await r.searchHistory('sophie');
+
+        expect(after, isEmpty);
+        verifyNever(
+          () => search.call<Map<String, dynamic>>(any<Map<String, Object>>()),
+        );
+      },
+    );
+
+    test('a terminal-to-terminal change is merged into the row', () async {
+      final r = repo();
+      await r.searchHistory('sophie');
+      searchCalls();
+
+      await r.updateAppointmentStatus(id: 'a1', status: 'cancelled');
+      final after = await r.searchHistory('sophie');
+
+      expect(after.single.status, 'cancelled');
+      expect(after.single.clientName, 'Sophie Tremblay');
+      verifyNever(
+        () => search.call<Map<String, dynamic>>(any<Map<String, Object>>()),
+      );
+    });
+
+    test('completing a job the answer lacks re-runs the search', () async {
+      // Only the query knows whether it matches the newly closed job.
+      final r = repo();
+      await r.searchHistory('sophie');
+      searchCalls();
+
+      await r.updateAppointmentStatus(id: 'b2', status: 'done');
+      await r.searchHistory('sophie');
+
+      expect(searchCalls(), 1);
+    });
+
+    test('renaming the client of a listed job re-runs the search', () async {
+      final r = repo();
+      await r.searchHistory('sophie');
+      searchCalls();
+
+      await r.updateAppointment(
+        AppointmentRecord(
+          id: 'a1',
+          clientName: 'Marc Tremblay',
+          status: 'done',
+          startTime: DateTime(2026, 6, 24, 9),
+          endTime: DateTime(2026, 6, 24, 10),
+        ),
+      );
+      await r.searchHistory('sophie');
+
+      expect(searchCalls(), 1);
+    });
   });
 }

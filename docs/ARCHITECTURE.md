@@ -510,7 +510,7 @@ shown, so `isAllDay` is threaded through all four mirrors:
 
 | Mirror | What the flag changes |
 | --- | --- |
-| Reminder sweep (`travel_utils.js`) | `selectTravelCandidates` skips all-day records. The midnight start otherwise landed inside the 90-min window at ~23:30 the night before and fired a "time to leave" push for a block with no departure time. A *timed* personal job keeps its reminder. |
+| Reminder sweep (`travel_policy.js`) | `selectTravelCandidates` skips all-day records. The midnight start otherwise landed inside the 90-min window at ~23:30 the night before and fired a "time to leave" push for a block with no departure time. A *timed* personal job keeps its reminder. |
 | Push + digest text (`notification_messages.js`) | The date alone ("Wed, Jul 8"), never "Wed, Jul 8, 12:00 a.m."; `_whoAt` joins with "·" instead of "at"/"à". |
 | Home-screen widget | `isAllDay` in the job JSON in both hand-mirrored builders and the Swift decoder (`Bool?`, so older payloads still parse); `timeLabel` reads "All day". The *today* filter is `endTime`-based for an all-day block — the old start-time test dropped it from today from 00:00 onward. `nextJob` prefers a timed job so a midnight block doesn't own "up next" all day. |
 | Siri snapshot (**v2**) | Adds `isAllDay` **and** `title` — a personal job has no client and the snapshot carried no title, so Siri said "unnamed client". `SiriStrings.who` is the single client→title→placeholder resolver; `timePhrase` speaks "all day"; `nextAppointment` applies the same prefer-timed rule and treats a block as upcoming until its 23:59 end. |
@@ -662,7 +662,7 @@ card, so only the CARD is withheld — the `leaveNow` push still goes out on day
 and both commented at the site: `groupTomorrowsJobsByEmployee`
 (`notification_policy.js`) overlaps raw instants rather than daily windows, so
 an overnight run can be listed on the morning it finishes; and
-`travel_utils.js`' `MAX_BOOKING_MS` keeps a long run out of the travel context
+`travel_policy.js`' `MAX_BOOKING_MS` keeps a long run out of the travel context
 rather than risk `decideOrigin` picking a wrong origin from it.
 
 ### CarPlay (2026-09-09)
@@ -1428,7 +1428,8 @@ appointments/{docId}
   employeeNames: [string]  denormalised for display
   pictures: [{url, storagePath}]   RETIRED at the CONTRACT step. Nothing reads
                        or writes it, AppointmentRecord no longer parses it, and
-                       clear-appointment-picture-arrays.js deletes it from the
+                       clear-appointment-picture-arrays.js (deleted 2026-09-28)
+                       deleted it from the
                        documents that still carry one. The rules keep the
                        100-entry cap (isValidAppointmentData) for exactly those
                        documents — a cap, never a ban, or an edit of one would

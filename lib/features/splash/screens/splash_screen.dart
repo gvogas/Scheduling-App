@@ -104,6 +104,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
               lastName: lastName,
             ),
           );
+        case SplashGoToChangePassword():
+          nav.pushReplacementNamed(AppRoutes.changePassword);
         case SplashGoToCalendar(:final isAdmin, :final employeeId):
           nav.pushReplacementNamed(
             AppRoutes.mainCalendar,

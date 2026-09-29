@@ -41,6 +41,8 @@ at the top of each file, not its boxes.
 
 | Doc | State |
 |---|---|
+| `2026-09-28-admin-password-reset.md` | **BUILT 2026-09-29, NOT DEPLOYED.** Admin resets an ACTIVE employee's password (emails aren't real inboxes, so Forgot password can't work): server-owned `passwordResetRequired` flag, temp password, sign-out everywhere, forced Change password screen. Two new callables (30 → 32) + a rules denylist field — deploy `functions,firestore:rules` BEFORE the app build. Plan: `2026-09-28-admin-password-reset-plan.md`. |
+| `2026-09-28-admin-password-reset-plan.md` | **EXECUTED 2026-09-29.** Task-by-task TDD plan for the design above; its "Deviations from the spec" section records where the real code forced a different shape. |
 | `2026-09-12-month-end-overdue-review.md` | **BUILT (`ed59a6a5`), functions DEPLOYED 2026-09-19 (`608b817a`), NOT SHIPPED.** Waits only on the app build. Owner steps after it ships: turn the month-end switch on for Paul, register the `count` GA dimension. The plan's banner lists the seven deviations from the design. |
 | `2026-09-12-dashboard-redesign.md` | **DESIGN PICKED 2026-09-12 (Option B), NOT STARTED.** A Today / Trends switch under the title. Today: on site now with progress through each job, needs-attention chips, compact next up, crew tiles against `maxJobsPerDay`. Trends: every period number and chart. Unassigned count and banner removed (owner: a job is never unassigned). App-only, no new reads, tour ids unchanged but their copy must be rewritten. Three open questions for the build. No implementation plan yet. |
 | `2026-09-12-live-map-improvements.md` | **BUILT (`ed59a6a5`, `e544fb01`), DEVICE PASS DONE 2026-09-19 (owner), NOT SHIPPED.** App-only, no backend deploy. The accessibility page's crew-map paragraph was rewritten for the team sheet 2026-09-19. Owner steps once the build ships: republish `privacy-policy.html` and `accessibility.html` to `es-pro-legal`, flip the Apple tester's Test account switch. |
@@ -213,9 +215,9 @@ one again, or runs one expecting work it already did.
   rule was reversed by owner call 2026-08-14.
 - **`backfill-client-name-with-phone.js`** ran 2026-08-14 (504 renamed) and
   **destroyed the stored name on docs with no `firstName`/`lastName`** — it
-  predated the first/last split. `restore-client-name-halves.js` repairs those
+  predated the first/last split. `restore-client-name-halves.js` (deleted 2026-09-28; in git history) repaired those
   from `clientName` on the client's SETTLED appointments and never touches
-  `name`; `docs/audits/audit-renamed-client-names.js` is its read-only twin, and
+  `name`; `docs/audits/audit-renamed-client-names.js` (also deleted) was its read-only twin, and
   the two are kept deliberately in step — reading one rule's report and running
   another rule's repair is the failure mode.
 - **Run: `backfill-search-tokens.js`** — 2026-09-06 (720 clients / 84

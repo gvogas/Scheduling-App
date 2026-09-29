@@ -87,7 +87,10 @@ Root context: `../../CLAUDE.md`.
   token is set (`canLinkClient`, a `getAfter`) and refuses any client update
   while it is set — without that, a job booked between the count and the
   delete was orphaned. A retry after a killed attempt takes a new token and
-  proceeds; never clear another attempt's token.
+  proceeds; never clear another attempt's token. **The token-release cleanup has
+  its own try/catch** (2026-09-28): a release that fails is logged
+  (`logger.error`) and the ORIGINAL error is still rethrown, so the caller sees
+  the real refusal rather than the cleanup's.
   **`allow delete` on `/clients` is now WITHDRAWN** (2026-08-08). It had
   survived as a `#compat-1.37.1` shim entry for that build's ungated Delete
   button, and while it did the hole was real — an admin on the old build could
@@ -118,7 +121,8 @@ Root context: `../../CLAUDE.md`.
   earlier the same day). The row is one line: the round Filter button, the
   count sentence, and the sort control pinned to the end. What the chips were
   for — saying which filter is on — the SENTENCE already does
-  (`clients_showingType` reads "45 Commercial clients"), so they were a second
+  (`clients_showingType` reads "45 Commercial clients", or "50 of 120 Commercial
+  clients" while it is still paging), so they were a second
   copy of the sheet's vocabulary that could only ever show a subset of it; and
   the separate chip row cost a whole line of list. Clearing is a ✕ beside the
   sentence, rendered only while a filter is on. `ClientsFilterBar` is now just
@@ -156,9 +160,16 @@ Root context: `../../CLAUDE.md`.
   `clientsTotalCountProvider` (a `count()` aggregate, `ClientsRepository.countClients`
   — not a scan: reading the roster to count it would cost more than the list),
   and renders `clients_showingSome` ("50 of 717 clients") until the two agree,
-  then `clients_showingAll`. **`total` is passed ONLY under `ClientsFilterAll`**:
-  it is the one `count()` aggregate there is, so a filtered slice shows its
-  loaded rows with no "of M".
+  then `clients_showingAll`. **`total` is passed under EVERY filter** (2026-09-28;
+  it was `ClientsFilterAll` only, so a filtered slice showed no "of M").
+  `clientsTotalCountProvider` is a family keyed on `ClientsFilter`, and
+  `countClients(filter:)` counts through the same `_filteredQuery` the paged
+  list reads, so count and page cannot disagree. The header renders
+  `clients_showingSomeType` / `clients_inThisBuildingSome` until loaded == total,
+  then the plain sentence, and ignores `total` while searching (the count is
+  then matches, not loaded rows). The unfiltered count stays watched under every
+  filter so a round trip re-counts nothing. It is an equality-only `count()`
+  served by the existing composites — no new index.
   **Page size is 50 under EVERY sort** (owner call — a 250-row first page was
   tried and rejected the same day).
 - **`ClientsListView` carries no chrome.** The Filter button, the ✕ and the
@@ -535,10 +546,12 @@ Root context: `../../CLAUDE.md`.
   (504 renamed). The only surviving copy is `clientName` on the client's
   SETTLED appointments — `propagateClientEdits` gates on `hasWorkLeft`, so a
   visit that had already ended still carries the pre-rename name.
-  `restore-client-name-halves.js` writes those back into the halves and
+  `restore-client-name-halves.js` (deleted 2026-09-28; in git history) wrote
+  those back into the halves and
   **never touches `name`**, which is Wave's customer identity; it reports, and
   leaves alone, anything reading as a business.
-  `docs/audits/audit-renamed-client-names.js` is its read-only twin and the two
+  `docs/audits/audit-renamed-client-names.js` (also deleted 2026-09-28) was its
+  read-only twin and the two
   are kept deliberately in step — an operator reading one rule's report and
   running another rule's repair is the failure mode. Both scan the client's
   appointments **ordered `startTime` DESC on the existing
@@ -571,11 +584,10 @@ Root context: `../../CLAUDE.md`.
   (last whitespace token is the surname), hand-mirrored ONCE on the JS side, as
   `splitName` in `functions/scripts/backfill-client-name-with-phone.js` — whose
   `patchFor` carries the halves in the same patch for the same reason.
-  **There are TWO implementations, not three:**
-  `restore-client-name-halves.js` **imports** it
-  (`const {splitName} = require("./backfill-client-name-with-phone");`) and
-  re-exports it, so it is a caller, not a twin. Keep it that way — a second JS
-  copy is what the Dart↔JS pair already costs, and a third would drift silently.
+  **`backfill-client-name-with-phone.js`'s `splitName` is now the ONLY JS copy:**
+  `restore-client-name-halves.js`, which imported it, was deleted 2026-09-28.
+  Keep it that way — a second JS copy is what the Dart↔JS pair already costs,
+  and a third would drift silently.
   Both client sheets compose on save, and **both must pass `type` (and the
   edit sheet the stored `businessName`), or an ordinary save renames a
   business to its phone number on the invoices it appears on.** The edit sheet
@@ -849,7 +861,10 @@ Root context: `../../CLAUDE.md`.
 
 - **Client "Job history" section** (`ClientJobHistorySection`, admin-only client
   detail) reads via `fetchClientHistory` (`clientJobHistoryProvider`, an
-  `autoDispose.family` that re-fetches on `onLocalWrite`). It orders
+  `autoDispose.family` that re-fetches on `onRecordWrite`, not `onLocalWrite` —
+  a photo or crew note changes nothing listed). It reads PAST visits only
+  (`fetchClientHistory(pastOnly: true)`, `startTime < clock()`, on the same
+  composite) and orders
   `startTime` DESC on the **server** — `(clientId ASC, startTime DESC)`, added
   2026-08-13 — and the `orderBy` is what makes the `limit` mean anything. It
   filtered on `clientId` alone before that, on the reasoning that the automatic
@@ -863,11 +878,14 @@ Root context: `../../CLAUDE.md`.
   so `getAppointmentById` is now the only read in that repository that can
   reach a legacy or console-written row missing one — which is what
   `_recordFrom`'s breadcrumb is left for.
-  **The SECTION renders at most `_maxRendered` (50) of them**, because it is a
+  **The PROVIDER owns the render bound; the section renders what it is given**
+  (`_maxRendered` is gone, 2026-09-28). It asks for a deliberate window,
+  `limit: kClientJobHistoryScan + 1` / `cap: kClientJobHistoryScan` (60 — 10 docs
+  of headroom for the run days 2+ that Dart drops), and keeps
+  `kClientJobHistoryVisits` (50). It is bounded because it is a
   non-lazy `Column` inside the detail body's own scroll view — there is no
   sliver context to hand a builder, so every row it is given is built eagerly,
-  and each is an `AppointmentCard` (an `IntrinsicHeight` subtree). Adding
-  paging to the repository silently took that from 50 rows to up to 1000. Keep
-  the bound until the surface grows a "show all" affordance or hands off to
+  and each is an `AppointmentCard` (an `IntrinsicHeight` subtree). Keep the
+  bound until the surface grows a "show all" affordance or hands off to
   History filtered by client; a taller list means a builder, not a bigger
   number.

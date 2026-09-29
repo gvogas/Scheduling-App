@@ -486,6 +486,7 @@ the array (the fleet is on 1.48). What changes:
    node functions/scripts/backfill-appointment-images.js --dry-run
    node functions/scripts/backfill-appointment-images.js
    ```
+   (Script deleted 2026-09-28, migration closed; in git history.)
    **DONE 2026-08-22 against `schedulingapp-88727` (LIVE)** — dry run and live
    run agreed exactly: **14 photos copied across 11 appointments, 55 scanned**.
    **Read that as a TOTAL, not a delta.** This script is idempotent and
@@ -510,6 +511,7 @@ the array (the fleet is on 1.48). What changes:
    node functions/scripts/clear-appointment-picture-arrays.js --dry-run
    node functions/scripts/clear-appointment-picture-arrays.js
    ```
+   (Script deleted 2026-09-28, migration closed; in git history.)
    It **refuses** any appointment whose subcollection does not already cover
    every array entry, and reports them — that is the signal to re-run step 1,
    not to force anything. An entry with no identity at all (no `storagePath`,

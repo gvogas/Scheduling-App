@@ -28,9 +28,9 @@ class ClientsListHeader extends StatelessWidget {
   /// follows.
   final int? count;
 
-  /// The roster size, when it is known and larger than [count] — the list
+  /// How many clients the selected [filter] matches, when known — the list
   /// pages, so the rows it holds are not "all" of anything until they are.
-  /// Null when no separate total has been fetched for the selected filter.
+  /// Ignored while searching: [count] is then matches, not loaded rows.
   final int? total;
 
   /// True while a search narrows the unfiltered list: [count] is its matches.
@@ -65,22 +65,42 @@ class ClientsListHeader extends StatelessWidget {
     final shown = count;
     if (shown == null) return '';
     final roster = total;
+    final ofTotal = !isSearching && roster != null && shown < roster
+        ? roster
+        : null;
     return switch (filter) {
       ClientsFilterAll() when isSearching => l10n.clients_searchMatches(shown),
-      ClientsFilterAll() when roster != null && shown < roster =>
-        l10n.clients_showingSome(shown, roster),
-      ClientsFilterAll() => l10n.clients_showingAll(shown),
-      ClientsFilterType(:final type) => l10n.clients_showingType(
+      ClientsFilterAll() when ofTotal != null => l10n.clients_showingSome(
         shown,
+        ofTotal,
+      ),
+      ClientsFilterAll() => l10n.clients_showingAll(shown),
+      ClientsFilterType(:final type) => _typeSentence(
+        l10n,
+        shown,
+        ofTotal,
         clientTypeLabel(l10n, type),
       ),
-      ClientsFilterArchived() => l10n.clients_showingType(
+      ClientsFilterArchived() => _typeSentence(
+        l10n,
         shown,
+        ofTotal,
         l10n.clients_filterArchived,
       ),
+      ClientsFilterBuilding() when ofTotal != null =>
+        l10n.clients_inThisBuildingSome(shown, ofTotal),
       ClientsFilterBuilding() => l10n.clients_inThisBuilding(shown),
     };
   }
+
+  String _typeSentence(
+    AppLocalizations l10n,
+    int shown,
+    int? ofTotal,
+    String type,
+  ) => ofTotal == null
+      ? l10n.clients_showingType(shown, type)
+      : l10n.clients_showingSomeType(shown, ofTotal, type);
 
   @override
   Widget build(BuildContext context) {

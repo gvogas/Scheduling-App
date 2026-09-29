@@ -56,7 +56,7 @@ across all three rather than living under `functions/`.
   (a non-admin stops at the calendar). A new id-carrying kind needs no Dart
   change; a new id-less one needs a branch there, above the id read.
 - **`sendDailyJobDigest` carries the month-end overdue review as a rider**
-  (`runMonthEndOverdueReview`, `notification_utils.js`, 2026-09-13), in its own
+  (`runMonthEndOverdueReview`, `notification_sweeps.js`, 2026-09-13), in its own
   `try` AFTER the TTL prune and BEFORE `runWaveDaily`: every rider shares the
   540 s timeout, so a rider below Wave can be killed on exactly the evening it
   matters. `notifications_riders.test.js` pins that order. It acts only when

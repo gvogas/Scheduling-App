@@ -7,37 +7,52 @@ import 'package:scheduling/features/employees/domain/models/new_account_credenti
 import 'package:scheduling/features/employees/widgets/fields/credential_line.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
-/// Shows the sign-in credentials after creating an employee account — an
-/// adaptive dialog that picks Cupertino or Material to match the platform.
-///
-/// The password is the per-account starting one the server just generated,
-/// echoed back rather than derived here so the dialog can never show something
-/// the account was not actually given.
+/// Shows the credentials the server just issued by a create or a reset.
 Future<void> showNewAccountDialog(
   BuildContext context, {
   required String name,
   required NewAccountCredentials credentials,
+  String? title,
+  String? caption,
 }) {
+  final heading = title ?? context.l10n.employees_accountCreatedTitle;
   if (context.isCupertino) {
     // showCupertinoDialog is non-dismissible by default, which matches what
     // we do in the Material branch.
     return showCupertinoDialog<void>(
       context: context,
-      builder: (ctx) => _NewAccountDialog(name: name, credentials: credentials),
+      builder: (ctx) => _NewAccountDialog(
+        name: name,
+        credentials: credentials,
+        title: heading,
+        caption: caption,
+      ),
     );
   }
   return showDialog<void>(
     context: context,
     barrierDismissible: false,
-    builder: (ctx) => _NewAccountDialog(name: name, credentials: credentials),
+    builder: (ctx) => _NewAccountDialog(
+      name: name,
+      credentials: credentials,
+      title: heading,
+      caption: caption,
+    ),
   );
 }
 
 class _NewAccountDialog extends StatefulWidget {
-  const _NewAccountDialog({required this.name, required this.credentials});
+  const _NewAccountDialog({
+    required this.name,
+    required this.credentials,
+    required this.title,
+    this.caption,
+  });
 
   final String name;
   final NewAccountCredentials credentials;
+  final String title;
+  final String? caption;
 
   @override
   State<_NewAccountDialog> createState() => _NewAccountDialogState();
@@ -72,8 +87,9 @@ class _NewAccountDialogState extends State<_NewAccountDialog> {
           value: widget.credentials.password,
         ),
         const SizedBox(height: AppSpacing.sp12),
+        // A reset's caption replaces the untrue first-sign-in line.
         Text(
-          l10n.employees_theyWillChooseTheirOwnPassword,
+          widget.caption ?? l10n.employees_theyWillChooseTheirOwnPassword,
           style: Theme.of(context).textTheme.bodySmall,
         ),
       ],
@@ -86,7 +102,7 @@ class _NewAccountDialogState extends State<_NewAccountDialog> {
 
     if (context.isCupertino) {
       return CupertinoAlertDialog(
-        title: Text(l10n.employees_accountCreatedTitle),
+        title: Text(widget.title),
         // Wrap in a transparent Material widget so the selectable text still
         // gets its Material toolbar inside the Cupertino dialog.
         content: Material(
@@ -117,7 +133,7 @@ class _NewAccountDialogState extends State<_NewAccountDialog> {
     }
 
     return AlertDialog(
-      title: Text(l10n.employees_accountCreatedTitle),
+      title: Text(widget.title),
       content: _buildBody(context),
       actions: [
         CopyCredentialsButton(

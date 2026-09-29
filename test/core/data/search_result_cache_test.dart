@@ -111,6 +111,51 @@ void main() {
     expect(c.read('a'), isNull);
   });
 
+  group('patchAll', () {
+    test('rewrites each entry and evicts where the patch returns null', () {
+      final c = cache()
+        ..write('keep', ['a', 'b'])
+        ..write('drop', ['c'])
+        ..patchAll((key, results) => key == 'drop' ? null : results.sublist(1));
+
+      expect(c.read('keep'), ['b']);
+      expect(c.read('drop'), isNull);
+    });
+
+    test('a patched entry keeps its original TTL', () {
+      final c = cache()..write('q', ['a']);
+      now = now.add(const Duration(seconds: 100));
+      c.patchAll((_, results) => results);
+      now = now.add(const Duration(seconds: 21));
+
+      expect(c.read('q'), isNull);
+    });
+
+    test('a stale entry is dropped without being patched', () {
+      final c = cache()..write('q', ['a']);
+      now = now.add(const Duration(seconds: 121));
+      var patched = 0;
+      c.patchAll((_, results) {
+        patched++;
+        return results;
+      });
+
+      expect(patched, 0);
+      expect(c.length, 0);
+    });
+
+    test('a load started before the patch cannot refill the cache', () async {
+      final c = cache();
+      final pending = Completer<List<String>>();
+      final old = c.getOrLoad('q', () => pending.future);
+      c.patchAll((_, results) => results);
+      pending.complete(['old']);
+      await old;
+
+      expect(c.read('q'), isNull);
+    });
+  });
+
   group('in-flight loads', () {
     test('simultaneous identical queries share one load', () async {
       final c = cache();

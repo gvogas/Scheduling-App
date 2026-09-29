@@ -139,6 +139,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
 
   /// Reads this job's photos from `appointments/{id}/images`.
   Future<void> _loadStoredPictures({bool showLoading = false}) async {
+    if (!ref.mounted) return;
     final id = appointment.id;
     if (id == null || id.isEmpty) return;
     final repo = ref.read(appointmentsRepositoryProvider);
@@ -175,6 +176,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
 
   /// Enriches placeholder assignees for display.
   Future<void> _enrichSelectedEmployees() async {
+    if (!ref.mounted) return;
     if (state.selectedEmployees.isEmpty) return;
     final logger = ref.read(loggerProvider);
     try {
@@ -196,6 +198,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
       ref.read(employeesRepositoryProvider).watchEmployees().first;
 
   Future<void> _loadClientIfNeeded(String clientId) async {
+    if (!ref.mounted) return;
     final id = clientId.trim();
     if (id.isEmpty || state.client != null) return;
     // Resolved BEFORE the first await: `ref.read` on an unmounted consumer

@@ -144,6 +144,7 @@ void main() {
     // Both halves: the password alone loses which account it opens.
     expect(find.text('zoe@example.com'), findsOneWidget);
     expect(find.text('Welcome123!'), findsOneWidget);
+    expect(find.textContaining('first time they sign in'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

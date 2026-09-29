@@ -143,4 +143,24 @@ void main() {
     expect(value.hasError, isTrue);
     expect(value.error, isA<MapsFailureRateLimit>());
   });
+
+  test('a coarse key merges fixes ~250 m apart that the default key splits', () {
+    ReverseGeocodeQuery q(double lat, {int decimals = 3}) => ReverseGeocodeQuery(
+      lat: lat,
+      lng: -73.5673,
+      locale: 'en',
+      decimals: decimals,
+    );
+
+    expect(q(45.5017), isNot(q(45.5042)));
+    expect(
+      q(45.5017, decimals: kCoarseGeocodePrecision),
+      q(45.5042, decimals: kCoarseGeocodePrecision),
+    );
+    expect(
+      q(45.5017, decimals: kCoarseGeocodePrecision).hashCode,
+      q(45.5042, decimals: kCoarseGeocodePrecision).hashCode,
+    );
+    expect(q(45.5017, decimals: kCoarseGeocodePrecision).lat, 45.5);
+  });
 }

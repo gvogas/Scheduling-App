@@ -394,4 +394,73 @@ void main() {
       },
     );
   });
+
+  group('completePasswordReset', () {
+    setUp(() {
+      when(
+        () => user.reauthenticateWithCredential(any()),
+      ).thenAnswer((_) async => _FakeUserCredential());
+    });
+
+    test(
+      'sends the trimmed password, then renews the session with it',
+      () async {
+        when(
+          () => employees.completePasswordReset(any()),
+        ).thenAnswer((_) async {});
+
+        await service.completePasswordReset('  N3wPassw0rd  ');
+
+        verify(() => employees.completePasswordReset('N3wPassw0rd')).called(1);
+        final captured = verify(
+          () => user.reauthenticateWithCredential(captureAny()),
+        ).captured.single;
+        expect((captured as EmailAuthCredential).password, 'N3wPassw0rd');
+      },
+    );
+
+    test('a failed session renewal still completes', () async {
+      when(
+        () => employees.completePasswordReset(any()),
+      ).thenAnswer((_) async {});
+      when(
+        () => user.reauthenticateWithCredential(any()),
+      ).thenThrow(FirebaseAuthException(code: 'network-request-failed'));
+
+      await expectLater(
+        service.completePasswordReset('N3wPassw0rd'),
+        completes,
+      );
+    });
+
+    test('refuses with no signed-in user and calls nothing', () async {
+      when(() => auth.currentUser).thenReturn(null);
+
+      await expectLater(
+        service.completePasswordReset('N3wPassw0rd'),
+        throwsA(isA<AuthFailureSessionExpired>()),
+      );
+      verifyNever(() => employees.completePasswordReset(any()));
+    });
+
+    for (final (message, matcher) in <(String, Matcher)>[
+      ('invalid-newPassword', isA<AuthFailureWeakPassword>()),
+      ('not-required', isA<AuthFailureSetupAlreadyComplete>()),
+      ('account-operation-in-progress', isA<AuthFailureTooManyRequests>()),
+    ]) {
+      test('maps the server refusal $message to a typed failure', () async {
+        when(() => employees.completePasswordReset(any())).thenThrow(
+          FirebaseFunctionsException(
+            code: 'failed-precondition',
+            message: message,
+          ),
+        );
+
+        await expectLater(
+          service.completePasswordReset('N3wPassw0rd'),
+          throwsA(matcher),
+        );
+      });
+    }
+  });
 }

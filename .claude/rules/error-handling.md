@@ -132,6 +132,7 @@ alwaysApply: true
   | `EMP-CREATE` | `error_introSaveEmployee` |
   | `EMP-STATUS` | `error_introChangeEmployeeStatus` |
   | `EMP-DELETE` | `error_introRemoveAccount` |
+  | `EMP-RESETPW` | `error_introResetPassword` |
   | `ME-SAVE` | `error_introSaveMyDetails` · `error_introSaveAvailability` · `error_introSaveTravelAlerts` · `error_introSaveLocationSharing` |
   | `ME-EMAIL` | `error_introChangeEmail` |
   | `ACCT-DEL` | `error_introDeleteAccount` |
@@ -159,7 +160,8 @@ alwaysApply: true
 
   - App shell / lifecycle: `ACCOUNT-EXIT`, `APP-SYNC`, `CARPLAY`, `DEEP-LINK`,
     `NOTICE`, `SETTINGS`, `SPLASH`, `TOUR`, `ONBOARD-GATE`
-  - Auth / account: `AUTH-SETUP`, `AUTH-SIGNIN`, `AUTH-PREFILL`, `AUTH-RESET`
+  - Auth / account: `AUTH-SETUP`, `AUTH-SIGNIN`, `AUTH-PREFILL`, `AUTH-RESET`,
+    `AUTH-CHANGEPW`
     (`AUTH-SIGNIN`/`AUTH-PREFILL` added 2026-08-25, replacing six `login.*`
     dotted-lowercase tags that were in no registry at all — the whole sign-in
     path was invisible to a Crashlytics search by tag. That sweep MISSED
@@ -169,7 +171,10 @@ alwaysApply: true
     and — since the same pass — the four `auth_service.dart`
     `completeAccountSetup:` labels, which carried NO tag at all; one of them is
     the breadcrumb for `AuthFailureStartingPasswordReused`, the load-bearing
-    guard.)
+    guard. `AUTH-CHANGEPW` (2026-09-29) is `ChangePasswordScreen`'s submit and
+    sign-out plus `AuthService.completePasswordReset`'s session-renewal label;
+    the route-in after a change logs under `AUTH-SETUP` through the shared
+    `resumeAfterSignUp`.)
   - Appointments: `APPT-BUSY`, `APPT-COUNT`, `APPT-IMG`, `APPT-RANGE`
   - Clients / history: `CLI-SEARCH`, `CLI-BUILDINGS`, `CLI-CONTACT-SAVE`,
     `CLI-CONTACT-SYNC`, `HIST-SEARCH`
@@ -343,7 +348,7 @@ re-decide it at a call site.
 - **Every auth catch site logs through `logger.authFailure(label, failure,
   error, st)`** (the `AuthFailureLogging` extension on `AppLogger`, beside
   `isExpected`) — never hand-roll the `if (failure.isExpected)` branch. The
-  sites (`sign_in_controller`, `account_setup_screen`, `forgot_password_screen`,
+  sites (`sign_in_controller`, `account_setup_screen`, `change_password_screen`, `forgot_password_screen`,
   `auth_service`, `my_details_screen`, `delete_account_flow`) previously
   double-filed the same failure from two layers. (This said "the four sites"
   and named `create_account_screen`, which P4c deleted; the delete-account
