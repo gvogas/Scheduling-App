@@ -48,9 +48,11 @@ jobs:
       # rather than only discoverable by a manual audit. No threshold is
       # enforced: a hard gate on a repo with device-only paths (image picker,
       # biometrics, geolocator) would fail on code that is deliberately
-      # untestable here.
+      # untestable here. `tool/test.dart` shards the suite (one compile per
+      # shard instead of per file) and passes `--coverage` through to
+      # `flutter test`, which still writes coverage/lcov.info.
       - name: Test
-        run: flutter test --coverage
+        run: dart run tool/test.dart --coverage
 
       - name: Upload coverage
         if: always()
