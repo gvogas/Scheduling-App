@@ -218,9 +218,10 @@ and the post-release `build_env` and Events-page checks.
   1.61.0+90 — do it on 1.63.0+93 once out), the **Wave "Retry failed" press**
   on a real dead-letter, and the **Xcode `InfoPlist.strings`** confirmation.
   Its I25 is open BY DESIGN — fix only if observed in the wild.
-- **Carried from the archived 2026-09-19 audit:** remove the stale
-  `.claude/worktrees/` agent directories (three still on disk 2026-10-01,
-  gitignored), and **I12**, which needs a real bad record to reproduce.
+- **Carried from the archived 2026-09-19 audit:** **I12**, which needs a real
+  bad record to reproduce. (Its other item, the three stale `.claude/worktrees/`
+  agent directories, was DONE 2026-10-01: each held only uncommitted snapshots of
+  work that is on `dev` in a later form, and they were removed.)
 - **S4 of the 2026-09-28 audit** — resetting a demoted account's password
   leaves it disabled. Needs an owner decision (`docs/audits/CODEBASE_AUDIT_2026-09-28.md`).
 

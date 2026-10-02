@@ -6,8 +6,9 @@ it rides the next one (1.63.0+93 is cut). The accessibility page is rewritten fo
 the team sheet in the repo; publishing both legal pages waits on the build.
 Original banner: built 2026-09-13, not shipped. No backend deploy (the optional rules type check was skipped).
 Left: the device-only checks in §7, republishing `docs/legal/privacy-policy.html`
-to `es-pro-legal` once the build ships (the rest of that file went live
-2026-09-14, so the three two-hour location passages are the only difference),
+to `es-pro-legal` once the build ships — the CURRENT file, byte-identical (last
+changed 2026-09-19, `bec23b85`). The two-hour passages it once carried are gone:
+the 2 h pin cutoff was removed 2026-09-14 by owner call (`.claude/rules/employees.md`),
 re-checking the crew-map paragraph of `docs/legal/accessibility.html` (written
 2026-09-14 against 1.61's staff list, which this build replaces with the team
 sheet) and republishing it, and flipping the Apple tester's Test account switch once the
