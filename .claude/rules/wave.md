@@ -468,7 +468,7 @@ the sync badge, `clients/{id}.name` as Wave's customer name — are in
   `functions/scripts/audit-wave-contract.js` replays the contract over
   production, read-only. Run it after any change to the contract, the mappers,
   or `ClientNamePolicy`. Design:
-  `docs/plans/2026-08-30-wave-validated-contract-design.md`; Phases 2-4 plan:
+  `docs/archive/2026-08-30-wave-validated-contract-design.md`; Phases 2-4 plan:
   `docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`.
   **A client's contract verdict is derivable from the collection, not only
   from the trigger.** `functions/scripts/backfill-wave-blocked.js` (Phase 3,

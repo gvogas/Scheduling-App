@@ -10,6 +10,48 @@ the three entries from 2026-09-01 through 2026-09-04 (releases 1.55.0+84 to
 1.57.0+86, across which the export list went 25 -> 29), frozen as written and
 placed above the 2026-09-06 trim, newest first.
 
+**Added 2026-10-01** by the docs sweep, when the stack had grown back to seven:
+the four entries from 2026-09-05 through 2026-09-12 (releases 1.58.0+87 to
+1.61.0+90, across which the export list sat at 29), frozen as written and
+placed above the 2026-09-13 addition, newest first.
+
+Previously refreshed 2026-09-12 (release
+1.61.0+90 — **the export list is unchanged at 29**,
+and all of it is DEPLOYED: the app build shipped first and the full `functions`
+deploy followed 2026-09-13 02:07Z (`38c8225b`), the INVERTED order Wave Phase 2
+needs — 1.60.0+89 never shipped, so this build carries its Dart. One body
+changed: `recountClientJobs` stops counting cancelled visits and now also fires
+on a cancelled-ness flip, served by a new `appointments (clientId, status,
+dayIndex)` composite deployed 2026-09-12 ahead of the function. Both one-off
+scripts behind it ran live 2026-09-13: `recount-client-jobs.js` (726 scanned,
+9 patched) and `backfill-wave-blocked.js` (726 scanned, 1 patched). No signature,
+allowlist or guard moved. Deploy status corrected 2026-09-13. Previously refreshed 2026-09-10 (release 1.60.0+89 — **the export list is unchanged at 29**
+and NOT yet deployed; this release inverts the usual order and must ship the APP
+BUILD FIRST, because an older build renders no badge at all for the `blocked`
+state the backend starts writing. The Wave customer contract stops recording and
+starts REFUSING: `waveUpsertCustomer` gates the enqueue and cancels a job an
+earlier edit left queued, `upsertCustomer` returns `blocked` rather than
+throwing `WaveValidationError` (throwing is what dead-letters permanently),
+`requeueDeadJobs` drops jobs that can only fail again and reports them, and
+`importOneCustomer` re-runs the contract over the fields it writes, so a pull
+can no longer leave a stale verdict on the doc. One new composite index — `clients` on `wave.syncState` + `name` —
+must be READY before the app build ships. No signature, allowlist or guard
+moved. Previously refreshed 2026-09-07 (release 1.59.0+88 — **the export list was unchanged at 29**,
+and all 29 are now DEPLOYED. This pass changed no signature: the five Wave
+callables opened with a hand-spelled auth/`assertAdmin`/payload preamble and now
+open with the composed `assertAdminCall`, which changes the opening and not one
+allowlist key, and every `wave/connection` read went through the new
+`readWaveConnection`/`connectionFieldsOf` pair in `sync_run.js` — eight
+hand-copied coercions, one of which applied the unknown-cadence fallback and one
+of which did not. `firestore.rules` gained the `appointments/{id}/fieldNotes`
+grants. Previously refreshed 2026-09-05 (release 1.58.0+87 — **the export list was unchanged at 29**;
+this pass hardened three guards rather than adding any. `assertActiveCall` now
+resolves the caller's uid so a bridge-row field cannot shadow it,
+`matchPhoneInName` gained the whole-field branch its Dart twin already had (a
+Wave customer named by a 7- or 11-digit number was importing undialable), and
+the callables that log a caller now log `shortHash(uid)` rather than the raw
+Auth uid.
+
 Previously refreshed 2026-09-04 (release 1.57.0+86 — **the export list GREW 25 -> 29**,
 the first change since 2026-08-13. Four callables were added: `searchClients`,
 `searchHistory` and `findAppointmentConflicts` (`indexed_search.js`), which move

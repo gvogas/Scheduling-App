@@ -1,5 +1,7 @@
 # Admin Password Reset Implementation Plan
 
+**Status: EXECUTED 2026-09-29** (verified 2026-10-01) — built, backend deployed at `306ed848` + `cc38be5d`, app half unshipped in 1.63.0+93. The "Deviations from the spec" section records where the real code forced a different shape; the unticked boxes below are unknown, not outstanding.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let an admin reset the password of an ACTIVE employee: the server issues a temporary password, signs the person out everywhere and sets a server-owned `passwordResetRequired` flag; on next sign-in both gates route the person to a short Change password screen, which clears the flag through a server callable and walks them into the app.

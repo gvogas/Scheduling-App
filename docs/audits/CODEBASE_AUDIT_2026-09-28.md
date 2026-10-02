@@ -1,5 +1,10 @@
 # Codebase Audit — 2026-09-28
 
+**Status (verified 2026-10-01):** every finding marked "needs functions deploy"
+below is DEPLOYED — it went live with `306ed848` on 2026-09-29 (`docs/DEPLOYMENT.md`
+log). The app-side fixes ride 1.63.0+93, which has not shipped. **Still open: S4**
+(owner decision).
+
 Scope: whole repo (`lib/`, `functions/`, `firestore.rules`, `storage.rules`,
 `firestore.indexes.json`, `test/`). Baseline: `dev` @ `cee76f45`, clean tree.
 Emphasis on the code changed since the 2026-09-23 audit (`6b96db46..HEAD`:

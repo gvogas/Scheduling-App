@@ -976,7 +976,7 @@ Export Compliance needs no action: `ITSAppUsesNonExemptEncryption = false` is in
 - **Series bulk edits** write N appointment docs → N pushes. Accepted for v1
   (each is a real change).
 - The remaining audit work lives in `docs/audits/` — the latest snapshot is
-  `CODEBASE_AUDIT_2026-09-07.md`, with the rolling owner-only list in
+  `CODEBASE_AUDIT_2026-09-28.md`, with the rolling owner-only list in
   `AUDIT_FOLLOWUPS.md`. (The single rolling `CODEBASE_AUDIT.md` this line used
   to name is gone; snapshots are written to dated filenames now.) Nothing
   there blocks the steps above.

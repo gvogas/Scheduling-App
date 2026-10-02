@@ -1,14 +1,14 @@
 # Open follow-ups from the 2026-09-12 session
 
 **Date:** 2026-09-12
-**Status: OPEN — item 4 CLOSED 2026-09-12, item 5 CLOSED 2026-09-19, the other three still blocked.** Five items, each blocked on a
+**Status: OPEN — item 4 CLOSED 2026-09-12, item 5 CLOSED 2026-09-19, the other three still blocked (re-verified 2026-10-01:** `appointment_form_fields.dart` and `job_address_section.dart` still mix `SheetPanel` with loose fields, and the Places details field mask is still `formattedAddress,addressComponents`, with no `structuredFormat`). Five items, each blocked on a
 different thing — a design decision, a deploy, a machine permission, a commit
 boundary, and a device. None is blocked on not knowing what to do.
 
 Written because they were each raised, reasoned about and then deliberately
 NOT done during the 2026-09-12 session, and a decision that only exists in a
 conversation is a decision that gets re-litigated from scratch. The work that
-DID land that day is in `2026-09-12-add-appointment-sheet-structure.md` and
+DID land that day is in `docs/archive/2026-09-12-add-appointment-sheet-structure.md` and
 `docs/archive/2026-09-11-fresh-header-redesign.md`.
 
 ---
@@ -158,7 +158,7 @@ That hit rate is the argument for finishing the pass.
 
 The 2026-09-12 session also closed several things; they are recorded at their
 sites and are NOT open work: the four simulator fixes and the Option C build
-(`2026-09-12-add-appointment-sheet-structure.md`), the dropdown rebuild and the
+(`docs/archive/2026-09-12-add-appointment-sheet-structure.md`), the dropdown rebuild and the
 "Attach" removal (same doc), the `0/4000` counter removal, the docs sweep
 (counts, the stale fresh-header index row, seven unindexed archive files, the
 retired rolling-audit references), and the `codebase-audit` skill's contradictory

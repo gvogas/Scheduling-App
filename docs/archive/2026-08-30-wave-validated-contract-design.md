@@ -1,6 +1,10 @@
 # Wave sync: the validated contract
 
-**State (2026-09-13): PHASES 1-3 COMPLETE, PHASE 4 PLANNED, NOT STARTED.**
+**State (verified 2026-10-01): ALL FOUR PHASES DEPLOYED.** Phase 4 (the `worker.js`
+split and the cadence removal) deployed 2026-09-19 (`608b817a`); its remaining
+tail — the legal republish, the app build without the cadence picker, and the
+later `waveSetImportSchedule` deletion — is tracked in the phases-2-4 plan. The
+2026-09-13 state line read: PHASES 1-3 COMPLETE, PHASE 4 PLANNED, NOT STARTED.
 Phase 2 (enforce) shipped in 1.61.0+90 and deployed 2026-09-13 (`38c8225b`);
 Phase 3's backfill ran live the same day (726 scanned, 1 patched, 0 blocked,
 1 advisory). Phases 2 and 4 are tasked in

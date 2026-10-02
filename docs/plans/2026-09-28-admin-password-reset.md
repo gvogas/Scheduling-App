@@ -1,6 +1,6 @@
 # Admin password reset for active accounts — design
 
-Status: **approved 2026-09-28, BUILT 2026-09-29, not deployed.** Owner-approved in conversation. Implementation: `2026-09-28-admin-password-reset-plan.md`.
+Status: **approved 2026-09-28, BUILT 2026-09-29, backend DEPLOYED 2026-09-29, app NOT SHIPPED** (verified 2026-10-01). Both callables went live at `306ed848` (30 → 32 exports) and the review fixes to their bodies at `cc38be5d` (`docs/DEPLOYMENT.md` log); the app half rides 1.63.0+93, which has not shipped. Open: S4 in `docs/audits/CODEBASE_AUDIT_2026-09-28.md` (a demoted account's reset leaves it disabled). Owner-approved in conversation. Implementation: `2026-09-28-admin-password-reset-plan.md`.
 
 ## Why
 

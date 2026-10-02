@@ -1,7 +1,8 @@
 # Live staff map improvements — design
 
-**Status (2026-09-19): BUILT and committed (`ed59a6a5`, `e544fb01`), DEVICE PASS
-DONE (owner, 2026-09-19), NOT SHIPPED.** The accessibility page is rewritten for
+**Status (verified 2026-10-01): BUILT and committed (`ed59a6a5`, `e544fb01`), DEVICE PASS
+DONE (owner, 2026-09-19), NOT SHIPPED** — no app build has shipped since 1.61.0+90;
+it rides the next one (1.63.0+93 is cut). The accessibility page is rewritten for
 the team sheet in the repo; publishing both legal pages waits on the build.
 Original banner: built 2026-09-13, not shipped. No backend deploy (the optional rules type check was skipped).
 Left: the device-only checks in §7, republishing `docs/legal/privacy-policy.html`

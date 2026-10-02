@@ -1,7 +1,8 @@
 # Month-end overdue review — design
 
-**Status (2026-09-19): BUILT and committed (`ed59a6a5`); functions DEPLOYED
-2026-09-19 16:37Z (`608b817a`); NOT SHIPPED.** Built 2026-09-13 on branch
+**Status (verified 2026-10-01): BUILT and committed (`ed59a6a5`); functions DEPLOYED
+2026-09-19 16:37Z (`608b817a`); NOT SHIPPED** — no app build has shipped since
+1.61.0+90, so it rides the next one (1.63.0+93 is cut; 1.62.0 and 1.62.1 never shipped). Built 2026-09-13 on branch
 `month-end` (from `ba2fdb05`). Deploy `functions` first (the rider; old builds
 degrade to the calendar on the tap), then ship the app build; no index, rules
 or export change. After the app ships, an admin turns the month-end switch ON

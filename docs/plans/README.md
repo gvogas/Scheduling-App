@@ -1,8 +1,13 @@
 # Active plans — index and outstanding work
 
 Swept 2026-08-11, re-swept 2026-08-15, 2026-09-06, 2026-09-09 and 2026-09-12,
-re-swept 2026-09-13 and **2026-09-19** against what the code, `git log` and the deploy log
-actually say. The 2026-09-13 pass recorded 1.61.0+90 as SHIPPED, the full
+re-swept 2026-09-13, 2026-09-19 and **2026-10-01** against what the code, `git log` and the deploy log
+actually say. **The 2026-10-01 pass** found the index ten days stale: it still
+called the admin password reset undeployed (live since 2026-09-29, `306ed848` +
+`cc38be5d`) and §1 still described 1.61.0+90 as the newest build, while
+1.62.0, 1.62.1 and 1.63.0 have all been cut since and none has shipped. It
+moved two finished plans and two superseded audits to `docs/archive/` (listed
+below the index) and carried those audits' surviving owner items into §6. The 2026-09-13 pass recorded 1.61.0+90 as SHIPPED, the full
 `functions` deploy (Wave Phase 2 + Issue 2, `38c8225b`) and all three prod
 scripts behind it as run, and `fresh-header` as merged — three rows below still
 called those undeployed, unrun or unmerged. The same pass then **moved four
@@ -41,20 +46,26 @@ at the top of each file, not its boxes.
 
 | Doc | State |
 |---|---|
-| `2026-09-28-admin-password-reset.md` | **BUILT 2026-09-29, NOT DEPLOYED.** Admin resets an ACTIVE employee's password (emails aren't real inboxes, so Forgot password can't work): server-owned `passwordResetRequired` flag, temp password, sign-out everywhere, forced Change password screen. Two new callables (30 → 32) + a rules denylist field — deploy `functions,firestore:rules` BEFORE the app build. Plan: `2026-09-28-admin-password-reset-plan.md`. |
-| `2026-09-28-admin-password-reset-plan.md` | **EXECUTED 2026-09-29.** Task-by-task TDD plan for the design above; its "Deviations from the spec" section records where the real code forced a different shape. |
-| `2026-09-12-month-end-overdue-review.md` | **BUILT (`ed59a6a5`), functions DEPLOYED 2026-09-19 (`608b817a`), NOT SHIPPED.** Waits only on the app build. Owner steps after it ships: turn the month-end switch on for Paul, register the `count` GA dimension. The plan's banner lists the seven deviations from the design. |
-| `2026-09-12-dashboard-redesign.md` | **DESIGN PICKED 2026-09-12 (Option B), NOT STARTED.** A Today / Trends switch under the title. Today: on site now with progress through each job, needs-attention chips, compact next up, crew tiles against `maxJobsPerDay`. Trends: every period number and chart. Unassigned count and banner removed (owner: a job is never unassigned). App-only, no new reads, tour ids unchanged but their copy must be rewritten. Three open questions for the build. No implementation plan yet. |
-| `2026-09-12-live-map-improvements.md` | **BUILT (`ed59a6a5`, `e544fb01`), DEVICE PASS DONE 2026-09-19 (owner), NOT SHIPPED.** App-only, no backend deploy. The accessibility page's crew-map paragraph was rewritten for the team sheet 2026-09-19. Owner steps once the build ships: republish `privacy-policy.html` and `accessibility.html` to `es-pro-legal`, flip the Apple tester's Test account switch. |
+| `2026-09-28-admin-password-reset.md` | **BUILT 2026-09-29, backend DEPLOYED 2026-09-29, app NOT SHIPPED.** Admin resets an ACTIVE employee's password (emails aren't real inboxes, so Forgot password can't work): server-owned `passwordResetRequired` flag, temp password, sign-out everywhere, forced Change password screen. Both callables (30 → 32) and the rules denylist field went live at `306ed848`, the review fixes at `cc38be5d`; the app half rides 1.63.0+93. Open: **S4** of the 2026-09-28 audit (a demoted account's reset leaves it disabled) — an owner decision. Plan: `2026-09-28-admin-password-reset-plan.md`. |
+| `2026-09-28-admin-password-reset-plan.md` | **EXECUTED 2026-09-29.** Task-by-task TDD plan for the design above; its "Deviations from the spec" section records where the real code forced a different shape. Archive both once 1.63.0+93 ships and S4 is decided. |
+| `2026-09-12-month-end-overdue-review.md` | **BUILT (`ed59a6a5`), functions DEPLOYED 2026-09-19 (`608b817a`), NOT SHIPPED** — rides the next app build (1.63.0+93 is cut; nothing has shipped since 1.61.0+90). Owner steps after it ships: turn the month-end switch on for Paul, register the `count` GA dimension. The plan's banner lists the seven deviations from the design. |
+| `2026-09-12-dashboard-redesign.md` | **DESIGN PICKED 2026-09-12 (Option B), NOT STARTED** (re-verified 2026-10-01: no Today/Trends switch in `dashboard_screen.dart`). A Today / Trends switch under the title. Today: on site now with progress through each job, needs-attention chips, compact next up, crew tiles against `maxJobsPerDay`. Trends: every period number and chart. Unassigned count and banner removed (owner: a job is never unassigned). App-only, no new reads, tour ids unchanged but their copy must be rewritten. Three open questions for the build. No implementation plan yet; waits on the owner's go-ahead. |
+| `2026-09-12-live-map-improvements.md` | **BUILT (`ed59a6a5`, `e544fb01`), DEVICE PASS DONE 2026-09-19 (owner), NOT SHIPPED** — rides the next app build (1.63.0+93). App-only, no backend deploy. Owner steps once the build ships: republish `privacy-policy.html` and `accessibility.html` to `es-pro-legal`, flip the Apple tester's Test account switch. |
 | `2026-09-07-analytics-followups.md` | **Code COMPLETE, device-verified 2026-09-10; every open item is off-repo.** GA is enabled and linked, and all 27 custom dimensions are registered (owner, 2026-09-10) — this row called both outstanding until 2026-09-13 while the plan had them ticked. Left, all unticked and so *unknown* now that 1.61.0+90 has shipped with analytics in it: the App Store Connect privacy answers (Product Interaction, and Analytics added to Device ID) plus owner sign-off on `PrivacyInfo.xcprivacy`; whether the release build used `FIREBASE_ANALYTICS_WITHOUT_ADID=true`; four events never observed in DebugView (`search_used`, `note_added`, `photo_added`, `contact_action`); the optional `FIREBASE_ANALYTICS_COLLECTION_ENABLED=NO` Info.plist key; and the post-release `build_env` and ~48 h Events-page checks. |
 | `2026-07-10-siri-app-intents-design.md` | Design, 6 phases. Phases 5–6 unscoped. |
 | `2026-07-19-siri-app-intents-implementation.md` | Phases 1–3 built; **no device pass ever run** — the one feature here that has never been exercised on hardware at all. (CarPlay has since been driven in the Simulator, so it is no longer in this category; its remaining checks are behavioural, see §4.) Six read intents in `ios/SiriIntents/`, never exercised by voice. |
 | `2026-07-20-siri-phase4-write-actions.md` | **NOT STARTED.** Mac + Apple-portal session. |
-| `2026-08-30-wave-validated-contract-design.md` | **Phase 1 COMPLETE** — built and deployed 2026-08-30 (`fe9edc51`, report-only), and the prod replay **ran 2026-09-09: 724 clients, 0 blocking, 1 advisory.** Phase 2 (enforce) was since built, shipped and deployed — see the phases-2-4 row. |
-| `2026-09-12-add-appointment-sheet-structure.md` | **OPTION C BUILT 2026-09-12, merged to `dev` and SHIPPED in 1.61.0+90.** The TEMPLATES section is deleted and its chips now sit under the `Service / Title` field they fill, so the form opens on the first required field; the `apptTemplates` tour step KEEPS its member and only its target moved, so no storage key changes and nobody replays. Options A and B were not taken, and **the split container vocabulary they would have resolved is still open** (SCHEDULE is a `SheetPanel`, WHO and DETAILS are loose fields). The doc also records a second same-day change to that sheet: the client and address **attached dropdowns** were rebuilt onto one shared row (fill + lift, dividers, avatars, two-line addresses, the 48pt tap floor) and the sub-floor "Attach" button AND its word were dropped by owner call. **Neither dropdown was verified on a device**, and a street/city address split is still open behind a Places field-mask change and a functions deploy. |
-| `2026-09-12-open-followups.md` | **OPEN — three items still blocked** (items 4 and 5 CLOSED; the fresh-header device pass was done 2026-09-19): the split container vocabulary on the appointment form (an owner decision — the declined Option B), the street/city address split (a functions deploy — the Places field mask omits `structuredFormat`), and device verification of both rebuilt dropdowns (macOS Accessibility permission). |
-| `2026-09-10-wave-validated-contract-phases-2-4.md` | **Phases 2-4 DEPLOYED.** Phase 2 shipped (1.61.0+90) and deployed (`38c8225b`); Phase 3 run (archived plan); **Phase 4 deployed 2026-09-19 (`608b817a`)**, cadence wording removed from `docs/legal/` the same day. Left: republish privacy + terms to `es-pro-legal`; the app build that drops the Settings cadence picker; and, as its own §4a deploy once 1.61.0 has aged out, deleting `waveSetImportSchedule` (accepted-and-ignored until then). |
+| `2026-09-12-open-followups.md` | **OPEN — three items still blocked** (items 4 and 5 CLOSED; re-verified against the code 2026-10-01): the split container vocabulary on the appointment form (an owner decision — the declined Option B), the street/city address split (a functions deploy — the Places field mask still omits `structuredFormat`), and device verification of both rebuilt dropdowns (macOS Accessibility permission). The plan it came from is archived: `docs/archive/2026-09-12-add-appointment-sheet-structure.md`. |
+| `2026-09-10-wave-validated-contract-phases-2-4.md` | **Phases 2-4 DEPLOYED** (Phase 4 at `608b817a`, 2026-09-19); the design doc is archived. Left: republish privacy + terms to `es-pro-legal`; ship the app build that drops the Settings cadence picker (gone from `lib/`, rides 1.63.0+93); and, as its own §4a deploy once 1.61.0 has aged out — which cannot begin until a newer build ships — delete `waveSetImportSchedule` (still exported as a no-op). |
 | `APP_STORE_SUBMISSION.md` | **The live release runbook**, now for updates rather than a launch — the app shipped. Its unticked boxes have never been reconciled against four shipped submissions, so read one as *unknown*, not *outstanding*. |
+
+**Moved to `docs/archive/` on 2026-10-01.** Two plans and two audits:
+`2026-09-12-add-appointment-sheet-structure.md` (shipped in 1.61.0+90; its open
+items are the open-followups row), `2026-08-30-wave-validated-contract-design.md`
+(all four phases deployed; the tail is the phases-2-4 row), and the superseded
+audit snapshots `CODEBASE_AUDIT_2026-09-07.md` and `CODEBASE_AUDIT_2026-09-19.md`
+(their surviving owner items are in §6). The two 2026-09-19 moves below were
+also missing from `docs/archive/README.md` until this pass.
 
 **Moved to `docs/archive/` on 2026-09-19.** Two plans, both finished:
 `2026-09-04-carplay-driving-task.md` (shipped in 1.61.0+90; the behavioural
@@ -85,25 +96,33 @@ build record, the device runbook included), complete and owing nothing.
 Everything below is open. This file is a work list; it is not where the history
 goes.
 
-### 1. The app build — SHIPPED 2026-09-13
+### 1. The app build — 1.63.0+93 CUT, NOT SHIPPED (re-verified 2026-10-01)
 
-**1.61.0+90 is out** (release commit `dd8c4863`, owner-confirmed), and the
-backend behind it is fully live: `functions` at `38c8225b` (2026-09-13 02:07Z,
-29 exports by name), all 21 composites `READY`, and every prod script the
-release needed has run — `backfill-search-tokens.js` and
-`backfill-client-sort-fields.js` before the build (2026-09-12),
-`recount-client-jobs.js` and `backfill-wave-blocked.js` after the deploy
-(2026-09-13). `git log 38c8225b..HEAD` over `functions/`, both rules files and
-`firestore.indexes.json` is empty, so there is no backend deploy debt. Read
+**The newest SHIPPED build is still 1.61.0+90** (`dd8c4863`, 2026-09-13).
+1.62.0+91 never shipped, 1.62.1+92 was superseded before shipping, and
+**1.63.0+93** (`cc38be5d`, `pubspec.yaml`) is the build that carries everything
+since: the month-end overdue review, the live map rework, Wave Phase 4's
+cadence-free Settings, the 2026-09-19 / 09-23 / 09-28 audit fixes and the admin
+password reset.
+
+**Its backend is fully live**, so there is no deploy debt ahead of it:
+`functions` at 32 exports, all deployed — `306ed848` (2026-09-29, the two
+admin-reset callables, the `passwordResetRequired` rules denylist, the 09-28
+audit fixes) then `cc38be5d` (the review fixes). The 2026-09-23 rollout's rules,
+indexes and `backfill-client-buildings.js` ran 2026-09-29 (`e70b494d`); its
+step 6, the app release, is this build. `git diff cc38be5d HEAD` over
+`functions/`, both rules files and `firestore.indexes.json` is empty. Read
 `docs/DEPLOYMENT.md`'s log for what production runs — never this file.
 
-- **Rollback direction has FLIPPED.** Roll back the APP, never the backend: the
-  shipped build calls the server-side search callables, and its old client-side
-  scan path is unreachable (`firebaseFunctionsProvider` is non-nullable).
-- **Crashlytics re-check** on 1.61.0+90 is now possible (the 2026-09-07 audit
-  carried it over waiting for a shipped build).
-- **Distribution signing with the CarPlay entitlement is proven**: the key is in
-  `ios/Runner/Runner.entitlements` at `dd8c4863`, and that build shipped (§4).
+- **Rollback direction is APP, never backend** — unchanged since 1.61.0+90: the
+  shipped build calls the server-side search callables, and the backend has
+  only grown supersets since.
+- **After it ships:** the owner steps in the month-end, live-map and analytics
+  rows; the legal republish (privacy, terms, accessibility); the Crashlytics
+  re-check on the new build. Once 1.61.0+90 then ages out, the
+  `waveSetImportSchedule` deletion (§3) becomes possible.
+- **Distribution signing with the CarPlay entitlement is proven** by 1.61.0+90
+  (closed in §4).
 
 ### 2. Siri — the one feature that has never been on a device at all
 
@@ -120,7 +139,7 @@ mismatch. Phases 5–6 are unscoped.
 
 ### 3. Wave — Phases 1–4 DEPLOYED
 
-**Update (2026-09-19): Phase 4 is DEPLOYED** (`608b817a`, all 29 updated, no
+**Update (2026-10-01): unchanged since 2026-09-19 — the cadence-free app build is 1.63.0+93, cut but unshipped, and the design doc is archived.** **Update (2026-09-19): Phase 4 is DEPLOYED** (`608b817a`, all 29 updated, no
 export change) and the cadence wording is gone from `docs/legal/`. Left:
 republish privacy + terms to `es-pro-legal`, ship the app build that drops the
 cadence picker, and later — its own §4a deploy once 1.61.0 has aged out —
@@ -194,6 +213,16 @@ and the post-release `build_env` and Events-page checks.
 - **ASC App Privacy needs Precise Location added.**
 - **The `liveActivityCards` TTL policy** cannot be created yet — blocked by
   Firestore itself.
+- **Carried from the archived 2026-09-07 audit** (unverified since; read as
+  *unknown*): the **Crashlytics re-check** on a shipped build (possible since
+  1.61.0+90 — do it on 1.63.0+93 once out), the **Wave "Retry failed" press**
+  on a real dead-letter, and the **Xcode `InfoPlist.strings`** confirmation.
+  Its I25 is open BY DESIGN — fix only if observed in the wild.
+- **Carried from the archived 2026-09-19 audit:** remove the stale
+  `.claude/worktrees/` agent directories (three still on disk 2026-10-01,
+  gitignored), and **I12**, which needs a real bad record to reproduce.
+- **S4 of the 2026-09-28 audit** — resetting a demoted account's password
+  leaves it disabled. Needs an owner decision (`docs/audits/CODEBASE_AUDIT_2026-09-28.md`).
 
 ### 7. Prod scripts — what must never be re-run, and what is closed
 

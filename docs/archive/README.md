@@ -146,6 +146,34 @@ this one".
   `docs/plans/redesign-subdocs/2026-08-11-p7-dashboard-history.md`, which stays
   active-adjacent with the rest of the redesign sub-docs.
 
+### Added by the 2026-10-01 sweep
+
+Two plans whose work had shipped and deployed, each with its leftover items
+already carried by a live plan — plus two moved on 2026-09-19 that were never
+indexed here.
+
+- `2026-09-12-add-appointment-sheet-structure.md` — Option C of the Add
+  Appointment sheet: the TEMPLATES section deleted and its chips moved under
+  the `Service / Title` field, the `apptTemplates` tour step retargeted without
+  a storage-key change, and the client/address attached dropdowns rebuilt onto
+  one shared row. Shipped in 1.61.0+90 (`dd8c4863`). Its three open items — the
+  split container vocabulary, the street/city address split, and device
+  verification of both dropdowns — live in `docs/plans/2026-09-12-open-followups.md`.
+- `2026-08-30-wave-validated-contract-design.md` — the Wave customer contract
+  design, all four phases deployed: Phase 1 report-only (`fe9edc51`, 2026-08-30),
+  Phase 2 enforcement (`38c8225b`, 2026-09-13, shipped in 1.61.0+90), Phase 3's
+  backfill run live 2026-09-13, Phase 4's `worker.js` split and cadence removal
+  (`608b817a`, 2026-09-19). The remaining tail — the legal republish, the app
+  build without the cadence picker, the later `waveSetImportSchedule` deletion —
+  is in `docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`.
+- `2026-09-04-carplay-driving-task.md` — **moved 2026-09-19, indexed 2026-10-01.**
+  The CarPlay driving task; shipped in 1.61.0+90, behavioural checks (the four
+  actions, the technician view, App Lock) confirmed all clear by the owner
+  2026-09-19.
+- `2026-09-11-fresh-header-redesign.md` — **moved 2026-09-19, indexed 2026-10-01.**
+  The `AppTopBar` header redesign, all four phases; shipped in 1.61.0+90, Phase
+  3's device pass done 2026-09-19.
+
 ### Added by the 2026-09-13 sweep
 
 Four plans whose work had shipped and deployed. Three were already marked
@@ -342,11 +370,22 @@ a new verdict, only a missing row. A file moved but not indexed is lost.
 Point-in-time whole-repo audits; each run's findings were implemented at the
 time. Superseded by later audits. `docs/audits/` now holds
 DATED snapshots rather than one rolling action list — the newest is
-`CODEBASE_AUDIT_2026-09-07.md` — and also keeps
-`SECURITY_ASSESSMENT_2026-08-04.md` and `AUDIT_FOLLOWUPS.md` (the owner-only
-Maps budget cap), plus two read-only repair-audit scripts for the client-rename
-damage (`audit-renamed-client-names.js` and the earlier
-`audit-client-phone-backfill-damage.js`).
+`CODEBASE_AUDIT_2026-09-28.md` — and also keeps
+`SECURITY_ASSESSMENT_2026-08-04.md`, `AUDIT_FOLLOWUPS.md` (the owner-only
+Maps budget cap), `AUDIT_ROLLOUT_2026-09-23.md`, `IPHONE_PERFORMANCE_2026-09-23.md`
+and one read-only repair-audit script, `audit-client-phone-backfill-damage.js`
+(its sibling `audit-renamed-client-names.js` was deleted 2026-09-28 with the
+closed-migration scripts; it is in git history).
+- `CODEBASE_AUDIT_2026-09-19.md` — **added 2026-10-01.** The audit at
+  `608b817a`: 20 done, 3 kept, 1 not a defect, 1 by design; its backend half
+  deployed at `bec23b85` (2026-09-19). Two owner items outlived it and moved to
+  `docs/plans/README.md` §6: removing the stale `.claude/worktrees/` agent
+  directories, and I12, which needs a real bad record to reproduce.
+- `CODEBASE_AUDIT_2026-09-07.md` — **added 2026-10-01.** The audit at
+  `051a6b6d`: 36 of 41 worked, its rules half (B5) deployed at `462a1907`. I25
+  is open by design (fix only if observed). Its four carried-over owner items —
+  the Maps billing cap, the Crashlytics re-check, the Wave "Retry failed" press
+  and the Xcode `InfoPlist.strings` check — moved to `docs/plans/README.md` §6.
 - `CODEBASE_AUDIT_2026-09-05.md` — the whole-repo audit run against `394d67af`
   on branch `redesgin`, superseded by later passes. Indexed by the 2026-09-12
   sweep, which found it unlisted.

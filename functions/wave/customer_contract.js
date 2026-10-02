@@ -18,7 +18,7 @@
  * producer of a Wave customer payload, and a client it refuses never becomes a
  * queued job.
  *
- * Design: `docs/plans/2026-08-30-wave-validated-contract-design.md`.
+ * Design: `docs/archive/2026-08-30-wave-validated-contract-design.md`.
  * @module wave/customer_contract
  */
 

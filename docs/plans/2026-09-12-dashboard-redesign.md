@@ -1,7 +1,8 @@
 # Dashboard redesign — Today | Trends
 
 **Status: DESIGN PICKED 2026-09-12 (Option B). NOT STARTED — no code, no
-implementation plan yet.** The owner gives the build go-ahead separately.
+implementation plan yet** (re-verified 2026-10-01: `dashboard_screen.dart` has no
+Today/Trends switch; `BusinessTrendsSection` predates the design, from July). The owner gives the build go-ahead separately.
 
 Mockup (chosen design, private artifact):
 https://claude.ai/code/artifact/9ee3a908-df11-4151-b536-e91753902123

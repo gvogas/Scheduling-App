@@ -3,9 +3,9 @@
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
 refreshed 2026-09-29 (release 1.63.0+93 — **32 exports, all 32 deployed**:
-`resetEmployeePassword` and `completePasswordReset` went live at `306ed848`; the
-release's review fixes to both bodies are in source and NOT YET DEPLOYED — see the
-deploy log). Earlier 2026-09-29: `syncClientBuilding` went live at `e70b494d`. Previously refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
+`resetEmployeePassword` and `completePasswordReset` went live at `306ed848`, and
+the release's review fixes to both bodies at `cc38be5d` the same day — see the
+deploy log; re-checked 2026-10-01, nothing in `functions/` has changed since). Earlier 2026-09-29: `syncClientBuilding` went live at `e70b494d`. Previously refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
 and NOT YET DEPLOYED; the other 29 are deployed at `bec23b85`**, though five of
 their bodies changed in source and are also undeployed: `createEmployeeAccount`
 and `completeEmployeeSetup` (per-account operation lock, optional `newPassword`),
@@ -18,44 +18,10 @@ month-end overdue rider on `sendDailyJobDigest` and Wave Phase 4 (the `worker.js
 split, the guarded import updates, the cadence deleted and
 `waveSetImportSchedule` retired to a no-op) went live 2026-09-19 16:37Z
 (`608b817a`), ahead of the app build; the audit's stale-block clear in
-`waveUpsertCustomer` followed at ~19:45Z (`bec23b85`). Previously refreshed 2026-09-12 (release
-1.61.0+90 — **the export list is unchanged at 29**,
-and all of it is DEPLOYED: the app build shipped first and the full `functions`
-deploy followed 2026-09-13 02:07Z (`38c8225b`), the INVERTED order Wave Phase 2
-needs — 1.60.0+89 never shipped, so this build carries its Dart. One body
-changed: `recountClientJobs` stops counting cancelled visits and now also fires
-on a cancelled-ness flip, served by a new `appointments (clientId, status,
-dayIndex)` composite deployed 2026-09-12 ahead of the function. Both one-off
-scripts behind it ran live 2026-09-13: `recount-client-jobs.js` (726 scanned,
-9 patched) and `backfill-wave-blocked.js` (726 scanned, 1 patched). No signature,
-allowlist or guard moved. Deploy status corrected 2026-09-13. Previously refreshed 2026-09-10 (release 1.60.0+89 — **the export list is unchanged at 29**
-and NOT yet deployed; this release inverts the usual order and must ship the APP
-BUILD FIRST, because an older build renders no badge at all for the `blocked`
-state the backend starts writing. The Wave customer contract stops recording and
-starts REFUSING: `waveUpsertCustomer` gates the enqueue and cancels a job an
-earlier edit left queued, `upsertCustomer` returns `blocked` rather than
-throwing `WaveValidationError` (throwing is what dead-letters permanently),
-`requeueDeadJobs` drops jobs that can only fail again and reports them, and
-`importOneCustomer` re-runs the contract over the fields it writes, so a pull
-can no longer leave a stale verdict on the doc. One new composite index — `clients` on `wave.syncState` + `name` —
-must be READY before the app build ships. No signature, allowlist or guard
-moved. Previously refreshed 2026-09-07 (release 1.59.0+88 — **the export list was unchanged at 29**,
-and all 29 are now DEPLOYED. This pass changed no signature: the five Wave
-callables opened with a hand-spelled auth/`assertAdmin`/payload preamble and now
-open with the composed `assertAdminCall`, which changes the opening and not one
-allowlist key, and every `wave/connection` read went through the new
-`readWaveConnection`/`connectionFieldsOf` pair in `sync_run.js` — eight
-hand-copied coercions, one of which applied the unknown-cadence fallback and one
-of which did not. `firestore.rules` gained the `appointments/{id}/fieldNotes`
-grants. Previously refreshed 2026-09-05 (release 1.58.0+87 — **the export list was unchanged at 29**;
-this pass hardened three guards rather than adding any. `assertActiveCall` now
-resolves the caller's uid so a bridge-row field cannot shadow it,
-`matchPhoneInName` gained the whole-field branch its Dart twin already had (a
-Wave customer named by a 7- or 11-digit number was importing undialable), and
-the callables that log a caller now log `shortHash(uid)` rather than the raw
-Auth uid.
-Refresh entries older than 2026-09-05 were moved to
-`docs/archive/CLOUD_FUNCTIONS_refresh_history.md` (2026-09-06 and 2026-09-13).
+`waveUpsertCustomer` followed at ~19:45Z (`bec23b85`).
+Refresh entries older than 2026-09-19 were moved to
+`docs/archive/CLOUD_FUNCTIONS_refresh_history.md` (2026-09-06, 2026-09-13 and
+2026-10-01).
 
 **Every callable now enforces App Check** (`enforceAppCheck: true`); the
 earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
@@ -381,7 +347,7 @@ dot as a field path, so a dotted key there would create a literal
 `wave.syncState` field and leave the real one untouched.
 Replay the contract over production read-only with
 `functions/scripts/audit-wave-contract.js`. Design:
-`docs/plans/2026-08-30-wave-validated-contract-design.md`; Phases 2-4 plan:
+`docs/archive/2026-08-30-wave-validated-contract-design.md`; Phases 2-4 plan:
 `docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`.
 
 **Exactly three Cloud Scheduler jobs, and that is deliberate** — only 3 are free

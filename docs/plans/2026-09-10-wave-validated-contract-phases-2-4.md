@@ -7,11 +7,14 @@
 (its own plan, archived at `docs/archive/2026-09-11-wave-validated-contract-phase-3.md`). Phase 4
 BUILT 2026-09-13 and DEPLOYED 2026-09-19 16:37Z (`608b817a`, all 29 updated,
 no export change); the cadence wording was dropped from `docs/legal/` the same
-day. Left: republish privacy + terms to `es-pro-legal`, and — its own §4a
-deploy, once 1.61.0 has aged out of the fleet — delete `waveSetImportSchedule`.** The "nothing deployed" paragraph below is the
+day. Left (verified 2026-10-01): republish privacy + terms to `es-pro-legal`; ship the
+app build that drops the Settings cadence picker (gone from `lib/`, rides 1.63.0+93,
+unshipped); and — its own §4a deploy, once 1.61.0 has aged out of the fleet,
+which cannot start until a newer build ships — delete `waveSetImportSchedule`
+(still exported as a no-op).** The "nothing deployed" paragraph below is the
 build-time state. Phase 1 was complete, deployed (`fe9edc51`, report-only) and
 prod-replayed 2026-09-09 (**724 clients, 0 blocking, 1 advisory**). Design:
-`docs/plans/2026-08-30-wave-validated-contract-design.md` §3-§7. Phase 1 plan:
+`docs/archive/2026-08-30-wave-validated-contract-design.md` §3-§7. Phase 1 plan:
 `docs/archive/2026-08-30-wave-validated-contract-implementation.md`.
 
 **Verified at build time:** analyzer clean, **1872 jest** (from 1848), eslint
