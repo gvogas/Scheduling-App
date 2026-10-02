@@ -2,8 +2,8 @@ name: CI
 
 on:
   push:
-    # Verify both long-lived development branches as well as main.
-    branches: [main, redesgin, dev]
+    # Verify the long-lived development branch as well as main.
+    branches: [main, dev]
   pull_request:
 
 jobs:

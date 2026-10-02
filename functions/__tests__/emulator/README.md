@@ -23,4 +23,4 @@ The same runner now checks both booking/deletion commit orders, forged deletion
 and setup barriers, per-UID setup/reset contention, the legacy setup barrier,
 actual sign-in with the chosen password, and building catalog transactions
 (including duplicate delivery, concurrent membership, archive, delete and dry-run). It also checks that no client can set or clear passwordResetRequired, and runs an admin password reset followed by the employee's forced change against the Auth emulator.
-CI runs it on PRs and pushes to main, redesgin, and dev.
+CI runs it on PRs and pushes to main and dev.

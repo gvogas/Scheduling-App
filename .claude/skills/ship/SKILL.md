@@ -13,7 +13,7 @@ description: >-
 One pass that replaces the usual "final check → commit → push" exchange.
 Never commit red — fix and rerun instead.
 
-**A push runs CI** (`.github/workflows/ci.yml`, on `main`, `dev` and `redesgin`), and
+**A push runs CI** (`.github/workflows/ci.yml`, on `main` and `dev`), and
 CI runs `flutter analyze`, `dart run tool/test.dart`, `npm run lint` and `npx jest` on
 every push regardless of what changed. So the checks below are not a courtesy:
 anything skipped here comes back as a failed run minutes later. Run the full
