@@ -21,6 +21,8 @@ import 'package:scheduling/features/employees/widgets/cards/pending_invite_tile.
 import 'package:scheduling/features/employees/widgets/fields/employee_color_grid.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
+import '../../../support/tour_test_support.dart';
+
 class _MockEmployeesRepo extends Mock implements EmployeesRepository {}
 
 const _jane = EmployeeRecord(
@@ -115,6 +117,8 @@ void _useWideViewport(WidgetTester tester) {
 }
 
 void main() {
+  setUp(markAllToursSeen);
+
   setUpAll(() => registerFallbackValue(const EmployeeRecord(id: 'fallback')));
 
   testWidgets('renders employee cards from the stream', (tester) async {

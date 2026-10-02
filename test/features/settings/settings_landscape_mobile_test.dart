@@ -12,6 +12,8 @@ import 'package:scheduling/features/settings/screens/settings_screen.dart';
 import 'package:scheduling/features/settings/widgets/views/text_size_view.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
+import '../../support/tour_test_support.dart';
+
 Widget _wrap(Widget child, {double textScale = 2}) => ProviderScope(
   // The drawer's admin rows are gated on the LIVE user doc as well as the
   // route argument, and the admin drawer is the taller overflow case.
@@ -46,15 +48,20 @@ Widget _wrap(Widget child, {double textScale = 2}) => ProviderScope(
 );
 
 void main() {
-  PackageInfo.setMockInitialValues(
-    appName: 'Scheduling',
-    packageName: 'net.vogas.scheduling',
-    version: '1.0.3',
-    buildNumber: '4',
-    buildSignature: '',
+  setUpAll(
+    () => PackageInfo.setMockInitialValues(
+      appName: 'Scheduling',
+      packageName: 'net.vogas.scheduling',
+      version: '1.0.3',
+      buildNumber: '4',
+      buildSignature: '',
+    ),
   );
 
-  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
+    markAllToursSeen();
+  });
 
   testWidgets(
     'nav drawer does not overflow on narrow landscape at 2x text',

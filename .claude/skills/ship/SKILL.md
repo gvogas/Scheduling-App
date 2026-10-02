@@ -13,7 +13,7 @@ description: >-
 One pass that replaces the usual "final check → commit → push" exchange.
 Never commit red — fix and rerun instead.
 
-**A push runs CI** (`.github/workflows/ci.yml`, on `main` and `redesgin`), and
+**A push runs CI** (`.github/workflows/ci.yml`, on `main`, `dev` and `redesgin`), and
 CI runs `flutter analyze`, `flutter test`, `npm run lint` and `npx jest` on
 every push regardless of what changed. So the checks below are not a courtesy:
 anything skipped here comes back as a failed run minutes later. Run the full
@@ -40,8 +40,12 @@ straight to step 3.
   floor to filter against — any line it prints is yours. (An older version of
   this skill said to grep out "~1000 info lints"; that noise floor has not
   existed for a long time and grepping hid real findings from the run.)
-- **Tests**: `flutter test` — the whole suite, because CI runs the whole suite.
-  Running only the touched files here just moves the failure to the push.
+- **Tests**: `dart run tool/test.dart` — the whole suite, because CI runs the
+  whole suite. Running only the touched files here just moves the failure to
+  the push. It shards files into a shared isolate (~3 min against ~10 for bare
+  `flutter test`), while CI still runs bare `flutter test`, one isolate per
+  file — so ALSO run `flutter test <touched test files>`, which catches a test
+  that only passes because a shard-mate set something up for it.
 - **ARB changes**: `flutter gen-l10n` succeeds and
   `lib/l10n/.gen/untranslated.json` shows no EN/FR drift.
 - **`functions/` changes**: `cd functions && npm run lint && npx jest`.
@@ -67,7 +71,7 @@ is a claim, not a fact, and this repo has shipped a bug behind one.
 
 ## 4. Push
 
-Push to the **current** branch — `redesgin` is the long-lived active one.
+Push to the **current** branch — `dev` is the long-lived active one.
 Never push to `main` unless explicitly asked.
 
 Finish by reporting: the checks run and their observed results, the commit

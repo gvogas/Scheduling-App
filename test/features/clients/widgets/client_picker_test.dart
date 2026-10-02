@@ -263,6 +263,7 @@ void main() {
   testWidgets('no overflow on a small phone at 2x text', (tester) async {
     tester.view.physicalSize = const Size(260, 640);
     tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
       harness(
@@ -281,6 +282,7 @@ void main() {
   testWidgets('the dropdown survives a 260px phone at 2x text', (tester) async {
     tester.view.physicalSize = const Size(260, 900);
     tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
       harness(

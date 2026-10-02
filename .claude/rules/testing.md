@@ -15,6 +15,28 @@ paths:
   policy classes (`ClientSearchPolicy`, etc.) — no Firebase needed.
 - Always `await tester.pumpAndSettle()` after state changes. Assert `tester.takeException()` is null.
 
+## Shard isolation
+
+`dart run tool/test.dart` runs many test files in ONE isolate, so a file must
+not depend on state another file left behind, or on a plugin being ABSENT. The
+runner resets the SharedPreferences and secure-storage mocks to an empty store
+before each file; nothing else is reset. The leaks found when sharding landed
+(2026-10-01):
+
+- **Reset every `tester.view` value you set**, `devicePixelRatio` included —
+  `addTearDown(tester.view.reset)` covers all of them. A leaked DPR of 1 made
+  the next file's logical screen 2400 px wide, and its swipe stopped revealing
+  the action pane.
+- **A screen hosting a `DestinationTour` (Dashboard, Settings, Employees, the
+  day route) needs `markAllToursSeen()` in `setUp`** (`test/support/tour_test_support.dart`).
+  Run alone, the prefs read failed against the missing plugin, so the tour
+  never started; with a working mock store it starts and `pumpAndSettle` hangs.
+- **Override `isOfflineProvider` in a bare `ProviderContainer`** whose code
+  reads it. Once another file has initialised the test binding, the real
+  connectivity channel is called and throws `MissingPluginException`.
+- Set a global mock in `setUp`/`setUpAll`, never directly in `main()`: every
+  file's `main()` runs at load, so the last file loaded wins.
+
 ## Harness requirements
 
 - Wrap widgets that use `ThemeNotifier.of(context)` in a full `ThemeNotifier(..., child: ...)`.

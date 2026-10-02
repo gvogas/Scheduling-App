@@ -23,6 +23,8 @@ import 'package:scheduling/features/wave/domain/wave_failure.dart';
 import 'package:scheduling/features/wave/widgets/wave_settings_section.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
+import '../../support/tour_test_support.dart';
+
 // ---------------------------------------------------------------------------
 // Mock
 // ---------------------------------------------------------------------------
@@ -124,7 +126,10 @@ void main() {
     );
   });
 
-  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
+    markAllToursSeen();
+  });
 
   // ── WaveSettingsSection widget ────────────────────────────────────────────
 

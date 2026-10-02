@@ -32,7 +32,7 @@ have that.
 
 ```bash
 flutter analyze                       # 0 issues is the baseline
-flutter test                          # full suite
+dart run tool/test.dart               # full suite, sharded (~3 min)
 cd functions && npm run lint && npx jest
 ```
 
@@ -711,7 +711,7 @@ CONTRACT step — see "Pending: the photo subcollection CONTRACT step" above.
 Copy this into the release PR / notes:
 
 ```
-[ ] flutter analyze 0 · flutter test green · functions lint + jest green
+[ ] flutter analyze 0 · tool/test.dart green · functions lint + jest green
 [ ] rules validate (only the 3 isAvailabilityOnlyChange warnings)
 [ ] recorded what is ACTUALLY live (functions:list), not what the docs claim
 [ ] diffed functions/ + rules since the last deploy commit

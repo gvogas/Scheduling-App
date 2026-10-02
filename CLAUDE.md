@@ -49,7 +49,14 @@ file into the literal-values style and breaks the define-based setup.
 
 ```bash
 flutter analyze   # baseline is `No issues found!` — any lint you see is yours
+dart run tool/test.dart   # full suite, sharded: ~3 min vs ~10 for bare `flutter test`
 ```
+
+`tool/test.dart` bundles the 391 test files into 6 shards under
+`build/test_shards/`, because bare `flutter test` spends ~1.4 s per FILE of
+serial compilation. Extra args pass through as flags (`--coverage`,
+`--reporter expanded`); for one file, keep using `flutter test <path>`. Files
+in a shard share an isolate — see "Shard isolation" in `.claude/rules/testing.md`.
 
 ## Required environment
 

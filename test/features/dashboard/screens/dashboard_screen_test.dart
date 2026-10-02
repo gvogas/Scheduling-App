@@ -16,6 +16,8 @@ import 'package:scheduling/features/employees/application/employees_providers.da
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
+import '../../../support/tour_test_support.dart';
+
 class _MockClientsRepo extends Mock implements ClientsRepository {}
 
 /// Fixed clock: Wednesday 2026-07-08, noon.
@@ -95,6 +97,7 @@ void main() {
   });
 
   setUp(() {
+    markAllToursSeen();
     clientsRepo = _MockClientsRepo();
     when(() => clientsRepo.fetchClientsCreatedSince(any())).thenAnswer(
       (_) async => [

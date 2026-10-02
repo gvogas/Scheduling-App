@@ -67,7 +67,7 @@ Run the four commands CI runs, and report the counts you actually observed:
 
 ```
 flutter analyze          # baseline is: No issues found!
-flutter test
+dart run tool/test.dart  # full suite, sharded (~3 min); CI runs plain `flutter test`
 cd functions && npm run lint
 cd functions && npx jest
 ```

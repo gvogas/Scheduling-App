@@ -1800,6 +1800,7 @@ not default it off.
 - **Widget tests** (`testWidgets()`): UI behavior — button visibility, dialog appearance, error banners, overflow at 2× text scale.
 - **Mocking**: `mocktail` at system boundaries only (Firebase, repositories). Real implementations everywhere else.
 - **Test harness**: Widgets using `ThemeNotifier.of(context)` must be wrapped in `ThemeNotifier(...)`. For overflow tests, pump the widget at a **small-phone size with 2× text** — set `tester.view.physicalSize` (a 260-wide logical viewport is the usual worst case) and wrap in a `MediaQuery` carrying `textScaler: TextScaler.linear(2)`. Each test file keeps its own local `_harness` helper for this; there is no shared one.
+- **Shard isolation**: `dart run tool/test.dart` (the fast full-suite runner) runs many test files in one isolate, resetting only the SharedPreferences/secure-storage mocks between files. Reset every `tester.view` value you set, call `markAllToursSeen()` before pumping a tour-hosting screen, override `isOfflineProvider` in bare containers, and set global mocks in `setUp`/`setUpAll` rather than in `main()`. Mirrored in `.claude/rules/testing.md`.
 - **Three harness traps that fail as a HANG or a timeout rather than an
   assertion**, all mirrored in `.claude/rules/testing.md`: a widget test
   reaching an account exit must override `appointmentImageLoaderProvider`,
@@ -1816,7 +1817,8 @@ not default it off.
   meaningful regression test here — a naive local-time version passes the same
   cases. Mirrored in `.claude/rules/testing.md`.
 
-Run: `flutter test` (3854 passing as of 2026-09-29, the 1.63.0+93 release pass — that is the runner's count;
+Run: `dart run tool/test.dart` — the sharded full suite, ~3 min against ~10 for bare `flutter test`, which
+still works and gives the same count (3854 passing as of 2026-09-29, the 1.63.0+93 release pass — that is the runner's count;
 `grep`ing for `test(`/`testWidgets(` gives fewer (3713 as of 2026-09-29), since some cases are
 generated inside loops; `functions` adds 1994 jest tests across 92 suites in
 `functions/__tests__/` — the parallel `functions/test/` directory was

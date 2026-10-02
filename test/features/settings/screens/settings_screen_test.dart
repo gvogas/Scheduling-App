@@ -10,6 +10,8 @@ import 'package:scheduling/features/notifications/application/push_registration_
 import 'package:scheduling/features/settings/screens/settings_screen.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
+import '../../../support/tour_test_support.dart';
+
 Widget _wrap({
   double textScale = 1.0,
   bool isDark = false,
@@ -49,15 +51,20 @@ Widget _wrap({
 void main() {
   // SettingsScreen now watches appInfoProvider (PackageInfo) and the
   // app-lock flag (secure storage) during build.
-  PackageInfo.setMockInitialValues(
-    appName: 'Scheduling',
-    packageName: 'net.vogas.scheduling',
-    version: '1.0.3',
-    buildNumber: '4',
-    buildSignature: '',
+  setUpAll(
+    () => PackageInfo.setMockInitialValues(
+      appName: 'Scheduling',
+      packageName: 'net.vogas.scheduling',
+      version: '1.0.3',
+      buildNumber: '4',
+      buildSignature: '',
+    ),
   );
 
-  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
+    markAllToursSeen();
+  });
 
   testWidgets('shows Appearance section header', (tester) async {
     await tester.pumpWidget(_wrap());
