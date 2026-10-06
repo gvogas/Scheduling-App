@@ -208,3 +208,6 @@ docs/superpowers/
 
 
 dev/settings.local.json
+
+# understand-anything knowledge graph (local)
+/.ua/

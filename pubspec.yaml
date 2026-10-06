@@ -72,7 +72,7 @@ dependencies:
   infinite_scroll_pagination: ^5.1.1
   flutter_slidable: ^4.0.0
   smooth_page_indicator: ^3.0.0
-  permission_handler: ^12.0.3
+  permission_handler: ^13.0.2
   local_auth: ^3.0.1
 
   # Live background GPS presence (travel-time "leave now" reminders)
@@ -95,7 +95,7 @@ dependencies:
 
   # Network reachability (app-wide offline banner)
   connectivity_plus: ^7.2.0
-  home_widget: ^0.9.3
+  home_widget: ^0.10.0
   share_plus: ^13.2.0
   saver_gallery: ^5.1.0
   showcaseview: ^5.1.0
