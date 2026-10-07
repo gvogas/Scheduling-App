@@ -1,0 +1,24 @@
+{
+  "cases": [
+    {"name": "moves a pasted number into the phone field", "input": "Marc Tremblay 514-555-1234", "phone": "", "expectName": "Marc Tremblay", "expectPhone": "(514) 555-1234"},
+    {"name": "takes the number off the front of the name too", "input": "514-555-1234 - Marc Tremblay", "phone": "", "expectName": "Marc Tremblay", "expectPhone": "(514) 555-1234"},
+    {"name": "a typed phone always wins", "input": "Marc Tremblay 514-555-1234", "phone": "(438) 222-3333", "expectNull": true},
+    {"name": "keeps the name when it is nothing but the number", "input": "5145551234", "phone": "", "expectName": "5145551234", "expectPhone": "(514) 555-1234"},
+    {"name": "leaves an ambiguous digit run for a human", "input": "Suite 12345", "phone": "", "expectNull": true},
+    {"name": "leaves an international number in a name", "input": "Marc +33 6 12 34 56 78", "phone": "", "expectNull": true},
+    {"name": "takes the number's own brackets with it (trailing)", "input": "Marc Tremblay (514) 555-1234", "phone": "", "expectName": "Marc Tremblay", "expectPhone": "(514) 555-1234"},
+    {"name": "takes the number's own brackets with it (leading)", "input": "(514) 555-1234 Marc Tremblay", "phone": "", "expectName": "Marc Tremblay", "expectPhone": "(514) 555-1234"},
+    {"name": "takes the number's own brackets with it (bare digits)", "input": "Marc Tremblay (5145551234)", "phone": "", "expectName": "Marc Tremblay", "expectPhone": "(514) 555-1234"},
+    {"name": "a bracketed number alone is still nothing but the number", "input": "(514) 555-1234", "phone": "", "expectName": "(514) 555-1234", "expectPhone": "(514) 555-1234"},
+    {"name": "a bracket that belongs to the NAME survives", "input": "Depanneur (Nord) 5145551234", "phone": "", "expectName": "Depanneur (Nord)", "expectPhone": "(514) 555-1234"},
+    {"name": "does nothing to an ordinary name", "input": "Marc Tremblay", "phone": "", "expectNull": true},
+    {"name": "a ten-digit number still lifts and formats", "input": "5145628332", "phone": "", "expectPhone": "(514) 562-8332"},
+    {"name": "a seven-digit number lifts rather than being left in the name", "input": "5628332", "phone": "", "expectPhoneDigits": "5628332"},
+    {"name": "an eleven-digit typo still lifts", "input": "51456283322", "phone": "", "expectPhoneDigits": "51456283322"},
+    {"name": "an international number alone stays in the name", "input": "+33 6 12 34 56 78", "phone": "", "expectNull": true},
+    {"name": "too few digits to dial is not a phone", "input": "4820", "phone": "", "expectNull": true},
+    {"name": "a name with a number in it keeps the name", "input": "Marie Tremblay 5145628332", "phone": "", "expectName": "Marie Tremblay", "expectPhone": "(514) 562-8332"},
+    {"name": "eight digits are no NANP shape, so nothing lifts", "input": "3101-5696", "phone": "", "expectNull": true},
+    {"name": "nine digits are no NANP shape, so nothing lifts", "input": "310 156 969", "phone": "", "expectNull": true}
+  ]
+}

@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/remote_config/feature_flags.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/employees_repository.dart';
@@ -11,6 +13,14 @@ import 'package:scheduling/features/live_activity/application/live_activity_regi
 import 'package:scheduling/features/live_activity/data/live_activity_token_repository.dart';
 import 'package:scheduling/features/live_activity/domain/live_activity_token.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+FeatureFlags _flags({bool liveAct = true}) => FeatureFlags(
+  addressAutocomplete: true,
+  presence: true,
+  liveActivities: liveAct,
+  waveSync: true,
+  minSupportedBuild: 0,
+);
 
 class _MockAuth extends Mock implements FirebaseAuth {}
 
@@ -59,10 +69,14 @@ void main() {
   ProviderContainer makeContainer({
     bool onIos = false,
     Map<String, dynamic>? accountDoc,
+    bool liveActivitiesEnabled = true,
   }) {
     final container = ProviderContainer(
       overrides: [
         employeesRepositoryProvider.overrideWithValue(employees),
+        featureFlagsProvider.overrideWithValue(
+          _flags(liveAct: liveActivitiesEnabled),
+        ),
         liveActivityTokenRepositoryProvider.overrideWithValue(tokenRepo),
         if (accountDoc != null)
           currentUserDocProvider.overrideWith(
@@ -160,6 +174,21 @@ void main() {
         'live_activity_enabled': false,
       });
       final container = makeContainer(onIos: true)
+        ..listen(liveActivityEnabledProvider, (_, _) {});
+      await container.read(liveActivityEnabledProvider.notifier).ready;
+
+      await controllerOf(container).sync();
+
+      verify(
+        () => tokenRepo.deleteTokensOfKind(
+          userDocId: 'doc-1',
+          kind: LiveActivityTokenKind.pushToStart,
+        ),
+      ).called(1);
+    });
+
+    test('a remote pause tears down like an opt-out', () async {
+      final container = makeContainer(onIos: true, liveActivitiesEnabled: false)
         ..listen(liveActivityEnabledProvider, (_, _) {});
       await container.read(liveActivityEnabledProvider.notifier).ready;
 

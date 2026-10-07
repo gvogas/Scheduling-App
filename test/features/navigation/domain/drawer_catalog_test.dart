@@ -10,6 +10,15 @@ void main() {
     expect(groups.expand((g) => g.rows), hasLength(9));
   });
 
+  test('a paused live map leaves the admin drawer', () {
+    final rows = drawerGroups(
+      isAdmin: true,
+      liveMapEnabled: false,
+    ).expand((g) => g.rows).toList();
+    expect(rows, isNot(contains(HubTab.liveMap)));
+    expect(rows, hasLength(8));
+  });
+
   test('Overdue jobs follows History in the BUSINESS group, admin only', () {
     final business = drawerGroups(isAdmin: true)[2].rows;
     expect(

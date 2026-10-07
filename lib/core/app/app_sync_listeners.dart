@@ -6,6 +6,8 @@ import 'package:scheduling/core/app/carplay_bridge.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/platform/ios_platform.dart';
+import 'package:scheduling/core/remote_config/feature_flags.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
 import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/home_widget/application/widget_sync_service.dart';
@@ -34,6 +36,7 @@ class AppSyncListeners {
     _widgetSync();
     _snapshotSync();
     _uploadDrain();
+    _featureFlagSync();
   }
 
   /// Runs [action] to completion, logging a throw under [tag] instead of
@@ -192,5 +195,23 @@ class AppSyncListeners {
           );
         }
       });
+  }
+
+  void _featureFlagSync() {
+    ref.listen<FeatureFlags>(featureFlagsProvider, (prev, next) {
+      if (prev == null) return;
+      if (prev.presence != next.presence) {
+        _fireAndForget(
+          'APP-SYNC presence sync failed',
+          () => ref.read(presenceSyncControllerProvider).sync(),
+        );
+      }
+      if (prev.liveActivities != next.liveActivities) {
+        _fireAndForget(
+          'APP-SYNC live activity sync failed',
+          () => ref.read(liveActivityRegistrationControllerProvider).sync(),
+        );
+      }
+    });
   }
 }

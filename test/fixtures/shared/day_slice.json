@@ -1,0 +1,43 @@
+{
+  "dailyWindowsOverlap": [
+    {"name": "a 9-5 week does not clash with a 7pm job inside it",
+     "a": ["2026-08-01T09:00:00-04:00", "2026-08-05T17:00:00-04:00"], "b": ["2026-08-03T19:00:00-04:00", "2026-08-03T20:00:00-04:00"], "expect": false},
+    {"name": "the same week DOES clash with a midday job inside it",
+     "a": ["2026-08-01T09:00:00-04:00", "2026-08-05T17:00:00-04:00"], "b": ["2026-08-03T12:00:00-04:00", "2026-08-03T13:00:00-04:00"], "expect": true},
+    {"name": "runs that share no day never clash",
+     "a": ["2026-08-01T09:00:00-04:00", "2026-08-02T17:00:00-04:00"], "b": ["2026-08-04T09:00:00-04:00", "2026-08-05T17:00:00-04:00"], "expect": false},
+    {"name": "touching windows on a shared day do not clash",
+     "a": ["2026-08-01T09:00:00-04:00", "2026-08-03T12:00:00-04:00"], "b": ["2026-08-02T12:00:00-04:00", "2026-08-02T14:00:00-04:00"], "expect": false},
+    {"name": "an overnight shift clashes with a job in its small hours",
+     "a": ["2026-08-01T22:00:00-04:00", "2026-08-03T06:00:00-04:00"], "b": ["2026-08-02T02:00:00-04:00", "2026-08-02T03:00:00-04:00"], "expect": true},
+    {"name": "a corrupt window whose end precedes its start never clashes",
+     "a": ["2026-08-10T09:00:00-04:00", "2026-08-01T17:00:00-04:00"], "b": ["2026-08-10T09:00:00-04:00", "2026-08-10T17:00:00-04:00"], "expect": false}
+  ],
+  "expandRunWindows": [
+    {"name": "a one-day window yields one pair unchanged",
+     "run": ["2026-08-03T09:00:00-04:00", "2026-08-03T17:00:00-04:00"],
+     "expectWindows": [["2026-08-03T09:00:00-04:00", "2026-08-03T17:00:00-04:00"]]},
+    {"name": "a 5-day 9-to-5 window yields five one-day windows",
+     "run": ["2026-08-03T09:00:00-04:00", "2026-08-07T17:00:00-04:00"],
+     "expectWindows": [
+       ["2026-08-03T09:00:00-04:00", "2026-08-03T17:00:00-04:00"],
+       ["2026-08-04T09:00:00-04:00", "2026-08-04T17:00:00-04:00"],
+       ["2026-08-05T09:00:00-04:00", "2026-08-05T17:00:00-04:00"],
+       ["2026-08-06T09:00:00-04:00", "2026-08-06T17:00:00-04:00"],
+       ["2026-08-07T09:00:00-04:00", "2026-08-07T17:00:00-04:00"]]},
+    {"name": "a night shift yields one window per NIGHT, ending the morning after",
+     "run": ["2026-08-03T22:00:00-04:00", "2026-08-05T06:00:00-04:00"],
+     "expectWindows": [
+       ["2026-08-03T22:00:00-04:00", "2026-08-04T06:00:00-04:00"],
+       ["2026-08-04T22:00:00-04:00", "2026-08-05T06:00:00-04:00"]]},
+    {"name": "an all-day multi-day block yields a midnight-to-23:59 window a day",
+     "run": ["2026-08-03T00:00:00-04:00", "2026-08-04T23:59:00-04:00"],
+     "expectWindows": [
+       ["2026-08-03T00:00:00-04:00", "2026-08-03T23:59:00-04:00"],
+       ["2026-08-04T00:00:00-04:00", "2026-08-04T23:59:00-04:00"]]},
+    {"name": "a span past the cap clamps to the max span",
+     "run": ["2026-08-03T09:00:00-04:00", "2027-03-12T17:00:00-05:00"], "expectLength": 14},
+    {"name": "a corrupt pair whose end precedes its start yields one window",
+     "run": ["2026-08-07T09:00:00-04:00", "2026-08-03T17:00:00-04:00"], "expectLength": 1, "expectFirstStart": "2026-08-07T09:00:00-04:00"}
+  ]
+}

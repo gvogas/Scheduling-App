@@ -360,6 +360,14 @@ orphaned Cloud Scheduler entry that must be deleted by hand — see
 `docs/DEPLOYMENT.md`, "DONE 2026-08-14: a THREE-deletion deploy". Adding a
 fourth scheduled function starts costing money.
 
+## Kill switches (Remote Config)
+
+`feature_flags_policy.js` (pure: keys, defaults, parsing, the 60 s fail-open
+cache) and `feature_flags.js` (lazy `firebase-admin/remote-config` loader,
+`getFeatureFlags()`, `assertFeatureEnabled()`). Not exports. Reads the Remote
+Config SERVER template only (the app reads the Client one; flip both). Runbook:
+`docs/DEPLOYMENT.md` "Flip a kill switch".
+
 ## Auth & accounts
 
 ### `deleteAccount` — `account.js`
@@ -734,11 +742,15 @@ highest-cost function in the project was not a cap. The trade is one Firestore
 transaction per lookup where there were none; keep the GCP Maps Platform billing
 alert regardless.
 
+Refuses with `failed-precondition` / `feature-disabled` while `feature_address_autocomplete` is off (before the rate limiter).
+
 ### `placesGetDetails` — `places.js`
 Proxies Places details for a selected address (one billable call per address the
 user actually picks). Same guards as autocomplete (App Check + auth +
 `assertAdmin`). Uses the durable Firestore rate limiter (40 per 15 min) — lower
 volume, but each call is more expensive, so a hard cap matters.
+
+Refuses with `failed-precondition` / `feature-disabled` while `feature_address_autocomplete` is off (before the rate limiter).
 
 ### `placesReverseGeocode` — `places.js`
 Backs the live staff-location map: turns a lat/lng into a human-readable
@@ -751,6 +763,8 @@ multiply request volume. Calls the classic Geocoding API (not Places v1, which
 has no reverse-geocode mode) with `GOOGLE_MAP_API_KEY`, and returns only the
 top result's `formatted_address` (or `null` on `ZERO_RESULTS`) — never logs
 coordinates or resolved addresses. **Deployed to prod 2026-07-18.**
+
+Refuses with `failed-precondition` / `feature-disabled` while `feature_address_autocomplete` is off (before the rate limiter).
 
 **All three Places callables abort upstream at 8 s** (`UPSTREAM_TIMEOUT_MS`,
 `fetchPlacesJson`, 2026-09-01). Node's `fetch()` has no default timeout, so a
@@ -1300,6 +1314,8 @@ payload check keeps a non-admin from distinguishing `unexpected-field` from
 legitimate admin's slots.
 
 ### `waveBootstrap` — `wave/callables.js`
+
+Refuses with `failed-precondition` / `feature-disabled` while `feature_wave_sync` is off.
 Admin-only, idempotent get-or-create of the `wave/connection` doc. An
 already-connected doc short-circuits (not rate-limited); the not-yet-connected
 path makes live Wave calls (`whoami` + `listBusinesses`) and is rate-limited
@@ -1323,6 +1339,8 @@ callable deletion under `docs/DEPLOYMENT.md` §4a, due once that log line has
 gone quiet and no build at or below 1.61.0 remains.
 
 ### `waveImportCustomers` — `wave/callables.js`
+
+Refuses with `failed-precondition` / `feature-disabled` while `feature_wave_sync` is off.
 Admin **two-way** sync behind Settings › "Sync with Wave" (2026-08-04). The
 callable keeps its original, now-inaccurate name because renaming a deployed
 callable deletes the one **every** shipped build calls — a constraint that
@@ -1506,6 +1524,8 @@ up to five minutes. Needs the same `waveSyncQueue` composite indexes the worker
 did: `(status ASC, nextAttemptAt ASC)` and `(status ASC, claimedAt ASC)`.
 
 ### `waveRetryFailedJobs` — `wave/callables.js`
+
+Refuses with `failed-precondition` / `feature-disabled` while `feature_wave_sync` is off.
 
 Admin-only recovery for **dead-lettered** outbox jobs, called from Settings
 (`wave_service.dart`). A `dead` job is terminal — no drain picks it up again —

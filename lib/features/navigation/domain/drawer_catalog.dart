@@ -12,7 +12,10 @@ typedef DrawerGroup = ({
 
 /// Grouped drawer rows for a role, grouped by WHEN you would reach for them,
 /// not by object type.
-List<DrawerGroup> drawerGroups({required bool isAdmin}) => [
+List<DrawerGroup> drawerGroups({
+  required bool isAdmin,
+  bool liveMapEnabled = true,
+}) => [
   (
     title: (l10n) => l10n.nav_groupToday,
     rows: [
@@ -21,7 +24,7 @@ List<DrawerGroup> drawerGroups({required bool isAdmin}) => [
       // History is admin-only (2026-09-06). An employee's copy carried no
       // filter control of any kind, and a technician still reaches a finished
       // job through the calendar's closed-job sink.
-      if (isAdmin) HubTab.liveMap,
+      if (isAdmin && liveMapEnabled) HubTab.liveMap,
     ],
   ),
   if (isAdmin)

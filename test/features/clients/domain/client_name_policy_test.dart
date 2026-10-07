@@ -4,11 +4,9 @@ import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/policies/client_name_policy.dart';
 import 'package:scheduling/features/clients/domain/policies/client_search_policy.dart';
 
-/// The worked examples here are DELIBERATELY shared with
-/// `functions/__tests__/client_name_utils.test.js`, which hand-mirrors this
-/// policy for `propagateClientEdits` and the backfill script. A divergence
-/// between the two implementations has to fail a test rather than ship — the
-/// same discipline `appointment_day_slice` / `day_slice_utils` already uses.
+import '../../../fixtures/shared/shared_fixture.dart';
+
+/// liftPhoneFromName examples are shared with jest: test/fixtures/shared/client_name_lift.json.
 void main() {
   group('stripPhone', () {
     test('removes the number this app appended', () {
@@ -476,115 +474,39 @@ void main() {
   });
 
   group('liftPhoneFromName', () {
-    test('moves a pasted number into the phone field', () {
-      final lifted = ClientNamePolicy.liftPhoneFromName(
-        name: 'Marc Tremblay 514-555-1234',
-        phone: '',
-      );
-      expect(lifted?.name, 'Marc Tremblay');
-      expect(lifted?.phone, '(514) 555-1234');
-    });
-
-    test('handles a number at the front', () {
-      final lifted = ClientNamePolicy.liftPhoneFromName(
-        name: '514-555-1234 - Marc Tremblay',
-        phone: '',
-      );
-      expect(lifted?.name, 'Marc Tremblay');
-      expect(lifted?.phone, '(514) 555-1234');
-    });
-
-    test('a typed phone always wins', () {
-      expect(
-        ClientNamePolicy.liftPhoneFromName(
-          name: 'Marc Tremblay 514-555-1234',
-          phone: '(438) 222-3333',
-        ),
-        isNull,
-      );
-    });
-
-    test('keeps the name when it is nothing but the number', () {
-      // The name is a required field — emptying it would read as the paste
-      // having vanished.
-      final lifted = ClientNamePolicy.liftPhoneFromName(
-        name: '5145551234',
-        phone: '',
-      );
-      expect(lifted?.name, '5145551234');
-      expect(lifted?.phone, '(514) 555-1234');
-    });
-
-    test('leaves an ambiguous number for a human', () {
-      // Not a clean 10 digits, so a rewrite would be guessing.
-      expect(
-        ClientNamePolicy.liftPhoneFromName(name: 'Suite 12345', phone: ''),
-        isNull,
-      );
-      expect(
-        ClientNamePolicy.liftPhoneFromName(
-          name: 'Marc +33 6 12 34 56 78',
-          phone: '',
-        ),
-        isNull,
-      );
-    });
-
-    // "(514) 555-1234" is the shape the app itself renders and the shape a
-    // number is pasted in. The candidate run starts at a DIGIT, so the
-    // number's own opening bracket is not part of the match and was left
-    // stranded in the name — a new client saved as firstName "(".
-    test('takes the number own brackets with it', () {
-      expect(
-        ClientNamePolicy.liftPhoneFromName(
-          name: 'Marc Tremblay (514) 555-1234',
-          phone: '',
-        )?.name,
-        'Marc Tremblay',
-      );
-      expect(
-        ClientNamePolicy.liftPhoneFromName(
-          name: '(514) 555-1234 Marc Tremblay',
-          phone: '',
-        )?.name,
-        'Marc Tremblay',
-      );
-      expect(
-        ClientNamePolicy.liftPhoneFromName(
-          name: 'Marc Tremblay (5145551234)',
-          phone: '',
-        )?.name,
-        'Marc Tremblay',
-      );
-    });
-
-    test('a bracketed number alone is still nothing but the number', () {
-      final lifted = ClientNamePolicy.liftPhoneFromName(
-        name: '(514) 555-1234',
-        phone: '',
-      );
-      expect(lifted?.name, '(514) 555-1234');
-      expect(lifted?.phone, '(514) 555-1234');
-    });
-
-    test('a bracket that belongs to the NAME survives', () {
-      // The seam trim must not eat a legitimate bracket, which is why the
-      // shared edge-separator set is deliberately not widened.
-      expect(
-        ClientNamePolicy.liftPhoneFromName(
-          name: 'Depanneur (Nord) 5145551234',
-          phone: '',
-        )?.name,
-        'Depanneur (Nord)',
-      );
-    });
-
-    test('does nothing to an ordinary name', () {
-      expect(
-        ClientNamePolicy.liftPhoneFromName(name: 'Marc Tremblay', phone: ''),
-        isNull,
-      );
-    });
+    final cases = sharedCases(
+      loadSharedFixture('client_name_lift.json'),
+      'cases',
+    );
+    for (final c in cases) {
+      test(c['name'] as String, () {
+        expectAsserts(c, const [
+          'expectNull',
+          'expectName',
+          'expectPhone',
+          'expectPhoneDigits',
+        ]);
+        final lifted = ClientNamePolicy.liftPhoneFromName(
+          name: c['input'] as String,
+          phone: c['phone'] as String,
+        );
+        if (c['expectNull'] == true) {
+          expect(lifted, isNull);
+          return;
+        }
+        expect(lifted, isNotNull);
+        if (c.containsKey('expectName')) expect(lifted!.name, c['expectName']);
+        if (c.containsKey('expectPhone')) {
+          expect(lifted!.phone, c['expectPhone']);
+        }
+        if (c.containsKey('expectPhoneDigits')) {
+          expect(
+            ClientSearchPolicy.digitsOnly(lifted!.phone),
+            c['expectPhoneDigits'],
+          );
+        }
+      });
+    }
   });
 
   group('splitPersonName', () {
@@ -697,68 +619,6 @@ void main() {
       expect(second.name, '5145551234');
       expect(second.firstName, 'Marc');
       expect(second.lastName, 'Tremblay');
-    });
-  });
-
-  group('liftPhoneFromName at other digit counts', () {
-    test('a ten-digit number still lifts and formats', () {
-      final lifted = ClientNamePolicy.liftPhoneFromName(
-        name: '5145628332',
-        phone: '',
-      );
-      expect(lifted!.phone, '(514) 562-8332');
-    });
-
-    test('a seven-digit number lifts rather than being left in the name', () {
-      final lifted = ClientNamePolicy.liftPhoneFromName(
-        name: '5628332',
-        phone: '',
-      );
-      expect(lifted, isNotNull);
-      expect(ClientSearchPolicy.digitsOnly(lifted!.phone), '5628332');
-    });
-
-    test('an eleven-digit typo still lifts', () {
-      final lifted = ClientNamePolicy.liftPhoneFromName(
-        name: '51456283322',
-        phone: '',
-      );
-      expect(lifted, isNotNull);
-      expect(ClientSearchPolicy.digitsOnly(lifted!.phone), '51456283322');
-    });
-
-    test('an international number still stays in the name', () {
-      expect(
-        ClientNamePolicy.liftPhoneFromName(name: '+33 6 12 34 56 78', phone: ''),
-        isNull,
-      );
-    });
-
-    test('too few digits to dial is not a phone', () {
-      expect(
-        ClientNamePolicy.liftPhoneFromName(name: '4820', phone: ''),
-        isNull,
-      );
-    });
-
-    test('a name with a number in it keeps the name', () {
-      final lifted = ClientNamePolicy.liftPhoneFromName(
-        name: 'Marie Tremblay 5145628332',
-        phone: '',
-      );
-      expect(lifted!.name, 'Marie Tremblay');
-      expect(lifted.phone, '(514) 562-8332');
-    });
-
-    test('eight and nine digits are no NANP shape, so nothing lifts', () {
-      expect(
-        ClientNamePolicy.liftPhoneFromName(name: '3101-5696', phone: ''),
-        isNull,
-      );
-      expect(
-        ClientNamePolicy.liftPhoneFromName(name: '310 156 969', phone: ''),
-        isNull,
-      );
     });
   });
 }

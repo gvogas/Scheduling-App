@@ -12,6 +12,7 @@ import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/navigation/app_destination.dart';
 import 'package:scheduling/core/navigation/hub_shell_scope.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
@@ -28,6 +29,7 @@ import 'package:scheduling/features/presence/widgets/staff_marker_icon.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_header_pair.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_top_bar.dart';
+import 'package:scheduling/shared/widgets/feature_paused_notice.dart';
 import 'package:scheduling/shared/widgets/feedback/centered_error_text.dart';
 import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 
@@ -134,7 +136,12 @@ class _LiveMapScreenState extends ConsumerState<LiveMapScreen> {
     // team, and don't watch the data providers, so autoDispose can tear down
     // the presence listener and ticker.
     final Widget body;
-    if (visible) {
+    if (!ref.watch(featureFlagsProvider.select((f) => f.presence))) {
+      _mapTargetsRendered = false;
+      body = Center(
+        child: FeaturePausedNotice(message: context.l10n.common_featurePaused),
+      );
+    } else if (visible) {
       body = _liveBody(context);
     } else {
       _mapTargetsRendered = true;

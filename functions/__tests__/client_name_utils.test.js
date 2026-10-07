@@ -18,6 +18,7 @@ const {
  * and `client_name_utils.js` are hand-mirrors of one rule, so a divergence
  * between the two implementations has to fail a test rather than ship — the
  * same discipline `appointment_day_slice` / `day_slice_utils` already uses.
+ * liftPhoneFromName reads test/fixtures/shared/client_name_lift.json.
  */
 describe("stripPhone", () => {
   test("removes the number this app appended", () => {
@@ -307,99 +308,22 @@ describe("formatNanpNumber", () => {
 });
 
 describe("liftPhoneFromName", () => {
-  test("moves a pasted number into the phone field", () => {
-    expect(liftPhoneFromName({name: "Marc Tremblay 514-555-1234", phone: ""}))
-        .toEqual({name: "Marc Tremblay", phone: "(514) 555-1234"});
-  });
+  const {cases} = require("../../test/fixtures/shared/client_name_lift.json");
 
-  test("takes the number off the FRONT of the name too", () => {
-    expect(liftPhoneFromName({name: "514-555-1234 - Marc Tremblay", phone: ""}))
-        .toEqual({name: "Marc Tremblay", phone: "(514) 555-1234"});
-  });
-
-  test("a typed phone wins — nothing moves", () => {
-    expect(liftPhoneFromName({
-      name: "Marc Tremblay 514-555-1234", phone: "(438) 222-3333",
-    })).toBeNull();
-  });
-
-  test("a name that is NOTHING but the number keeps it", () => {
-    // The name field is required, so emptying it would read as the paste
-    // having vanished. This is the shape a Wave-added person arrives in.
-    expect(liftPhoneFromName({name: "5145551234", phone: ""}))
-        .toEqual({name: "5145551234", phone: "(514) 555-1234"});
-  });
-
-  test("leaves a non-phone digit run and an international number alone", () => {
-    expect(liftPhoneFromName({name: "Suite 12345", phone: ""})).toBeNull();
-    expect(liftPhoneFromName({name: "Marc +33 6 12 34 56 78", phone: ""}))
-        .toBeNull();
-  });
-
-  // Worked examples shared with `ClientNamePolicy.liftPhoneFromName` — the
-  // candidate run starts at a DIGIT, so the number's own opening bracket was
-  // stranded in the name.
-  test("takes the number own brackets with it", () => {
-    expect(liftPhoneFromName({name: "Marc Tremblay (514) 555-1234", phone: ""}))
-        .toEqual({name: "Marc Tremblay", phone: "(514) 555-1234"});
-    expect(liftPhoneFromName({name: "(514) 555-1234 Marc Tremblay", phone: ""}))
-        .toEqual({name: "Marc Tremblay", phone: "(514) 555-1234"});
-    expect(liftPhoneFromName({name: "Marc Tremblay (5145551234)", phone: ""}))
-        .toEqual({name: "Marc Tremblay", phone: "(514) 555-1234"});
-  });
-
-  test("a bracketed number alone is still nothing but the number", () => {
-    expect(liftPhoneFromName({name: "(514) 555-1234", phone: ""}))
-        .toEqual({name: "(514) 555-1234", phone: "(514) 555-1234"});
-  });
-
-  test("a bracket that belongs to the NAME survives", () => {
-    expect(liftPhoneFromName({name: "Depanneur (Nord) 5145551234", phone: ""}))
-        .toEqual({name: "Depanneur (Nord)", phone: "(514) 555-1234"});
-  });
-
-  test("a name with no number at all", () => {
-    expect(liftPhoneFromName({name: "Marc Tremblay", phone: ""})).toBeNull();
-  });
-});
-
-// Worked examples shared value-for-value with the Dart suite's
-// "liftPhoneFromName at other digit counts" group.
-describe("liftPhoneFromName at other digit counts", () => {
-  test("a ten-digit number still lifts and formats", () => {
-    expect(liftPhoneFromName({name: "5145628332", phone: ""}).phone)
-        .toBe("(514) 562-8332");
-  });
-
-  test("a seven-digit number lifts rather than being left in the name", () => {
-    const lifted = liftPhoneFromName({name: "5628332", phone: ""});
+  test.each(cases)("$name", (c) => {
+    expect(["expectNull", "expectName", "expectPhone", "expectPhoneDigits"]
+        .some((k) => k in c)).toBe(true);
+    const lifted = liftPhoneFromName({name: c.input, phone: c.phone});
+    if (c.expectNull) {
+      expect(lifted).toBeNull();
+      return;
+    }
     expect(lifted).not.toBeNull();
-    expect(lifted.phone.replace(/\D/g, "")).toBe("5628332");
-  });
-
-  test("an eleven-digit typo still lifts", () => {
-    const lifted = liftPhoneFromName({name: "51456283322", phone: ""});
-    expect(lifted).not.toBeNull();
-    expect(lifted.phone.replace(/\D/g, "")).toBe("51456283322");
-  });
-
-  test("an international number still stays in the name", () => {
-    expect(liftPhoneFromName({name: "+33 6 12 34 56 78", phone: ""}))
-        .toBeNull();
-  });
-
-  test("too few digits to dial is not a phone", () => {
-    expect(liftPhoneFromName({name: "4820", phone: ""})).toBeNull();
-  });
-
-  test("a name with a number in it keeps the name", () => {
-    expect(liftPhoneFromName({name: "Marie Tremblay 5145628332", phone: ""}))
-        .toEqual({name: "Marie Tremblay", phone: "(514) 562-8332"});
-  });
-
-  test("eight and nine digits are no NANP shape, so nothing lifts", () => {
-    expect(liftPhoneFromName({name: "3101-5696", phone: ""})).toBeNull();
-    expect(liftPhoneFromName({name: "310 156 969", phone: ""})).toBeNull();
+    if ("expectName" in c) expect(lifted.name).toBe(c.expectName);
+    if ("expectPhone" in c) expect(lifted.phone).toBe(c.expectPhone);
+    if ("expectPhoneDigits" in c) {
+      expect(lifted.phone.replace(/\D/g, "")).toBe(c.expectPhoneDigits);
+    }
   });
 });
 

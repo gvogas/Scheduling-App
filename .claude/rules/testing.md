@@ -37,6 +37,18 @@ before each file; nothing else is reset. The leaks found when sharding landed
 - Set a global mock in `setUp`/`setUpAll`, never directly in `main()`: every
   file's `main()` runs at load, so the last file loaded wins.
 
+## Hand-mirrored Dart/JS pairs
+
+- Their worked examples live in ONE JSON file under `test/fixtures/shared/`,
+  read by both suites (`loadSharedFixture` in Dart, `require` in jest). Never
+  restate an example inline on one side. That is how the image-magic and
+  address pairs drifted while both suites stayed green.
+- A fixture case that fails on first run is a real divergence. Fix the code,
+  never the fixture value.
+- `test/shared_fixtures_registry_test.dart` fails when a fixture loses its
+  reader on either side. Side-specific cases (generated inputs, `null`,
+  model types) stay in their own suite.
+
 ## Harness requirements
 
 - Wrap widgets that use `ThemeNotifier.of(context)` in a full `ThemeNotifier(..., child: ...)`.

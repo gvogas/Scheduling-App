@@ -12,6 +12,7 @@ import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/permissions/location_permission_service.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/utils/reentrant_sync.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
@@ -108,7 +109,9 @@ bool shouldTrackPresence({
   required String status,
   required bool signedIn,
   required bool locationSharingEnabled,
+  bool featureEnabled = true,
 }) =>
+    featureEnabled &&
     locationSharingEnabled &&
     shouldRegisterPush(role: role, status: status, signedIn: signedIn);
 
@@ -153,6 +156,7 @@ class PresenceSyncController with ReentrantSync {
   String? _docId;
   Position? _lastPosition;
   DateTime? _lastUploadAt;
+  bool _pauseCleared = false;
 
   AppLogger get _logger => _ref.read(loggerProvider);
 
@@ -165,13 +169,28 @@ class PresenceSyncController with ReentrantSync {
       final gate = readAccountGateInputs(_ref, _auth);
       // Null is "we don't know yet" — leave presence tracking as it is.
       if (gate == null) return;
+      final featureOn = _ref.read(featureFlagsProvider).presence;
+      if (featureOn) _pauseCleared = false;
       if (!shouldTrackPresence(
         role: gate.role,
         status: gate.status,
         signedIn: gate.signedIn,
         locationSharingEnabled: gate.locationSharingEnabled,
+        featureEnabled: featureOn,
       )) {
+        final knownDocId = _docId;
         _stop();
+        final pausedOnly =
+            !featureOn &&
+            shouldTrackPresence(
+              role: gate.role,
+              status: gate.status,
+              signedIn: gate.signedIn,
+              locationSharingEnabled: gate.locationSharingEnabled,
+            );
+        if (pausedOnly && !_pauseCleared) {
+          await _clearPausedFix(knownDocId, generation);
+        }
         return;
       }
       // Restart stream if permission was flipped while running.
@@ -400,6 +419,20 @@ class PresenceSyncController with ReentrantSync {
     } catch (e, st) {
       _logger.warn('PRESENCE unregister failed', e, st);
       return false;
+    }
+  }
+
+  /// Removes the stored fix once per remote pause; a failure leaves
+  /// [_pauseCleared] false so the next sync retries. Never throws.
+  Future<void> _clearPausedFix(String? knownDocId, int generation) async {
+    try {
+      final docId = knownDocId ?? await _resolveUserDocId();
+      if (docId == null || isSyncStale(generation)) return;
+      _pauseCleared = await _ref
+          .read(presenceRepositoryProvider)
+          .deleteLocation(userDocId: docId);
+    } catch (e, st) {
+      _logger.warn('PRESENCE pause clear failed', e, st);
     }
   }
 

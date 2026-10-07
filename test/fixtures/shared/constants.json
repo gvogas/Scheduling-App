@@ -1,0 +1,6 @@
+{
+  "searchTokenQueryLimit": 10,
+  "searchTokenFieldLimit": 240,
+  "maxAppointmentSpanDays": 14,
+  "appointmentImageIdMaxLength": 300
+}

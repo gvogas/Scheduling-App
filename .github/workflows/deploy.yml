@@ -1,0 +1,297 @@
+name: Deploy backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: main, or a commit sha already merged into main
+        required: true
+        default: main
+      targets:
+        description: What to deploy (all = indexes first and READY, then functions + rules + storage)
+        required: true
+        type: choice
+        default: functions
+        options:
+          - functions
+          - firestore:rules
+          - firestore:indexes
+          - storage
+          - all
+
+# Two deploys must never overlap, and a running one is never cancelled.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+# Nothing is writable unless a job below asks for it by name.
+permissions: {}
+
+env:
+  PROJECT_ID: schedulingapp-88727
+  # Cleared so the CLI does not stamp an agent name into the audit log.
+  AI_AGENT: ""
+  CLAUDECODE: ""
+  CLAUDE_CODE: ""
+
+jobs:
+  # Runs before any repo code: no environment, no id-token, no install step.
+  gate:
+    name: Main-only ref check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Only main reaches production
+        id: check
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::This workflow deploys production and must be dispatched from main (got '$GITHUB_REF')."
+            exit 1
+          fi
+          if [ "$REF" = "main" ]; then
+            sha=$(git rev-parse origin/main)
+          else
+            if ! printf '%s' "$REF" | grep -Eq '^[0-9a-f]{7,40}$'; then
+              echo "::error::ref must be 'main' or a 7-40 character commit sha merged into main. Unmerged work (dev included) never deploys to production."
+              exit 1
+            fi
+            sha=$(git rev-parse --verify --quiet "$REF^{commit}") || sha=""
+            case "$sha" in
+              "$REF"*) ;;
+              *)
+                echo "::error::ref is not a commit sha in this repository."
+                exit 1
+                ;;
+            esac
+            if ! git merge-base --is-ancestor "$sha" origin/main; then
+              echo "::error::commit $sha is not merged into origin/main. Merge it first."
+              exit 1
+            fi
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying $sha"
+
+  verify:
+    name: Lint + test (same as CI)
+    needs: gate
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    with:
+      ref: ${{ needs.gate.outputs.sha }}
+
+  deploy:
+    name: Deploy to production
+    needs: [gate, verify]
+    runs-on: ubuntu-latest
+    # The only job that can mint a GCP token (the WIF provider requires it).
+    environment: production
+    env:
+      FIREBASE_BIN: ${{ github.workspace }}/tools/deploy/node_modules/.bin/firebase
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      count: ${{ steps.after.outputs.count }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Install functions dependencies
+        working-directory: functions
+        # Dependency install scripts never run with deploy credentials around.
+        run: npm ci --ignore-scripts
+
+      # The CLI comes from a committed lockfile, installed before any
+      # credential exists, with no lifecycle scripts.
+      - name: Install the firebase CLI
+        working-directory: tools/deploy
+        run: npm ci --ignore-scripts
+
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
+
+      - name: Plan
+        id: plan
+        env:
+          TARGETS: ${{ inputs.targets }}
+        run: |
+          case "$TARGETS" in
+            all)              indexes="firestore:indexes"; rest="functions,firestore:rules,storage" ;;
+            firestore:indexes) indexes="firestore:indexes"; rest="" ;;
+            functions|firestore:rules|storage) indexes=""; rest="$TARGETS" ;;
+            *)
+              echo "::error::Unknown deploy target '$TARGETS'."
+              exit 1
+              ;;
+          esac
+          echo "indexes=$indexes" >> "$GITHUB_OUTPUT"
+          echo "rest=$rest" >> "$GITHUB_OUTPUT"
+          case "$rest" in *functions*) echo "functions=true" >> "$GITHUB_OUTPUT" ;; esac
+
+      - name: Export diff (deletions abort non-interactively)
+        if: steps.plan.outputs.functions == 'true'
+        run: |
+          "$FIREBASE_BIN" functions:list --project "$PROJECT_ID" --json > live-before.json
+          node functions/scripts/deploy/export_diff.js functions/index.js live-before.json
+
+      - name: Allowlists are a superset of the last deploy
+        if: steps.plan.outputs.functions == 'true'
+        run: |
+          base=$(node functions/scripts/deploy/deploy_log.js last-sha docs/DEPLOYMENT.md)
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "::warning::No usable last-deploy sha in the Deploy log ('$base'); allowlist check skipped. Do DEPLOYMENT.md §4(a) by hand."
+            exit 0
+          fi
+          cd functions && node scripts/deploy/allowlist_diff.js "$base"
+
+      - name: TTL drift report
+        if: steps.plan.outputs.indexes != ''
+        run: |
+          gcloud firestore fields ttls list --project "$PROJECT_ID" --format=json \
+            | jq -r '.[] | .name | capture("collectionGroups/(?<c>[^/]+)/fields/(?<f>[^/]+)") | "\(.c).\(.f)"' \
+            | sort > ttl-live.txt
+          jq -r '.fieldOverrides[] | select(.ttl == true) | "\(.collectionGroup).\(.fieldPath)"' firestore.indexes.json \
+            | sort > ttl-file.txt
+          missing=$(comm -23 ttl-live.txt ttl-file.txt)
+          if [ -n "$missing" ]; then
+            echo "::warning::Live TTL policies not in firestore.indexes.json (harmless without --force, which this workflow never passes): $missing"
+            { echo "### TTL drift"; echo; echo '```'; echo "$missing"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Deploy indexes
+        if: steps.plan.outputs.indexes != ''
+        run: bash tools/deploy/run_deploy.sh firestore:indexes
+
+      - name: Wait for every composite index to be READY
+        if: steps.plan.outputs.indexes != ''
+        run: |
+          deadline=$((SECONDS + 2700))
+          while true; do
+            pending=$(gcloud firestore indexes composite list --project "$PROJECT_ID" --format=json \
+              | jq '[.[] | select(.state != "READY")] | length')
+            [ "$pending" -eq 0 ] && { echo "All composite indexes READY."; break; }
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::$pending composite index(es) still not READY after 45 min. Nothing else was deployed; re-run once they are."
+              exit 1
+            fi
+            echo "$pending composite index(es) not READY yet; waiting 30 s"
+            sleep 30
+          done
+
+      - name: Deploy
+        id: deploy
+        if: steps.plan.outputs.rest != ''
+        env:
+          REST: ${{ steps.plan.outputs.rest }}
+        run: |
+          set -o pipefail
+          bash tools/deploy/run_deploy.sh "$REST" 2>&1 | tee deploy-output.log
+
+      - name: Explain a known abort
+        if: failure() && steps.deploy.outcome == 'failure'
+        run: |
+          if grep -q "failure policy" deploy-output.log; then
+            echo "::error::A NEWLY CREATED retry: true function aborts a non-interactive deploy (DEPLOYMENT.md, 2026-08-14 row). Do not add --force to the whole run. Deploy the new trigger alone from an owner shell with 'firebase deploy --only functions:<name> --force' — with no firestore target in scope --force cannot reach an index or TTL policy — then re-run this workflow."
+          fi
+          if grep -qi "delet" deploy-output.log; then
+            echo "::error::The CLI wanted to delete a function. The export diff should have caught this; read deploy-output.log and delete explicitly with firebase functions:delete."
+          fi
+
+      - name: Verify by name
+        id: after
+        if: steps.plan.outputs.functions == 'true'
+        run: |
+          "$FIREBASE_BIN" functions:list --project "$PROJECT_ID" --json > live-after.json
+          node functions/scripts/deploy/export_diff.js functions/index.js live-after.json --after-deploy
+          echo "count=$(jq '.result | length' live-after.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Checklist the workflow cannot enforce
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Before you ship the app build
+
+          - [ ] This run is green. The backend goes out BEFORE the app build that needs it — never the reverse.
+          - [ ] Every NEW payload field is optional (`optionalString`, `x === true`). The allowlist check only catches REMOVED keys.
+          - [ ] No rules cap is tighter than what a shipped client or callable can write (DEPLOYMENT.md §4c).
+          - [ ] Any backfill this release depends on has run (`node functions/scripts/run.js <name> --live`).
+          - [ ] Function logs since the deploy show no `unexpected-field`, no startup errors.
+          - [ ] Smoke-tested with the OLD app build if one is installed.
+          - [ ] Notes column filled in on the deploy-log PR this run opens.
+          EOF
+
+  record:
+    name: Open the deploy-log PR
+    needs: [gate, deploy]
+    runs-on: ubuntu-latest
+    # No environment: this job cannot mint a GCP token.
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      # dev only supplies the file being edited; no dev script runs here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: dev
+          path: dev-checkout
+          persist-credentials: false
+
+      # The reviewed, gated commit supplies the script that edits it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          path: tools-src
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+
+      - name: Append the row
+        env:
+          SHA: ${{ needs.gate.outputs.sha }}
+          COUNT: ${{ needs.deploy.outputs.count || 'unchanged' }}
+          TARGETS: ${{ inputs.targets }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node tools-src/functions/scripts/deploy/deploy_log.js append \
+            dev-checkout/docs/DEPLOYMENT.md \
+            "--date=$(date -u +%Y-%m-%d)" "--sha=$SHA" "--targets=$TARGETS" \
+            "--count=$COUNT" "--run-url=$RUN_URL"
+
+      - uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
+        with:
+          path: dev-checkout
+          add-paths: docs/DEPLOYMENT.md
+          base: dev
+          branch: deploy-log/${{ github.run_id }}
+          title: "Record the ${{ inputs.targets }} deploy of ${{ needs.gate.outputs.sha }}"
+          commit-message: "Record the ${{ inputs.targets }} deploy in the deploy log"
+          body: |
+            Appends the Deploy log row for workflow run ${{ github.run_id }}.
+            Fill in the Notes cell (what changed, any prompt, what still stands) before merging.
+
+            🤖 Generated with [Claude Code](https://claude.com/claude-code)

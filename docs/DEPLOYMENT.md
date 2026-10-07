@@ -195,6 +195,50 @@ reverting the cap.
 
 ---
 
+## Flip a kill switch
+
+Firebase Remote Config has SEPARATE **Client** and **Server** templates. The app
+reads the Client template; `functions/feature_flags.js` uses `getServerTemplate()`,
+which reads ONLY the Server template. A switch must be flipped in BOTH where it
+applies. Both sides FAIL OPEN (a failed fetch, an empty template or a missing
+key means every feature on and `min_supported_build` 0).
+
+| Key | Client template (app) | Server template (functions) |
+|---|---|---|
+| `feature_address_autocomplete` | yes | yes |
+| `feature_presence` | yes | no |
+| `feature_live_activities` | yes | yes |
+| `feature_wave_sync` | yes | yes |
+| `min_supported_build` | yes | no |
+
+| Key | Default | Off means |
+|---|---|---|
+| `feature_address_autocomplete` | `true` | Address field is plain text; `places*` callables refuse |
+| `feature_presence` | `true` | Location sharing stops; live map destination hidden |
+| `feature_live_activities` | `true` | No new activities; active ones ended; APNs pushes skipped |
+| `feature_wave_sync` | `true` | Wave settings show "paused"; outbox keeps queuing, drain stops sending |
+| `min_supported_build` | `0` | Builds with a lower build number see a blocking update screen |
+
+- **Flip:** Firebase console -> Remote Config -> pick the Client or Server tab -> edit the parameter -> Publish.
+  Open apps react within seconds (real-time listener); functions within 60 s.
+- **Rollback:** Remote Config -> the template's version history -> roll back (per template).
+- **After re-enabling,** functions can lag up to 60 s (per-instance cache), so Places/Wave may refuse briefly; the Wave backlog drains on the next client edit, a Sync press, or the daily sweep, not instantly.
+- **Values:** `1/true/t/yes/y/on` (case-insensitive) read ON on both sides and
+  anything else, including empty, reads OFF; publish exactly `true`/`false`.
+  `min_supported_build` is an integer.
+- **One-time IAM test:** publish `feature_wave_sync = false` in the **Server** template, press Wave -> Sync,
+  look for `FLAGS blocked a call {"key":"feature_wave_sync"}` in
+  `firebase functions:log`, then publish it back to `true`. No line: first confirm it was the Server tab, THEN
+  check that the functions runtime service account has `roles/cloudconfig.viewer`; grant it if absent.
+- **Older builds (no kill-switch code):** Places and Wave actions show a generic "something went wrong" error while paused; presence is NOT paused on them (app-only switch); their Live Activity cards freeze until iOS removes them as stale. `min_supported_build` is the lever for those.
+- Presence pause also DELETES each person's last location pin once (retried if refused).
+- Live Activities pause ends cards on devices running this build; a job ending while paused still removes that card's token row (normal lifecycle).
+- Wave pause queues edits and drains them after re-enable; nothing dead-letters; `functions/scripts/drain-wave-queue.js` stops with a message while paused.
+- Forced update: lifting it mid-session restarts the app at splash (navigation state is lost). While the update screen shows, a remote account exit (disabled/deleted/demoted) does not sign the device out until the gate lifts; server-side deactivation (`syncUsersByUid`) still revokes access immediately.
+- `min_supported_build` only affects builds that contain the gate: the first build after 1.63.0+93.
+
+---
+
 ## Repo-specific traps
 
 - **TTL policies live in `firestore.indexes.json`** as `fieldOverrides` with
@@ -792,6 +836,7 @@ what production is running.
 | 2026-09-29 ~13:40Z | `cc38be5d` | functions | 32 (unchanged) | **Release 1.63.0+93 review fixes to the admin reset.** `resetEmployeePassword`: a failed `revokeRefreshTokens` after the password is set now logs and still RETURNS the credentials instead of rethrowing (a rethrow hid the only copy of the new password). `completePasswordReset`: the flag clear is a transaction that re-checks `active` + `uid`. `notifications.js` imports the three sweeps from `notification_sweeps.js` directly (lazy getters removed). `firestore.rules`, `storage.rules` and `firestore.indexes.json` unchanged since `306ed848`, so functions only. Pre-flight: eslint clean, jest **1994 / 92 suites**; tree clean at `cc38be5d`. Run `--non-interactive`, env vars cleared and echoed empty in the same PowerShell invocation; no prompts. 32 `Successful update operation`. **Verified by NAME:** 32 live = 32 exports, zero missing, zero orphans. Post-deploy WARNING+ from 13:20Z: only the two-per-callable `Request has invalid method. GET` / `Invalid request, unable to process.` pairs on `resetEmployeePassword` and `completePasswordReset` at 13:42:17-20Z (the outside GET sweep documented below, rejected before any handler), nothing else. **Still owed:** step 4, the 1.63.0+93 app build. |
 | 2026-10-07 ~01:16Z | `abbe5e3f` | functions | 32 (unchanged) | **Dependency patch, lockfile only** (PR #55, Dependabot alerts 2/4/6/7/10/11/12/13): proxy-addr 2.0.8, @fastify/busboy 3.2.2, brace-expansion 1.1.21 / 2.1.7; also carries the @grpc/grpc-js 1.14.5 bump (PR #52). No source, rules, index or payload change, so no ordering constraint against the app build. Pre-flight: lint clean, 1994/1994 jest after `npm ci`. Verified: 32 deployed names diff clean against `index.js` exports. Logs: the usual unauthenticated GET burst (24 `Invalid request` entries, ~2 per callable, see the section below), zero other errors post-deploy. |
 | 2026-10-07 ~01:40Z | `8739e48c` | functions | 32 (unchanged) | **S4 of the 2026-09-28 audit** (PR #57): `resetProvisionedPassword` sends `disabled: false`, so re-running create for an account an admin demoted active → invited in the console (credential disabled by `syncUsersByUid`) hands over a password that actually signs in. Only `createEmployeeAccount` calls it. No payload, rules or index change, so no ordering constraint against the app build. Pre-flight: lint clean, 1995/1995 jest after `npm ci`. Verified: 32 deployed names diff clean against `index.js`; `createEmployeeAccount` revision `00039` started and passed its startup probe; zero errors post-deploy. |
+| 2026-10-07 ~03:44Z | `29fa4072` | functions | 32 (unchanged) | **Remote Config kill switches** (plan `docs/plans/2026-10-06-remote-config-kill-switches-plan.md`): new `feature_flags.js` / `feature_flags_policy.js` (Server template, fail-open, 60 s cache); `places*` and `waveBootstrap`/`waveImportCustomers`/`waveRetryFailedJobs` refuse `failed-precondition`/`feature-disabled` while paused; Live Activity pushes skip without pruning; `drainQueue` pauses before claiming. No payload, rules or index change; every default ON, so no ordering constraint against the app build. Pre-flight: lint clean, 2018/2018 jest. Verified: 32 deployed names diff clean against `index.js`; zero E/W log lines post-deploy. Runtime SA `914958291749-compute@` holds `roles/editor` (covers `cloudconfig.configs.get`). **Still open:** the one-time Server-template IAM test, and the app build carrying the client half. |
 
 ### The `Invalid request, unable to process.` entries are NOT the rollout probe
 

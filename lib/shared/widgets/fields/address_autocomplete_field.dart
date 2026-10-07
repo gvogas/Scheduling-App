@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
 import 'package:scheduling/core/errors/failure.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/core/utils/debouncer.dart';
 import 'package:scheduling/core/validators/text_limits.dart';
@@ -92,6 +93,20 @@ class _AddressAutocompleteFieldState
       return;
     }
 
+    if (!ref.read(featureFlagsProvider).addressAutocomplete) {
+      _debounce.cancel();
+      _requestId++;
+      _lastFetched = '';
+      if (_suggestions.isNotEmpty || _isLoading || _serviceError != null) {
+        setState(() {
+          _suggestions = [];
+          _isLoading = false;
+          _serviceError = null;
+        });
+      }
+      return;
+    }
+
     _debounce.cancel();
     final trimmed = value.trim();
     if (trimmed.length < _minQueryLength) {
@@ -117,6 +132,7 @@ class _AddressAutocompleteFieldState
   }
 
   Future<void> _fetch(String query) async {
+    if (!mounted || !ref.read(featureFlagsProvider).addressAutocomplete) return;
     // Skip re-fetching the exact query we already fetched successfully, so we
     // don't bill for an identical call. This is only set on success, so a
     // failed fetch will still retry.

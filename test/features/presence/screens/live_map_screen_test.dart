@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/remote_config/feature_flags.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
@@ -16,6 +18,8 @@ import 'package:scheduling/features/presence/application/live_map_providers.dart
 import 'package:scheduling/features/presence/domain/models/presence_fix.dart';
 import 'package:scheduling/features/presence/screens/live_map_screen.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/app_bars/app_top_bar.dart';
+import 'package:scheduling/shared/widgets/feature_paused_notice.dart';
 
 final _now = DateTime(2026, 7, 17, 12);
 
@@ -128,6 +132,40 @@ void main() {
     placesRepositoryProvider.overrideWithValue(places),
     ...extra,
   ];
+
+  testWidgets('a paused presence flag shows the notice instead of the map', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      wrap(
+        overrides: baseOverrides(
+          presence: Stream.value([_fix('u1', 45.5, -73.6, _now)]),
+          extra: [
+            featureFlagsProvider.overrideWithValue(
+              const FeatureFlags(
+                addressAutocomplete: true,
+                presence: false,
+                liveActivities: true,
+                waveSync: true,
+                minSupportedBuild: 0,
+              ),
+            ),
+          ],
+        ),
+        child: LiveMapScreen(
+          isAdmin: true,
+          employeeId: 'e1',
+          mapBuilder: stubMap,
+        ),
+      ),
+    );
+    await settleMap(tester);
+
+    expect(find.byType(FeaturePausedNotice), findsOneWidget);
+    expect(find.byType(AppTopBar), findsOneWidget);
+    expect(lastConfig, isNull);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('builds a marker per active staff member (incl. a stale one)', (
     tester,

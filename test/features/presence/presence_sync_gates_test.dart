@@ -100,6 +100,21 @@ void main() {
     );
   });
 
+  group('shouldTrackPresence kill switch', () {
+    test('a remotely paused feature stops tracking for everyone', () {
+      expect(
+        shouldTrackPresence(
+          role: 'employee',
+          status: 'active',
+          signedIn: true,
+          locationSharingEnabled: true,
+          featureEnabled: false,
+        ),
+        isFalse,
+      );
+    });
+  });
+
   group('shouldWritePresenceFix', () {
     test('first fix always uploads', () {
       expect(shouldWritePresenceFix(lastUploadAt: null, now: now), isTrue);

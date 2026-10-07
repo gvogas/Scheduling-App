@@ -104,6 +104,7 @@ dependencies:
   # FlutterDeepLinkingEnabled stays false: Flutter's own handler would consume
   # the URL before this plugin sees it.
   app_links: ^7.2.1
+  firebase_remote_config: ^6.7.0
 
 dev_dependencies:
   integration_test:

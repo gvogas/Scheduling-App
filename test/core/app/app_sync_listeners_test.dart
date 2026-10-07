@@ -9,6 +9,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:scheduling/core/app/app_sync_listeners.dart';
 import 'package:scheduling/core/app/carplay_bridge.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
+import 'package:scheduling/core/remote_config/feature_flags.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/utils/current_day_provider.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
 import 'package:scheduling/features/auth/application/active_user_identity_provider.dart';
@@ -66,6 +68,30 @@ final _widgetMirror = StreamProvider<Map<String, dynamic>?>(
 
 final _snapshotMirror = StreamProvider<Map<String, dynamic>?>(
   (ref) => const Stream.empty(),
+);
+
+class _FlagsController extends Notifier<FeatureFlags> {
+  @override
+  FeatureFlags build() => FeatureFlags.defaults;
+
+  void flip({bool presence = true, bool liveAct = true, bool wave = true}) =>
+      state = _flags(presence: presence, liveAct: liveAct, wave: wave);
+}
+
+final _flagsSource = NotifierProvider<_FlagsController, FeatureFlags>(
+  _FlagsController.new,
+);
+
+FeatureFlags _flags({
+  bool presence = true,
+  bool liveAct = true,
+  bool wave = true,
+}) => FeatureFlags(
+  addressAutocomplete: true,
+  presence: presence,
+  liveActivities: liveAct,
+  waveSync: wave,
+  minSupportedBuild: 0,
 );
 
 const _account = {'id': 'u1', 'role': 'employee', 'status': 'active'};
@@ -146,6 +172,7 @@ void main() {
           widgetSyncServiceProvider.overrideWithValue(widgetSync),
           scheduleSnapshotServiceProvider.overrideWithValue(snapshotSync),
           carPlayBridgeProvider.overrideWithValue(carPlay),
+          featureFlagsProvider.overrideWith((ref) => ref.watch(_flagsSource)),
         ],
         child: Consumer(
           builder: (context, ref, _) {
@@ -189,6 +216,40 @@ void main() {
       await tester.pump();
 
       verify(() => push.sync()).called(2);
+    });
+  });
+
+  group('feature flag re-sync', () {
+    testWidgets('a presence flip re-syncs presence only', (tester) async {
+      final container = await pump(tester);
+
+      container.read(_flagsSource.notifier).flip(presence: false);
+      await tester.pump();
+
+      verify(() => presence.sync()).called(1);
+      verifyNever(() => liveActivity.sync());
+    });
+
+    testWidgets('a live activities flip re-syncs live activities only', (
+      tester,
+    ) async {
+      final container = await pump(tester);
+
+      container.read(_flagsSource.notifier).flip(liveAct: false);
+      await tester.pump();
+
+      verify(() => liveActivity.sync()).called(1);
+      verifyNever(() => presence.sync());
+    });
+
+    testWidgets('an unrelated flip syncs neither', (tester) async {
+      final container = await pump(tester);
+
+      container.read(_flagsSource.notifier).flip(wave: false);
+      await tester.pump();
+
+      verifyNever(() => presence.sync());
+      verifyNever(() => liveActivity.sync());
     });
   });
 

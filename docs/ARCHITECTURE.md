@@ -1837,6 +1837,18 @@ Widgets that call `context.l10n` (e.g. `StatusChip`) require localization delega
 
 ---
 
+### Hand-mirrored Dart/JS pairs
+
+- Their worked examples live in ONE JSON file under `test/fixtures/shared/`,
+  read by both suites (`loadSharedFixture` in Dart, `require` in jest). Never
+  restate an example inline on one side. That is how the image-magic and
+  address pairs drifted while both suites stayed green.
+- A fixture case that fails on first run is a real divergence. Fix the code,
+  never the fixture value.
+- `test/shared_fixtures_registry_test.dart` fails when a fixture loses its
+  reader on either side. Side-specific cases (generated inputs, `null`,
+  model types) stay in their own suite.
+
 ## Analysis & Linting
 
 Baseline is `very_good_analysis` (strict). `flutter analyze` reports **0 errors,

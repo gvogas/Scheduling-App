@@ -1,0 +1,15 @@
+{
+  "cases": [
+    {"name": "accepts a JPEG signature (FF D8 FF E0)", "bytes": [255, 216, 255, 224], "expect": true},
+    {"name": "accepts a JPEG signature with any fourth byte (FF D8 FF 00)", "bytes": [255, 216, 255, 0], "expect": true},
+    {"name": "accepts a PNG signature (89 50 4E 47)", "bytes": [137, 80, 78, 71], "expect": true},
+    {"name": "rejects the three PNG bytes with the wrong fourth", "bytes": [137, 80, 78, 0], "expect": false},
+    {"name": "rejects a three-byte PNG prefix", "bytes": [137, 80, 78], "expect": false},
+    {"name": "accepts a three-byte JPEG prefix", "bytes": [255, 216, 255], "expect": true},
+    {"name": "rejects a PDF signature", "bytes": [37, 80, 68, 70], "expect": false},
+    {"name": "rejects a GIF signature", "bytes": [71, 73, 70, 56], "expect": false},
+    {"name": "rejects arbitrary non-image bytes", "bytes": [0, 1, 2, 3], "expect": false},
+    {"name": "rejects a truncated JPEG prefix", "bytes": [255, 216], "expect": false},
+    {"name": "rejects an empty file", "bytes": [], "expect": false}
+  ]
+}

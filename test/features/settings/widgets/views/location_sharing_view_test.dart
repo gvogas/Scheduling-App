@@ -7,6 +7,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/notices/app_notice.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
+import 'package:scheduling/core/remote_config/feature_flags.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/employees_repository.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
@@ -14,6 +16,7 @@ import 'package:scheduling/features/presence/application/presence_sync_controlle
 import 'package:scheduling/features/settings/application/my_details_providers.dart';
 import 'package:scheduling/features/settings/widgets/views/location_sharing_view.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/feature_paused_notice.dart';
 
 class _MockEmployeesRepo extends Mock implements EmployeesRepository {}
 
@@ -44,7 +47,11 @@ void main() {
     when(presence.sync).thenAnswer((_) async {});
   });
 
-  Future<void> pump(WidgetTester tester, {required bool cleared}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    required bool cleared,
+    bool presenceOn = true,
+  }) async {
     when(presence.unregister).thenAnswer((_) async => cleared);
     await tester.pumpWidget(
       ProviderScope(
@@ -54,6 +61,15 @@ void main() {
           myEmployeeRecordProvider.overrideWith((ref) => _me),
           myPresenceFixProvider.overrideWith((ref) => Stream.value(null)),
           isOfflineProvider.overrideWithValue(false),
+          featureFlagsProvider.overrideWithValue(
+            FeatureFlags(
+              addressAutocomplete: true,
+              presence: presenceOn,
+              liveActivities: true,
+              waveSync: true,
+              minSupportedBuild: 0,
+            ),
+          ),
           // No NoticeListener in this harness, so record at the service.
           noticeServiceProvider.overrideWithValue(notices),
         ],
@@ -110,5 +126,17 @@ void main() {
             as EmployeeRecord;
     expect(written.locationSharingEnabled, isFalse);
     verify(presence.unregister).called(1);
+  });
+
+  testWidgets('a paused presence flag shows the notice and locks the switch', (
+    tester,
+  ) async {
+    await pump(tester, cleared: true, presenceOn: false);
+
+    final sharingSwitch = tester.widget<Switch>(
+      find.byKey(const Key('locationSharingPrivacySwitch')),
+    );
+    expect(find.byType(FeaturePausedNotice), findsOneWidget);
+    expect(sharingSwitch.onChanged, isNull);
   });
 }

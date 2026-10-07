@@ -1,0 +1,34 @@
+{
+  "streetOnly": [
+    {"name": "strips the locality tail the structured fields already carry", "stored": "1234 Rue Principale, Montréal, QC H2X 1Y4, Canada",
+     "locality": {"city": "Montréal", "province": "QC", "postalCode": "H2X 1Y4", "country": "Canada"}, "expect": "1234 Rue Principale"},
+    {"name": "keeps a street whose own second segment is not a locality", "stored": "100 Main St, Building A, Montréal, QC H2X 1Y4, Canada",
+     "locality": {"city": "Montréal", "province": "QC", "postalCode": "H2X 1Y4", "country": "Canada"}, "expect": "100 Main St, Building A"},
+    {"name": "is idempotent: an already-reduced street passes through", "stored": "1234 Rue Principale",
+     "locality": {"city": "Montréal", "province": "QC", "postalCode": "H2X 1Y4", "country": "Canada"}, "expect": "1234 Rue Principale"},
+    {"name": "keeps the apt prefix on the canonical stored form", "stored": "4-1234 Rue Principale, Montréal, QC H2X 1Y4, Canada",
+     "locality": {"city": "Montréal", "province": "QC", "postalCode": "H2X 1Y4", "country": "Canada"}, "expect": "4-1234 Rue Principale"},
+    {"name": "matches a province and postal code joined in one segment", "stored": "55 Boulevard Saint-Laurent, Laval, QC H7N 1A1",
+     "locality": {"city": "Laval", "province": "QC", "postalCode": "H7N 1A1"}, "expect": "55 Boulevard Saint-Laurent"},
+    {"name": "matches regardless of case and inner spacing", "stored": "12 Rue Ontario,  MONTREAL , qc,  h2x   1y4",
+     "locality": {"city": "Montreal", "province": "QC", "postalCode": "H2X 1Y4"}, "expect": "12 Rue Ontario"},
+    {"name": "with no locality fields it keeps the first segment", "stored": "77 Rue Peel, Montréal, QC", "locality": {}, "expect": "77 Rue Peel"},
+    {"name": "never strips the last remaining segment", "stored": "Montréal", "locality": {"city": "Montréal"}, "expect": "Montréal"},
+    {"name": "an empty address stays empty", "stored": "",
+     "locality": {"city": "Montréal", "province": "QC", "postalCode": "H2X 1Y4", "country": "Canada"}, "expect": ""}
+  ],
+  "composeFull": [
+    {"name": "re-spells the apt the way the app books it", "stored": "4-1234 Rue Principale",
+     "locality": {"city": "Montréal", "province": "QC", "postalCode": "H2X 1Y4", "country": "Canada"}, "expect": "1234 Rue Principale #4, Montréal, QC H2X 1Y4, Canada"},
+    {"name": "a legacy full-string doc composes to the SAME string", "stored": "4-1234 Rue Principale, Montréal, QC H2X 1Y4, Canada",
+     "locality": {"city": "Montréal", "province": "QC", "postalCode": "H2X 1Y4", "country": "Canada"}, "expect": "1234 Rue Principale #4, Montréal, QC H2X 1Y4, Canada"},
+    {"name": "rejoins the parts around a street with no apt", "stored": "1234 Rue Principale",
+     "locality": {"city": "Montréal", "province": "QC", "postalCode": "H2X 1Y4", "country": "Canada"}, "expect": "1234 Rue Principale, Montréal, QC H2X 1Y4, Canada"},
+    {"name": "both stored shapes of a no-apt address compose identically", "stored": "1234 Rue Principale, Montréal, QC H2X 1Y4, Canada",
+     "locality": {"city": "Montréal", "province": "QC", "postalCode": "H2X 1Y4", "country": "Canada"}, "expect": "1234 Rue Principale, Montréal, QC H2X 1Y4, Canada"},
+    {"name": "omits parts that are missing", "stored": "1234 Rue Principale", "locality": {"city": "Montréal"}, "expect": "1234 Rue Principale, Montréal"},
+    {"name": "with no locality fields it is just the displayed street", "stored": "4-1234 Rue Principale", "locality": {}, "expect": "1234 Rue Principale #4"},
+    {"name": "an empty address yields no leading comma", "stored": "", "locality": {"city": "Montréal", "province": "QC"}, "expect": "Montréal, QC"},
+    {"name": "everything empty stays empty", "stored": "", "locality": {}, "expect": ""}
+  ]
+}

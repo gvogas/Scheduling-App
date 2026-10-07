@@ -8,6 +8,7 @@
 
 const {WaveValidationError, upsertCustomer} = require("./customers");
 const {adminFirestore} = require("../admin_firestore");
+const {getFeatureFlags} = require("../feature_flags");
 const {WaveApiError} = require("./client");
 const {
   DEFAULT_MAX_ATTEMPTS,
@@ -250,10 +251,14 @@ function tallyUpsert(summary, status) {
  * `Date.now`); injectable for deadline tests.
  * - `logger` {!Object} Logging facade with `.error(msg, meta)` etc.,
  * defaulting to `firebase-functions/logger` (never `console`).
+ * - `featureFlags` {!Function} Returns the kill-switch flags (default
+ * `getFeatureFlags`, which fails open).
  * @return {!Promise<{processed:number, done:number, retried:number,
  * dead:number, skipped:number, reclaimed:number, created:number,
- * updated:number}>} Summary of the drain run. `created`/`updated` count what
- * landed in Wave (see `tallyUpsert`); the rest describe the queue.
+ * updated:number, blocked:number, paused:(boolean|undefined)}>} Summary of
+ * the drain run. `created`/`updated` count what landed in Wave (see
+ * `tallyUpsert`); the rest describe the queue. `paused` is true, with every
+ * counter zero, when the Wave sync kill switch skipped the run.
  */
 async function drainQueue(deps = {}) {
   const db = deps.db || adminFirestore().getFirestore();
@@ -284,6 +289,13 @@ async function drainQueue(deps = {}) {
     processed: 0, done: 0, retried: 0, dead: 0, skipped: 0, reclaimed: 0,
     created: 0, updated: 0, blocked: 0,
   };
+
+  const flags = await (deps.featureFlags || getFeatureFlags)();
+  if (flags.feature_wave_sync === false) {
+    // Before any claim, so no attempt is spent and nothing dead-letters.
+    logger.info("FLAGS wave sync paused; drain skipped");
+    return {...summary, paused: true};
+  }
 
   const ctx = {
     db, logger, backoffFn, maxAttempts, batchLimit, leaseMs, deadlineMs,
