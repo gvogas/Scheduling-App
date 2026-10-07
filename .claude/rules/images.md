@@ -42,7 +42,7 @@ Loaded when working on the image pipeline. Root context: `../../CLAUDE.md`.
 ## Detail sheet and photo strip
 
 - Seed `EventDetailsController` with NO photos and fill from the subcollection read, adopting the result only while the list is still what `build()` seeded (`_loadStoredPictures`'s `_lastKnownImages` guard) — a removal during the round trip must not be put back.
-- Keep `EventDetailsController` subscribed to `repo.onLocalWrite` (not `onRecordWrite`, which excludes photo/note writes) and re-running `_loadStoredPictures()`, so an open sheet learns when an upload lands; the extra subcollection read on a note or status write is accepted. See root `CLAUDE.md`'s `_patchWindow`/`_notifyLocalWrite` rule.
+- Keep `EventDetailsController` subscribed to `repo.onLocalWrite` (not `onRecordWrite`, which excludes photo/note writes) and re-running `_loadStoredPictures()`, so an open sheet learns when an upload lands; the extra subcollection read on a note or status write is accepted. See `.claude/rules/search.md`'s `_patchWindow`/`_notifyLocalWrite` rule.
 - Raise `isLoadingPictures` only for UPLOAD-driven re-reads: `_loadStoredPictures` takes `showLoading`, and only the `onLocalWrite` listener passes true. (ADR-0010)
 - Make `DetailsPhotosView`'s render gate COUNT `pendingCount` and WATCH it (`ListenableBuilder` over `Listenable.merge([notifier.pending, notifier.failures])`, `details_view_leaf_widgets.dart`), or a crew upload on a photo-less job shows nothing. (ADR-0010)
 - Measure the per-job photo cap AFTER the pick (`_roomForPhotos`, `remainingSlots` on `pickAndAddAppointmentImages`), since a background upload can land during the pick, and name the room LEFT in the notice, using `calendar_photosLimitFull` at zero room. (ADR-0010)

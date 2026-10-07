@@ -31,9 +31,9 @@ meant `pictures` alone generating four indexed subfields per photo per doc,
 forever, for a field nothing has ever queried; the free-text and denormalized
 fields (`title`, `notes`, `materialsNeeded`, `address`, `clientName`,
 `clientPhone`, `employeeNames`, `seriesOpId`) and the `clients` name/address
-family plus `contacts` are the same shape. Entity search is matched in **Dart**
-over a bounded window by design (see the root `CLAUDE.md`), so none of these is
-ever a query constraint — the exemptions cut index storage and shorten every
+family plus `contacts` are the same shape. Entity search queries the `searchTokens` /
+`historySearchScopes` token arrays (see `.claude/rules/search.md`), never these
+fields, so none of these is ever a query constraint — the exemptions cut index storage and shorten every
 write without changing a single query. **Adding a `where`/`orderBy` on an
 exempted field means removing its override first**, and the rebuild is not
 instant; check this list before writing a new query rather than debugging a

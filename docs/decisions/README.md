@@ -17,3 +17,23 @@ not to "fix". Number sequentially from one counter; never renumber.
 | 0008 | Offline upload queue entries are owned | `.claude/rules/images.md` |
 | 0009 | One serialized drain path and serialized queue mutations | `.claude/rules/images.md` |
 | 0010 | Photo strip and detail-sheet render gates | `.claude/rules/images.md` |
+| 0011 | iOS is the only platform; `android/` deleted and ignored | `CLAUDE.md` |
+| 0012 | Build config is `--dart-define`; `dev/.env` retired | `CLAUDE.md` |
+| 0013 | Invited and reset-required accounts keep the session at sign-in | `CLAUDE.md` |
+| 0014 | No client `runTransaction` on routine or concurrent paths | `CLAUDE.md` |
+| 0015 | Secure storage uses `first_unlock_this_device` | `CLAUDE.md` |
+| 0016 | The app-lock flag is tri-state at both lifecycle gates | `CLAUDE.md` |
+| 0017 | Arg-required routes type-check their arguments | `CLAUDE.md` |
+| 0018 | The `users` read rule has three clauses | `CLAUDE.md` |
+| 0019 | Entity search moved server-side onto a client-written token index | `.claude/rules/search.md` |
+| 0020 | The server conflict check is a daily-window overlap | `.claude/rules/search.md` |
+| 0021 | One owner per search matcher and per field list | `.claude/rules/search.md` |
+| 0022 | Write paths patch the search caches instead of dropping them | `.claude/rules/search.md` |
+| 0023 | Scan windows page to a cap and warn; `pageToCap` owns the loop | `.claude/rules/search.md` |
+| 0024 | Rules split out of root `CLAUDE.md`, committed and path-scoped | `CLAUDE.md` |
+| 0025 | `guardedOffline` and its exactly-three carve-outs | `CLAUDE.md` |
+| 0026 | Account exit: listeners detect, a controller tears down | `CLAUDE.md` |
+| 0027 | One `Debouncer`, `onError` required, built through `Debouncer.tagged` | `CLAUDE.md` |
+| 0028 | Callable responses are cast loosely | `CLAUDE.md` |
+| 0029 | Decisions of a bucket-at-load module live in a pure `*_policy.js` | `CLAUDE.md` |
+| 0030 | Backend additions go live before the app build that needs them | `CLAUDE.md` |
