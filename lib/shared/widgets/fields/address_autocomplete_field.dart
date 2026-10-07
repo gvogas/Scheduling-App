@@ -132,6 +132,7 @@ class _AddressAutocompleteFieldState
   }
 
   Future<void> _fetch(String query) async {
+    if (!mounted || !ref.read(featureFlagsProvider).addressAutocomplete) return;
     // Skip re-fetching the exact query we already fetched successfully, so we
     // don't bill for an identical call. This is only set on success, so a
     // failed fetch will still retry.
