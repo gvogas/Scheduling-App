@@ -640,7 +640,7 @@ payload or a rules cap.
 
 **Two callables were ADDED 2026-09-29 (30 → 32)** — `resetEmployeePassword` (admin,
 `assertAdminCall`) and `completePasswordReset` (self-service, `assertActiveCall`)
-in `employee_accounts.js`, with `passwordResetRequired` added to the `/users`
+in `employee_accounts_admin.js` and `employee_accounts_self.js` respectively, with `passwordResetRequired` added to the `/users`
 create and update denylists. Deploy `functions,firestore:rules` BEFORE the app
 build that calls them; they are new callables, so there is no payload-superset
 concern, and no backfill (an absent flag means "not required").

@@ -8,10 +8,12 @@ const {performDeleteClient} = require("../../clients");
 const {withAccountOperation} = require("../../account_operation");
 const {
   createEmployeeAccount,
-  completeEmployeeSetup,
   resetEmployeePassword,
+} = require("../../employee_accounts_admin");
+const {
+  completeEmployeeSetup,
   completePasswordReset,
-} = require("../../employee_accounts");
+} = require("../../employee_accounts_self");
 const {reconcileClientBuilding} = require("../../client_buildings");
 const {backfillBuildings} = require("../../scripts/backfill-client-buildings");
 

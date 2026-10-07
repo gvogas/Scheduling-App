@@ -3,7 +3,8 @@ paths:
   - "lib/features/employees/**"
   - "lib/features/auth/**"
   - "lib/features/settings/**"
-  - "functions/employee_accounts.js"
+  - "functions/employee_accounts_admin.js"
+  - "functions/employee_accounts_self.js"
   - "functions/bridge.js"
   - "test/features/employees/**"
   - "test/features/settings/**"
@@ -97,7 +98,7 @@ self-service settings. Root context: `../../CLAUDE.md`.
   2026-08-02 — this REPLACED the one-time signup-code flow entirely). The
   admin's person sheet calls `createEmployeeAccount`, which mints a **Firebase
   Auth account** on a **random per-account starting password** —
-  `generateStartingPassword()` in `functions/employee_accounts.js`, drawn once
+  `generateStartingPassword()` in `functions/employee_accounts_admin.js`, drawn once
   per call, handed to both the create and the re-provision path, returned in the
   response and **never persisted anywhere** (2026-08-21; until then it was the
   shared constant `Welcome123!`) — plus a `users` doc that is `invited` but
@@ -281,7 +282,7 @@ self-service settings. Root context: `../../CLAUDE.md`.
 - **An employee's email is their SIGN-IN identity, so an edit to it moves BOTH
   stores or neither** (2026-08-04, which re-enabled a field that had been
   read-only since P4c). The joining callable is `changeEmployeeEmail`
-  (`functions/employee_accounts.js`), and `FirebaseEmployeesRepository
+  (`functions/employee_accounts_self.js`), and `FirebaseEmployeesRepository
   .updateEmployee` is its ONLY caller: it reads the stored doc first and, when
   the email actually changed **and** the doc carries a `uid`, runs the callable
   **before** its own Firestore write, which then merely re-states what the
@@ -596,7 +597,7 @@ self-service settings. Root context: `../../CLAUDE.md`.
   `requireString(..., 254)`, so the two employee sheets bind to it rather than
   to the 320-char `TextLimits.email` the client records use.
   **`test/core/validators/text_limits_test.dart` now reads `firestore.rules`
-  (and `employee_accounts.js`) back and fails the build if a client cap ever
+  (and both `employee_accounts_*.js` modules) back and fails the build if a client cap ever
   exceeds its rules or callable cap.** Dart, CEL and JS cannot share a constant,
   so that test is the only mechanism turning this rule into something enforced
   rather than merely written down — four appointment pairs are currently
@@ -839,7 +840,7 @@ self-service settings. Root context: `../../CLAUDE.md`.
 - **An employee's own sign-in email moves through `changeEmployeeEmail`'s SELF
   branch** (P5, 2026-08-10) — never a users-doc write, which is why `email` is
   off the self allowlist. `resolveEmailChangeCaller`
-  (`functions/employee_accounts.js`, pure and jest-tested) is the one gate:
+  (`functions/employee_accounts_self.js`, pure and jest-tested) is the one gate:
   an **active admin** may move any doc, an **active employee** may move their
   OWN, and nothing else gets through — disabled, invited, unknown role, missing
   bridge doc, or an employee naming somebody else's docId. Widening the callable

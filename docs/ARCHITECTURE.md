@@ -1297,7 +1297,7 @@ users/{docId}
   email: string
   phone: string
   role: 'admin' | 'employee'   ALWAYS 'employee' at creation —
-                       `employee_accounts.js` hard-codes it and never reads it
+                       `employee_accounts_admin.js` hard-codes it and never reads it
                        off the payload, so a pending account can never be an
                        admin one (the invite sheet's Admin toggle was removed
                        2026-08-21). Promotion is a separate edit on
@@ -1638,9 +1638,10 @@ rateLimits/{route__uid}  True sliding window written by enforceDurableRateLimit.
                            restoreAppointmentStatus 30 / hr
                          clients.js
                            deleteClient           20 / hr
-                         employee_accounts.js
+                         employee_accounts_admin.js
                            createEmployeeAccount  20 / hr
                            deleteEmployeeAccount  20 / hr   (shares the CREATE pair)
+                         employee_accounts_self.js
                            completeEmployeeSetup   5 / 15 min
                            changeEmployeeEmail     5 / hr
                          indexed_search.js

@@ -75,7 +75,7 @@ refuses `client-has-history` on a **live `count()` aggregate**, deliberately not
 the lazily-backfilled `jobCount`, since deleting on a stale zero orphans the
 visits this gate exists to protect; pure `performDeleteClient` exported for
 jest), `places.js`, `account.js`,
-`employee_accounts.js` (the whole employee-account lifecycle, P4c 2026-08-02 —
+`employee_accounts_admin.js` + `employee_accounts_self.js` (the whole employee-account lifecycle, P4c 2026-08-02, split 2026-10-07 into the admin callables `createEmployeeAccount`/`deleteEmployeeAccount`/`resetEmployeePassword` and the self-service `completeEmployeeSetup`/`completePasswordReset`/`changeEmployeeEmail` —
 `createEmployeeAccount` (admin-only: mints the Firebase Auth account on a
 random per-account starting password (`generateStartingPassword`, 12
 unambiguous chars, `crypto.randomInt`, never persisted) and the `invited`
@@ -130,7 +130,7 @@ flip), invited, unknown role, missing bridge doc, or an employee naming another
 docId. **Widening this callable past admins must never widen WHICH doc a caller
 can reach** — that function exists to make the mistake hard to write. Guard
 order is FIVE, not four: auth → payload → identity → **`assertFreshReauth`**
-→ rate limit → work (`employee_accounts.js:509-511` spells it out in its own
+→ rate limit → work (`employee_accounts_self.js`'s `changeEmployeeEmail` spells it out in its own
 comment). The re-auth step sits between identity and the limiter and is keyed on
 ROLE, not on `isSelf`: a valid ID token alone must not let an EMPLOYEE move
 their own sign-in address, while every ADMIN call arrives through `updateEmployee`,

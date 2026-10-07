@@ -1,6 +1,6 @@
 "use strict";
 
-const {resolveEmailChangeCaller} = require("../employee_accounts");
+const {resolveEmailChangeCaller} = require("../employee_accounts_self");
 
 describe("resolveEmailChangeCaller", () => {
   const admin = {role: "admin", status: "active", docId: "adm"};

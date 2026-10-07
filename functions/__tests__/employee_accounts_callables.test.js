@@ -66,12 +66,14 @@ const {
 const security = require("../security");
 const {
   createEmployeeAccount,
-  completeEmployeeSetup,
-  changeEmployeeEmail,
   deleteEmployeeAccount,
   resetEmployeePassword,
+} = require("../employee_accounts_admin");
+const {
+  completeEmployeeSetup,
+  changeEmployeeEmail,
   completePasswordReset,
-} = require("../employee_accounts");
+} = require("../employee_accounts_self");
 
 const ADMIN = {uid: "admin-uid"};
 

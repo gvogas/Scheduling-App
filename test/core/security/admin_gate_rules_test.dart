@@ -4,8 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// "Active admin, resolved through the `usersByUid` bridge" has FOUR
 /// independent implementations — `firestore.rules`, `storage.rules`,
-/// `functions/security.js` and `functions/employee_accounts.js`. Six tests
-/// already read `firestore.rules` back; nothing read `storage.rules`, which
+/// `functions/security.js` and `functions/employee_accounts_self.js`. Six
+/// tests already read `firestore.rules` back; nothing read `storage.rules`, which
 /// makes it the least-observed copy of a rule whose documented historical bug
 /// was precisely a missing `status == 'active'` in a bridge gate.
 ///

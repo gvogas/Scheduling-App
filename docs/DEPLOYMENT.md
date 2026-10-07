@@ -85,9 +85,9 @@ For **every callable whose payload handling changed**, answer two questions.
 
 ```bash
 # deployed
-git show <last-deploy-commit>:functions/employee_accounts.js | grep -n "assertPayloadShape" -A 4
+git show <last-deploy-commit>:functions/employee_accounts_admin.js | grep -n "assertPayloadShape" -A 4
 # local
-grep -n "assertPayloadShape" -A 4 functions/employee_accounts.js
+grep -n "assertPayloadShape" -A 4 functions/employee_accounts_admin.js
 ```
 
 If a key was **removed** from an allowlist, the currently-installed build breaks

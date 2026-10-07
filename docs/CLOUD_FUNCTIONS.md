@@ -289,12 +289,12 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
 | `placesGetDetails` | callable | `onCall` | `places.js` | `google_places_repository.dart` (address selected) | `GOOGLE_MAP_API_KEY` | App Check ✓ · admin · durable 40/15min |
 | `placesReverseGeocode` | callable | `onCall` | `places.js` | live staff-location map (admin) | `GOOGLE_MAP_API_KEY` | App Check ✓ · admin · durable 120/hr |
 | `deleteAccount` | callable | `onCall` | `account.js` | `account_deletion_service.dart` | — | App Check ✓ · reauth ≤5min · durable 5/15min |
-| `createEmployeeAccount` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (invite sheet, roster row Reset password) | — | App Check ✓ · admin · durable 20/hr·uid · `accountOperations` locks (email hash + uid) |
-| `completeEmployeeSetup` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` → `auth_service.dart` (account setup screen) | — | App Check ✓ · authed (own doc) · durable 5/15min·uid · `accountOperations` lock · optional `newPassword` |
-| `deleteEmployeeAccount` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (pending-account row) | — | App Check ✓ · admin · durable 20/hr·uid |
-| `changeEmployeeEmail` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (inside `updateEmployee`, when the email changed on a doc with a `uid`); `self_email_service.dart` (a person changing their own) | — | App Check ✓ · admin **or self** · non-admin also needs re-auth <5 min · durable 5/hr·uid |
-| `resetEmployeePassword` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (edit-person sheet, Reset password on an active person) | — | App Check ✓ · admin · fresh re-auth (5 min) · durable 20/hr·uid · `accountOperations` lock (uid) · refuses self, non-active and admin targets |
-| `completePasswordReset` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` → `auth_service.dart` (Change password screen) | — | App Check ✓ · active caller (`assertActiveCall`) · durable 5/15min·uid · `accountOperations` lock · requires `passwordResetRequired` |
+| `createEmployeeAccount` | callable | `onCall` | `employee_accounts_admin.js` | `firebase_employees_repository.dart` (invite sheet, roster row Reset password) | — | App Check ✓ · admin · durable 20/hr·uid · `accountOperations` locks (email hash + uid) |
+| `completeEmployeeSetup` | callable | `onCall` | `employee_accounts_self.js` | `firebase_employees_repository.dart` → `auth_service.dart` (account setup screen) | — | App Check ✓ · authed (own doc) · durable 5/15min·uid · `accountOperations` lock · optional `newPassword` |
+| `deleteEmployeeAccount` | callable | `onCall` | `employee_accounts_admin.js` | `firebase_employees_repository.dart` (pending-account row) | — | App Check ✓ · admin · durable 20/hr·uid |
+| `changeEmployeeEmail` | callable | `onCall` | `employee_accounts_self.js` | `firebase_employees_repository.dart` (inside `updateEmployee`, when the email changed on a doc with a `uid`); `self_email_service.dart` (a person changing their own) | — | App Check ✓ · admin **or self** · non-admin also needs re-auth <5 min · durable 5/hr·uid |
+| `resetEmployeePassword` | callable | `onCall` | `employee_accounts_admin.js` | `firebase_employees_repository.dart` (edit-person sheet, Reset password on an active person) | — | App Check ✓ · admin · fresh re-auth (5 min) · durable 20/hr·uid · `accountOperations` lock (uid) · refuses self, non-active and admin targets |
+| `completePasswordReset` | callable | `onCall` | `employee_accounts_self.js` | `firebase_employees_repository.dart` → `auth_service.dart` (Change password screen) | — | App Check ✓ · active caller (`assertActiveCall`) · durable 5/15min·uid · `accountOperations` lock · requires `passwordResetRequired` |
 | `waveBootstrap` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` | `WAVE_FULL_ACCESS_TOKEN`, `WAVE_BUSINESS_NAME` | App Check ✓ · admin · durable 10/hr |
 | `waveGetConnection` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (Settings mount) | — | App Check ✓ · admin · durable 60/hr |
 | `waveSetImportSchedule` | callable | `onCall` | `wave/callables.js` | none in the current app; builds ≤ 1.61.0 (Settings cadence picker) | — | App Check ✓ · admin · RETIRED no-op, `#compat-1.61.0` |
@@ -417,7 +417,7 @@ a plain `employee` now, and `firestore.rules` grants an `invited` user
 creating the account at the moment they hand the credentials over, not weeks
 ahead.
 
-### `createEmployeeAccount` — `employee_accounts.js`
+### `createEmployeeAccount` — `employee_accounts_admin.js`
 Admin-only. Mints a Firebase Auth account on a **random per-account starting
 password** plus an `invited` `users` doc that **already carries the real `uid`**,
 and returns `{email, password}` (no `docId` — the client already has the row it
@@ -493,7 +493,7 @@ allowlists — this Admin SDK write bypasses rules, so those checks ARE the
 enforcement) **before** the limiter, while `assertAdmin` stays above it.
 Transactional core exported as `performCreateAccount` for jest.
 
-### `completeEmployeeSetup` — `employee_accounts.js`
+### `completeEmployeeSetup` — `employee_accounts_self.js`
 The employee's own activation — authed, but **not** admin: it resolves the
 caller's doc by `where("uid", "==", req.auth.uid)` and can only ever touch that
 one. Flips `status` to `active` and stamps the setup profile. Refuses
@@ -537,7 +537,7 @@ by `name` and Firestore excludes docs missing the orderBy field. Rate-limited
 5 per 15 min per uid: setup runs once per person, and a handful of retries
 covers a fumbled password.
 
-### `deleteEmployeeAccount` — `employee_accounts.js`
+### `deleteEmployeeAccount` — `employee_accounts_admin.js`
 Admin-only. Removes an account that has never been set up — the `users` doc and
 the Firebase Auth account both. **Transactional, and refuses once the person has
 set up** (`failed-precondition / account-not-pending`): from that point the
@@ -562,7 +562,7 @@ able to delete a users doc (orphaning its crew links) was retired 2026-08-08;
 see docs/DEPLOYMENT.md. Transactional core exported as `performDeleteAccount`
 for jest.
 
-### `changeEmployeeEmail` — `employee_accounts.js`
+### `changeEmployeeEmail` — `employee_accounts_self.js`
 Admin **or the person themselves** (the `self` branch landed with P5,
 2026-08-10). Moves an employee's **sign-in identity** in Firebase Auth and on
 their `users` doc together. It exists because nothing else joined those two:
@@ -644,7 +644,7 @@ too. Tapping it just opens the calendar (`_handlePushTap` treats a missing
 guarantee**: an employee with no live FCM token learns when their old address
 stops signing them in, so the admin should still tell them directly.
 
-### `resetEmployeePassword` — `employee_accounts.js`
+### `resetEmployeePassword` — `employee_accounts_admin.js`
 Admin-only. Resets an ACTIVE employee's password (their email is not a real
 inbox, so Forgot password cannot help). Guard order auth → `assertAdmin` →
 payload (`docId` only, `/` rejected) → `assertFreshReauth` (5 min, shared
@@ -664,7 +664,7 @@ password that did not change; a revoke failure after the password changed logs
 and `updateUser` with a password already invalidates sessions). Returns `{email, password}` in
 `createEmployeeAccount`'s shape; logs only `shortHash(uid)`, never the password.
 
-### `completePasswordReset` — `employee_accounts.js`
+### `completePasswordReset` — `employee_accounts_self.js`
 Self-service. Opens with `assertActiveCall(req, {newPassword})`, then
 `requireString(newPassword, 128)` and the shared `isStrongPassword` (8+, `\p{Lu}`,
 `\p{Ll}`, a digit) BEFORE the durable 5/15 min limiter, so a malformed payload

@@ -307,7 +307,10 @@ void main() {
     // surfaces as an unexplained "Something went wrong" they cannot fix.
     expect(TextLimits.authEmail, lessThanOrEqualTo(254));
 
-    final source = File('functions/employee_accounts.js').readAsStringSync();
+    final source = [
+      'functions/employee_accounts_admin.js',
+      'functions/employee_accounts_self.js',
+    ].map((path) => File(path).readAsStringSync()).join('\n');
     final caps = RegExp(
       r'requireString\(\s*req\.data,\s*"email",\s*(\d+)\s*\)',
     ).allMatches(source).map((m) => int.parse(m.group(1)!)).toList();
@@ -320,7 +323,9 @@ void main() {
   // A longer passphrase passed every client check, then failed server-side as
   // "weak password".
   test('a new password fits what completeEmployeeSetup accepts', () {
-    final source = File('functions/employee_accounts.js').readAsStringSync();
+    final source = File(
+      'functions/employee_accounts_self.js',
+    ).readAsStringSync();
     final caps = RegExp(
       r'requireString\(\s*req\.data,\s*"newPassword",\s*(\d+)\s*\)',
     ).allMatches(source).map((m) => int.parse(m.group(1)!)).toList();
