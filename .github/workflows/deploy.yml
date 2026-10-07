@@ -36,17 +36,65 @@ env:
   CLAUDE_CODE: ""
 
 jobs:
+  # Runs before any repo code: no environment, no id-token, no install step.
+  gate:
+    name: Main-only ref check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.check.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Only main reaches production
+        id: check
+        env:
+          REF: ${{ inputs.ref }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::This workflow deploys production and must be dispatched from main (got '$GITHUB_REF')."
+            exit 1
+          fi
+          if [ "$REF" = "main" ]; then
+            sha=$(git rev-parse origin/main)
+          else
+            if ! printf '%s' "$REF" | grep -Eq '^[0-9a-f]{7,40}$'; then
+              echo "::error::ref must be 'main' or a 7-40 character commit sha merged into main. Unmerged work (dev included) never deploys to production."
+              exit 1
+            fi
+            sha=$(git rev-parse --verify --quiet "$REF^{commit}") || sha=""
+            case "$sha" in
+              "$REF"*) ;;
+              *)
+                echo "::error::ref is not a commit sha in this repository."
+                exit 1
+                ;;
+            esac
+            if ! git merge-base --is-ancestor "$sha" origin/main; then
+              echo "::error::commit $sha is not merged into origin/main. Merge it first."
+              exit 1
+            fi
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Deploying $sha"
+
   verify:
     name: Lint + test (same as CI)
+    needs: gate
     uses: ./.github/workflows/ci.yml
     permissions:
       contents: read
     with:
-      ref: ${{ inputs.ref }}
+      ref: ${{ needs.gate.outputs.sha }}
 
   deploy:
     name: Deploy to production
-    needs: verify
+    needs: [gate, verify]
     runs-on: ubuntu-latest
     # The only job that can mint a GCP token (the WIF provider requires it).
     environment: production
@@ -54,17 +102,13 @@ jobs:
       contents: read
       id-token: write
     outputs:
-      sha: ${{ steps.resolve.outputs.sha }}
       count: ${{ steps.after.outputs.count }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ needs.gate.outputs.sha }}
           fetch-depth: 0
           persist-credentials: false
-
-      - id: resolve
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-node@v7
         with:
@@ -74,7 +118,8 @@ jobs:
 
       - name: Install functions dependencies
         working-directory: functions
-        run: npm ci
+        # Dependency install scripts never run with deploy credentials around.
+        run: npm ci --ignore-scripts
 
       - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
         with:
@@ -87,22 +132,7 @@ jobs:
         id: plan
         env:
           TARGETS: ${{ inputs.targets }}
-          REF: ${{ inputs.ref }}
-          DISPATCH_REF: ${{ github.ref }}
         run: |
-          # Only main reaches production: dispatched from main, and the ref
-          # is main itself or a commit already merged into it.
-          if [ "$DISPATCH_REF" != "refs/heads/main" ]; then
-            echo "::error::This workflow deploys production and must be dispatched from main (got '$DISPATCH_REF')."
-            exit 1
-          fi
-          if [ "$REF" != "main" ]; then
-            if ! printf '%s' "$REF" | grep -Eq '^[0-9a-f]{7,40}$' ||
-                ! git merge-base --is-ancestor "$REF" origin/main; then
-              echo "::error::ref '$REF' is not main or a commit merged into origin/main. Unmerged work (dev included) never deploys to production; merge it first."
-              exit 1
-            fi
-          fi
           case "$TARGETS" in
             all)              indexes="firestore:indexes"; rest="functions,firestore:rules,storage" ;;
             firestore:indexes) indexes="firestore:indexes"; rest="" ;;
@@ -235,7 +265,7 @@ jobs:
 
   record:
     name: Open the deploy-log PR
-    needs: deploy
+    needs: [gate, deploy]
     runs-on: ubuntu-latest
     # No environment: this job cannot mint a GCP token.
     permissions:
@@ -253,7 +283,7 @@ jobs:
 
       - name: Append the row
         env:
-          SHA: ${{ needs.deploy.outputs.sha }}
+          SHA: ${{ needs.gate.outputs.sha }}
           COUNT: ${{ needs.deploy.outputs.count || 'unchanged' }}
           TARGETS: ${{ inputs.targets }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -266,7 +296,7 @@ jobs:
         with:
           base: dev
           branch: deploy-log/${{ github.run_id }}
-          title: "Record the ${{ inputs.targets }} deploy of ${{ needs.deploy.outputs.sha }}"
+          title: "Record the ${{ inputs.targets }} deploy of ${{ needs.gate.outputs.sha }}"
           commit-message: "Record the ${{ inputs.targets }} deploy in the deploy log"
           body: |
             Appends the Deploy log row for workflow run ${{ github.run_id }}.
