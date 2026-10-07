@@ -1,0 +1,260 @@
+name: Deploy backend
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit, branch or tag to deploy
+        required: true
+        default: main
+      targets:
+        description: What to deploy (all = indexes first and READY, then functions + rules + storage)
+        required: true
+        type: choice
+        default: functions
+        options:
+          - functions
+          - firestore:rules
+          - firestore:indexes
+          - storage
+          - all
+
+# Two deploys must never overlap, and a running one is never cancelled.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+# Nothing is writable unless a job below asks for it by name.
+permissions: {}
+
+env:
+  PROJECT_ID: schedulingapp-88727
+  FIREBASE_TOOLS: firebase-tools@15.25.1
+  # Cleared so the CLI does not stamp an agent name into the audit log.
+  AI_AGENT: ""
+  CLAUDECODE: ""
+  CLAUDE_CODE: ""
+
+jobs:
+  verify:
+    name: Lint + test (same as CI)
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+    with:
+      ref: ${{ inputs.ref }}
+
+  deploy:
+    name: Deploy to production
+    needs: verify
+    runs-on: ubuntu-latest
+    # The only job that can mint a GCP token (the WIF provider requires it).
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+      count: ${{ steps.after.outputs.count }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - id: resolve
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+
+      - name: Install functions dependencies
+        working-directory: functions
+        run: npm ci
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Plan
+        id: plan
+        env:
+          TARGETS: ${{ inputs.targets }}
+        run: |
+          case "$TARGETS" in
+            all)               indexes="firestore:indexes"; rest="functions,firestore:rules,storage" ;;
+            firestore:indexes) indexes="firestore:indexes"; rest="" ;;
+            functions|firestore:rules|storage) indexes=""; rest="$TARGETS" ;;
+            *)
+              echo "::error::Unknown deploy target '$TARGETS'."
+              exit 1
+              ;;
+          esac
+          base="npx --yes $FIREBASE_TOOLS deploy --project $PROJECT_ID --non-interactive --only"
+          [ -n "$indexes" ] && echo "$base $indexes" > deploy-indexes.cmd
+          [ -n "$rest" ] && echo "$base $rest" > deploy-rest.cmd
+          touch deploy-indexes.cmd deploy-rest.cmd
+          echo "indexes=$indexes" >> "$GITHUB_OUTPUT"
+          echo "rest=$rest" >> "$GITHUB_OUTPUT"
+          case "$rest" in *functions*) echo "functions=true" >> "$GITHUB_OUTPUT" ;; esac
+          cat deploy-indexes.cmd deploy-rest.cmd
+
+      # The deploy steps below run exactly these files, so this guards them.
+      - name: Check the deploy commands
+        run: |
+          for file in deploy-indexes.cmd deploy-rest.cmd; do
+            [ -s "$file" ] || continue
+            if grep -n -e '--force' "$file"; then
+              echo "::error::A deploy command contains --force. It deletes every prod TTL policy missing from firestore.indexes.json (all five were lost this way on 2026-07-21). Never."
+              exit 1
+            fi
+            if ! grep -q -e ' --non-interactive ' "$file"; then
+              echo "::error::A deploy command lacks --non-interactive; a prompt would hang the run."
+              exit 1
+            fi
+            if ! grep -q -e " --project $PROJECT_ID " "$file"; then
+              echo "::error::A deploy command does not name --project $PROJECT_ID."
+              exit 1
+            fi
+          done
+
+      - name: Export diff (deletions abort non-interactively)
+        if: steps.plan.outputs.functions == 'true'
+        run: |
+          npx --yes "$FIREBASE_TOOLS" functions:list --project "$PROJECT_ID" --json > live-before.json
+          node functions/scripts/deploy/export_diff.js functions/index.js live-before.json
+
+      - name: Allowlists are a superset of the last deploy
+        if: steps.plan.outputs.functions == 'true'
+        run: |
+          base=$(node functions/scripts/deploy/deploy_log.js last-sha docs/DEPLOYMENT.md)
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "::warning::No usable last-deploy sha in the Deploy log ('$base'); allowlist check skipped. Do DEPLOYMENT.md §4(a) by hand."
+            exit 0
+          fi
+          cd functions && node scripts/deploy/allowlist_diff.js "$base"
+
+      - name: TTL drift report
+        if: steps.plan.outputs.indexes != ''
+        run: |
+          gcloud firestore fields ttls list --project "$PROJECT_ID" --format=json \
+            | jq -r '.[] | .name | capture("collectionGroups/(?<c>[^/]+)/fields/(?<f>[^/]+)") | "\(.c).\(.f)"' \
+            | sort > ttl-live.txt
+          jq -r '.fieldOverrides[] | select(.ttl == true) | "\(.collectionGroup).\(.fieldPath)"' firestore.indexes.json \
+            | sort > ttl-file.txt
+          missing=$(comm -23 ttl-live.txt ttl-file.txt)
+          if [ -n "$missing" ]; then
+            echo "::warning::Live TTL policies not in firestore.indexes.json (harmless without --force, which this workflow never passes): $missing"
+            { echo "### TTL drift"; echo; echo '```'; echo "$missing"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Deploy indexes
+        if: steps.plan.outputs.indexes != ''
+        run: |
+          read -r -a cmd < deploy-indexes.cmd
+          "${cmd[@]}"
+
+      - name: Wait for every composite index to be READY
+        if: steps.plan.outputs.indexes != ''
+        run: |
+          deadline=$((SECONDS + 2700))
+          while true; do
+            pending=$(gcloud firestore indexes composite list --project "$PROJECT_ID" --format=json \
+              | jq '[.[] | select(.state != "READY")] | length')
+            [ "$pending" -eq 0 ] && { echo "All composite indexes READY."; break; }
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::$pending composite index(es) still not READY after 45 min. Nothing else was deployed; re-run once they are."
+              exit 1
+            fi
+            echo "$pending composite index(es) not READY yet; waiting 30 s"
+            sleep 30
+          done
+
+      - name: Deploy
+        id: deploy
+        if: steps.plan.outputs.rest != ''
+        run: |
+          set -o pipefail
+          read -r -a cmd < deploy-rest.cmd
+          "${cmd[@]}" 2>&1 | tee deploy-output.log
+
+      - name: Explain a known abort
+        if: failure() && steps.deploy.outcome == 'failure'
+        run: |
+          if grep -q "failure policy" deploy-output.log; then
+            echo "::error::A NEWLY CREATED retry: true function aborts a non-interactive deploy (DEPLOYMENT.md, 2026-08-14 row). Do not add --force to the whole run. Deploy the new trigger alone from an owner shell with 'firebase deploy --only functions:<name> --force' — with no firestore target in scope --force cannot reach an index or TTL policy — then re-run this workflow."
+          fi
+          if grep -qi "delet" deploy-output.log; then
+            echo "::error::The CLI wanted to delete a function. The export diff should have caught this; read deploy-output.log and delete explicitly with firebase functions:delete."
+          fi
+
+      - name: Verify by name
+        id: after
+        if: steps.plan.outputs.functions == 'true'
+        run: |
+          npx --yes "$FIREBASE_TOOLS" functions:list --project "$PROJECT_ID" --json > live-after.json
+          node functions/scripts/deploy/export_diff.js functions/index.js live-after.json --after-deploy
+          echo "count=$(jq '.result | length' live-after.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Checklist the workflow cannot enforce
+        if: always()
+        run: |
+          cat >> "$GITHUB_STEP_SUMMARY" <<'EOF'
+          ## Before you ship the app build
+
+          - [ ] This run is green. The backend goes out BEFORE the app build that needs it — never the reverse.
+          - [ ] Every NEW payload field is optional (`optionalString`, `x === true`). The allowlist check only catches REMOVED keys.
+          - [ ] No rules cap is tighter than what a shipped client or callable can write (DEPLOYMENT.md §4c).
+          - [ ] Any backfill this release depends on has run (`node functions/scripts/run.js <name> --live`).
+          - [ ] Function logs since the deploy show no `unexpected-field`, no startup errors.
+          - [ ] Smoke-tested with the OLD app build if one is installed.
+          - [ ] Notes column filled in on the deploy-log PR this run opens.
+          EOF
+
+  record:
+    name: Open the deploy-log PR
+    needs: deploy
+    runs-on: ubuntu-latest
+    # No environment: this job cannot mint a GCP token.
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Append the row
+        env:
+          SHA: ${{ needs.deploy.outputs.sha }}
+          COUNT: ${{ needs.deploy.outputs.count || 'unchanged' }}
+          TARGETS: ${{ inputs.targets }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node functions/scripts/deploy/deploy_log.js append docs/DEPLOYMENT.md \
+            "--date=$(date -u +%Y-%m-%d)" "--sha=$SHA" "--targets=$TARGETS" \
+            "--count=$COUNT" "--run-url=$RUN_URL"
+
+      - uses: peter-evans/create-pull-request@v7
+        with:
+          base: dev
+          branch: deploy-log/${{ github.run_id }}
+          title: "Record the ${{ inputs.targets }} deploy of ${{ needs.deploy.outputs.sha }}"
+          commit-message: "Record the ${{ inputs.targets }} deploy in the deploy log"
+          body: |
+            Appends the Deploy log row for workflow run ${{ github.run_id }}.
+            Fill in the Notes cell (what changed, any prompt, what still stands) before merging.
+
+            🤖 Generated with [Claude Code](https://claude.com/claude-code)
