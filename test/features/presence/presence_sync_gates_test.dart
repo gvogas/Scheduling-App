@@ -123,7 +123,9 @@ void main() {
     test('throttles inside the 2-min gap, allows at the boundary', () {
       expect(
         shouldWritePresenceFix(
-          lastUploadAt: now.subtract(const Duration(minutes: 1, seconds: 59)),
+          lastUploadAt: now.subtract(
+            const Duration(minutes: 1, seconds: 59),
+          ),
           now: now,
         ),
         isFalse,
@@ -146,7 +148,9 @@ void main() {
     test('fires only once a full heartbeat period elapsed', () {
       expect(
         shouldHeartbeat(
-          lastUploadAt: now.subtract(const Duration(minutes: 9, seconds: 59)),
+          lastUploadAt: now.subtract(
+            const Duration(minutes: 9, seconds: 59),
+          ),
           now: now,
         ),
         isFalse,

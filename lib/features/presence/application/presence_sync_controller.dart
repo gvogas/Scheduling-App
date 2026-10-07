@@ -156,6 +156,7 @@ class PresenceSyncController with ReentrantSync {
   String? _docId;
   Position? _lastPosition;
   DateTime? _lastUploadAt;
+  bool _pauseCleared = false;
 
   AppLogger get _logger => _ref.read(loggerProvider);
 
@@ -168,14 +169,28 @@ class PresenceSyncController with ReentrantSync {
       final gate = readAccountGateInputs(_ref, _auth);
       // Null is "we don't know yet" — leave presence tracking as it is.
       if (gate == null) return;
+      final featureOn = _ref.read(featureFlagsProvider).presence;
+      if (featureOn) _pauseCleared = false;
       if (!shouldTrackPresence(
         role: gate.role,
         status: gate.status,
         signedIn: gate.signedIn,
         locationSharingEnabled: gate.locationSharingEnabled,
-        featureEnabled: _ref.read(featureFlagsProvider).presence,
+        featureEnabled: featureOn,
       )) {
+        final knownDocId = _docId;
         _stop();
+        final pausedOnly =
+            !featureOn &&
+            shouldTrackPresence(
+              role: gate.role,
+              status: gate.status,
+              signedIn: gate.signedIn,
+              locationSharingEnabled: gate.locationSharingEnabled,
+            );
+        if (pausedOnly && !_pauseCleared) {
+          await _clearPausedFix(knownDocId, generation);
+        }
         return;
       }
       // Restart stream if permission was flipped while running.
@@ -404,6 +419,21 @@ class PresenceSyncController with ReentrantSync {
     } catch (e, st) {
       _logger.warn('PRESENCE unregister failed', e, st);
       return false;
+    }
+  }
+
+  /// Removes the stored fix once per remote pause; a failure leaves
+  /// [_pauseCleared] false so the next sync retries. Never throws.
+  Future<void> _clearPausedFix(String? knownDocId, int generation) async {
+    try {
+      final docId = knownDocId ?? await _resolveUserDocId();
+      if (docId == null || isSyncStale(generation)) return;
+      await _ref
+          .read(presenceRepositoryProvider)
+          .deleteLocation(userDocId: docId);
+      _pauseCleared = true;
+    } catch (e, st) {
+      _logger.warn('PRESENCE pause clear failed', e, st);
     }
   }
 
