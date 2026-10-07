@@ -428,10 +428,9 @@ class PresenceSyncController with ReentrantSync {
     try {
       final docId = knownDocId ?? await _resolveUserDocId();
       if (docId == null || isSyncStale(generation)) return;
-      await _ref
+      _pauseCleared = await _ref
           .read(presenceRepositoryProvider)
           .deleteLocation(userDocId: docId);
-      _pauseCleared = true;
     } catch (e, st) {
       _logger.warn('PRESENCE pause clear failed', e, st);
     }

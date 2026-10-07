@@ -24,9 +24,13 @@ class _MockPresenceRepo extends Mock implements PresenceRepository {}
 class _MockPermissions extends Mock implements LocationPermissionService {}
 
 class _FakeGeolocator extends GeolocatorPlatform {
+  int listens = 0;
+
   @override
-  Stream<Position> getPositionStream({LocationSettings? locationSettings}) =>
-      const Stream.empty();
+  Stream<Position> getPositionStream({LocationSettings? locationSettings}) {
+    listens++;
+    return const Stream.empty();
+  }
 }
 
 class _FlagsController extends Notifier<FeatureFlags> {
@@ -54,6 +58,7 @@ void main() {
   late _MockEmployeesRepo employees;
   late _MockPresenceRepo presence;
   late _MockPermissions permissions;
+  late _FakeGeolocator geolocator;
 
   setUp(() {
     auth = _MockAuth();
@@ -61,7 +66,8 @@ void main() {
     employees = _MockEmployeesRepo();
     presence = _MockPresenceRepo();
     permissions = _MockPermissions();
-    GeolocatorPlatform.instance = _FakeGeolocator();
+    geolocator = _FakeGeolocator();
+    GeolocatorPlatform.instance = geolocator;
 
     when(() => user.uid).thenReturn('uid-1');
     when(() => auth.currentUser).thenReturn(user);
@@ -76,14 +82,14 @@ void main() {
     ).thenAnswer((_) async => true);
   });
 
-  Future<ProviderContainer> makeContainer() async {
+  Future<ProviderContainer> makeContainer({bool sharing = true}) async {
     final container = ProviderContainer(
       overrides: [
         currentUserDocProvider.overrideWith(
-          (ref) => Stream.value(const {
+          (ref) => Stream.value({
             'role': 'employee',
             'status': 'active',
-            'locationSharingEnabled': true,
+            'locationSharingEnabled': sharing,
           }),
         ),
         featureFlagsProvider.overrideWith((ref) => ref.watch(_flagsSource)),
@@ -156,5 +162,46 @@ void main() {
     verifyNever(
       () => presence.deleteLocation(userDocId: any(named: 'userDocId')),
     );
+  });
+
+  test('a delete the repository refuses is retried by the next sync', () async {
+    final results = [false, true];
+    when(
+      () => presence.deleteLocation(userDocId: any(named: 'userDocId')),
+    ).thenAnswer((_) async => results.removeAt(0));
+    final container = await makeContainer();
+    container.read(_flagsSource.notifier).presence(on: false);
+    final controller = container.read(presenceSyncControllerProvider);
+
+    await controller.sync();
+    await controller.sync();
+    await controller.sync();
+
+    verifyDeletes(2);
+  });
+
+  test('a paused flag with sharing already off deletes nothing here', () async {
+    final container = await makeContainer(sharing: false);
+    container.read(_flagsSource.notifier).presence(on: false);
+
+    await container.read(presenceSyncControllerProvider).sync();
+
+    verifyNever(
+      () => presence.deleteLocation(userDocId: any(named: 'userDocId')),
+    );
+  });
+
+  test('tracking restarts once the flag is back on', () async {
+    final container = await makeContainer();
+    final flags = container.read(_flagsSource.notifier);
+    final controller = container.read(presenceSyncControllerProvider);
+    flags.presence(on: false);
+    await controller.sync();
+    expect(geolocator.listens, 0);
+
+    flags.presence(on: true);
+    await controller.sync();
+
+    expect(geolocator.listens, 1);
   });
 }
