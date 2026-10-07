@@ -75,4 +75,19 @@ void main() {
     await pumpEventQueue();
     verify(() => logger.warn('FLAGS fetch failed', any(), any())).called(1);
   });
+
+  test(
+    'cancelling before setDefaults completes leaves no update listener',
+    () async {
+      final gate = Completer<void>();
+      when(() => rc.setDefaults(any())).thenAnswer((_) => gate.future);
+      final service = RemoteConfigService(remoteConfig: rc, logger: logger);
+      final sub = service.watch().listen((_) {});
+      await pumpEventQueue();
+      await sub.cancel();
+      gate.complete();
+      await pumpEventQueue();
+      expect(updates.hasListener, isFalse);
+    },
+  );
 }

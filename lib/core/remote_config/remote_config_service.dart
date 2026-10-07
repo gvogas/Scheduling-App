@@ -19,9 +19,10 @@ class RemoteConfigService {
     late final StreamController<FeatureFlags> controller;
     StreamSubscription<RemoteConfigUpdate>? updates;
     FeatureFlags? last;
+    var cancelled = false;
 
     void emit() {
-      if (controller.isClosed) return;
+      if (cancelled || controller.isClosed) return;
       try {
         final flags = FeatureFlags.fromValues(_remoteConfig.getAll());
         if (flags == last) return;
@@ -61,7 +62,7 @@ class RemoteConfigService {
         _logger.warn('FLAGS activate failed', e, st);
       }
       emit();
-      if (controller.isClosed) return;
+      if (cancelled || controller.isClosed) return;
       unawaited(fetch());
       try {
         updates = _remoteConfig.onConfigUpdated.listen(
@@ -69,6 +70,7 @@ class RemoteConfigService {
           onError: (Object e, StackTrace st) =>
               _logger.warn('FLAGS update stream failed', e, st),
         );
+        if (cancelled) unawaited(updates?.cancel());
       } catch (e, st) {
         _logger.warn('FLAGS update listen failed', e, st);
       }
@@ -76,7 +78,10 @@ class RemoteConfigService {
 
     controller = StreamController<FeatureFlags>(
       onListen: () => unawaited(start()),
-      onCancel: () => updates?.cancel(),
+      onCancel: () {
+        cancelled = true;
+        return updates?.cancel();
+      },
     );
     return controller.stream;
   }
