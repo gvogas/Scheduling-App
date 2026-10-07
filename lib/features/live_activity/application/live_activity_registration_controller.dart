@@ -88,6 +88,7 @@ class LiveActivityRegistrationController with ReentrantSync {
   String? _uid;
   String? _locale;
   String? _pushToStartToken;
+  bool _pauseCleared = false;
 
   /// Live cards keyed by activity id — one update token each.
   final Map<String, String> _activityTokens = <String, String>{};
@@ -123,13 +124,10 @@ class LiveActivityRegistrationController with ReentrantSync {
     // defaults to true, which would re-register a device that opted out.
     await _ref.read(liveActivityEnabledProvider.notifier).ready;
     if (isSyncStale(generation)) return;
-    if (!_ref.read(liveActivityEnabledProvider) ||
-        !_ref.read(featureFlagsProvider).liveActivities) {
-      // A stored opt-out is authoritative, so reconcile by actively removing
-      // any stale server rows left behind by an interrupted previous opt-out
-      // rather than only stopping local streams. Straight to `_teardown` -
-      // going through `unregister` would invalidate the generation and drop a
-      // preference flip that arrived while this run was in flight.
+    final featureOn = _ref.read(featureFlagsProvider).liveActivities;
+    if (featureOn) _pauseCleared = false;
+    if (!_ref.read(liveActivityEnabledProvider)) {
+      // Not `unregister`: invalidating the generation would drop an in-flight preference flip.
       await _teardown();
       return;
     }
@@ -142,6 +140,11 @@ class LiveActivityRegistrationController with ReentrantSync {
       signedIn: gate.signedIn,
     )) {
       await _cancelStreams();
+      return;
+    }
+    if (!featureOn) {
+      // A remote pause keeps the push-to-start row: iOS may not re-emit its token on resume.
+      if (!_pauseCleared) _pauseCleared = await _endLocalCards();
       return;
     }
 
@@ -297,11 +300,16 @@ class LiveActivityRegistrationController with ReentrantSync {
   /// only. Never wire this to status writes: `endAllActivities()` is
   /// device-wide and can't target a single appointment. Terminal transitions
   /// are ended server-side instead, by `endCardOnTerminal`.
-  Future<void> endLocalCards() async {
-    if (!isIosPlatform() || !_pluginReady) return;
+  Future<void> endLocalCards() => _endLocalCards();
+
+  /// [endLocalCards], reporting whether the device-wide end succeeded.
+  Future<bool> _endLocalCards() async {
+    if (!isIosPlatform() || !_pluginReady) return true;
+    var ended = true;
     try {
       await _plugin.endAllActivities();
     } catch (e, st) {
+      ended = false;
       _logger.warn('LIVE-ACT endLocalCards failed', e, st);
     }
     // The `ended` stream events clear these rows too; sweeping here means a
@@ -309,6 +317,7 @@ class LiveActivityRegistrationController with ReentrantSync {
     for (final activityId in _activityTokens.keys.toList()) {
       await _forgetActivity(activityId);
     }
+    return ended;
   }
 
   /// Best-effort de-registration for sign-out or account deletion — ends any

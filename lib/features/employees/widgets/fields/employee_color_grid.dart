@@ -35,9 +35,7 @@ class EmployeeColorGrid extends ConsumerWidget {
             color.toARGB32() == selectedColor)
           color,
     ];
-    final isCustomColor = !available.any(
-      (c) => c.toARGB32() == selectedColor,
-    );
+    final isCustomColor = !available.any((c) => c.toARGB32() == selectedColor);
 
     return Wrap(
       spacing: AppSpacing.sp4,

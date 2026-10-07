@@ -516,9 +516,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('Connect bootstraps without showing a picker', (
-      tester,
-    ) async {
+    testWidgets('Connect bootstraps without showing a picker', (tester) async {
       final service = _mockService();
       final notices = NoticeService();
       final emitted = <String>[];
@@ -594,6 +592,30 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('a server-side pause surfaces the Wave paused copy', (
+      tester,
+    ) async {
+      // The server's flag cache lags the client's realtime read by up to 60 s.
+      final service = _mockService();
+      final notices = NoticeService();
+      final emitted = <String>[];
+      notices.stream.listen((n) => emitted.add(n.message));
+
+      when(service.bootstrap).thenThrow(const WavePaused());
+
+      await tester.pumpWidget(_wrapSection(service, noticeService: notices));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Connect to Wave'));
+      await tester.pumpAndSettle();
+
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(WaveSettingsSection)),
+      );
+      expect(emitted, [l10n.settings_wavePaused]);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('a NON-WaveFailure throw still surfaces a notice', (
       tester,
     ) async {
@@ -628,10 +650,8 @@ void main() {
       notices.stream.listen((n) => emitted.add(n.message));
 
       when(service.bootstrap).thenAnswer(
-        (_) async => const WaveConnection(
-          businessId: 'biz-1',
-          businessName: 'Test Biz',
-        ),
+        (_) async =>
+            const WaveConnection(businessId: 'biz-1', businessName: 'Test Biz'),
       );
       when(service.syncCustomers).thenAnswer(
         (_) async => const WaveSyncSummary(
@@ -673,10 +693,8 @@ void main() {
 
       // Connect first so Import is offered, then make the import fail.
       when(service.bootstrap).thenAnswer(
-        (_) async => const WaveConnection(
-          businessId: 'biz-1',
-          businessName: 'Test Biz',
-        ),
+        (_) async =>
+            const WaveConnection(businessId: 'biz-1', businessName: 'Test Biz'),
       );
       when(service.syncCustomers).thenThrow(const WaveAuthInvalid());
 

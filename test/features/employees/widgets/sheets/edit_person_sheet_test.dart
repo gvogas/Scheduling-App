@@ -11,8 +11,11 @@ import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
+import 'package:scheduling/features/auth/domain/auth_failure.dart';
+import 'package:scheduling/features/auth/services/account_deletion_service.dart';
 import 'package:scheduling/features/employees/application/employee_schedule_providers.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
+import 'package:scheduling/features/employees/domain/employees_failure.dart';
 import 'package:scheduling/features/employees/domain/employees_repository.dart';
 import 'package:scheduling/features/employees/domain/models/emergency_contact.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
@@ -23,8 +26,11 @@ import 'package:scheduling/l10n/l10n.dart';
 
 class _MockRepo extends Mock implements EmployeesRepository {}
 
+class _MockReauth extends Mock implements AccountDeletionService {}
+
 void main() {
   late _MockRepo repo;
+  late _MockReauth reauth;
 
   setUpAll(() {
     registerFallbackValue(const EmployeeRecord(id: 'fallback'));
@@ -33,6 +39,10 @@ void main() {
 
   setUp(() {
     repo = _MockRepo();
+    reauth = _MockReauth();
+    when(
+      () => reauth.reauthenticateWithPassword(any()),
+    ).thenAnswer((_) async {});
     // The sheet's body is a lazy scroll view, so a phone-sized viewport never
     // builds the availability panel or the footer. Every test but the scale
     // sweep runs tall enough to build the whole form at once.
@@ -72,6 +82,7 @@ void main() {
   }) => ProviderScope(
     overrides: [
       employeesRepositoryProvider.overrideWithValue(repo),
+      accountDeletionServiceProvider.overrideWithValue(reauth),
       isOfflineProvider.overrideWithValue(offline),
       authUidProvider.overrideWith((ref) => Stream<String?>.value(signedInUid)),
       if (notices != null) noticeServiceProvider.overrideWithValue(notices),
@@ -557,6 +568,20 @@ void main() {
       matching: find.widgetWithText(FilledButton, 'Reset password'),
     );
 
+    /// The confirm doubles as the admin's re-auth: it enables only once their
+    /// own password is typed.
+    Future<void> confirmWithPassword(WidgetTester tester) async {
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'admin-pw',
+      );
+      await tester.pump();
+      await tester.tap(confirmButton());
+    }
+
     testWidgets('an active teammate offers Reset password', (tester) async {
       useTallViewport(tester);
       await tester.pumpWidget(wrap(teammate));
@@ -643,7 +668,7 @@ void main() {
       await tester.tap(resetButton);
       await tester.pumpAndSettle();
       expect(find.text("Reset Theo's password?"), findsOneWidget);
-      await tester.tap(confirmButton());
+      await confirmWithPassword(tester);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -658,7 +683,68 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('cancelling the confirmation resets nothing', (tester) async {
+    testWidgets('dismissing the sheet mid-reset still shows the password', (
+      tester,
+    ) async {
+      final pending = Completer<NewAccountCredentials>();
+      when(
+        () => repo.resetEmployeePassword('e1'),
+      ).thenAnswer((_) => pending.future);
+      useTallViewport(tester);
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            employeesRepositoryProvider.overrideWithValue(repo),
+            accountDeletionServiceProvider.overrideWithValue(reauth),
+            isOfflineProvider.overrideWithValue(false),
+            authUidProvider.overrideWith(
+              (ref) => Stream<String?>.value('admin-uid'),
+            ),
+            futureAssignmentCountProvider('e1').overrideWith((_) async => 0),
+          ],
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            theme: lightTheme(),
+            home: Builder(
+              builder: (context) => Scaffold(
+                body: TextButton(
+                  onPressed: () => showModalBottomSheet<void>(
+                    context: context,
+                    isScrollControlled: true,
+                    builder: (_) => const EditPersonSheet(employee: teammate),
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(resetButton);
+      await tester.pumpAndSettle();
+      await confirmWithPassword(tester);
+      await tester.pump();
+
+      // A drag-dismiss pops the route directly, which PopScope cannot veto.
+      Navigator.of(tester.element(find.byType(EditPersonSheet))).pop();
+      await tester.pumpAndSettle();
+      expect(find.byType(EditPersonSheet), findsNothing);
+
+      pending.complete(issued);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Password reset'), findsOneWidget);
+      expect(find.text('Tmp2pass!wd9'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('cancelling at the re-auth prompt resets nothing', (
+      tester,
+    ) async {
       useTallViewport(tester);
       await tester.pumpWidget(wrap(teammate));
       await tester.pumpAndSettle();
@@ -674,6 +760,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
+      verifyNever(() => reauth.reauthenticateWithPassword(any()));
       verifyNever(() => repo.resetEmployeePassword(any()));
     });
 
@@ -690,7 +777,7 @@ void main() {
 
       await tester.tap(resetButton);
       await tester.pumpAndSettle();
-      await tester.tap(confirmButton());
+      await confirmWithPassword(tester);
       await tester.pumpAndSettle();
 
       expect(seen.single, isA<NoticeError>());
@@ -709,11 +796,91 @@ void main() {
 
       await tester.tap(resetButton);
       await tester.pumpAndSettle();
-      await tester.tap(confirmButton());
+      await confirmWithPassword(tester);
       await tester.pumpAndSettle();
 
       verifyNever(() => repo.resetEmployeePassword(any()));
       expect(seen.single, isA<NoticeError>());
+    });
+
+    testWidgets('an admin teammate has no Reset password', (tester) async {
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate.copyWith(role: 'admin')));
+      await tester.pumpAndSettle();
+
+      expect(resetButton, findsNothing);
+    });
+
+    testWidgets('the admin re-authenticates BEFORE the reset is called', (
+      tester,
+    ) async {
+      when(
+        () => repo.resetEmployeePassword('e1'),
+      ).thenAnswer((_) async => issued);
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate));
+      await tester.pumpAndSettle();
+
+      await tester.tap(resetButton);
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<FilledButton>(confirmButton()).onPressed,
+        isNull,
+        reason: 'no password typed yet',
+      );
+      await confirmWithPassword(tester);
+      await tester.pumpAndSettle();
+
+      verifyInOrder([
+        () => reauth.reauthenticateWithPassword('admin-pw'),
+        () => repo.resetEmployeePassword('e1'),
+      ]);
+    });
+
+    testWidgets('a wrong admin password resets nothing and says so', (
+      tester,
+    ) async {
+      final notices = NoticeService();
+      final seen = <AppNotice>[];
+      notices.stream.listen(seen.add);
+      when(
+        () => reauth.reauthenticateWithPassword(any()),
+      ).thenThrow(const AuthFailureWrongCredentials());
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate, notices: notices));
+      await tester.pumpAndSettle();
+
+      await tester.tap(resetButton);
+      await tester.pumpAndSettle();
+      await confirmWithPassword(tester);
+      await tester.pumpAndSettle();
+
+      verifyNever(() => repo.resetEmployeePassword(any()));
+      expect(seen.single.message, 'Invalid email or password');
+    });
+
+    testWidgets('an admin-target refusal shows its own message', (
+      tester,
+    ) async {
+      final notices = NoticeService();
+      final seen = <AppNotice>[];
+      notices.stream.listen(seen.add);
+      when(
+        () => repo.resetEmployeePassword('e1'),
+      ).thenThrow(const EmployeesFailureTargetIsAdmin());
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate, notices: notices));
+      await tester.pumpAndSettle();
+
+      await tester.tap(resetButton);
+      await tester.pumpAndSettle();
+      await confirmWithPassword(tester);
+      await tester.pumpAndSettle();
+
+      expect(
+        seen.single.message,
+        "An admin's password can't be reset from here.",
+      );
     });
 
     testWidgets('the footer survives 260 px at 2.0 text scale', (tester) async {

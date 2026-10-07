@@ -31,6 +31,45 @@ describe("lastDeployedSha", () => {
     expect(lastDeployedSha(DOC)).toBe("cc38be5d");
   });
 
+  /**
+   * A Deploy log whose rows end with the given trailing rows.
+   * @param {!Array<string>} rows Rows appended after a functions deploy.
+   * @return {string} The document.
+   */
+  function logWith(rows) {
+    return ["## Deploy log", "| Date | Commit | Targets | Fns live | Notes |",
+      "|---|---|---|---|---|", "| 2026-09-01 | `1111111` | functions | 1 | a |",
+      ...rows].join("\n");
+  }
+
+  test("skips a trailing indexes-only row", () => {
+    expect(lastDeployedSha(logWith([
+      "| 2026-09-02 | `2222222` | **`firestore:indexes` ONLY** | 1 | b |",
+      "| 2026-09-03 | `3333333` | firestore:rules, storage | 1 | c |",
+    ]))).toBe("1111111");
+  });
+
+  test("skips no-deploy and backfill-only rows", () => {
+    expect(lastDeployedSha(logWith([
+      "| 2026-09-02 | `2222222` | **no deploy — prod scripts only** | 1 | b |",
+      "| 2026-09-03 | `3333333` | **prod backfills only** (no deploy target)" +
+        " | 1 | c |",
+    ]))).toBe("1111111");
+  });
+
+  test("counts a single-function and a combined-target row", () => {
+    expect(lastDeployedSha(logWith([
+      "| 2026-09-02 | `2222222` | functions:syncClientBuilding | 1 | b |",
+    ]))).toBe("2222222");
+    expect(lastDeployedSha(logWith([
+      "| 2026-09-02 | `2222222` | **`functions` + `firestore:rules`** | 1 |" +
+        " b |",
+    ]))).toBe("2222222");
+    expect(lastDeployedSha(logWith([
+      "| 2026-09-02 | `2222222` | all | 1 | b |",
+    ]))).toBe("2222222");
+  });
+
   test("returns null when there is no Deploy log", () => {
     expect(lastDeployedSha("# nothing here")).toBeNull();
   });
@@ -39,8 +78,8 @@ describe("lastDeployedSha", () => {
 describe("a table with blank lines between rows (the real log)", () => {
   const GAPPED = [
     "## Deploy log", "", "| Date | Commit | Targets | Fns live | Notes |",
-    "|---|---|---|---|---|", "| 2026-08-01 | `aaaaaaa` | f | 1 | a |", "",
-    "| 2026-08-02 | `bbbbbbb` | f | 1 | b |", "", "### Next", "",
+    "|---|---|---|---|---|", "| 2026-08-01 | `aaaaaaa` | functions | 1 | a |",
+    "", "| 2026-08-02 | `bbbbbbb` | functions | 1 | b |", "", "### Next", "",
   ].join("\n");
 
   test("reads and appends past the gaps", () => {

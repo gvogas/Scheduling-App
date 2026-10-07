@@ -63,10 +63,7 @@ class _InvitePersonSheetState extends ConsumerState<InvitePersonSheet> {
   final Map<String, String?> errors = {};
 
   // Admin-only surface: the Team tab's FAB is the only way in.
-  final _tour = TourSteps(
-    const FormTour(TourForm.invitePerson),
-    isAdmin: true,
-  );
+  final _tour = TourSteps(const FormTour(TourForm.invitePerson), isAdmin: true);
 
   @override
   void initState() {
@@ -132,13 +129,17 @@ class _InvitePersonSheetState extends ConsumerState<InvitePersonSheet> {
       return;
     }
 
+    // Drag-dismiss bypasses PopScope, so show the password via the root navigator.
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final analytics = ref.read(analyticsServiceProvider);
+    final firstName = _firstNameController.text.trim();
     final outcome = await ref
         .read(employeeFormControllerProvider.notifier)
         .createAccount(
           EmployeeRecord(
             id: '',
             name: composedName,
-            firstName: _firstNameController.text.trim(),
+            firstName: firstName,
             lastName: _lastNameController.text.trim(),
             email: normalizeEmail(_emailController.text),
             phone: _phoneController.text.trim(),
@@ -148,26 +149,28 @@ class _InvitePersonSheetState extends ConsumerState<InvitePersonSheet> {
             jobTitle: _jobTitle,
           ),
         );
-    if (!mounted) return;
-
     switch (outcome) {
-      // See pending_invite_tile: a skipped duplicate submit surfaces nothing.
-      case EmployeeSaveBusy():
-        break;
       case EmployeeAccountCreated(:final credentials):
-        // Fires before the credentials dialog: the account exists at this
-        // point, and the dialog can be dismissed without changing that.
-        ref.read(analyticsServiceProvider).logEmployeeInvited();
+        // Fires before the dialog: the account exists whether or not it is dismissed.
+        analytics.logEmployeeInvited();
         await showNewAccountDialog(
-          context,
-          name: _firstNameController.text.trim(),
+          // The root navigator outlives this sheet, so its context is safe.
+          // ignore: use_build_context_synchronously
+          navigator.context,
+          name: firstName,
           credentials: credentials,
         );
         if (!mounted) return;
         Navigator.pop(context, true);
+      // A skipped duplicate submit surfaces nothing; an update is unreachable here.
+      case EmployeeSaveBusy():
+      case EmployeeUpdated():
+        break;
       case EmployeeEmailInUse(:final failure):
+        if (!mounted) return;
         setState(() => errors['email'] = failure.toLocalizedMessage(context));
       case EmployeeSaveFailed(:final error):
+        if (!mounted) return;
         ref
             .read(noticeServiceProvider)
             .error(
@@ -177,10 +180,6 @@ class _InvitePersonSheetState extends ConsumerState<InvitePersonSheet> {
                 error: error,
               ),
             );
-      case EmployeeUpdated():
-        // Unreachable from the invite path; the sealed family forces the
-        // branch.
-        break;
     }
   }
 

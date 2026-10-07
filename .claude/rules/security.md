@@ -18,7 +18,8 @@ alwaysApply: true
   every password field here has a Show/Hide toggle** — the instant it is
   tapped the field is plain text at the `true` default. That is exactly how
   `AuthPasswordField` (both P4c setup fields ride it) and both
-  `DeleteAccountReauthDialog` variants shipped without it. Set the flag
+  `PasswordReauthDialog` variants (then `DeleteAccountReauthDialog`) shipped
+  without it. Set the flag
   unconditionally, beside `obscureText`, and pass
   `kCredentialImePersonalizedLearning`
   (`lib/core/security/credential_input.dart`) rather than a bare `false` — the

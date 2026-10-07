@@ -4,6 +4,8 @@ const {
   extractAllowlists,
   removedKeys,
   compareTrees,
+  gitTrees,
+  main,
 } = require("../scripts/deploy/allowlist_diff");
 
 const BASE = `
@@ -114,5 +116,41 @@ describe("compareTrees", () => {
         files({"a.js": BASE}),
         files({"a.js": "function f(r) { assertAdminCall(r, X); }"})))
         .toThrow(/a\.js/);
+  });
+});
+
+describe("gitTrees and main against a fake git", () => {
+  /**
+   * A git runner whose `show` fails for every file.
+   * @param {!Array<string>} listed Files `ls-tree` reports at the base.
+   * @return {function(!Array<string>): string} The runner.
+   */
+  function brokenShow(listed) {
+    return (args) => {
+      if (args[0] === "ls-tree") return listed.join("\n") + "\n";
+      if (args[0] === "ls-files") return "";
+      if (args[0] === "show") throw new Error("fatal: bad object");
+      return "";
+    };
+  }
+
+  test("a file absent from the base listing reads as null", () => {
+    expect(gitTrees("abc1234", brokenShow(["a.js"])).base.read("b.js"))
+        .toBeNull();
+  });
+
+  test("a listed base file git cannot show throws", () => {
+    expect(() => gitTrees("abc1234", brokenShow(["a.js"])).base.read("a.js"))
+        .toThrow(/bad object/);
+  });
+
+  test("main exits 1 when git fails on a listed file", () => {
+    const spy = jest.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(main(["abc1234"], brokenShow(["a.js"]))).toBe(1);
+      expect(spy.mock.calls.join("\n")).toMatch(/could not run/);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

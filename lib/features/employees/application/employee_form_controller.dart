@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:scheduling/core/logging/app_logger.dart';
+import 'package:scheduling/features/auth/domain/auth_failure.dart';
+import 'package:scheduling/features/auth/services/account_deletion_service.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/employees_failure.dart';
 import 'package:scheduling/features/employees/domain/employees_repository.dart';
@@ -351,14 +353,25 @@ class EmployeeFormController extends Notifier<EmployeeFormActivity> {
   }
 
   /// Issues a temporary password for an active person and forces a change at next sign-in.
-  Future<PasswordResetOutcome> resetPassword(String docId) async {
+  ///
+  /// Re-authenticates the ADMIN with [password] first; the callable refuses a
+  /// stale `auth_time`, so the order is what lets it through.
+  Future<PasswordResetOutcome> resetPassword(
+    String docId, {
+    required String password,
+  }) async {
     if (state.isResettingPassword) return const PasswordResetBusy();
     // Resolved before the first await — see _save.
     final repo = ref.read(employeesRepositoryProvider);
+    final reauth = ref.read(accountDeletionServiceProvider);
     final logger = ref.read(loggerProvider);
     state = state.copyWith(isResettingPassword: true);
     try {
+      await reauth.reauthenticateWithPassword(password);
       return PasswordResetIssued(await repo.resetEmployeePassword(docId));
+    } on AuthFailure catch (e, st) {
+      logger.authFailure('EMP-RESETPW reauthenticate failed', e, e, st);
+      return PasswordResetFailed(e);
     } catch (e, st) {
       logger.warn('EMP-RESETPW resetEmployeePassword failed', e, st);
       return PasswordResetFailed(e);

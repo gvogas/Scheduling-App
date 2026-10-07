@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/features/auth/domain/auth_failure.dart';
+import 'package:scheduling/features/auth/services/account_deletion_service.dart';
 import 'package:scheduling/features/employees/application/employee_form_controller.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/employees_failure.dart';
@@ -15,8 +17,11 @@ import 'package:scheduling/features/employees/domain/models/new_account_credenti
 
 class _MockEmployeesRepo extends Mock implements EmployeesRepository {}
 
+class _MockReauth extends Mock implements AccountDeletionService {}
+
 void main() {
   late _MockEmployeesRepo repo;
+  late _MockReauth reauth;
   late ProviderContainer container;
 
   setUpAll(() {
@@ -25,8 +30,15 @@ void main() {
 
   setUp(() {
     repo = _MockEmployeesRepo();
+    reauth = _MockReauth();
+    when(
+      () => reauth.reauthenticateWithPassword(any()),
+    ).thenAnswer((_) async {});
     container = ProviderContainer(
-      overrides: [employeesRepositoryProvider.overrideWithValue(repo)],
+      overrides: [
+        employeesRepositoryProvider.overrideWithValue(repo),
+        accountDeletionServiceProvider.overrideWithValue(reauth),
+      ],
     );
     addTearDown(container.dispose);
   });
@@ -186,19 +198,24 @@ void main() {
       },
     );
 
-    test('a concurrent delete for the SAME pending account returns Busy', () async {
-      final gate = Completer<void>();
-      when(() => repo.deleteEmployeeAccount('a')).thenAnswer((_) => gate.future);
+    test(
+      'a concurrent delete for the SAME pending account returns Busy',
+      () async {
+        final gate = Completer<void>();
+        when(
+          () => repo.deleteEmployeeAccount('a'),
+        ).thenAnswer((_) => gate.future);
 
-      final first = notifier().deleteAccount('a');
-      final second = await notifier().deleteAccount('a');
+        final first = notifier().deleteAccount('a');
+        final second = await notifier().deleteAccount('a');
 
-      expect(second, isA<AccountDeleteBusy>());
+        expect(second, isA<AccountDeleteBusy>());
 
-      gate.complete();
-      expect(await first, isA<AccountDeleted>());
-      verify(() => repo.deleteEmployeeAccount('a')).called(1);
-    });
+        gate.complete();
+        expect(await first, isA<AccountDeleted>());
+        verify(() => repo.deleteEmployeeAccount('a')).called(1);
+      },
+    );
   });
 
   group('createAccount', () {
@@ -230,45 +247,48 @@ void main() {
       expect(activity().isSaving, isFalse);
     });
 
-    test('recomposes name from first and last before creating the account', () async {
-      when(
-        () => repo.createEmployeeAccount(
-          name: any(named: 'name'),
-          firstName: any(named: 'firstName'),
-          lastName: any(named: 'lastName'),
-          email: any(named: 'email'),
-          phone: any(named: 'phone'),
-          colorValue: any(named: 'colorValue'),
-          jobTitle: any(named: 'jobTitle'),
-        ),
-      ).thenAnswer(
-        (_) async => const NewAccountCredentials(
-          email: 'alex@test.com',
-          password: 'Welcome123!',
-        ),
-      );
+    test(
+      'recomposes name from first and last before creating the account',
+      () async {
+        when(
+          () => repo.createEmployeeAccount(
+            name: any(named: 'name'),
+            firstName: any(named: 'firstName'),
+            lastName: any(named: 'lastName'),
+            email: any(named: 'email'),
+            phone: any(named: 'phone'),
+            colorValue: any(named: 'colorValue'),
+            jobTitle: any(named: 'jobTitle'),
+          ),
+        ).thenAnswer(
+          (_) async => const NewAccountCredentials(
+            email: 'alex@test.com',
+            password: 'Welcome123!',
+          ),
+        );
 
-      await notifier().createAccount(
-        const EmployeeRecord(
-          id: '',
-          firstName: 'Amy',
-          lastName: 'Adams',
-          email: 'amy@test.com',
-        ),
-      );
+        await notifier().createAccount(
+          const EmployeeRecord(
+            id: '',
+            firstName: 'Amy',
+            lastName: 'Adams',
+            email: 'amy@test.com',
+          ),
+        );
 
-      verify(
-        () => repo.createEmployeeAccount(
-          name: 'Amy Adams',
-          firstName: 'Amy',
-          lastName: 'Adams',
-          email: 'amy@test.com',
-          phone: '',
-          colorValue: any(named: 'colorValue'),
-          jobTitle: any(named: 'jobTitle'),
-        ),
-      ).called(1);
-    });
+        verify(
+          () => repo.createEmployeeAccount(
+            name: 'Amy Adams',
+            firstName: 'Amy',
+            lastName: 'Adams',
+            email: 'amy@test.com',
+            phone: '',
+            colorValue: any(named: 'colorValue'),
+            jobTitle: any(named: 'jobTitle'),
+          ),
+        ).called(1);
+      },
+    );
 
     test('surfaces a taken email as a field-level outcome', () async {
       when(
@@ -339,23 +359,28 @@ void main() {
   });
 
   group('setEmployeeStatus', () {
-    test('a concurrent status toggle returns Busy, not a duplicate write', () async {
-      final gate = Completer<void>();
-      when(() => repo.deactivateEmployee('e1')).thenAnswer((_) => gate.future);
+    test(
+      'a concurrent status toggle returns Busy, not a duplicate write',
+      () async {
+        final gate = Completer<void>();
+        when(
+          () => repo.deactivateEmployee('e1'),
+        ).thenAnswer((_) => gate.future);
 
-      final first = notifier().setEmployeeStatus(docId: 'e1', disable: true);
-      final second = await notifier().setEmployeeStatus(
-        docId: 'e1',
-        disable: true,
-      );
+        final first = notifier().setEmployeeStatus(docId: 'e1', disable: true);
+        final second = await notifier().setEmployeeStatus(
+          docId: 'e1',
+          disable: true,
+        );
 
-      expect(second, isA<EmployeeStatusBusy>());
+        expect(second, isA<EmployeeStatusBusy>());
 
-      gate.complete();
-      expect(await first, isA<EmployeeStatusChanged>());
-      verify(() => repo.deactivateEmployee('e1')).called(1);
-      expect(activity().isTogglingStatus, isFalse);
-    });
+        gate.complete();
+        expect(await first, isA<EmployeeStatusChanged>());
+        verify(() => repo.deactivateEmployee('e1')).called(1);
+        expect(activity().isTogglingStatus, isFalse);
+      },
+    );
 
     test('disables via deactivateEmployee', () async {
       when(() => repo.deactivateEmployee(any())).thenAnswer((_) async {});
@@ -441,7 +466,7 @@ void main() {
         () => repo.resetEmployeePassword('e1'),
       ).thenAnswer((_) async => issued);
 
-      final outcome = await notifier().resetPassword('e1');
+      final outcome = await notifier().resetPassword('e1', password: 'pw');
 
       expect(
         outcome,
@@ -458,7 +483,7 @@ void main() {
       final error = Exception('boom');
       when(() => repo.resetEmployeePassword('e1')).thenThrow(error);
 
-      final outcome = await notifier().resetPassword('e1');
+      final outcome = await notifier().resetPassword('e1', password: 'pw');
 
       expect(
         outcome,
@@ -473,13 +498,65 @@ void main() {
         () => repo.resetEmployeePassword('e1'),
       ).thenAnswer((_) => gate.future);
 
-      final first = notifier().resetPassword('e1');
+      final first = notifier().resetPassword('e1', password: 'pw');
       expect(activity().isResettingPassword, isTrue);
-      expect(await notifier().resetPassword('e1'), isA<PasswordResetBusy>());
+      expect(
+        await notifier().resetPassword('e1', password: 'pw'),
+        isA<PasswordResetBusy>(),
+      );
 
       gate.complete(issued);
       expect(await first, isA<PasswordResetIssued>());
       verify(() => repo.resetEmployeePassword('e1')).called(1);
+    });
+
+    test('re-authenticates the admin BEFORE calling the server', () async {
+      when(
+        () => repo.resetEmployeePassword('e1'),
+      ).thenAnswer((_) async => issued);
+
+      await notifier().resetPassword('e1', password: 'admin-pw');
+
+      verifyInOrder([
+        () => reauth.reauthenticateWithPassword('admin-pw'),
+        () => repo.resetEmployeePassword('e1'),
+      ]);
+    });
+
+    test('a refused re-auth never reaches the server', () async {
+      when(
+        () => reauth.reauthenticateWithPassword(any()),
+      ).thenThrow(const AuthFailureWrongCredentials());
+
+      final outcome = await notifier().resetPassword('e1', password: 'wrong');
+
+      expect(
+        outcome,
+        isA<PasswordResetFailed>().having(
+          (o) => o.error,
+          'error',
+          isA<AuthFailureWrongCredentials>(),
+        ),
+      );
+      verifyNever(() => repo.resetEmployeePassword(any()));
+      expect(activity().isResettingPassword, isFalse);
+    });
+
+    test('an admin-target refusal surfaces as its typed failure', () async {
+      when(
+        () => repo.resetEmployeePassword('e1'),
+      ).thenThrow(const EmployeesFailureTargetIsAdmin());
+
+      final outcome = await notifier().resetPassword('e1', password: 'pw');
+
+      expect(
+        outcome,
+        isA<PasswordResetFailed>().having(
+          (o) => o.error,
+          'error',
+          isA<EmployeesFailureTargetIsAdmin>(),
+        ),
+      );
     });
   });
 }

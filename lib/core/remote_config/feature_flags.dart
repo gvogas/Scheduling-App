@@ -14,16 +14,21 @@ class FeatureFlags {
 
   /// A static value (no remote, no default) takes the code default, not false.
   factory FeatureFlags.fromValues(Map<String, RemoteConfigValue> values) {
-    bool readBool(String key, {required bool fallback}) {
+    String? raw(String key) {
       final v = values[key];
-      if (v == null || v.source == ValueSource.valueStatic) return fallback;
-      return v.asBool();
+      return v == null || v.source == ValueSource.valueStatic
+          ? null
+          : v.asString();
+    }
+
+    bool readBool(String key, {required bool fallback}) {
+      final r = raw(key);
+      return r == null ? fallback : parseBool(r, fallback: fallback);
     }
 
     int readInt(String key, int fallback) {
-      final v = values[key];
-      if (v == null || v.source == ValueSource.valueStatic) return fallback;
-      return v.asInt();
+      final r = raw(key);
+      return r == null ? fallback : parseInt(r, fallback: fallback);
     }
 
     return FeatureFlags(
@@ -43,6 +48,24 @@ class FeatureFlags {
       ),
     );
   }
+
+  /// Only `true`/`false` (any case, trimmed) count; anything else fails OPEN to [fallback].
+  static bool parseBool(String raw, {required bool fallback}) =>
+      switch (raw.trim().toLowerCase()) {
+        'true' => true,
+        'false' => false,
+        _ => fallback,
+      };
+
+  /// Only a plain (optionally signed) integer counts; anything else takes [fallback].
+  static int parseInt(String raw, {required int fallback}) {
+    final trimmed = raw.trim();
+    return _integer.hasMatch(trimmed)
+        ? int.tryParse(trimmed) ?? fallback
+        : fallback;
+  }
+
+  static final _integer = RegExp(r'^[+-]?\d+$');
 
   static const defaults = FeatureFlags(
     addressAutocomplete: true,

@@ -1,15 +1,21 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:scheduling/core/remote_config/feature_flags.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/features/maps/application/maps_providers.dart';
 import 'package:scheduling/features/maps/domain/maps_failure.dart';
 import 'package:scheduling/features/maps/domain/places_repository.dart';
 
 /// Counts lookups so a test can tell a cached answer from a fresh billed call.
 class _CountingPlaces implements PlacesRepository {
-  _CountingPlaces({this.fail = false});
+  _CountingPlaces({
+    this.fail = false,
+    this.failure = const MapsFailureRateLimit(),
+  });
 
   bool fail;
+  MapsFailure failure;
   int calls = 0;
 
   @override
@@ -19,13 +25,24 @@ class _CountingPlaces implements PlacesRepository {
     required String locale,
   }) async {
     calls += 1;
-    if (fail) throw const MapsFailureRateLimit();
+    if (fail) throw failure;
     return '1234 Rue Principale, Laval, QC';
   }
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
+
+/// Lets a test flip the kill switch mid-session.
+class _Flags extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  bool get enabled => state;
+  set enabled(bool value) => state = value;
+}
+
+final _addrEnabled = NotifierProvider<_Flags, bool>(_Flags.new);
 
 void main() {
   final key = ReverseGeocodeQuery(lat: 45.5017, lng: -73.5673, locale: 'en');
@@ -95,6 +112,42 @@ void main() {
     expect(places.calls, 1);
   });
 
+  test(
+    'a server pause resolves to null and is held for the cooldown',
+    () async {
+      // A server-only pause outlives the client flag; without the hold every
+      // recycled roster row re-called a callable that refuses again.
+      final places = _CountingPlaces(
+        fail: true,
+        failure: const MapsFailurePaused(),
+      );
+      final container = ProviderContainer(
+        overrides: [placesRepositoryProvider.overrideWithValue(places)],
+        retry: (retryCount, error) => null,
+      );
+      addTearDown(container.dispose);
+
+      final sub = container.listen(
+        reverseGeocodeProvider(key),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      while (container.read(reverseGeocodeProvider(key)).isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final value = container.read(reverseGeocodeProvider(key));
+      expect(value.hasError, isFalse);
+      expect(value.value, isNull);
+      sub.close();
+      await Future<void>.delayed(Duration.zero);
+
+      places.fail = false;
+      await readAndRelease(container);
+      expect(places.calls, 1);
+      expect(container.read(reverseGeocodeProvider(key)).value, isNull);
+    },
+  );
+
   test('the failure is held for the cooldown, then retried', () async {
     final places = _CountingPlaces(fail: true);
     final container = ProviderContainer(
@@ -144,23 +197,76 @@ void main() {
     expect(value.error, isA<MapsFailureRateLimit>());
   });
 
-  test('a coarse key merges fixes ~250 m apart that the default key splits', () {
-    ReverseGeocodeQuery q(double lat, {int decimals = 3}) => ReverseGeocodeQuery(
-      lat: lat,
-      lng: -73.5673,
-      locale: 'en',
-      decimals: decimals,
-    );
+  test(
+    'a coarse key merges fixes ~250 m apart that the default key splits',
+    () {
+      ReverseGeocodeQuery q(double lat, {int decimals = 3}) =>
+          ReverseGeocodeQuery(
+            lat: lat,
+            lng: -73.5673,
+            locale: 'en',
+            decimals: decimals,
+          );
 
-    expect(q(45.5017), isNot(q(45.5042)));
-    expect(
-      q(45.5017, decimals: kCoarseGeocodePrecision),
-      q(45.5042, decimals: kCoarseGeocodePrecision),
-    );
-    expect(
-      q(45.5017, decimals: kCoarseGeocodePrecision).hashCode,
-      q(45.5042, decimals: kCoarseGeocodePrecision).hashCode,
-    );
-    expect(q(45.5017, decimals: kCoarseGeocodePrecision).lat, 45.5);
-  });
+      expect(q(45.5017), isNot(q(45.5042)));
+      expect(
+        q(45.5017, decimals: kCoarseGeocodePrecision),
+        q(45.5042, decimals: kCoarseGeocodePrecision),
+      );
+      expect(
+        q(45.5017, decimals: kCoarseGeocodePrecision).hashCode,
+        q(45.5042, decimals: kCoarseGeocodePrecision).hashCode,
+      );
+      expect(q(45.5017, decimals: kCoarseGeocodePrecision).lat, 45.5);
+    },
+  );
+
+  test(
+    'paused: no lookup is made, and a re-enable resolves the cell',
+    () async {
+      final places = _CountingPlaces();
+      final container = ProviderContainer(
+        overrides: [
+          placesRepositoryProvider.overrideWithValue(places),
+          featureFlagsProvider.overrideWith(
+            (ref) => FeatureFlags(
+              addressAutocomplete: ref.watch(_addrEnabled),
+              presence: true,
+              liveActivities: true,
+              waveSync: true,
+              minSupportedBuild: 0,
+            ),
+          ),
+        ],
+        retry: (retryCount, error) => null,
+      );
+      addTearDown(container.dispose);
+
+      final sub = container.listen(
+        reverseGeocodeProvider(key),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(sub.close);
+      Future<void> settle() async {
+        while (container.read(reverseGeocodeProvider(key)).isLoading) {
+          await Future<void>.delayed(Duration.zero);
+        }
+      }
+
+      await settle();
+      final paused = container.read(reverseGeocodeProvider(key));
+      expect(paused.value, isNull);
+      expect(paused.hasError, isFalse);
+      expect(places.calls, 0);
+
+      container.read(_addrEnabled.notifier).enabled = true;
+      await settle();
+      expect(
+        container.read(reverseGeocodeProvider(key)).value,
+        '1234 Rue Principale, Laval, QC',
+      );
+      expect(places.calls, 1);
+    },
+  );
 }

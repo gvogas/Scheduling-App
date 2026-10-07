@@ -158,7 +158,7 @@ alwaysApply: true
 
   **Log-only tags** — no notice intro, so no ARB key. Everything else:
 
-  - App shell / lifecycle: `ACCOUNT-EXIT`, `APP-SYNC`, `CARPLAY`, `DEEP-LINK`,
+  - App shell / lifecycle: `ACCOUNT-EXIT`, `ANALYTICS`, `APP-SYNC`, `CARPLAY`, `DEEP-LINK`,
     `FLAGS`, `NOTICE`, `SETTINGS`, `SPLASH`, `TOUR`, `ONBOARD-GATE`
   - Auth / account: `AUTH-SETUP`, `AUTH-SIGNIN`, `AUTH-PREFILL`, `AUTH-RESET`,
     `AUTH-CHANGEPW`
@@ -186,7 +186,10 @@ alwaysApply: true
     `MAPS-KEY` (`main.dart`'s `_provideIosMapsApiKey`, which is one of the very
     few sites that logs through a bare `AppLogger()` rather than
     `loggerProvider` — it runs before `runApp`, so there is no container yet),
-    `LAUNCH-TEL`, `LAUNCH-EMAIL`, `LAUNCH-MAPS`, `LAUNCH-URL`
+    `LAUNCH-TEL`, `LAUNCH-EMAIL`, `LAUNCH-MAPS`, `LAUNCH-URL`. A typed
+    Places failure is logged ONCE, by the repository under `ADDR-PLACES`
+    (a paused one as a breadcrumb); the field's `ADDR-AUTO`/`ADDR-DETAILS`
+    fire only for an untyped error.
   - Devices / delivery: `FCM`, `PUSH`, `PUSH-TAP`, `LIVE-ACT`, `WIDGET`,
     `WIDGET-TAP`, `SIRI`
   - OS permissions: `PERM-LOCATION`, `PERM-MEDIA`
@@ -198,7 +201,10 @@ alwaysApply: true
     `WAVE-SCHED` and `WAVE-SCHEDULE` are GONE from the app with the import
     cadence (2026-09-13). The Settings-layer three are the
     `WaveNetwork().toLocalizedMessage` carve-out from `composeErrorNotice`, so
-    they surface a message without an `error_intro*` key.
+    they surface a message without an `error_intro*` key. A typed
+    `WaveFailure` is logged ONCE, by `wave_service.dart` (a paused one as a
+    breadcrumb); the Settings-layer three fire only as `(unexpected)` for an
+    untyped error.
 - **A user-visible failure notice is not a substitute for a log.** A `catch` that
   only pushes a notice (or only returns `false`) is invisible in Crashlytics —
   every swallowed failure needs a `warn` beside it. The sanctioned exceptions are

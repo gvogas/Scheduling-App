@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -148,6 +150,74 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('dismissing the sheet mid-create still shows the password', (
+    tester,
+  ) async {
+    final pending = Completer<NewAccountCredentials>();
+    when(
+      () => repo.createEmployeeAccount(
+        name: any(named: 'name'),
+        firstName: any(named: 'firstName'),
+        lastName: any(named: 'lastName'),
+        email: any(named: 'email'),
+        phone: any(named: 'phone'),
+        colorValue: any(named: 'colorValue'),
+        jobTitle: any(named: 'jobTitle'),
+      ),
+    ).thenAnswer((_) => pending.future);
+    useTallViewport(tester);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          employeesRepositoryProvider.overrideWithValue(repo),
+          isOfflineProvider.overrideWithValue(false),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: lightTheme(),
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: TextButton(
+                onPressed: () => showModalBottomSheet<void>(
+                  context: context,
+                  isScrollControlled: true,
+                  builder: (_) => const InvitePersonSheet(),
+                ),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await fillRequired(tester);
+    await tester.tap(find.text('Send Invite'));
+    await tester.pump();
+
+    // A drag-dismiss pops the route directly, which PopScope cannot veto.
+    Navigator.of(tester.element(find.byType(InvitePersonSheet))).pop();
+    await tester.pumpAndSettle();
+    expect(find.byType(InvitePersonSheet), findsNothing);
+
+    pending.complete(
+      const NewAccountCredentials(
+        email: 'theo@x.com',
+        password: 'Tmp2pass!wd9',
+      ),
+    );
+    // Fixed-duration pump: the dialog's SelectableText cursor never settles.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    expect(find.text('theo@x.com'), findsOneWidget);
+    expect(find.text('Tmp2pass!wd9'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('an email already in use becomes a field error, not a notice', (
     tester,
   ) async {
@@ -211,10 +281,7 @@ void main() {
 
     // Wording follows P4c: the admin hands over a starting password, there is
     // no signup code to "sign up with" any more.
-    expect(
-      find.textContaining('starting password'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('starting password'), findsOneWidget);
   });
 
   testWidgets('survives 260x640 at 2.0 text scale', (tester) async {

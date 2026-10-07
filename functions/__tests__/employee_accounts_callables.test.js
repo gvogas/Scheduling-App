@@ -960,7 +960,12 @@ describe("resetEmployeePassword", () => {
     [EMP]: {status: "active", uid: "emp-uid", email: "ada@example.com"},
     "admin-doc": {status: "active", uid: "admin-uid", role: "admin"},
   });
-  const run = (data) => resetEmployeePassword.run({data, auth: ADMIN});
+  // The reset demands a fresh re-auth, so the admin carries an auth_time.
+  const freshAdmin = () => ({
+    ...ADMIN, token: {auth_time: Math.floor(Date.now() / 1000)},
+  });
+  const run = (data, auth = freshAdmin()) =>
+    resetEmployeePassword.run({data, auth});
 
   beforeEach(() => {
     security.assertAdmin.mockResolvedValue(undefined);
@@ -976,9 +981,109 @@ describe("resetEmployeePassword", () => {
     await run({docId: EMP});
 
     expect(security.assertAdminCall).toHaveBeenCalledWith(
-        expect.objectContaining({auth: ADMIN}), new Set(["docId"]));
+        expect.objectContaining({auth: expect.objectContaining(ADMIN)}),
+        new Set(["docId"]));
     expect(security.assertAdmin).toHaveBeenCalledWith(ADMIN.uid);
   });
+
+  test("a stale re-auth resets nothing and burns no rate-limit slot",
+      async () => {
+        const trace = [];
+        const docs = staff();
+        getFirestore.mockReturnValue(makeDb(docs, trace));
+        getAuth.mockReturnValue(makeAuth(trace));
+
+        await expect(run({docId: EMP}, {
+          ...ADMIN, token: {auth_time: Math.floor(Date.now() / 1000) - 600},
+        })).rejects.toThrow(/stale-auth/);
+
+        expect(trace).toEqual([]);
+        expect(docs[EMP].passwordResetRequired).toBeUndefined();
+        expect(security.enforceDurableRateLimit).not.toHaveBeenCalled();
+      });
+
+  test.each([
+    ["no token", {uid: "admin-uid"}],
+    ["no auth_time claim", {uid: "admin-uid", token: {}}],
+  ])("fails closed with %s", async (_label, auth) => {
+    const trace = [];
+    getFirestore.mockReturnValue(makeDb(staff(), trace));
+    getAuth.mockReturnValue(makeAuth(trace));
+
+    await expect(run({docId: EMP}, auth)).rejects.toThrow(/stale-auth/);
+
+    expect(trace).toEqual([]);
+    expect(security.enforceDurableRateLimit).not.toHaveBeenCalled();
+  });
+
+  test("a malformed payload is refused before the re-auth check", async () => {
+    getFirestore.mockReturnValue(makeDb(staff(), []));
+    getAuth.mockReturnValue(makeAuth([]));
+
+    await expect(run({docId: EMP, evil: 1}, {uid: "admin-uid"}))
+        .rejects.toThrow(/unexpected-field/);
+  });
+
+  test("refuses an admin target", async () => {
+    const trace = [];
+    const docs = {
+      ...staff(),
+      "boss-doc": {status: "active", uid: "boss-uid", role: "admin"},
+    };
+    const auth = makeAuth(trace);
+    getFirestore.mockReturnValue(makeDb(docs, trace));
+    getAuth.mockReturnValue(auth);
+
+    await expect(run({docId: "boss-doc"})).rejects.toMatchObject({
+      code: "failed-precondition", message: "target-is-admin",
+    });
+    expect(trace).toEqual([]);
+    expect(auth.updateUser).not.toHaveBeenCalled();
+    expect(docs["boss-doc"].passwordResetRequired).toBeUndefined();
+  });
+
+  test("an employee target is still reset", async () => {
+    const docs = staff();
+    docs[EMP].role = "employee";
+    const auth = makeAuth([]);
+    getFirestore.mockReturnValue(makeDb(docs, []));
+    getAuth.mockReturnValue(auth);
+
+    await run({docId: EMP});
+
+    expect(auth.updateUser).toHaveBeenCalledWith(
+        "emp-uid", {password: expect.any(String)});
+    expect(docs[EMP].passwordResetRequired).toBe(true);
+  });
+
+  test("a promotion committing first is refused in the transaction",
+      async () => {
+        const trace = [];
+        const docs = staff();
+        const db = makeDb(docs, trace);
+        const auth = makeAuth(trace);
+        const collection = db.collection;
+        db.collection = (name) => {
+          const col = collection(name);
+          if (name !== "users") return col;
+          return {...col, doc: (id) => ({
+            ...col.doc(id),
+            get: async () => {
+              const before = {...docs[id]};
+              docs[id] = {...docs[id], role: "admin"};
+              return {id, exists: true, data: () => before, ref: {id}};
+            },
+          })};
+        };
+        getFirestore.mockReturnValue(db);
+        getAuth.mockReturnValue(auth);
+
+        await expect(run({docId: EMP})).rejects.toMatchObject({
+          code: "failed-precondition", message: "target-is-admin",
+        });
+        expect(auth.updateUser).not.toHaveBeenCalled();
+        expect(docs[EMP].passwordResetRequired).toBeUndefined();
+      });
 
   // Mutation check: delete the assertAdminCall line and this fails.
   test("a non-admin resets nothing and burns no rate-limit slot", async () => {

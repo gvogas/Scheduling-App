@@ -35,11 +35,18 @@ self-service settings. Root context: `../../CLAUDE.md`.
 
 - **Admin password reset for an ACTIVE account** (2026-09-29). Employee emails are not
   real inboxes, so Forgot password can never reach anyone. Reset password in the
-  account footer of `edit_person_sheet.dart` (shown only for an `active` doc with
-  a `uid` that is NOT the signed-in admin; hidden while that uid is unknown) goes
-  through `EmployeeFormController.resetPassword` (sealed `PasswordResetIssued` /
-  `Failed` / `Busy`) to `resetEmployeePassword`, which refuses self and non-active,
-  then under `accountOperations/{uid}` (`password-reset`) re-checks `active` + the
+  account footer of `edit_person_sheet.dart` (shown only for an `active`,
+  non-admin doc with a `uid` that is NOT the signed-in admin; hidden while that
+  uid is unknown) goes through `EmployeeFormController.resetPassword` (sealed
+  `PasswordResetIssued` / `Failed` / `Busy`) to `resetEmployeePassword`.
+  **The admin re-enters their OWN password first** (S1, owner call 2026-10-07):
+  the confirm is a `PasswordReauthDialog` (`showPasswordReauthDialog`) with reset copy, the controller
+  re-authenticates through `AccountDeletionService.reauthenticateWithPassword`
+  BEFORE the callable, and the server restates it with `assertFreshReauth`
+  (`stale-auth` → `EmployeesFailureReauthRequired`). The server refuses self,
+  non-active and **any admin target** (`target-is-admin` →
+  `EmployeesFailureTargetIsAdmin`, re-checked in the transaction so a concurrent
+  promotion cannot slip through). It then under `accountOperations/{uid}` (`password-reset`) re-checks `active` + the
   same `uid` in a transaction and writes the server-owned
   **`passwordResetRequired: true`** FIRST, then sets a
   `generateStartingPassword()` value, then `revokeRefreshTokens`. The order is

@@ -109,9 +109,7 @@ bool shouldTrackPresence({
   required String status,
   required bool signedIn,
   required bool locationSharingEnabled,
-  bool featureEnabled = true,
 }) =>
-    featureEnabled &&
     locationSharingEnabled &&
     shouldRegisterPush(role: role, status: status, signedIn: signedIn);
 
@@ -171,24 +169,16 @@ class PresenceSyncController with ReentrantSync {
       if (gate == null) return;
       final featureOn = _ref.read(featureFlagsProvider).presence;
       if (featureOn) _pauseCleared = false;
-      if (!shouldTrackPresence(
+      final eligible = shouldTrackPresence(
         role: gate.role,
         status: gate.status,
         signedIn: gate.signedIn,
         locationSharingEnabled: gate.locationSharingEnabled,
-        featureEnabled: featureOn,
-      )) {
+      );
+      if (!eligible || !featureOn) {
         final knownDocId = _docId;
         _stop();
-        final pausedOnly =
-            !featureOn &&
-            shouldTrackPresence(
-              role: gate.role,
-              status: gate.status,
-              signedIn: gate.signedIn,
-              locationSharingEnabled: gate.locationSharingEnabled,
-            );
-        if (pausedOnly && !_pauseCleared) {
+        if (eligible && !_pauseCleared) {
           await _clearPausedFix(knownDocId, generation);
         }
         return;

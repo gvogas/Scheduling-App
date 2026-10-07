@@ -28,6 +28,24 @@ class EmployeesFailureAccountNoLongerPending extends EmployeesFailure {
       context.l10n.error_thatAccountIsNoLongerPending;
 }
 
+/// `resetEmployeePassword` refused because the target holds the admin role.
+class EmployeesFailureTargetIsAdmin extends EmployeesFailure {
+  const EmployeesFailureTargetIsAdmin();
+
+  @override
+  String toLocalizedMessage(BuildContext context) =>
+      context.l10n.employees_resetPasswordAdminRefused;
+}
+
+/// `resetEmployeePassword` refused the caller's re-auth as too old.
+class EmployeesFailureReauthRequired extends EmployeesFailure {
+  const EmployeesFailureReauthRequired();
+
+  @override
+  String toLocalizedMessage(BuildContext context) =>
+      context.l10n.employees_resetPasswordReauthExpired;
+}
+
 class EmployeesFailureUnknown extends EmployeesFailure {
   const EmployeesFailureUnknown();
 

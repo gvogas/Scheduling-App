@@ -1,7 +1,5 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:scheduling/core/adaptive/adaptive.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/app/device_deregistration.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
@@ -14,6 +12,7 @@ import 'package:scheduling/features/settings/widgets/dialogs/delete_account_dial
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
 import 'package:scheduling/shared/widgets/dialogs/confirm_dialog.dart';
+import 'package:scheduling/shared/widgets/dialogs/password_reauth_dialog.dart';
 
 /// The two account-exit flows Settings owns: sign out, and the irreversible
 /// account deletion behind its confirm + re-auth pair.
@@ -128,16 +127,13 @@ mixin DeleteAccountFlow<T extends ConsumerStatefulWidget> on ConsumerState<T> {
       );
       if (!result || !mounted) return;
 
-      // Match the platform presentation of the adaptive confirm dialog shown before this.
-      final password = context.isCupertino
-          ? await showCupertinoDialog<String>(
-              context: context,
-              builder: (dialogContext) => const DeleteAccountReauthDialog(),
-            )
-          : await showDialog<String>(
-              context: context,
-              builder: (dialogContext) => const DeleteAccountReauthDialog(),
-            );
+      final password = await showPasswordReauthDialog(
+        context,
+        title: context.l10n.settings_confirmYourPassword,
+        message: context.l10n.settings_confirmYourPasswordToDelete,
+        confirmLabel: context.l10n.settings_deletePermanently,
+        destructive: true,
+      );
       if (password == null || password.isEmpty || !mounted) return;
 
       await _runDeletion(password);

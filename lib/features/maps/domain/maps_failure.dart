@@ -49,3 +49,12 @@ class MapsFailureInvalidInput extends MapsFailure {
   String toLocalizedMessage(BuildContext context) =>
       context.l10n.error_somethingWentWrong;
 }
+
+/// The server refused because the address kill switch is off.
+class MapsFailurePaused extends MapsFailure {
+  const MapsFailurePaused({super.cause, super.stackTrace});
+
+  @override
+  String toLocalizedMessage(BuildContext context) =>
+      context.l10n.common_featurePaused;
+}

@@ -64,9 +64,7 @@ void main() {
     );
   });
 
-  testWidgets('MapsFailureUnauthorized resolves to retry copy', (
-    tester,
-  ) async {
+  testWidgets('MapsFailureUnauthorized resolves to retry copy', (tester) async {
     final context = await harness(tester);
     const failure = MapsFailureUnauthorized();
     expect(
@@ -86,6 +84,17 @@ void main() {
     );
   });
 
+  testWidgets('MapsFailurePaused resolves to the feature-paused copy', (
+    tester,
+  ) async {
+    final context = await harness(tester);
+    const failure = MapsFailurePaused();
+    expect(
+      failure.toLocalizedMessage(context),
+      AppLocalizations.of(context).common_featurePaused,
+    );
+  });
+
   testWidgets('localized message never leaks the raw cause string', (
     tester,
   ) async {
@@ -98,6 +107,7 @@ void main() {
       MapsFailureRateLimit(cause: sentinel),
       MapsFailureUnauthorized(cause: sentinel),
       MapsFailureInvalidInput(cause: sentinel),
+      MapsFailurePaused(cause: sentinel),
     ];
     for (final f in failures) {
       expect(

@@ -16,8 +16,10 @@ describe("FLAG_DEFAULTS", () => {
 describe("readFlags", () => {
   test("reads booleans and the number through the evaluated config", () => {
     const config = {
-      getBoolean: (k) => k !== "feature_wave_sync",
-      getNumber: () => 93,
+      getString: (k) => ({
+        feature_wave_sync: "false",
+        min_supported_build: "93",
+      })[k] ?? "true",
     };
     expect(readFlags(config)).toEqual({
       feature_address_autocomplete: true,
@@ -28,9 +30,13 @@ describe("readFlags", () => {
     });
   });
 
-  test("a non-finite build number falls back to 0", () => {
-    const config = {getBoolean: () => true, getNumber: () => NaN};
-    expect(readFlags(config).min_supported_build).toBe(0);
+  test("a malformed publish fails OPEN: every feature on, build 0", () => {
+    const config = {getString: () => "yes"};
+    expect(readFlags(config)).toEqual(FLAG_DEFAULTS);
+  });
+
+  test("a static (absent) value takes the code default", () => {
+    expect(readFlags({getString: () => ""})).toEqual(FLAG_DEFAULTS);
   });
 });
 

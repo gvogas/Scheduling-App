@@ -5,6 +5,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:scheduling/core/remote_config/feature_flags.dart';
 import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/features/maps/application/maps_providers.dart';
+import 'package:scheduling/features/maps/domain/models/address_suggestion.dart';
 import 'package:scheduling/features/maps/domain/places_repository.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/fields/address_autocomplete_field.dart';
@@ -44,6 +45,55 @@ Future<void> _pump(
   ),
 );
 
+/// Lets a test flip the kill switch while suggestions are on screen.
+class _AddrFlag extends Notifier<bool> {
+  @override
+  bool build() => true;
+
+  bool get enabled => state;
+  set enabled(bool value) => state = value;
+}
+
+final _addrEnabled = NotifierProvider<_AddrFlag, bool>(_AddrFlag.new);
+
+/// Enabled, with one suggestion shown for '123 Main'; returns the container.
+Future<ProviderContainer> _pumpWithSuggestion(
+  WidgetTester tester,
+  PlacesRepository places,
+  TextEditingController controller,
+) async {
+  when(
+    () => places.autocomplete(any(), sessionToken: any(named: 'sessionToken')),
+  ).thenAnswer(
+    (_) async => [
+      const AddressSuggestion(placeId: 'p1', description: '123 Main St, Laval'),
+    ],
+  );
+  final container = ProviderContainer(
+    overrides: [
+      placesRepositoryProvider.overrideWithValue(places),
+      featureFlagsProvider.overrideWith(
+        (ref) => _flags(addr: ref.watch(_addrEnabled)),
+      ),
+    ],
+  );
+  addTearDown(container.dispose);
+  await tester.pumpWidget(
+    UncontrolledProviderScope(
+      container: container,
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(body: AddressAutocompleteField(controller: controller)),
+      ),
+    ),
+  );
+  await tester.enterText(find.byType(TextField), '123 Main');
+  await tester.pump(const Duration(seconds: 2));
+  expect(find.text('123 Main St, Laval'), findsOneWidget);
+  return container;
+}
+
 void main() {
   testWidgets('paused: typing never calls Places, and the text still lands', (
     tester,
@@ -76,6 +126,71 @@ void main() {
       () =>
           places.autocomplete(any(), sessionToken: any(named: 'sessionToken')),
     ).called(1);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pausing clears suggestions already on screen', (tester) async {
+    final places = _MockPlaces();
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final container = await _pumpWithSuggestion(tester, places, controller);
+
+    container.read(_addrEnabled.notifier).enabled = false;
+    await tester.pump();
+
+    expect(find.text('123 Main St, Laval'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('paused: tapping a stale suggestion never calls getDetails', (
+    tester,
+  ) async {
+    final places = _MockPlaces();
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final container = await _pumpWithSuggestion(tester, places, controller);
+
+    // Flipped with no frame pumped, so the row is still there to be tapped.
+    container.read(_addrEnabled.notifier).enabled = false;
+    await tester.tap(find.text('123 Main St, Laval'));
+    await tester.pump();
+
+    verifyNever(
+      () => places.getPlaceDetails(
+        any(),
+        sessionToken: any(named: 'sessionToken'),
+      ),
+    );
+    expect(controller.text, '123 Main St, Laval');
+    expect(find.text('123 Main St, Laval'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a re-enable re-fetches the query typed before the pause', (
+    tester,
+  ) async {
+    final places = _MockPlaces();
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final container = await _pumpWithSuggestion(tester, places, controller);
+
+    container.read(_addrEnabled.notifier).enabled = false;
+    await tester.tap(find.text('123 Main St, Laval'));
+    await tester.pump();
+    container.read(_addrEnabled.notifier).enabled = true;
+    await tester.pump();
+
+    // The first keystroke after a selection is absorbed by `_suppressFetch`.
+    await tester.enterText(find.byType(TextField), '1');
+    await tester.enterText(find.byType(TextField), '123 Main');
+    await tester.pump(const Duration(seconds: 2));
+
+    verify(
+      () => places.autocomplete(
+        '123 Main',
+        sessionToken: any(named: 'sessionToken'),
+      ),
+    ).called(2);
     expect(tester.takeException(), isNull);
   });
 }

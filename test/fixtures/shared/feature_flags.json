@@ -5,5 +5,40 @@
     "feature_live_activities": true,
     "feature_wave_sync": true,
     "min_supported_build": 0
-  }
+  },
+  "boolCases": [
+    {"raw": "true", "default": true, "expect": true},
+    {"raw": "TRUE", "default": false, "expect": true},
+    {"raw": "True", "default": false, "expect": true},
+    {"raw": "false", "default": true, "expect": false},
+    {"raw": "FALSE", "default": true, "expect": false},
+    {"raw": " false ", "default": true, "expect": false},
+    {"raw": "\ttrue\n", "default": false, "expect": true},
+    {"raw": "", "default": true, "expect": true},
+    {"raw": "   ", "default": true, "expect": true},
+    {"raw": "yes", "default": true, "expect": true},
+    {"raw": "no", "default": true, "expect": true},
+    {"raw": "on", "default": true, "expect": true},
+    {"raw": "off", "default": true, "expect": true},
+    {"raw": "1", "default": true, "expect": true},
+    {"raw": "0", "default": true, "expect": true},
+    {"raw": "t", "default": true, "expect": true},
+    {"raw": "flase", "default": true, "expect": true},
+    {"raw": "yes", "default": false, "expect": false},
+    {"raw": "", "default": false, "expect": false}
+  ],
+  "intCases": [
+    {"raw": "93", "default": 0, "expect": 93},
+    {"raw": " 93 ", "default": 0, "expect": 93},
+    {"raw": "0", "default": 0, "expect": 0},
+    {"raw": "+7", "default": 0, "expect": 7},
+    {"raw": "-1", "default": 0, "expect": -1},
+    {"raw": "", "default": 0, "expect": 0},
+    {"raw": "abc", "default": 0, "expect": 0},
+    {"raw": "1.5", "default": 0, "expect": 0},
+    {"raw": "1e3", "default": 0, "expect": 0},
+    {"raw": "0x10", "default": 0, "expect": 0},
+    {"raw": "93 builds", "default": 0, "expect": 0},
+    {"raw": "abc", "default": 5, "expect": 5}
+  ]
 }

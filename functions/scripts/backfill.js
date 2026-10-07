@@ -76,40 +76,13 @@ function assertKnownFlags(argv) {
 }
 
 /**
- * Mirrors every eligible `users` doc into `usersByUid`.
- * @return {!Promise<void>}
+ * Reconciles `usersByUid` against `users`; writes nothing under `dryRun`.
+ * @param {!Object} db Firestore instance.
+ * @param {{dryRun: boolean, pruneOrphans: boolean}} opts The run flags.
+ * @return {!Promise<!Object>} The stats the run prints.
  */
-async function main() {
-  const argv = process.argv.slice(2);
-  assertKnownFlags(argv);
-  const dryRun = argv.includes("--dry-run");
-  const pruneOrphans = argv.includes("--prune-orphans");
+async function reconcileBridges(db, {dryRun, pruneOrphans}) {
   const tag = dryRun ? "[dry-run] " : "";
-
-  // When pointed at the emulator, applicationDefault() is unused. The SDK
-  // picks up FIRESTORE_EMULATOR_HOST automatically and ignores creds.
-  let app;
-  if (process.env.FIRESTORE_EMULATOR_HOST) {
-    app = initializeApp({
-      projectId: process.env.GCLOUD_PROJECT || "schedulingapp-88727",
-    });
-  } else {
-    if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-      console.error(
-          "ERROR: set GOOGLE_APPLICATION_CREDENTIALS to a service-account " +
-          "JSON path (or FIRESTORE_EMULATOR_HOST for the emulator).");
-      process.exit(1);
-    }
-    app = initializeApp({credential: applicationDefault()});
-  }
-
-  // Printed BEFORE the first read. This used to say "Running against PROD
-  // project from service-account creds", which names the credential SOURCE and
-  // not the project — the one thing an operator needs to see before a bulk
-  // write to the collection every rules gate resolves a role through.
-  printTargetBanner(app, {dryRun});
-
-  const db = getFirestore();
   // `batchSize: 1`, deliberately. This repairs the collection every
   // `firestore.rules` gate resolves a role through, so PARTIAL PROGRESS IS
   // STRICTLY BETTER THAN NONE: each row used to commit on its own, and
@@ -218,6 +191,46 @@ async function main() {
 
   await writer.flush();
 
+  return stats;
+}
+
+/**
+ * Mirrors every eligible `users` doc into `usersByUid`.
+ * @return {!Promise<void>}
+ */
+async function main() {
+  const argv = process.argv.slice(2);
+  assertKnownFlags(argv);
+  const dryRun = argv.includes("--dry-run");
+  const pruneOrphans = argv.includes("--prune-orphans");
+  const tag = dryRun ? "[dry-run] " : "";
+
+  // When pointed at the emulator, applicationDefault() is unused. The SDK
+  // picks up FIRESTORE_EMULATOR_HOST automatically and ignores creds.
+  let app;
+  if (process.env.FIRESTORE_EMULATOR_HOST) {
+    app = initializeApp({
+      projectId: process.env.GCLOUD_PROJECT || "schedulingapp-88727",
+    });
+  } else {
+    if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      console.error(
+          "ERROR: set GOOGLE_APPLICATION_CREDENTIALS to a service-account " +
+          "JSON path (or FIRESTORE_EMULATOR_HOST for the emulator).");
+      process.exit(1);
+    }
+    app = initializeApp({credential: applicationDefault()});
+  }
+
+  // Printed BEFORE the first read. This used to say "Running against PROD
+  // project from service-account creds", which names the credential SOURCE and
+  // not the project — the one thing an operator needs to see before a bulk
+  // write to the collection every rules gate resolves a role through.
+  printTargetBanner(app, {dryRun});
+
+  const db = getFirestore();
+  const stats = await reconcileBridges(db, {dryRun, pruneOrphans});
+
   console.log(`\n${tag}Backfill complete:`);
   console.log(JSON.stringify(stats, null, 2));
   if (stats.orphansFound > 0 && !pruneOrphans) {
@@ -238,6 +251,7 @@ if (require.main === module) {
 
 module.exports = {
   assertKnownFlags,
+  reconcileBridges,
   // Re-exported so the script's own surface stays requirable by jest without
   // prod credentials; the bodies live in `../bridge_policy.js`.
   bridgeBody,

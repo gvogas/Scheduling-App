@@ -113,9 +113,6 @@ class _ClientDetailViewState extends ConsumerState<ClientDetailView>
         ClientDetailViewBody(client: client, onBookJob: _bookJob),
         const SizedBox(height: AppSpacing.sp24),
         OutlinedButton.icon(
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 48),
-          ),
           onPressed: busy ? null : () => archiveClient(client),
           icon: Icon(
             client.archived ? Icons.unarchive_outlined : Icons.archive_outlined,
@@ -131,10 +128,7 @@ class _ClientDetailViewState extends ConsumerState<ClientDetailView>
         if (canDeleteClient(client)) ...[
           const SizedBox(height: AppSpacing.sp8),
           OutlinedButton.icon(
-            style: destructiveOutlinedButtonStyle(
-              context,
-              minimumSize: const Size(double.infinity, 48),
-            ),
+            style: destructiveOutlinedButtonStyle(context),
             onPressed: busy ? null : () => confirmDeleteClient(client),
             icon: const Icon(Icons.delete_outline, size: 18),
             label: Text(context.l10n.common_delete),

@@ -19,6 +19,9 @@ class WaveErrorMapper {
     // Match on message first for wave/* semantic codes, then fall back to code.
     final msg = e.message ?? '';
 
+    // `assertFeatureEnabled` (functions/feature_flags.js) refuses this way.
+    if (msg == 'feature-disabled') return const WavePaused();
+
     if (msg == 'wave/token-invalid') return const WaveAuthInvalid();
 
     if (msg == 'wave/rate-limited' || e.code == 'resource-exhausted') {

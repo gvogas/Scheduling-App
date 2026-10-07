@@ -164,12 +164,23 @@ class FirebaseEmployeesRepository implements EmployeesRepository {
 
   @override
   Future<NewAccountCredentials> resetEmployeePassword(String docId) async {
-    final res = await _functions
-        .httpsCallable(
-          'resetEmployeePassword',
-          options: HttpsCallableOptions(timeout: _callableTimeout),
-        )
-        .call<dynamic>({'docId': docId});
+    final HttpsCallableResult<dynamic> res;
+    try {
+      res = await _functions
+          .httpsCallable(
+            'resetEmployeePassword',
+            options: HttpsCallableOptions(timeout: _callableTimeout),
+          )
+          .call<dynamic>({'docId': docId});
+    } on FirebaseFunctionsException catch (e) {
+      if (e.message == 'target-is-admin') {
+        throw const EmployeesFailureTargetIsAdmin();
+      }
+      if (e.message == 'stale-auth') {
+        throw const EmployeesFailureReauthRequired();
+      }
+      rethrow;
+    }
     final data = (res.data as Map?)?.cast<String, dynamic>();
     if (data == null) throw const EmployeesFailureUnknown();
     final credentials = NewAccountCredentials.fromMap(data);

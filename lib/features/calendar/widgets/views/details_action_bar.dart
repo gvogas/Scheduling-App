@@ -81,9 +81,6 @@ class DetailsActionBar extends StatelessWidget {
     _tour(
       TourStepId.jobBookAgain,
       OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          minimumSize: const Size(double.infinity, 48),
-        ),
         onPressed: onBookAgain,
         child: _ActionButtonContent(
           compact: compact,
@@ -97,9 +94,6 @@ class DetailsActionBar extends StatelessWidget {
   /// The arrival tap. Same haptic contract as mark-done below: felt on press,
   /// never awaited, so it can neither delay nor be delayed by the write.
   Widget _startButton(BuildContext context, bool compact) => OutlinedButton(
-    style: OutlinedButton.styleFrom(
-      minimumSize: const Size(double.infinity, 48),
-    ),
     onPressed: isSaving
         ? null
         : () {
@@ -161,9 +155,6 @@ class DetailsActionBar extends StatelessWidget {
       const SizedBox(height: AppSpacing.sp8),
       if (onEdit != null)
         OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 48),
-          ),
           onPressed: onEdit,
           child: _ActionButtonContent(
             compact: compact,
@@ -199,10 +190,7 @@ class DetailsActionBar extends StatelessWidget {
       // unconditional.
       const SizedBox(height: AppSpacing.sp8),
       OutlinedButton(
-        style: destructiveOutlinedButtonStyle(
-          context,
-          minimumSize: const Size(double.infinity, 48),
-        ),
+        style: destructiveOutlinedButtonStyle(context),
         onPressed: isSaving ? null : onCancel,
         child: _ActionButtonContent(
           compact: compact,

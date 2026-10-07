@@ -5,6 +5,17 @@
 const {readFileSync, writeFileSync} = require("fs");
 
 const ROW = /^\| \d{4}-\d{2}-\d{2}/;
+const FUNCTIONS_TARGET = /\b(functions|all)\b/i;
+const NO_DEPLOY = /no deploy/i;
+
+/**
+ * Whether a Targets cell records a deploy that reached Cloud Functions.
+ * @param {string} targets The cell text.
+ * @return {boolean} True for `functions`, `functions:name` or `all`.
+ */
+function deployedFunctions(targets) {
+  return FUNCTIONS_TARGET.test(targets) && !NO_DEPLOY.test(targets);
+}
 
 /**
  * Line range of the Deploy log table: header line to its last row.
@@ -26,7 +37,7 @@ function tableRange(lines) {
 }
 
 /**
- * The commit of the newest Deploy log row that names one.
+ * The commit of the newest Deploy log row that deployed functions.
  * @param {string} markdown The runbook.
  * @return {?string} A short or full sha, or null.
  */
@@ -36,7 +47,9 @@ function lastDeployedSha(markdown) {
   if (!range) return null;
   for (let i = range.end; i > range.start; i--) {
     if (!ROW.test(lines[i])) continue;
-    const match = (lines[i].split("|")[2] || "").match(/`([0-9a-f]{7,40})`/);
+    const cells = lines[i].split("|");
+    if (!deployedFunctions(cells[3] || "")) continue;
+    const match = (cells[2] || "").match(/`([0-9a-f]{7,40})`/);
     if (match) return match[1];
   }
   return null;

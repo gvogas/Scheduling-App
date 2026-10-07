@@ -9,6 +9,7 @@ import 'package:scheduling/core/utils/debouncer.dart';
 import 'package:scheduling/core/validators/text_limits.dart';
 import 'package:scheduling/features/maps/application/maps_providers.dart';
 import 'package:scheduling/features/maps/domain/address_parser.dart';
+import 'package:scheduling/features/maps/domain/maps_failure.dart';
 import 'package:scheduling/features/maps/domain/models/address_suggestion.dart';
 import 'package:scheduling/features/maps/domain/places_repository.dart';
 import 'package:scheduling/l10n/l10n.dart';
@@ -94,16 +95,7 @@ class _AddressAutocompleteFieldState
     }
 
     if (!ref.read(featureFlagsProvider).addressAutocomplete) {
-      _debounce.cancel();
-      _requestId++;
-      _lastFetched = '';
-      if (_suggestions.isNotEmpty || _isLoading || _serviceError != null) {
-        setState(() {
-          _suggestions = [];
-          _isLoading = false;
-          _serviceError = null;
-        });
-      }
+      _onAutocompletePaused();
       return;
     }
 
@@ -162,9 +154,8 @@ class _AddressAutocompleteFieldState
         _isLoading = false;
       });
     } catch (e, st) {
-      // Logged before the mounted guard so it reaches Crashlytics even if the
-      // field is gone by then — through the logger captured above.
-      _logger.warn('ADDR-AUTO autocomplete failed', e, st);
+      // A typed failure (a server pause included) was logged by the repository.
+      if (e is! Failure) _logger.warn('ADDR-AUTO autocomplete failed', e, st);
       if (!mounted || requestId != _requestId) return;
       setState(() {
         _suggestions = [];
@@ -196,57 +187,82 @@ class _AddressAutocompleteFieldState
     });
   }
 
+  /// Drops the list and any pending lookup when the kill switch pauses.
+  void _onAutocompletePaused() {
+    _debounce.cancel();
+    _requestId++;
+    _lastFetched = '';
+    if (_suggestions.isEmpty && !_isLoading && _serviceError == null) return;
+    setState(() {
+      _suggestions = [];
+      _isLoading = false;
+      _serviceError = null;
+    });
+  }
+
   Future<void> _selectSuggestion(AddressSuggestion s) async {
-    // Resolved BEFORE the await for the same reason as _fetch above — this is
-    // fired from onTap, so the sheet being dismissed before Places responds is
-    // routine, and `ref.read` on an unmounted consumer throws.
     // Invalidate any pending debounce/in-flight request so a late response can't resurface suggestions.
     _debounce.cancel();
     _requestId++;
     _suppressFetch = true;
-    widget.controller.text = s.description;
+    var base = s.description;
+    String? error;
+    // Paused: Places would refuse the details call, so keep the shown text.
+    if (ref.read(featureFlagsProvider).addressAutocomplete) {
+      widget.controller.text = s.description;
+      setState(() {
+        _suggestions = [];
+        _isLoading = true;
+      });
+      try {
+        final details = await _service.getPlaceDetails(
+          s.placeId,
+          sessionToken: _ensureSessionToken(),
+        );
+        if (details.fullAddress.isNotEmpty) base = details.fullAddress;
+      } on MapsFailurePaused {
+        // Logged by the repository; keep the shown text.
+      } catch (e, st) {
+        if (e is! Failure) {
+          _logger.warn('ADDR-DETAILS getPlaceDetails failed', e, st);
+        }
+        if (mounted) {
+          error = _localizedErrorFor(
+            e,
+            context,
+            context.l10n.error_couldNotLoadAddressDetails,
+          );
+        }
+      }
+      if (!mounted) return;
+    } else {
+      // Otherwise a re-enable would skip the pre-pause query as already fetched.
+      _lastFetched = '';
+    }
+    _suppressFetch = true;
+    widget.controller.text = AddressParser.formatForDisplay(
+      base,
+      _lastTypedApt,
+    );
+    _sessionToken = null;
+    _lastTypedApt = '';
     setState(() {
       _suggestions = [];
-      _isLoading = true;
+      _isLoading = false;
+      _serviceError = error;
     });
-
-    try {
-      final details = await _service.getPlaceDetails(
-        s.placeId,
-        sessionToken: _ensureSessionToken(),
-      );
-      if (!mounted) return;
-      _suppressFetch = true;
-      final base = details.fullAddress.isNotEmpty
-          ? details.fullAddress
-          : s.description;
-      widget.controller.text = AddressParser.formatForDisplay(
-        base,
-        _lastTypedApt,
-      );
-      setState(() => _isLoading = false);
-      widget.onAddressSelected?.call(widget.controller.text);
-    } catch (e, st) {
-      _logger.warn('ADDR-DETAILS getPlaceDetails failed', e, st);
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _serviceError = _localizedErrorFor(
-          e,
-          context,
-          context.l10n.error_couldNotLoadAddressDetails,
-        );
-      });
-      widget.onAddressSelected?.call(widget.controller.text);
-    } finally {
-      _sessionToken = null;
-      _lastTypedApt = '';
-    }
+    widget.onAddressSelected?.call(widget.controller.text);
   }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    ref.listen(featureFlagsProvider.select((f) => f.addressAutocomplete), (
+      _,
+      enabled,
+    ) {
+      if (!enabled) _onAutocompletePaused();
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

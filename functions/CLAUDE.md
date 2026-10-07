@@ -162,13 +162,18 @@ makes those edits themselves, and here the admin is a *different* person from
 the one whose sign-in is moving. It is a courtesy, **not** a guarantee: no live
 FCM token means no notice, so the admin still has to tell them).
 **Admin password reset (2026-09-29).** `resetEmployeePassword` opens with
-`assertAdminCall(req, {docId})` → `requireDocId` → the 20/hr create/delete
-budget, refuses the caller's own doc (`self-reset`) and any doc that is not
-`active` with a `uid` (`not-active`), then under `withAccountOperation(uid,
-"password-reset")` runs `markPasswordResetRequired` (transactional re-check that
-lets a deactivate committing first win) → `auth.updateUser(password)` →
+`assertAdminCall(req, {docId})` → `requireDocId` → **`assertFreshReauth`**
+(5 min; S1, owner call 2026-10-07 — the app re-authenticates the admin in the
+confirm dialog, so ship that build with or before this deploy) → the 20/hr
+create/delete budget, refuses the caller's own doc (`self-reset`), any doc that
+is not `active` with a `uid` (`not-active`) and any `role: "admin"` target
+(`target-is-admin`), then under `withAccountOperation(uid,
+"password-reset")` runs `markPasswordResetRequired` (transactional re-check of
+`active` + `uid` + not-admin, so a deactivate or a promotion committing first
+wins) → `auth.updateUser(password)` →
 `revokeRefreshTokens` (a revoke failure after the password changed logs
-`logger.error` with `shortHash(uid)` and rethrows); only `shortHash(uid)` is
+`logger.error` with `shortHash(uid)` and still RETURNS the credentials, since a
+rethrow would hide the only copy of the new password); only `shortHash(uid)` is
 ever logged. `completePasswordReset`
 opens with `assertActiveCall(req, {newPassword})` → `requireString(…, 128)` →
 `isStrongPassword` (shared with `completeEmployeeSetup` — never spell the regexes

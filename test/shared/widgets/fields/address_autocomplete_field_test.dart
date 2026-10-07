@@ -5,9 +5,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
+import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/core/utils/debouncer.dart';
 import 'package:scheduling/features/maps/application/maps_providers.dart';
+import 'package:scheduling/features/maps/domain/maps_failure.dart';
 import 'package:scheduling/features/maps/domain/models/address_suggestion.dart';
 import 'package:scheduling/features/maps/domain/models/parsed_address.dart';
 import 'package:scheduling/features/maps/domain/places_repository.dart';
@@ -36,6 +39,7 @@ class _RecordingPlaces implements PlacesRepository {
   /// When set, the next autocomplete waits on this instead of returning.
   Completer<List<AddressSuggestion>>? gate;
   Object? throws;
+  Exception? detailsThrows;
 
   @override
   Future<List<AddressSuggestion>> autocomplete(
@@ -59,6 +63,7 @@ class _RecordingPlaces implements PlacesRepository {
     required String sessionToken,
   }) async {
     tokens.add(sessionToken);
+    if (detailsThrows != null) throw detailsThrows!;
     return details ?? const ParsedAddress();
   }
 
@@ -66,21 +71,38 @@ class _RecordingPlaces implements PlacesRepository {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// Records every log line, so a test can count logs per failure.
+class _RecordingLogger extends AppLogger {
+  final lines = <String>[];
+
+  @override
+  void warn(String message, [Object? error, StackTrace? stack]) =>
+      lines.add(message);
+
+  @override
+  void breadcrumb(String message) => lines.add(message);
+}
+
 void main() {
   late TextEditingController controller;
   late _RecordingPlaces places;
   late List<String> reported;
+  late _RecordingLogger logger;
 
   setUp(() {
     controller = TextEditingController();
     places = _RecordingPlaces();
     reported = [];
+    logger = _RecordingLogger();
   });
 
   tearDown(() => controller.dispose());
 
   Widget app({required bool showField}) => ProviderScope(
-    overrides: [placesRepositoryProvider.overrideWithValue(places)],
+    overrides: [
+      placesRepositoryProvider.overrideWithValue(places),
+      loggerProvider.overrideWithValue(logger),
+    ],
     child: MaterialApp(
       localizationsDelegates: const [
         AppLocalizations.delegate,
@@ -224,7 +246,7 @@ void main() {
   testWidgets('a NEW session gets a new token once the last one closed', (
     tester,
   ) async {
-    // The token is cleared in `_selectSuggestion`'s finally, so the next
+    // The token is cleared at the end of `_selectSuggestion`, so the next
     // address the user looks up starts a fresh billable session rather than
     // riding an expired one.
     places
@@ -295,5 +317,78 @@ void main() {
 
     expect(reported.last, '');
     expect(find.text('1 Main St, Montreal'), findsNothing);
+  });
+
+  testWidgets('a server-side pause shows the paused message, not an error', (
+    tester,
+  ) async {
+    // A server-only pause can outlive the client flag; a silent field looks
+    // broken while every keystroke is refused again.
+    places.throws = const MapsFailurePaused();
+    await pumpField(tester);
+    await type(tester, '1 Main St');
+
+    expect(places.queries, ['1 Main St']);
+    final l10n = AppLocalizations.of(tester.element(find.byType(TextField)));
+    expect(find.text(l10n.common_featurePaused), findsOneWidget);
+    expect(find.text(l10n.error_addressLookupFailed), findsNothing);
+    expect(find.byType(AdaptiveProgressIndicator), findsNothing);
+    // The repository already breadcrumbed it; the field adds nothing.
+    expect(logger.lines, isEmpty);
+  });
+
+  testWidgets('a server-side pause on details keeps the typed address', (
+    tester,
+  ) async {
+    final selected = <String>[];
+    places
+      ..suggestions = const [
+        AddressSuggestion(placeId: 'p1', description: '1 Main St, Montreal'),
+      ]
+      ..detailsThrows = const MapsFailurePaused();
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [placesRepositoryProvider.overrideWithValue(places)],
+        child: MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: lightTheme(),
+          home: Scaffold(
+            body: AddressAutocompleteField(
+              controller: controller,
+              onAddressSelected: selected.add,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await type(tester, '1 Main');
+    await tester.tap(find.text('1 Main St, Montreal'));
+    await settle(tester);
+
+    expect(controller.text, '1 Main St, Montreal');
+    expect(selected, ['1 Main St, Montreal']);
+    final l10n = AppLocalizations.of(tester.element(find.byType(TextField)));
+    expect(find.text(l10n.common_featurePaused), findsNothing);
+    expect(find.text(l10n.error_couldNotLoadAddressDetails), findsNothing);
+  });
+
+  testWidgets('only an untyped error is logged by the field itself', (
+    tester,
+  ) async {
+    places.throws = const MapsFailureRateLimit();
+    await pumpField(tester);
+    await type(tester, '1 Main St');
+    expect(logger.lines, isEmpty);
+
+    places.throws = StateError('boom');
+    await type(tester, '2 Main St');
+    expect(logger.lines, ['ADDR-AUTO autocomplete failed']);
   });
 }

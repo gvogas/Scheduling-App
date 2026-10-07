@@ -145,11 +145,20 @@ function _authOf(deps) {
 }
 
 /**
+ * True when APNs secrets are missing or `feature_live_activities` is off.
+ * @param {!Object} deps `{apnsAuth, featureFlags?}`.
+ * @return {!Promise<boolean>}
+ */
+async function _paused(deps) {
+  if (!_authOf(deps)) return true;
+  const flags = await (deps.featureFlags || getFeatureFlags)();
+  return flags.feature_live_activities === false;
+}
+
+/**
  * Sends one payload to one registry row, pruning it when APNs says the
  * activity is gone. Returns 1 on a delivered push, else 0.
- * Skips the send, and never prunes, while `feature_live_activities` is off.
- * @param {!Object} deps `{logger, apnsAuth, featureFlags}`; `featureFlags`
- *   is an optional async loader, defaulting to `getFeatureFlags`.
+ * @param {!Object} deps `{logger, apnsAuth}`.
  * @param {!Object} row A row from the registry.
  * @param {!Object} payload
  * @param {string} label For the warn line.
@@ -158,11 +167,6 @@ function _authOf(deps) {
 async function _sendToRow(deps, row, payload, label) {
   const auth = _authOf(deps);
   if (!auth || !row || !row.token) return 0;
-  const flags = await (deps.featureFlags || getFeatureFlags)();
-  if (flags.feature_live_activities === false) {
-    // Skipped, NOT gone: a paused send must never prune the token.
-    return 0;
-  }
   const result = await sendLiveActivityPush({
     token: row.token,
     payload,
@@ -218,8 +222,8 @@ function _stateFor(row, ctx, nowDate) {
  */
 async function startLiveActivity(deps, args) {
   const {appointmentId, employeeDocId, ctx, nowDate} = args;
-  if (!_authOf(deps)) return 0;
   try {
+    if (await _paused(deps)) return 0;
     const rows = await listPushToStartTokens(deps, {
       employeeDocIds: [employeeDocId],
     });
@@ -277,8 +281,8 @@ async function startLiveActivity(deps, args) {
  */
 async function updateLiveActivity(deps, args) {
   const {appointmentId, employeeDocId, ctx, nowDate} = args;
-  if (!_authOf(deps)) return 0;
   try {
+    if (await _paused(deps)) return 0;
     const {rows, marker} = await _liveRowsFor(
         deps, {appointmentId, employeeDocId});
     if (rows.length === 0) return 0;
@@ -323,8 +327,8 @@ async function updateLiveActivity(deps, args) {
  */
 async function endLiveActivity(deps, args) {
   const {appointmentId, employeeDocId, ctx, nowDate} = args;
-  if (!_authOf(deps)) return 0;
   try {
+    if (await _paused(deps)) return 0;
     const {rows} = await _liveRowsFor(deps, {appointmentId, employeeDocId});
     if (rows.length === 0) return 0;
     let ended = 0;

@@ -11,28 +11,20 @@ class MapsErrorMapper {
     if (error is MapsFailure) return error;
 
     if (error is FirebaseFunctionsException) {
+      // `assertFeatureEnabled` (functions/feature_flags.js) refuses this way.
+      if (error.message == 'feature-disabled') {
+        return MapsFailurePaused(cause: error, stackTrace: stackTrace);
+      }
       switch (error.code) {
         case 'resource-exhausted':
-          return MapsFailureRateLimit(
-            cause: error,
-            stackTrace: stackTrace,
-          );
+          return MapsFailureRateLimit(cause: error, stackTrace: stackTrace);
         case 'unauthenticated':
         case 'failed-precondition':
-          return MapsFailureUnauthorized(
-            cause: error,
-            stackTrace: stackTrace,
-          );
+          return MapsFailureUnauthorized(cause: error, stackTrace: stackTrace);
         case 'invalid-argument':
-          return MapsFailureInvalidInput(
-            cause: error,
-            stackTrace: stackTrace,
-          );
+          return MapsFailureInvalidInput(cause: error, stackTrace: stackTrace);
         default:
-          return MapsFailureNetwork(
-            cause: error,
-            stackTrace: stackTrace,
-          );
+          return MapsFailureNetwork(cause: error, stackTrace: stackTrace);
       }
     }
 

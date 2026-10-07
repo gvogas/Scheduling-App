@@ -132,6 +132,15 @@ Secret-Manager `GOOGLE_MAP_API_KEY`, which must never ship in the app.
   means every feature on and `min_supported_build` 0. Two templates, Client (app)
   and Server (functions): flip both. Keys and defaults are mirrored and pinned by
   both sides' tests; a paused feature reuses its existing opt-out path.
+  A value counts only as case-insensitive `true`/`false` (anything else is the
+  default, ON) and `min_supported_build` only as a plain integer — both parsers
+  read `test/fixtures/shared/feature_flags.json`. The server refuses a paused
+  callable with `failed-precondition`/`feature-disabled`; the client maps that
+  to `MapsFailurePaused`/`WavePaused` and the service logs it as a breadcrumb,
+  because the client can read ON for up to 60 s while the server still refuses.
+  **A pause never prunes a Live Activity token on either side** — the device
+  only ends its cards, once per pause, since nothing re-emits the push-to-start
+  token after re-enable.
   Runbook: `docs/DEPLOYMENT.md` "Flip a kill switch".
 - **Employee visibility:** Employees see only appointments where their doc id is
   in `employeeIds`. Apply this filter on any new appointment view.

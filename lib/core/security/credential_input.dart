@@ -8,7 +8,7 @@
 /// at the framework's `true` default, and a third-party keyboard is free to
 /// retain and cloud-sync what was typed. `keyboardType: visiblePassword` does
 /// not imply it either. That is exactly how `AuthPasswordField` and both
-/// `DeleteAccountReauthDialog` variants once shipped without it — the rule is
+/// `PasswordReauthDialog` variants once shipped without it — the rule is
 /// named here so a new credential field has a symbol to copy rather than a
 /// paragraph to remember. See `.claude/rules/security.md`.
 const bool kCredentialImePersonalizedLearning = false;

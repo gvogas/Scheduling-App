@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/animations/animated_loading_button.dart';
 import 'package:scheduling/core/app/device_deregistration.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
@@ -182,6 +183,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
 
   Future<void> _signOutToLogin() async {
     final logger = ref.read(loggerProvider);
+    final analytics = ref.read(analyticsServiceProvider);
     DeviceDeregistrationDeps? deregistered;
     try {
       // An active account holds push, presence and Live Activity registrations.
@@ -189,6 +191,9 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
       await deregisterThisDevice(devices);
       deregistered = devices;
       await _authService.signOut();
+      analytics
+        ..logSignOut()
+        ..setUserRole(null);
       if (!mounted) return;
       await Navigator.of(
         context,
