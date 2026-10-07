@@ -18,6 +18,7 @@ import 'package:scheduling/features/presence/application/live_map_providers.dart
 import 'package:scheduling/features/presence/domain/models/presence_fix.dart';
 import 'package:scheduling/features/presence/screens/live_map_screen.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/app_bars/app_top_bar.dart';
 import 'package:scheduling/shared/widgets/feature_paused_notice.dart';
 
 final _now = DateTime(2026, 7, 17, 12);
@@ -161,6 +162,7 @@ void main() {
     await settleMap(tester);
 
     expect(find.byType(FeaturePausedNotice), findsOneWidget);
+    expect(find.byType(AppTopBar), findsOneWidget);
     expect(lastConfig, isNull);
     expect(tester.takeException(), isNull);
   });
