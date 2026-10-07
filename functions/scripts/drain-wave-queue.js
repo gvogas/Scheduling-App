@@ -204,6 +204,10 @@ async function main() {
       batchLimit: Math.min(BATCH_LIMIT, remaining),
       deadlineMs: startedAt + ROUND_BUDGET_MS,
     });
+    if (summary.paused) {
+      console.log("Wave sync is paused (feature_wave_sync = false); stopping.");
+      break;
+    }
 
     for (const key of Object.keys(totals)) totals[key] += summary[key] || 0;
 
