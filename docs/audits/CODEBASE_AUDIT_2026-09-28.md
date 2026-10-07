@@ -2,8 +2,8 @@
 
 **Status (verified 2026-10-01):** every finding marked "needs functions deploy"
 below is DEPLOYED — it went live with `306ed848` on 2026-09-29 (`docs/DEPLOYMENT.md`
-log). The app-side fixes ride 1.63.0+93, which has not shipped. **Still open: S4**
-(owner decision).
+log). The app-side fixes ride 1.63.0+93, which has not shipped. S4 was approved and
+built 2026-10-07 (needs functions deploy).
 
 Scope: whole repo (`lib/`, `functions/`, `firestore.rules`, `storage.rules`,
 `firestore.indexes.json`, `test/`). Baseline: `dev` @ `cee76f45`, clean tree.
@@ -25,7 +25,7 @@ Emphasis on the code changed since the 2026-09-23 audit (`6b96db46..HEAD`:
 
 ## Decide first
 **Resolved 2026-09-28:** B1 → `count()`; I1b → past jobs only; S1 → fix in the
-function; closed-migration scripts → delete. **Still open:** S4.
+function; closed-migration scripts → delete. S4 → fix (owner, 2026-10-07).
 
 - **B1** — the filtered Clients header counts loaded rows as if they were the
   total. Fix it with a `count()` aggregate (one read per filter change) or with
@@ -93,7 +93,7 @@ None. Zero `TODO(pre-ship)` markers in the tree.
   (low priority, can ride the next functions deploy).
 
 ### S4 — resetting a demoted account's password leaves it disabled · low · high (NEW, from the S1 fix)
-- **Status:** **OPEN — needs your decision.**
+- **Status:** **DONE 2026-10-07 — needs functions deploy.** Owner approved the fix as written; `resetProvisionedPassword` now sends `disabled: false`, pinned in `employee_accounts.test.js`.
 - **Where:** `functions/employee_accounts.js` `resetProvisionedPassword` (sets only `password`/`displayName`).
 - **Risk:** after S1, an account an admin demotes active→invited in the console has its credential disabled; a later Reset password hands over a password for a still-disabled account, so first sign-in fails.
 - **Fix:** add `disabled: false` to the reset's `updateUser` (the admin's reset IS the intent to hand over a working credential). Needs deploy.

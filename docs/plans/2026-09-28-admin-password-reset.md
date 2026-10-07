@@ -173,6 +173,6 @@ if it enumerates modules. `employee_accounts.js` is already listed there.
 ## Related
 
 - S4 in `docs/audits/CODEBASE_AUDIT_2026-09-28.md` (`disabled: false` on the
-  invited-account re-provision reset) is separate and still awaiting explicit
-  approval. It is not needed by this design, because active accounts are never
+  invited-account re-provision reset) is separate; it was approved and built
+  2026-10-07. It is not needed by this design, because active accounts are never
   disabled by it.
