@@ -316,9 +316,9 @@ Secret-Manager `GOOGLE_MAP_API_KEY`, which must never ship in the app.
     or search returns nothing for every existing client and closed job.
   - **`searchIndexTokens` is hand-mirrored by `functions/search_tokens.js`** —
     the app writes the tokens and the server queries them, so a divergence is a
-    search that silently returns nothing. `test/core/search/search_tokens_test.dart`
-    and `functions/__tests__/search_tokens.test.js` share their worked examples
-    value-for-value; change both sides in one commit and keep the examples equal.
+    search that silently returns nothing. Both suites read their worked examples
+    from `test/fixtures/shared/search_tokens.json`; change both implementations
+    in one commit and add new examples to the fixture, never inline.
   - **Two ordering rules inside it are load-bearing.** Each word emits its WHOLE
     token before any of its prefixes, so an exact-word query survives
     truncation; and the text and phone runs are INTERLEAVED, so a long client
@@ -338,8 +338,8 @@ Secret-Manager `GOOGLE_MAP_API_KEY`, which must never ship in the app.
     the server tokenizes the typed query with `functions/search_tokens.js`; NFD
     folds strictly more (all of Latin Extended-A), so a JS side using it made
     "Muñoz" storable as `t:mu`/`t:oz` and queryable as `t:munoz` — a client
-    nobody can find. Add a letter to both tables or to neither, and keep the
-    shared accent examples in the two suites equal.
+    nobody can find. Add a letter to both tables or to neither;
+    `test/fixtures/shared/accent_fold.json` pins all 64 Latin-1 entries on both sides.
   - **The read cap is a KNOWN bound and it warns.** A phone query tokenizes to
     every 3-12 digit substring, so `514` matches most of the roster; the
     callable reads 200 `orderBy('name')` and returns 25, which means the answer
