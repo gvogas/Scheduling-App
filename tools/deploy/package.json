@@ -1,0 +1,8 @@
+{
+  "name": "deploy-tools",
+  "private": true,
+  "description": "Pins the firebase CLI the deploy workflow runs.",
+  "dependencies": {
+    "firebase-tools": "15.25.1"
+  }
+}

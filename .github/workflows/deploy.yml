@@ -29,7 +29,6 @@ permissions: {}
 
 env:
   PROJECT_ID: schedulingapp-88727
-  FIREBASE_TOOLS: firebase-tools@15.25.1
   # Cleared so the CLI does not stamp an agent name into the audit log.
   AI_AGENT: ""
   CLAUDECODE: ""
@@ -98,6 +97,8 @@ jobs:
     runs-on: ubuntu-latest
     # The only job that can mint a GCP token (the WIF provider requires it).
     environment: production
+    env:
+      FIREBASE_BIN: ${{ github.workspace }}/tools/deploy/node_modules/.bin/firebase
     permissions:
       contents: read
       id-token: write
@@ -121,6 +122,12 @@ jobs:
         # Dependency install scripts never run with deploy credentials around.
         run: npm ci --ignore-scripts
 
+      # The CLI comes from a committed lockfile, installed before any
+      # credential exists, with no lifecycle scripts.
+      - name: Install the firebase CLI
+        working-directory: tools/deploy
+        run: npm ci --ignore-scripts
+
       - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
@@ -142,38 +149,14 @@ jobs:
               exit 1
               ;;
           esac
-          base="npx --yes $FIREBASE_TOOLS deploy --project $PROJECT_ID --non-interactive --only"
-          [ -n "$indexes" ] && echo "$base $indexes" > deploy-indexes.cmd
-          [ -n "$rest" ] && echo "$base $rest" > deploy-rest.cmd
-          touch deploy-indexes.cmd deploy-rest.cmd
           echo "indexes=$indexes" >> "$GITHUB_OUTPUT"
           echo "rest=$rest" >> "$GITHUB_OUTPUT"
           case "$rest" in *functions*) echo "functions=true" >> "$GITHUB_OUTPUT" ;; esac
-          cat deploy-indexes.cmd deploy-rest.cmd
-
-      # The deploy steps below run exactly these files, so this guards them.
-      - name: Check the deploy commands
-        run: |
-          for file in deploy-indexes.cmd deploy-rest.cmd; do
-            [ -s "$file" ] || continue
-            if grep -n -e '--force' "$file"; then
-              echo "::error::A deploy command contains --force. It deletes every prod TTL policy missing from firestore.indexes.json (all five were lost this way on 2026-07-21). Never."
-              exit 1
-            fi
-            if ! grep -q -e ' --non-interactive ' "$file"; then
-              echo "::error::A deploy command lacks --non-interactive; a prompt would hang the run."
-              exit 1
-            fi
-            if ! grep -q -e " --project $PROJECT_ID " "$file"; then
-              echo "::error::A deploy command does not name --project $PROJECT_ID."
-              exit 1
-            fi
-          done
 
       - name: Export diff (deletions abort non-interactively)
         if: steps.plan.outputs.functions == 'true'
         run: |
-          npx --yes "$FIREBASE_TOOLS" functions:list --project "$PROJECT_ID" --json > live-before.json
+          "$FIREBASE_BIN" functions:list --project "$PROJECT_ID" --json > live-before.json
           node functions/scripts/deploy/export_diff.js functions/index.js live-before.json
 
       - name: Allowlists are a superset of the last deploy
@@ -202,9 +185,7 @@ jobs:
 
       - name: Deploy indexes
         if: steps.plan.outputs.indexes != ''
-        run: |
-          read -r -a cmd < deploy-indexes.cmd
-          "${cmd[@]}"
+        run: bash tools/deploy/run_deploy.sh firestore:indexes
 
       - name: Wait for every composite index to be READY
         if: steps.plan.outputs.indexes != ''
@@ -225,10 +206,11 @@ jobs:
       - name: Deploy
         id: deploy
         if: steps.plan.outputs.rest != ''
+        env:
+          REST: ${{ steps.plan.outputs.rest }}
         run: |
           set -o pipefail
-          read -r -a cmd < deploy-rest.cmd
-          "${cmd[@]}" 2>&1 | tee deploy-output.log
+          bash tools/deploy/run_deploy.sh "$REST" 2>&1 | tee deploy-output.log
 
       - name: Explain a known abort
         if: failure() && steps.deploy.outcome == 'failure'
@@ -244,7 +226,7 @@ jobs:
         id: after
         if: steps.plan.outputs.functions == 'true'
         run: |
-          npx --yes "$FIREBASE_TOOLS" functions:list --project "$PROJECT_ID" --json > live-after.json
+          "$FIREBASE_BIN" functions:list --project "$PROJECT_ID" --json > live-after.json
           node functions/scripts/deploy/export_diff.js functions/index.js live-after.json --after-deploy
           echo "count=$(jq '.result | length' live-after.json)" >> "$GITHUB_OUTPUT"
 
