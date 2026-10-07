@@ -35,6 +35,7 @@ import 'package:scheduling/core/notices/notice_listener.dart';
 import 'package:scheduling/core/notifications/fcm_background_handler.dart';
 import 'package:scheduling/core/performance/performance_trace.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
+import 'package:scheduling/core/remote_config/update_gate.dart';
 import 'package:scheduling/core/security/app_lock.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
@@ -428,14 +429,16 @@ class _PaulAppState extends ConsumerState<PaulApp> {
                 ),
                 child: Theme(
                   data: theme,
-                  child: AppLock(
-                    child: NoticeListener(
-                      navigatorKey: _navigatorKey,
-                      child: Column(
-                        children: [
-                          Expanded(child: child ?? const SizedBox.shrink()),
-                          const OfflineBanner(),
-                        ],
+                  child: UpdateGate(
+                    child: AppLock(
+                      child: NoticeListener(
+                        navigatorKey: _navigatorKey,
+                        child: Column(
+                          children: [
+                            Expanded(child: child ?? const SizedBox.shrink()),
+                            const OfflineBanner(),
+                          ],
+                        ),
                       ),
                     ),
                   ),

@@ -208,6 +208,9 @@ abstract final class AnalyticsContactActions {
 
   /// An external web page (the legal links).
   static const String link = 'link';
+
+  /// The App Store page, from the forced-update screen.
+  static const String appStore = 'app_store';
 }
 
 /// Canonical `action` values for [AnalyticsEvents.overdueReviewApplied].
