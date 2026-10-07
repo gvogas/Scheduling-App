@@ -108,7 +108,7 @@ jobs:
 
       - name: Firebase authorization and concurrency checks
         working-directory: .
-        run: npx --yes firebase-tools@15.25.1 emulators:exec --project demo-scheduling-review --only auth,firestore,storage "node functions/__tests__/emulator/storage_rules.smoke.js"
+        run: npx --yes firebase-tools@15.32.1 emulators:exec --project demo-scheduling-review --only auth,firestore,storage "node functions/__tests__/emulator/storage_rules.smoke.js"
 
       - name: Upload coverage
         if: always()
