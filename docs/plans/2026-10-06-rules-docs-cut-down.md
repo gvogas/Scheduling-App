@@ -2,7 +2,53 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status: PLAN, not started. Revised 2026-10-07 after review** (see "Review changes" at the end): stronger no-loss checks, a one-clause reason kept inline, load-frequency order with a pilot, per-file size budgets, `check_rules.dart` heuristic fixes, re-measured sizes. Decision 3 still needs owner sign-off.
+> **Status: IN PROGRESS — paused 2026-10-07 after 5 of 15 files.** Decision 3 SIGNED OFF by the owner 2026-10-07. Tasks 1, 2, 3, 7, 9, 13 and 16 are DONE and committed; resume from "Progress and handoff" just below, which is the authority on what is left.
+
+## Progress and handoff (2026-10-07)
+
+**Done** (all on `dev`, each reviewed by an independent R6b pass before commit):
+
+| Task | File | Before → after | Commit | ADRs |
+|---|---|---|---|---|
+| 1 | `tool/check_rules.dart` + test + CI step | — | `17cc74b3` | — |
+| 2 | convention change in `code-quality.md`, `docs/decisions/README.md` | — | `65c8ed73` | — |
+| 9 | `.claude/rules/images.md` (pilot) | 39 177 → 14 059 | `61050179` | 0001–0010 |
+| 7 | root `CLAUDE.md` + new `.claude/rules/search.md` | 50 230 → 19 650 + 8 917 | `936f3fed` | 0011–0030 |
+| 13 | `.claude/rules/error-handling.md` | 25 741 → 13 444 | `a2345b6a` | 0031–0037 |
+| 16 | `.claude/rules/security.md` | 10 848 → 7 167 | `72f8b6eb` | 0038–0043 |
+| 3 | `.claude/rules/appointments.md` | 83 815 → 38 060 | `3c514746` | 0044–0060 |
+
+Every always-loaded file is done: ~90 KB → ~43 KB per session.
+
+**Left, in this order** (sizes re-measured 2026-10-07; next ADR number is **0061**):
+
+| Task | File | Bytes now | Notes |
+|---|---|---:|---|
+| 4 | `.claude/rules/employees.md` | 70 136 | `:545` pointer already fixed (`3c514746`). |
+| 5 | `.claude/rules/clients.md` | 65 093 | Its `ownPhoneDigits`/`scoreRecord` passage (~old 740-748) duplicates `search.md` — point there. |
+| 6 | `.claude/rules/notifications.md` | 54 036 | Mostly prose; R6 must show a walkthrough holds no imperative before deleting it. |
+| 8 | `.claude/rules/frontend.md` | 47 927 | `widget-timer` is enforced; say exactly what it covers (`/widgets/`, `/screens/` only). |
+| 10 | `functions/CLAUDE.md` | 36 225 | Per-function narrative goes to `docs/CLOUD_FUNCTIONS.md` if not already there. |
+| 11 | `.claude/rules/wave.md` | 35 172 | `:331` has a stale pointer into root `CLAUDE.md` — fix. |
+| 12 | `lib/features/calendar/CLAUDE.md` | 31 554 | `:8-12` claims status/multi-day rules "stay in root" — stale, now `appointments.md`. See the open decision below. |
+| 14 | `.claude/rules/analytics.md` | 12 061 | Import ban is enforced by `check_rules`. |
+| 15 | `ios/CLAUDE.md` | 11 425 | Also fix `ios/SiriIntents/README.md:117` (`supportedVersion` → `supportedVersions`, `[3, 4]`). |
+| 17 | `lib/features/feature_tour/CLAUDE.md` | 10 639 | — |
+| 18 | final check | — | Total size, every ADR cited and indexed, `flutter analyze`, `dart run tool/check_rules.dart`, `dart run tool/test.dart`; add `search.md` to any remaining rules-file lists. |
+
+**The loop that worked, per file** (do not skip a step; every file's R6b found 15-18 problems after all mechanical checks passed):
+1. **Writer** (an Opus subagent) runs R1-R6 and stops before R6b and the commit. Its prompt must carry the lessons: losses are REASON clauses, so keep one clause of why wherever a "fix" would be wrong; keep numeric values; every `(ADR-NNNN)` must cover its bullet; never pad an ADR with verbatim old text to keep symbols greppable; check every code name and claim against the code and correct inherited errors (reviews found a wrong widget class, "narrows" that was "refuses", a function that "trims" but doesn't); don't overclaim what a tool enforces; one clause per reason.
+2. **Re-run the checks yourself**: R5 (strip `\r` first: `tr -d '\r' <` both sides before the awk, since a file may be CRLF), the R6 counts (`wc -l < inventory` vs `grep -c '^old:' mapping`, `UNMAPPED` 0), the strict LOST check against the file plus ONLY the ADRs it cites (a LOST symbol is fine only if `git grep -wF` finds it nowhere in code; record it `GONE`/`CORRECTED`), MISSING ADRs, BOM, and the R7 CITED-TITLE check.
+3. **Independent R6b** (a fresh `doc-reviewer`, Opus): give it the specific invariants to verify against the code and ask for LOST / WEAKENED / NEEDS-INLINE-REASON / CONTRADICTS-CODE / BAD-CITATION findings with OLD line numbers. Feed the findings back to the writer; re-run step 2. A second R6b round paid off on root `CLAUDE.md` after 18 fixes.
+4. Owner approval, then commit `$F` + `docs/decisions/` (+ any pointer files touched).
+
+**Budget gate in practice:** the line-count formula (Decision 1) misfires on long-line files and data tables; files have landed at 7-38 KB, not 10. The working gate is "under the R1 budget, or the reviewer confirms nothing is compressible without losing a rule or reason".
+
+**Open owner decision:** move ~7 KB of Flutter-only rules (the clash-alert dialog internals, the assignee picker rules, the action-bar/tour wiring) from `appointments.md` into `lib/features/calendar/CLAUDE.md`, so a `functions/` or rules session stops loading them. Options: do it in Task 12, do it now, or leave them. Not decided.
+
+**Follow-ups found during the cut-down, not done:** `firestore.rules` still carries long rationale comments in the appointment block (against `code-quality.md`'s "rationale comments deleted"); the comment in `functions/security.js:340` ("keep guards inline per callable") contradicts `assertAdminCall`; `test/features/calendar/domain/models/appointment_prefill_test.dart:70` mentions the removed crew signal; the `appointments.md` / `firestore-indexes.md` index-deletion date disagrees (2026-08-28 vs 2026-08-29).
+
+**Scratch:** `build/rules_audit/` (gitignored) holds each finished file's inventory/mapping; it is not needed to resume.
 
 **Goal:** Cut the rules corpus (`CLAUDE.md`, `.claude/rules/*.md`, nested `CLAUDE.md` files) from ~608 KB to ~200 KB of terse invariants, without losing a single rule, by moving history into dated ADRs and moving mechanically checkable bans into a CI script.
 
