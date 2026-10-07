@@ -36,6 +36,7 @@ const {
 } = require("./live_activity_registry");
 const {sendLiveActivityPush} = require("./apns_client");
 const {toMillis} = require("./time_utils");
+const {getFeatureFlags} = require("./feature_flags");
 
 // Local rather than imported from travel_utils: that module requires this one
 // (travel_utils -> live_activity_dispatch), so reaching back would close a
@@ -146,7 +147,9 @@ function _authOf(deps) {
 /**
  * Sends one payload to one registry row, pruning it when APNs says the
  * activity is gone. Returns 1 on a delivered push, else 0.
- * @param {!Object} deps `{logger, apnsAuth}`.
+ * Skips the send, and never prunes, while `feature_live_activities` is off.
+ * @param {!Object} deps `{logger, apnsAuth, featureFlags}`; `featureFlags`
+ *   is an optional async loader, defaulting to `getFeatureFlags`.
  * @param {!Object} row A row from the registry.
  * @param {!Object} payload
  * @param {string} label For the warn line.
@@ -155,6 +158,11 @@ function _authOf(deps) {
 async function _sendToRow(deps, row, payload, label) {
   const auth = _authOf(deps);
   if (!auth || !row || !row.token) return 0;
+  const flags = await (deps.featureFlags || getFeatureFlags)();
+  if (flags.feature_live_activities === false) {
+    // Skipped, NOT gone: a paused send must never prune the token.
+    return 0;
+  }
   const result = await sendLiveActivityPush({
     token: row.token,
     payload,
