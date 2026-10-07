@@ -1,13 +1,13 @@
 "use strict";
 
 const mockEvaluate = jest.fn();
+const mockGetServerTemplate = jest.fn();
 jest.mock("firebase-admin/remote-config", () => ({
-  getRemoteConfig: () => ({
-    getServerTemplate: jest.fn(async () => ({evaluate: mockEvaluate})),
-  }),
+  getRemoteConfig: () => ({getServerTemplate: mockGetServerTemplate}),
 }));
 
 const {HttpsError} = require("firebase-functions/v2/https");
+const {FLAG_DEFAULTS} = require("../feature_flags_policy");
 const {
   loadFromRemoteConfig,
   assertFeatureEnabled,
@@ -16,6 +16,9 @@ const {
 
 beforeEach(() => {
   mockEvaluate.mockReset();
+  mockGetServerTemplate.mockReset();
+  mockGetServerTemplate.mockImplementation(
+      async () => ({evaluate: mockEvaluate}));
   _resetForTest();
 });
 
@@ -55,3 +58,12 @@ test("an unknown key is a programming error, not a silent pass", async () => {
   await expect(assertFeatureEnabled("feature_nope", "x"))
       .rejects.toThrow(/unknown flag/);
 });
+
+test("a Remote Config outage fails open, loading with the defaults",
+    async () => {
+      mockGetServerTemplate.mockRejectedValue(new Error("rc down"));
+      await expect(assertFeatureEnabled("feature_wave_sync", "x"))
+          .resolves.toBeUndefined();
+      expect(mockGetServerTemplate).toHaveBeenCalledWith(
+          expect.objectContaining({defaultConfig: FLAG_DEFAULTS}));
+    });
