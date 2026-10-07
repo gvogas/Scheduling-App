@@ -28,6 +28,7 @@ jest.mock("firebase-functions/logger", () => ({
   error: jest.fn(),
 }));
 jest.mock("../security", () => ({
+  APP_CHECK: {enforceAppCheck: true},
   assertPayloadShape: jest.fn(),
   assertFreshReauth: jest.fn(),
   enforceDurableRateLimit: jest.fn(),

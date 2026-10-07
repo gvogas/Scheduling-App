@@ -28,6 +28,7 @@ const {
 } = require("./sync_run");
 
 const {
+  APP_CHECK,
   assertAdminCall,
   enforceDurableRateLimit,
   shortHash,
@@ -167,7 +168,7 @@ const waveBootstrap = onCall(
 );
 
 const waveGetConnection = onCall(
-    {enforceAppCheck: true},
+    APP_CHECK,
     async (req) => {
       const uid = await assertAdminCall(req, new Set());
       await enforceDurableRateLimit(
@@ -295,7 +296,7 @@ const waveRetryFailedJobs = onCall(
 
 // waveSetImportSchedule — retired no-op kept for shipped builds.
 const waveSetImportSchedule = onCall(
-    {enforceAppCheck: true},
+    APP_CHECK,
     async (req) => {
       // #compat-1.61.0: `schedule` stays accepted, and is ignored.
       const uid = await assertAdminCall(req, new Set(["schedule"]));
