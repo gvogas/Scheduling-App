@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
 import 'package:scheduling/core/errors/failure.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/core/utils/debouncer.dart';
 import 'package:scheduling/core/validators/text_limits.dart';
@@ -89,6 +90,20 @@ class _AddressAutocompleteFieldState
     widget.onChanged?.call(value);
     if (_suppressFetch) {
       _suppressFetch = false;
+      return;
+    }
+
+    if (!ref.read(featureFlagsProvider).addressAutocomplete) {
+      _debounce.cancel();
+      _requestId++;
+      _lastFetched = '';
+      if (_suggestions.isNotEmpty || _isLoading || _serviceError != null) {
+        setState(() {
+          _suggestions = [];
+          _isLoading = false;
+          _serviceError = null;
+        });
+      }
       return;
     }
 
