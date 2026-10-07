@@ -14,9 +14,7 @@ import 'package:scheduling/features/auth/services/auth_service.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 
-/// Outcome of a sign-in attempt (or of resuming a session right after signup);
-/// the login screen only maps these to banner messages/navigation, and the
-/// orchestration lives in [SignInController].
+/// Outcome of a sign-in attempt, or of resuming a session right after setup.
 sealed class SignInOutcome {
   const SignInOutcome();
 }
@@ -32,14 +30,12 @@ class SignInInvalidCredentials extends SignInOutcome {
   const SignInInvalidCredentials();
 }
 
-/// Signed in, but no provisioned `users` doc exists for this uid — the
-/// session was signed out again before this outcome was returned.
+/// No provisioned `users` doc for this uid; the session was already signed out.
 class SignInNoProfile extends SignInOutcome {
   const SignInNoProfile();
 }
 
-/// The account's `users` doc is not active (disabled staff) — the session
-/// was signed out again before this outcome was returned.
+/// The `users` doc is not active; the session was already signed out.
 class SignInAccountDisabled extends SignInOutcome {
   const SignInAccountDisabled();
 }
@@ -49,16 +45,12 @@ class SignInNoSession extends SignInOutcome {
   const SignInNoSession();
 }
 
-/// Post-setup resume only: signed in but the freshly activated `users` doc
-/// isn't readable yet — ask the user to sign in normally.
+/// Post-setup resume only: the activated `users` doc isn't readable yet.
 class SignInProfilePending extends SignInOutcome {
   const SignInProfilePending();
 }
 
-/// Signed in against an account whose setup has never been completed.
-///
-/// The session is deliberately KEPT — it is the credential the setup screen
-/// needs. This is the only non-active status that isn't signed out.
+/// Signed in against a never-set-up account; the session is KEPT for setup.
 class SignInNeedsAccountSetup extends SignInOutcome {
   const SignInNeedsAccountSetup({
     required this.firstName,
@@ -79,8 +71,7 @@ class SignInError extends SignInOutcome {
   final AuthFailure failure;
 }
 
-/// Busy flag for the sign-in flow — drives the button spinner and disables
-/// the form fields while the attempt is in flight.
+/// Busy flag for the sign-in flow.
 @immutable
 class SignInState {
   const SignInState({this.inProgress = false});
@@ -95,9 +86,7 @@ class SignInState {
   int get hashCode => inProgress.hashCode;
 }
 
-/// Orchestrates the sign-in flow shared by the login form and the
-/// return-from-signup path, returning a [SignInOutcome]; the screen owns form
-/// state and navigation.
+/// Orchestrates sign-in and the post-setup resume; the screen owns form state and navigation.
 class SignInController extends Notifier<SignInState> {
   @override
   SignInState build() => const SignInState();
@@ -114,14 +103,12 @@ class SignInController extends Notifier<SignInState> {
     }
   }
 
-  /// Runs a full credential sign-in — on success it stays in-progress, and on
-  /// any failure it resets itself so the form re-enables.
+  /// Credential sign-in; stays in-progress on success and resets on any failure.
   Future<SignInOutcome> signIn({
     required String email,
     required String password,
   }) async {
-    // Grab these dependencies before the first await — in Riverpod 3, reading
-    // ref after the notifier is disposed throws.
+    // Resolved before the first await: a disposed notifier's Ref throws.
     final auth = ref.read(authServiceProvider);
     final employees = ref.read(employeesRepositoryProvider);
     final authCache = ref.read(authCacheProvider);
@@ -137,8 +124,6 @@ class SignInController extends Notifier<SignInState> {
         return const SignInInvalidCredentials();
       }
 
-      // Every account has a doc keyed by uid from the moment the admin
-      // creates it — including one that has never been set up.
       final userDoc = await retryAsync(() => employees.findUserByUid(user.uid));
 
       if (userDoc == null) {
@@ -154,11 +139,7 @@ class SignInController extends Notifier<SignInState> {
 
       final employee = EmployeeRecord.fromMap(userDoc.id, userDoc.data);
 
-      // First sign-in on an admin-created account: route to setup and KEEP the
-      // session. Signing out here would make setup unreachable, since the
-      // credential they just used is the one it needs. Checked before the
-      // active gate, and an exact `invited` match — an empty or unknown status
-      // still falls through to the sign-out below.
+      // Invited keeps the session and is checked before the active gate (root CLAUDE.md).
       if (employee.isInvited) {
         _settle();
         return SignInNeedsAccountSetup(
@@ -186,9 +167,7 @@ class SignInController extends Notifier<SignInState> {
         return const SignInNeedsPasswordChange();
       }
 
-      // The identity cache and remembered email are best-effort — neither
-      // should delay or fail the sign-in, so we fire them off unawaited and
-      // just log if they fail.
+      // Best-effort and unawaited: neither may delay or fail the sign-in.
       unawaited(
         authCache.save(employee).catchError((Object e, StackTrace st) {
           logger.warn('AUTH-SIGNIN identity cache save failed', e, st);
@@ -216,9 +195,7 @@ class SignInController extends Notifier<SignInState> {
     }
   }
 
-  /// Account setup activates the account while the person is already signed
-  /// in, so resolve their profile and let the screen route straight into the
-  /// app instead of asking them to sign in again.
+  /// Routes a just-activated, still-signed-in person straight into the app.
   Future<SignInOutcome> resumeAfterSignUp() async {
     final auth = ref.read(authServiceProvider);
     final employees = ref.read(employeesRepositoryProvider);
@@ -230,11 +207,7 @@ class SignInController extends Notifier<SignInState> {
       final userDoc = await retryAsync(() => employees.findUserByUid(user.uid));
       if (userDoc == null) return const SignInProfilePending();
       final employee = EmployeeRecord.fromMap(userDoc.id, userDoc.data);
-      // Mirror signIn's gate. This runs immediately after activation, so the
-      // doc is normally `active` — but a stale read (offline persistence, or
-      // the permission-denied retry served from cache) would otherwise walk an
-      // still-`invited` person into the hub, where every rules gate denies them
-      // and nothing routes them back to setup.
+      // A stale read can still show `invited` here (root CLAUDE.md, Auth).
       if (!employee.isActive || employee.passwordResetRequired) {
         return const SignInProfilePending();
       }
@@ -245,8 +218,7 @@ class SignInController extends Notifier<SignInState> {
       );
       return SignInSuccess(employee);
     } catch (error, stackTrace) {
-      // The account is already created and active server-side, so we just
-      // report "pending" here — the user can recover by signing in normally.
+      // Already active server-side; a normal sign-in recovers.
       logger.warn('AUTH-SETUP resume after setup failed', error, stackTrace);
       return const SignInProfilePending();
     }

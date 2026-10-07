@@ -37,11 +37,7 @@ import 'package:scheduling/shared/widgets/sheets/app_bottom_sheet.dart';
 import 'package:scheduling/shared/widgets/sheets/form_sheet_frame.dart';
 import 'package:scheduling/shared/widgets/sheets/sheet_widgets.dart';
 
-/// Opens the edit-person sheet. Resolves to the saved record, or null when the
-/// sheet was cancelled.
-///
-/// A nullable record is enough because a person is never removed here (owner
-/// decision 2026-08-02) — there is no third "they are gone" state.
+/// Opens the edit-person sheet; resolves to the saved record, or null when cancelled.
 Future<EmployeeRecord?> showEditPersonSheet(
   BuildContext context,
   EmployeeRecord employee, {
@@ -74,19 +70,9 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
   late final TextEditingController _emergencyPhoneController;
   late final ProviderSubscription<AsyncValue<EmergencyContact>> _emergencySub;
 
-  /// A snapshot of users/{id}/private/emergency has actually arrived.
-  /// Save writes the emergency doc ONLY when this is true — the fields start
-  /// blank and fill in asynchronously, so saving before the read lands would
-  /// merge two empty strings over a stored contact and destroy it.
+  // The three emergency-seeding flags are explained in `.claude/rules/employees.md`.
   bool _emergencyLoaded = false;
-
-  /// The admin has typed in one of the two fields. Until then a fresher
-  /// snapshot is allowed to re-seed, so a stale cache-first emission can be
-  /// corrected by the server one instead of being saved back as a lost update.
   bool _emergencyDirty = false;
-
-  /// The read failed — "we couldn't load it", which must NOT render as "none
-  /// on file", or the admin overwrites a contact they simply couldn't see.
   bool _emergencyFailed = false;
 
   late JobTitle _jobTitle;
@@ -110,9 +96,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
         .read(analyticsServiceProvider)
         .logScreenView(AnalyticsScreens.editPerson);
     final e = widget.employee;
-    // A legacy doc has the whole name in `name` and nothing in first/last.
-    // Seeding First with it keeps the stored name visible and editable, and
-    // composeEmployeeName then preserves it on save.
+    // A legacy doc has the whole name in `name`; seed First with it.
     final hasSplitName =
         e.firstName.trim().isNotEmpty || e.lastName.trim().isNotEmpty;
     _firstNameController = TextEditingController(
@@ -121,15 +105,9 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     _lastNameController = TextEditingController(text: e.lastName);
     _emailController = TextEditingController(text: e.email);
     _phoneController = TextEditingController(text: e.phone);
-    // Seeded asynchronously: the emergency pair lives in
-    // users/{id}/private/emergency, a separate read, so the fields start blank
-    // and fill in when it arrives. Guarded by _emergencySeeded so a later
-    // snapshot can't overwrite what the admin has already typed.
     _emergencyController = TextEditingController();
     _emergencyPhoneController = TextEditingController();
-    // Read the current value directly rather than firing the listener
-    // immediately — the immediate fire lands inside initState, where setState
-    // is illegal.
+    // Not fireImmediately: that fire lands inside initState, where setState is illegal.
     _applyEmergency(ref.read(emergencyContactProvider(e.id)), initial: true);
     _emergencySub = ref.listenManual(
       emergencyContactProvider(e.id),
@@ -149,8 +127,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     _isDisabled = e.isDisabled;
   }
 
-  /// Folds one emergency snapshot into the fields. [initial] runs inside
-  /// initState, where the frame hasn't been built yet and setState would throw.
+  /// Folds one emergency snapshot into the fields; [initial] skips setState inside initState.
   void _applyEmergency(
     AsyncValue<EmergencyContact> value, {
     bool initial = false,
@@ -267,8 +244,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
         .read(employeeFormControllerProvider.notifier)
         .updateEmployee(
           updated,
-          // null = leave the emergency doc alone. Sending a value we never
-          // managed to read would merge blanks over a stored contact.
+          // null = leave the emergency doc alone until its read has landed.
           emergency: _emergencyLoaded
               ? EmergencyContact(
                   contact: _emergencyController.text,
@@ -333,8 +309,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
         ref
             .read(analyticsServiceProvider)
             .logEmployeeStatusChanged(
-              // The account-status vocabulary has an owner; a second spelling
-              // here would drift from what the doc actually stores.
+              // Spelled through UserStatus, the vocabulary's one owner.
               status: _isDisabled
                   ? UserStatus.active.name
                   : UserStatus.disabled.name,
@@ -380,8 +355,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
       return;
     }
 
-    // Drag-dismiss pops the route directly (PopScope can't veto it), so the
-    // issued password must outlive the sheet: show it via the root navigator.
+    // The issued password must outlive a drag-dismissed sheet.
     final navigator = Navigator.of(context, rootNavigator: true);
     final outcome = await ref
         .read(employeeFormControllerProvider.notifier)
@@ -426,8 +400,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
         activity.isTogglingStatus ||
         activity.isResettingPassword;
     final signedInUid = ref.watch(authUidProvider).value;
-    // Fail closed: hidden until the signed-in uid is known and is not theirs.
-    // The server refuses an admin target, so the action is never offered.
+    // Fail closed: hidden until the signed-in uid is known, and never for an admin target.
     final canResetPassword =
         widget.employee.isActive &&
         !widget.employee.isAdmin &&
@@ -481,12 +454,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     ),
     const SizedBox(height: AppSpacing.sp16),
     SheetFocusScroll(
-      // Editable again since the `changeEmployeeEmail` callable exists: this is
-      // the person's SIGN-IN identity, and the repository routes a change
-      // through the server so Firebase Auth and the users doc move together.
-      // It was read-only while the field wrote Firestore alone — that left the
-      // person signing in at the old address and desynced the two stores
-      // `createEmployeeAccount` joins on.
+      // Sign-in identity: the repository moves Auth too via `changeEmployeeEmail`.
       child: LabeledTextField(
         key: const Key('email'),
         label: l10n.employees_workEmail,
@@ -548,16 +516,14 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
   ) => [
     MonoSectionLabel(l10n.employees_sectionAvailability),
     const SizedBox(height: AppSpacing.sp8),
-    // The SAME panel Settings › My details renders, so the two can't drift on
-    // a row's treatment or on which time picker it opens.
+    // Shared with Settings › My details.
     AvailabilityPanel(
       workingDays: _workingDays,
       workStartMinutes: _workStartMinutes,
       workEndMinutes: _workEndMinutes,
       onCall: _onCall,
       hoursErrorText: errors['hours'],
-      // Admin-only, and written through the admin save path — it is not on the
-      // self-service allowlist, so it is a slot rather than part of the patch.
+      // Admin-only (not on the self-service allowlist), so a slot rather than part of the panel.
       maxJobsRow: SheetFieldRow(
         label: l10n.employees_maxJobsPerDay,
         value: maxJobsLabel(l10n, _maxJobsPerDay),
@@ -573,15 +539,11 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
       }),
     ),
     const SizedBox(height: AppSpacing.sp24),
-    // Its own section, not a tail on AVAILABILITY — who to call in an
-    // emergency has nothing to do with when someone works.,
   ];
 
   List<Widget> _emergencySection(ThemeData theme, AppLocalizations l10n) => [
     MonoSectionLabel(l10n.employees_sectionEmergency),
     const SizedBox(height: AppSpacing.sp8),
-    // Free-text stays a LabeledTextField, outside the panel — it owns the
-    // error shake and the clear button a panel row has neither of.
     if (_emergencyFailed)
       WarningNote(message: l10n.employees_emergencyLoadFailed)
     else ...[
@@ -590,8 +552,6 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
           label: l10n.employees_emergencyContact,
           controller: _emergencyController,
           optional: true,
-          // Not editable until the separate read lands, so the admin can
-          // never type into (or save) fields that only LOOK empty.
           readOnly: !_emergencyLoaded,
           textInputAction: TextInputAction.next,
           maxLength: TextLimits.employeeEmergencyContact,
@@ -710,8 +670,7 @@ class _StatusFooter extends ConsumerWidget {
                 : l10n.employees_disableEmployee,
           ),
         ),
-        // Only meaningful before disabling — after, the work has already been
-        // left assigned and the caption would be nagging about the past.
+        // Only before disabling; afterwards it would nag about the past.
         if (!isDisabled && futureJobs.hasValue)
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.sp8),

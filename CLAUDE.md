@@ -111,6 +111,11 @@ Secret-Manager `GOOGLE_MAP_API_KEY`, which must never ship in the app.
   just used is the one it needs. The test is `employee.isInvited`, an **exact**
   match checked BEFORE the active gate, so an empty or unknown status still
   gets the old sign-out. Tests pin both halves.
+  `SignInController.resumeAfterSignUp` restates the active gate even though it
+  runs right after activation: a stale read (offline persistence, or the
+  permission-denied retry served from cache) would otherwise walk a
+  still-`invited` person into the hub, where every rule denies them and nothing
+  routes them back to setup.
   **An `active` doc with `passwordResetRequired: true` (admin reset, 2026-09-29)
   routes to `ChangePasswordScreen` and KEEPS the session** at both gates,
   checked AFTER the invited and active gates; sign-in clears the identity cache
@@ -193,7 +198,10 @@ Secret-Manager `GOOGLE_MAP_API_KEY`, which must never ship in the app.
   cosmetic); don't reintroduce transactions there. The two remaining client
   transactions (employee edit uniqueness re-check, series update) are isolated
   one-at-a-time admin actions — don't add new transaction call sites that can
-  run concurrently with them or each other.
+  run concurrently with them or each other. A transaction body can RE-RUN, so
+  any state it accumulates for after the commit is rebuilt per attempt
+  (`updateAppointments` clears its `written` map inside the body), or it names
+  docs an abandoned attempt touched and this commit did not.
 - **Secure storage is iOS `first_unlock_this_device`** (`SecureStorageService`):
   the default `unlocked` Keychain class made every read throw -25308 when a
   content-available push cold-started the app on a locked phone — Crashlytics

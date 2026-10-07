@@ -102,6 +102,11 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   paths (`updateAppointmentStatus`, `updateAppointmentStatuses`) send
   `FieldValue.serverTimestamp()` unconditionally — a new status-write path that
   omits it will be refused here.
+  **`updateAppointmentStatus` is NOT delegated to `updateAppointmentStatuses([id])`**,
+  though the bodies look duplicated: the singular writes the doc directly and
+  stamps `seriesOpId` only on `cancelled`, while the plural commits a
+  `WriteBatch` stamping `seriesOpId` on EVERY status — which this
+  `hasOnly(['status', 'updatedAt'])` branch would refuse for a crew mark-done.
 - **Admin-only appointment actions are gated by an explicit `showActions`.**
   `showEventDetails(..., showActions:)` is a REQUIRED param, and
   `EventDetailsSheet` / `EventDetailsView` both default it

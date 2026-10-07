@@ -267,7 +267,11 @@ Loaded when working on the image pipeline. Root context: `../../CLAUDE.md`.
   **`appendAppointmentPictures`/`removeAppointmentPictures` write the
   subcollection and touch the parent's `updatedAt` only.** They must never
   write `pictureCount` — `recountAppointmentPictures` owns it and the rules
-  reject a client update that moves it.
+  reject a client update that moves it. The ONE client write the rules allow is
+  `pictureCount: 0` on CREATE (`addAppointments`, and the copies a series edit
+  writes), so "absent" is never a state to interpret: the recount fires only on
+  a photo write, so a job created without it would read count-unknown until its
+  first photo.
   **The subcollection document id is DERIVED from the photo —
   `appointmentImageDocId` (`calendar/domain/policies/`), hand-mirrored as
   `functions/appointment_image_ids.js`.** That is what makes the write

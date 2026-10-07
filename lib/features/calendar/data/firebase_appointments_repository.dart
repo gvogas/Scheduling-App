@@ -58,8 +58,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   /// Lets tests inject a fake clock so the search-cache TTL is testable.
   final DateTime Function() _clock;
 
-  /// Generates a fresh id for each write op, so all the notifications a single
-  /// write triggers collapse into one per employee.
+  /// A fresh `seriesOpId` per write op, so one write notifies each employee once.
   String _newSeriesOpId() => const Uuid().v4();
 
   /// Ceiling on the live business-wide range listeners.
@@ -68,12 +67,10 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   /// Ceiling on one client's paged job history.
   static const int _clientHistoryScanLimit = 1000;
 
-  /// Page size for that scan. Kept off the caller's `limit` so a busy client
-  /// costs two round-trips to reach the ceiling, not twenty.
+  /// Page size for that scan, deliberately not the caller's display `limit`.
   static const int _clientHistoryPageSize = 500;
 
-  /// Raw rows the overdue review's live query reads; mirrors the server's
-  /// `MONTH_END_SCAN_MAX`, since personal blocks and days off never close.
+  /// Raw rows the overdue review's live query reads; mirrors `MONTH_END_SCAN_MAX`.
   static const int _overdueScanLimit = 5000;
 
   /// Overdue jobs the review lists; mirrors `MONTH_END_REVIEW_MAX`.
@@ -86,8 +83,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   final Map<String, _CachedHistoryScanWindow> _historyWindows = {};
   final Map<String, Future<_CachedHistoryScanWindow>> _pendingHistoryScans = {};
 
-  /// The map key for a scope: `''` for the admin archive, `'emp:<id>'` for one
-  /// person's.
+  /// Scope key: `''` for the admin archive, `'emp:<id>'` for one person's.
   static String _scopeKey(String? employeeId) =>
       employeeId == null ? '' : 'emp:$employeeId';
 
@@ -100,8 +96,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       (key, results) => _patchSearchResults(key, results, changes),
     );
     _pendingHistoryScans.clear();
-    // EVERY scope's window: a technician's is the same archive narrowed, so a
-    // write that changes what history holds changes it for them too.
+    // Every scope: a technician's window is the same archive narrowed.
     for (final scope in _historyWindows.keys.toList()) {
       final window = _historyWindows[scope]!;
       if (!_searchCache.isFresh(window.fetchedAt)) {
@@ -198,10 +193,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       written[doc.id] = _toFirestoreMap(appointment);
       batch.set(doc, {
         ..._toFirestoreMap(appointment),
-        // The one client write of this counter the rules allow, and the reason
-        // "absent" is not a state anything downstream has to interpret: the
-        // recount trigger only fires on a photo write, so a job created without
-        // it would read as count-unknown until its first photo.
+        // The one client write of this counter the rules allow (see images.md).
         'pictureCount': 0,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -252,8 +244,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     for (final copy in copies) {
       batch.set(_appointments.doc(copy.id), {
         ..._toFirestoreMap(copy),
-        // A copied occurrence is a new document — same reasoning as
-        // `addAppointments`, and photos never come along with one.
+        // A copied occurrence is a new document with no photos.
         'pictureCount': 0,
         'seriesOpId': opId,
         'createdAt': FieldValue.serverTimestamp(),
@@ -287,8 +278,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     await _appointments.firestore.runTransaction((txn) async {
       final refs = [for (final r in records) _appointments.doc(r.id)];
       final snaps = await Future.wait([for (final ref in refs) txn.get(ref)]);
-      // Rebuilt per attempt: a transaction can re-run, and a set carried over
-      // from an abandoned attempt would name docs this commit never touched.
+      // Rebuilt per attempt: a transaction body can re-run.
       written.clear();
       for (var i = 0; i < records.length; i++) {
         if (!snaps[i].exists) continue;
@@ -338,8 +328,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       authorId: authorId,
       authorName: authorName,
     );
-    // The narrow poke: a note changes no field matchHistoryDocs reads, so the
-    // window is woken rather than rebuilt.
+    // A note changes no field matchHistoryDocs reads.
     _notifyLocalWrite();
   }
 
@@ -354,9 +343,6 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     'cancelled',
   };
 
-  // NOT delegated to `updateAppointmentStatuses([id])`, though the bodies look
-  // duplicated: this writes the document DIRECTLY while the plural commits a
-  // WriteBatch.
   @override
   Future<void> updateFieldNotes({
     required String id,
@@ -373,6 +359,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     }, isRecordWrite: false);
   }
 
+  // Not delegated to the plural: see appointments.md, mark-complete.
   @override
   Future<void> updateAppointmentStatus({
     required String id,
@@ -573,11 +560,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
         isLessThan: Timestamp.fromDate(_clock()),
       );
     }
-    // The warn belongs to the DEFAULT cap, which is a silent truncation of a
-    // list meant to be complete. An explicit cap is a deliberate window — the
-    // booking form asks for the newest 20 — and reaching it is the normal case
-    // for exactly the repeat clients it serves, so warning there files a
-    // Crashlytics non-fatal on every form open and buries the real one.
+    // Only the DEFAULT cap warns; an explicit cap is a deliberate window and breadcrumbs.
     final docs = await pageToCap(
       query.orderBy('startTime', descending: true),
       pageSize: limit,
@@ -592,9 +575,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
         _logger.warn('$message ($scanCap)');
       },
     );
-    // A multi-day run is ONE visit stored as one document per work day, so
-    // listing every document rendered a Monday-to-Friday job as five identical
-    // rows — and burned five of the section's 50-row render bound.
+    // A multi-day run is one job: list only its first day.
     return docs
         .map((doc) => _recordFrom(doc.id, doc.data()))
         .where((record) => record.dayIndex <= 1)
@@ -612,8 +593,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     final q = query.trim();
     if (!ClientSearchPolicy.shouldSearch(q)) return const [];
 
-    // Scope is part of the key: the same words searched by an admin and by a
-    // technician are two different answers.
+    // Scope is part of the key: an admin and a technician get different answers.
     final scope = _scopeKey(employeeId);
     final cacheKey = '$scope|${ClientSearchPolicy.cacheKey(q)}';
     return await _searchCache.getOrLoad(
@@ -666,8 +646,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   }) async {
     if (candidates.isEmpty) return const [];
 
-    // The busy PEOPLE are the clashing records' assignees: same query, same
-    // rule, one owner.
+    // The busy people are the clashing records' assignees.
     final clashes = await findClashingAppointments(
       employeeIds: candidates.map((e) => e.id).toList(),
       start: start,
@@ -724,12 +703,10 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     return base;
   }
 
-  /// Hand-mirrored by `appointmentHistoryScopes` in
-  /// `functions/search_tokens.js`; change both together.
+  /// Hand-mirrored by `appointmentHistoryScopes` in `functions/search_tokens.js`.
   List<String> _historySearchScopes(Map<String, dynamic> map) {
     final employeeIds = firestoreStringList(map['employeeIds']);
-    // The field carries every token once per scope, so the per-scope budget is
-    // the field cap divided by the scope count — NOT the query-side limit.
+    // Per-scope budget = field cap / scope count, NOT the query limit.
     final scopeCount = 1 + employeeIds.length;
     final tokens = searchIndexTokens(
       texts: [
@@ -826,9 +803,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     return window;
   }
 
-  /// One pass over the window: every change is merged in place, and a doc the
-  /// window has not seen is inserted at its `startTime` position rather than
-  /// appended, because the window is `startTime` DESC.
+  /// Merges changes in place; a new doc is inserted at its `startTime` DESC position.
   List<RawHistoryDoc> _patchHistoryDocs(
     List<RawHistoryDoc> docs,
     Map<String, Map<String, dynamic>?> changes, {

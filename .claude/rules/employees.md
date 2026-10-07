@@ -356,6 +356,12 @@ self-service settings. Root context: `../../CLAUDE.md`.
   — correct, not a gap, since the invite sheet is modal. Never collapse this
   back to booleans, and never "fix" a busy-state bug by adding a flag at a call
   site instead.
+  `updateEmployee`'s `emergency` write (`users/{id}/private/emergency`) runs
+  INSIDE the same `_save` as the users-doc write, so the one Save button keeps
+  one in-flight flag and a failure on either write surfaces once.
+  `deleteAccount` reports a server refusal (the person finished setup
+  meanwhile) as `AccountDeleteFailed`, never as success — the live stream has
+  flipped the row to Active by the time the notice lands.
 - **The deep-link dispatcher is the single `app_links` consumer, and it MUST
   skip any URI carrying the `homeWidget` query param.** `classifyDeepLink`
   (`core/deep_links/deep_link_target.dart`) returns `IgnoredLink` for it, with
@@ -448,7 +454,9 @@ self-service settings. Root context: `../../CLAUDE.md`.
   whatever it is handed, so a call site that omits one silently wipes the
   pending person's phone or job title. `EmployeeFormController.createAccount`
   therefore takes a record and destructures it in ONE place (the repository
-  method below it is the only place that speaks named strings), and
+  method below it is the only place that speaks named strings — a new field in
+  the server's re-provision update set must still be added to that hand-written
+  destructuring, with no compile error if it is missed), and
   `PendingInviteTile` passes `widget.employee` whole — the omission is
   unexpressible rather than merely documented. Don't "flatten" the controller
   signature back to named strings: that shape was a trap that bit the old Show
@@ -673,7 +681,10 @@ self-service settings. Root context: `../../CLAUDE.md`.
   untouched field in `request.resource.data`. As written, an untouched legacy
   value simply passes through (so the doc stays updatable) and the client scrub
   heals it on the next save. The length caps in `isValidUserData` stay for that
-  pass-through case — they are not dead. `functions/scripts/backfill-emergency.js`
+  pass-through case — they are not dead. The scrub lives in `updateEmployee`
+  and NOT in `saveEmergencyContact`, because self-service settings also call
+  the latter and their `hasOnly` allowlist would reject the extra delete keys.
+  `functions/scripts/backfill-emergency.js`
   is **deleted**; it has nothing to do. Pinned by
   `test/core/security/emergency_contact_rules_test.dart`, which reads
   `firestore.rules` back (rules can't be unit-tested without the emulator).
@@ -703,6 +714,20 @@ self-service settings. Root context: `../../CLAUDE.md`.
   title and crew colour deliberately stay on the Team sheet: an admin editing
   their own role from a self-service screen is a privilege-escalation shape with
   no product reason to exist.
+- **`EditPersonSheet` seeds the emergency pair ASYNCHRONOUSLY, and three flags
+  guard it.** The fields start blank and fill from `emergencyContactProvider`.
+  `_emergencyLoaded`: the fields stay `readOnly` and Save sends
+  `emergency: null` (leave the doc alone) until a snapshot has arrived —
+  otherwise a save merges two empty strings over a stored contact. `_emergencyDirty`:
+  until the admin types, a fresher snapshot may RE-SEED, so a stale cache-first
+  emission is corrected by the server one instead of saved back as a lost
+  update; after typing, nothing clobbers the fields. `_emergencyFailed`: a
+  failed read renders `employees_emergencyLoadFailed`, never "none on file".
+  The initial value is read with `ref.read` in `initState` rather than firing
+  the listener immediately, because that fire lands where `setState` is illegal.
+  **The reset-password credential dialog opens on the ROOT navigator**, captured
+  before the await: a drag-dismiss pops the sheet directly (`PopScope` cannot
+  veto it), and the issued password must outlive the sheet.
 - **The emergency pair is its own section, not a tail on availability.** Both
   the edit sheet (`MonoSectionLabel` `employees_sectionEmergency`) and the
   read-only detail view (its own `KeyValuePanel`, rendered only when non-empty)
@@ -912,6 +937,11 @@ self-service settings. Root context: `../../CLAUDE.md`.
   the row is hidden until the person's own record loads rather than rendered
   against a guessed default. `EmployeeRecord.toMap()` deliberately does NOT emit
   it: an admin save must leave it exactly as it was.
+
+- **`EmployeesRepository.cachedUserDocId(uid)`** returns the doc id
+  `watchUserDoc` last resolved, so a caller already watching that stream does
+  not pay a second `where('uid').limit(1).get()` for it; null means "query the
+  slow way", never "no doc".
 
 - **The team roster's "jobs today" count is ONE listener, not one per row.**
   `employeeJobsTodayProvider` reduces a single `appointmentsInRangeProvider` over
