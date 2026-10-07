@@ -5,7 +5,7 @@
 // `obscureText` is NOT a safe proxy for it: every password field in this app
 // carries a Show/Hide toggle, so the instant it is tapped the field renders
 // plain text at the framework's `true` default. That is exactly how
-// `AuthPasswordField` and both `DeleteAccountReauthDialog` variants once
+// `AuthPasswordField` and both `PasswordReauthDialog` variants once
 // shipped without the flag — a rule nothing enforced.
 //
 // A widget test can only pin the fields it happens to mount, and the failure
@@ -132,16 +132,16 @@ void main() {
       containsAll(<String>[
         'lib/features/auth/widgets/auth_fields.dart',
         'lib/features/settings/widgets/dialogs/change_email_dialog.dart',
-        'lib/features/settings/widgets/dialogs/delete_account_dialog.dart',
+        'lib/shared/widgets/dialogs/password_reauth_dialog.dart',
       ]),
     );
-    // delete_account_dialog carries BOTH the Cupertino and Material variants —
+    // password_reauth_dialog carries BOTH the Cupertino and Material variants —
     // the pair that shipped broken because only one was ever looked at.
     expect(
       sites
           .where(
             (p) => p.endsWith(
-              'features/settings/widgets/dialogs/delete_account_dialog.dart',
+              'shared/widgets/dialogs/password_reauth_dialog.dart',
             ),
           )
           .length,

@@ -9,9 +9,13 @@ import 'package:scheduling/features/maps/domain/places_repository.dart';
 
 /// Counts lookups so a test can tell a cached answer from a fresh billed call.
 class _CountingPlaces implements PlacesRepository {
-  _CountingPlaces({this.fail = false});
+  _CountingPlaces({
+    this.fail = false,
+    this.failure = const MapsFailureRateLimit(),
+  });
 
   bool fail;
+  MapsFailure failure;
   int calls = 0;
 
   @override
@@ -21,7 +25,7 @@ class _CountingPlaces implements PlacesRepository {
     required String locale,
   }) async {
     calls += 1;
-    if (fail) throw const MapsFailureRateLimit();
+    if (fail) throw failure;
     return '1234 Rue Principale, Laval, QC';
   }
 
@@ -107,6 +111,42 @@ void main() {
 
     expect(places.calls, 1);
   });
+
+  test(
+    'a server pause resolves to null and is held for the cooldown',
+    () async {
+      // A server-only pause outlives the client flag; without the hold every
+      // recycled roster row re-called a callable that refuses again.
+      final places = _CountingPlaces(
+        fail: true,
+        failure: const MapsFailurePaused(),
+      );
+      final container = ProviderContainer(
+        overrides: [placesRepositoryProvider.overrideWithValue(places)],
+        retry: (retryCount, error) => null,
+      );
+      addTearDown(container.dispose);
+
+      final sub = container.listen(
+        reverseGeocodeProvider(key),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      while (container.read(reverseGeocodeProvider(key)).isLoading) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      final value = container.read(reverseGeocodeProvider(key));
+      expect(value.hasError, isFalse);
+      expect(value.value, isNull);
+      sub.close();
+      await Future<void>.delayed(Duration.zero);
+
+      places.fail = false;
+      await readAndRelease(container);
+      expect(places.calls, 1);
+      expect(container.read(reverseGeocodeProvider(key)).value, isNull);
+    },
+  );
 
   test('the failure is held for the cooldown, then retried', () async {
     final places = _CountingPlaces(fail: true);

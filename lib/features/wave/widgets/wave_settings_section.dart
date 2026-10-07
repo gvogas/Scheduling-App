@@ -56,8 +56,8 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
     setBusy(busy: true);
     try {
       await action();
-    } on WaveFailure catch (e, st) {
-      logger.warn('WAVE-$tag failed', e, st);
+    } on WaveFailure catch (e) {
+      // Already logged by WaveService, which is the only source of one.
       if (!mounted) return;
       notices.error(e.toLocalizedMessage(context));
     } on Object catch (e, st) {
@@ -279,10 +279,7 @@ class _OutboxRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(
-        left: AppSpacing.sp4,
-        top: AppSpacing.sp8,
-      ),
+      padding: const EdgeInsets.only(left: AppSpacing.sp4, top: AppSpacing.sp8),
       child: Row(
         children: [
           Icon(icon, size: 14, color: tone),
@@ -308,9 +305,7 @@ class _WaveStatusLoading extends StatelessWidget {
   Widget build(BuildContext context) {
     return const Padding(
       padding: EdgeInsets.symmetric(vertical: AppSpacing.sp12),
-      child: Center(
-        child: AdaptiveProgressIndicator(),
-      ),
+      child: Center(child: AdaptiveProgressIndicator()),
     );
   }
 }
@@ -338,10 +333,7 @@ class _WaveStatusError extends StatelessWidget {
             ),
           ),
         ),
-        TextButton(
-          onPressed: onRetry,
-          child: Text(context.l10n.common_retry),
-        ),
+        TextButton(onPressed: onRetry, child: Text(context.l10n.common_retry)),
       ],
     );
   }

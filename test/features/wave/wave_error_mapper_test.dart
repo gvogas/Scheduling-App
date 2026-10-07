@@ -65,15 +65,33 @@ void main() {
     });
 
     test('wave/business-ambiguous -> WaveValidation(businessAmbiguous)', () {
-      final result = WaveErrorMapper.map(fn(message: 'wave/business-ambiguous'));
+      final result = WaveErrorMapper.map(
+        fn(message: 'wave/business-ambiguous'),
+      );
       expect(result, isA<WaveValidation>());
       expect((result as WaveValidation).reason, 'businessAmbiguous');
     });
 
     test('wave/business-not-found -> WaveValidation(reason: null)', () {
-      final result = WaveErrorMapper.map(fn(message: 'wave/business-not-found'));
+      final result = WaveErrorMapper.map(
+        fn(message: 'wave/business-not-found'),
+      );
       expect(result, isA<WaveValidation>());
       expect((result as WaveValidation).reason, isNull);
+    });
+
+    test('a server feature-disabled refusal -> WavePaused', () {
+      expect(
+        WaveErrorMapper.map(
+          fn(message: 'feature-disabled', code: 'failed-precondition'),
+        ),
+        isA<WavePaused>(),
+      );
+      // Any other failed-precondition keeps its old mapping.
+      expect(
+        WaveErrorMapper.map(fn(message: 'other', code: 'failed-precondition')),
+        isA<WaveUnknown>(),
+      );
     });
 
     test('wave/not-admin -> WaveUnknown', () {

@@ -2,6 +2,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/features/maps/data/google_places_repository.dart';
 import 'package:scheduling/features/maps/domain/maps_failure.dart';
 
@@ -12,6 +13,8 @@ class _MockCallable extends Mock implements HttpsCallable {}
 class _MockResult extends Mock implements HttpsCallableResult<dynamic> {}
 
 class _FakeHttpsCallableOptions extends Fake implements HttpsCallableOptions {}
+
+class _MockLogger extends Mock implements AppLogger {}
 
 void main() {
   setUpAll(() {
@@ -177,6 +180,30 @@ void main() {
           () => repo.autocomplete('1234 Main', sessionToken: 't'),
           throwsA(isA<MapsFailureUnauthorized>()),
         );
+      },
+    );
+
+    test(
+      'a server feature-disabled refusal → Paused, as a breadcrumb not a warn',
+      () async {
+        final logger = _MockLogger();
+        final quiet = GooglePlacesRepository(
+          functions: functions,
+          logger: logger,
+        );
+        when(() => autocomplete.call<dynamic>(any<Object?>())).thenThrow(
+          FirebaseFunctionsException(
+            code: 'failed-precondition',
+            message: 'feature-disabled',
+          ),
+        );
+
+        await expectLater(
+          () => quiet.autocomplete('1234 Main', sessionToken: 't'),
+          throwsA(isA<MapsFailurePaused>()),
+        );
+        verify(() => logger.breadcrumb(any())).called(1);
+        verifyNever(() => logger.warn(any(), any<Object?>(), any()));
       },
     );
 
@@ -401,9 +428,7 @@ void main() {
 
     test('returns null when the server found no address', () async {
       final result = _MockResult();
-      when(
-        () => result.data,
-      ).thenReturn(<String, dynamic>{'address': null});
+      when(() => result.data).thenReturn(<String, dynamic>{'address': null});
       when(
         () => reverseGeocode.call<dynamic>(any<Object?>()),
       ).thenAnswer((_) async => result);
@@ -464,11 +489,7 @@ void main() {
         );
 
         expect(
-          () => repo.reverseGeocode(
-            lat: 45.5017,
-            lng: -73.5673,
-            locale: 'en',
-          ),
+          () => repo.reverseGeocode(lat: 45.5017, lng: -73.5673, locale: 'en'),
           throwsA(isA<MapsFailureRateLimit>()),
         );
       },

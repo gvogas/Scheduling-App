@@ -266,7 +266,7 @@ key means every feature on and `min_supported_build` 0).
   check that the functions runtime service account has `roles/cloudconfig.viewer`; grant it if absent.
 - **Older builds (no kill-switch code):** Places and Wave actions show a generic "something went wrong" error while paused; presence is NOT paused on them (app-only switch); their Live Activity cards freeze until iOS removes them as stale. `min_supported_build` is the lever for those.
 - Presence pause also DELETES each person's last location pin once (retried if refused).
-- Live Activities pause ends cards on devices running this build; a job ending while paused still removes that card's token row (normal lifecycle).
+- Live Activities pause ends cards once per pause on devices running this build and keeps every token: the device keeps its push-to-start rows, and the server neither sends nor prunes (a job ending while paused keeps its token row too), so re-enabling needs no re-registration.
 - Wave pause queues edits and drains them after re-enable; nothing dead-letters; `functions/scripts/drain-wave-queue.js` stops with a message while paused.
 - Forced update: lifting it mid-session restarts the app at splash (navigation state is lost). While the update screen shows, a remote account exit (disabled/deleted/demoted) does not sign the device out until the gate lifts; server-side deactivation (`syncUsersByUid`) still revokes access immediately.
 - `min_supported_build` only affects builds that contain the gate: the first build after 1.63.0+93.

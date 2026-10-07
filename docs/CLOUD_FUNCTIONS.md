@@ -2,7 +2,7 @@
 
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
-refreshed 2026-09-29 (release 1.63.0+93 — **32 exports, all 32 deployed**:
+refreshed 2026-10-07 (release 1.64.0+94 — still **32 exports**; source changes NOT yet deployed: `resetEmployeePassword` gained a fresh-reauth gate and refuses admin targets, the kill-switch parsers became strict, `endLiveActivity` keeps tokens while paused, and the FCM message dropped its Android block). Previously refreshed 2026-09-29 (release 1.63.0+93 — **32 exports, all 32 deployed**:
 `resetEmployeePassword` and `completePasswordReset` went live at `306ed848`, and
 the release's review fixes to both bodies at `cc38be5d` the same day — see the
 deploy log; re-checked 2026-10-01, nothing in `functions/` has changed since). Earlier 2026-09-29: `syncClientBuilding` went live at `e70b494d`. Previously refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
@@ -293,7 +293,7 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
 | `completeEmployeeSetup` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` → `auth_service.dart` (account setup screen) | — | App Check ✓ · authed (own doc) · durable 5/15min·uid · `accountOperations` lock · optional `newPassword` |
 | `deleteEmployeeAccount` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (pending-account row) | — | App Check ✓ · admin · durable 20/hr·uid |
 | `changeEmployeeEmail` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (inside `updateEmployee`, when the email changed on a doc with a `uid`); `self_email_service.dart` (a person changing their own) | — | App Check ✓ · admin **or self** · non-admin also needs re-auth <5 min · durable 5/hr·uid |
-| `resetEmployeePassword` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (edit-person sheet, Reset password on an active person) | — | App Check ✓ · admin · durable 20/hr·uid · `accountOperations` lock (uid) · refuses self and non-active |
+| `resetEmployeePassword` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (edit-person sheet, Reset password on an active person) | — | App Check ✓ · admin · fresh re-auth (5 min) · durable 20/hr·uid · `accountOperations` lock (uid) · refuses self, non-active and admin targets |
 | `completePasswordReset` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` → `auth_service.dart` (Change password screen) | — | App Check ✓ · active caller (`assertActiveCall`) · durable 5/15min·uid · `accountOperations` lock · requires `passwordResetRequired` |
 | `waveBootstrap` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` | `WAVE_FULL_ACCESS_TOKEN`, `WAVE_BUSINESS_NAME` | App Check ✓ · admin · durable 10/hr |
 | `waveGetConnection` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (Settings mount) | — | App Check ✓ · admin · durable 60/hr |
@@ -364,7 +364,11 @@ fourth scheduled function starts costing money.
 
 `feature_flags_policy.js` (pure: keys, defaults, parsing, the 60 s fail-open
 cache) and `feature_flags.js` (lazy `firebase-admin/remote-config` loader,
-`getFeatureFlags()`, `assertFeatureEnabled()`). Not exports. Reads the Remote
+`getFeatureFlags()`, `assertFeatureEnabled()`). Not exports. A value counts only
+as case-insensitive `true`/`false` (anything else is the default, ON) and
+`min_supported_build` only as a plain integer — the same rule as the app,
+pinned by `test/fixtures/shared/feature_flags.json`. A paused Live Activity
+call returns before any registry read and never prunes a token. Reads the Remote
 Config SERVER template only (the app reads the Client one; flip both). Runbook:
 `docs/DEPLOYMENT.md` "Flip a kill switch".
 
@@ -643,10 +647,13 @@ stops signing them in, so the admin should still tell them directly.
 ### `resetEmployeePassword` — `employee_accounts.js`
 Admin-only. Resets an ACTIVE employee's password (their email is not a real
 inbox, so Forgot password cannot help). Guard order auth → `assertAdmin` →
-payload (`docId` only, `/` rejected) → durable 20/hr per admin uid → work.
-Refuses the caller's own account (`failed-precondition / self-reset`) and a doc
+payload (`docId` only, `/` rejected) → `assertFreshReauth` (5 min, shared
+`REAUTH_MAX_AGE_SECONDS`; the app re-authenticates in the confirm dialog, so
+ship that build with or before this deploy) → durable 20/hr per admin uid → work.
+Refuses the caller's own account (`failed-precondition / self-reset`), a doc
 that is missing, has no `uid` or is not `active` (`failed-precondition /
-not-active`) — invited accounts keep the pending-row Reset, disabled ones stay
+not-active`), and an admin target (`failed-precondition / target-is-admin`,
+re-checked inside the transaction so a promotion committing first wins) — invited accounts keep the pending-row Reset, disabled ones stay
 locked out. Under the `accountOperations/{uid}` lock: a transaction re-checks
 `active` + the same `uid` and writes `passwordResetRequired: true`; THEN
 `auth.updateUser` with a `generateStartingPassword()` value; THEN

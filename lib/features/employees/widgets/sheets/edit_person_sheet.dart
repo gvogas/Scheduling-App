@@ -1,7 +1,5 @@
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:scheduling/core/adaptive/adaptive.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/analytics/analytics_screens.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
@@ -27,9 +25,9 @@ import 'package:scheduling/features/employees/widgets/fields/availability_panel.
 import 'package:scheduling/features/employees/widgets/fields/employee_color_grid.dart';
 import 'package:scheduling/features/employees/widgets/fields/job_title_chips.dart';
 import 'package:scheduling/features/employees/widgets/fields/work_schedule_pickers.dart';
-import 'package:scheduling/features/settings/widgets/dialogs/delete_account_dialog.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/dialogs/confirm_dialog.dart';
+import 'package:scheduling/shared/widgets/dialogs/password_reauth_dialog.dart';
 import 'package:scheduling/shared/widgets/feedback/user_status_chip.dart';
 import 'package:scheduling/shared/widgets/feedback/warning_note.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
@@ -368,7 +366,8 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     final l10n = context.l10n;
     final name = widget.employee.displayName;
     // One dialog is both the confirm and the admin's own re-auth.
-    final dialog = DeleteAccountReauthDialog(
+    final password = await showPasswordReauthDialog(
+      context,
       title: l10n.employees_resetPasswordConfirmTitle(name),
       message:
           '${l10n.employees_resetPasswordConfirmBody}\n\n'
@@ -376,12 +375,6 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
       confirmLabel: l10n.employees_resetPassword,
       destructive: false,
     );
-    final password = context.isCupertino
-        ? await showCupertinoDialog<String>(
-            context: context,
-            builder: (_) => dialog,
-          )
-        : await showDialog<String>(context: context, builder: (_) => dialog);
     if (!mounted || password == null || password.isEmpty) return;
     if (guardedOffline(context, ref, intro: l10n.error_introResetPassword)) {
       return;
@@ -393,8 +386,8 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     final outcome = await ref
         .read(employeeFormControllerProvider.notifier)
         .resetPassword(widget.employee.id, password: password);
-    if (!mounted) {
-      if (outcome case PasswordResetIssued(:final credentials)) {
+    switch (outcome) {
+      case PasswordResetIssued(:final credentials):
         await showNewAccountDialog(
           // The root navigator outlives this sheet, so its context is safe.
           // ignore: use_build_context_synchronously
@@ -404,22 +397,10 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
           title: l10n.employees_passwordReset,
           caption: l10n.employees_newPasswordIssued,
         );
-      }
-      return;
-    }
-
-    switch (outcome) {
       case PasswordResetBusy():
         break;
-      case PasswordResetIssued(:final credentials):
-        await showNewAccountDialog(
-          context,
-          name: name,
-          credentials: credentials,
-          title: l10n.employees_passwordReset,
-          caption: l10n.employees_newPasswordIssued,
-        );
       case PasswordResetFailed(:final error):
+        if (!mounted) return;
         ref
             .read(noticeServiceProvider)
             .error(

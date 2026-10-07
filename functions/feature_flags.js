@@ -30,9 +30,11 @@ async function loadFromRemoteConfig() {
   return readFlags(template.evaluate());
 }
 
-let cache = createFlagCache({
+const makeCache = () => createFlagCache({
   loader: loadFromRemoteConfig, now: Date.now, ttlMs: FLAG_TTL_MS, logger,
 });
+
+let cache = makeCache();
 
 /**
  * The current flags, at most 60 s stale. Never throws.
@@ -64,9 +66,7 @@ async function assertFeatureEnabled(key, label) {
  * @return {void}
  */
 function _resetForTest() {
-  cache = createFlagCache({
-    loader: loadFromRemoteConfig, now: Date.now, ttlMs: FLAG_TTL_MS, logger,
-  });
+  cache = makeCache();
 }
 
 module.exports = {

@@ -14,16 +14,21 @@ class FeatureFlags {
 
   /// A static value (no remote, no default) takes the code default, not false.
   factory FeatureFlags.fromValues(Map<String, RemoteConfigValue> values) {
-    bool readBool(String key, {required bool fallback}) {
+    String? raw(String key) {
       final v = values[key];
-      if (v == null || v.source == ValueSource.valueStatic) return fallback;
-      return parseBool(v.asString(), fallback: fallback);
+      return v == null || v.source == ValueSource.valueStatic
+          ? null
+          : v.asString();
+    }
+
+    bool readBool(String key, {required bool fallback}) {
+      final r = raw(key);
+      return r == null ? fallback : parseBool(r, fallback: fallback);
     }
 
     int readInt(String key, int fallback) {
-      final v = values[key];
-      if (v == null || v.source == ValueSource.valueStatic) return fallback;
-      return parseInt(v.asString(), fallback: fallback);
+      final r = raw(key);
+      return r == null ? fallback : parseInt(r, fallback: fallback);
     }
 
     return FeatureFlags(

@@ -37,6 +37,16 @@ void main() {
       },
     );
 
+    test('a server feature-disabled refusal -> MapsFailurePaused', () {
+      final error = FirebaseFunctionsException(
+        message: 'feature-disabled',
+        code: 'failed-precondition',
+      );
+      final failure = MapsErrorMapper.map(error);
+      expect(failure, isA<MapsFailurePaused>());
+      expect(failure.cause, same(error));
+    });
+
     test('invalid-argument -> MapsFailureInvalidInput', () {
       expect(
         MapsErrorMapper.map(fn('invalid-argument')),

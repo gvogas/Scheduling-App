@@ -59,6 +59,7 @@ test("paused: start sends nothing and deletes nothing", async () => {
   expect(sendLiveActivityPush).not.toHaveBeenCalled();
   expect(registry.deleteActivityToken).not.toHaveBeenCalled();
   expect(registry.writeCardMarker).not.toHaveBeenCalled();
+  expect(registry.listPushToStartTokens).not.toHaveBeenCalled();
 });
 
 test("paused: update sends nothing and deletes nothing", async () => {
@@ -69,6 +70,8 @@ test("paused: update sends nothing and deletes nothing", async () => {
   expect(sendLiveActivityPush).not.toHaveBeenCalled();
   expect(registry.deleteActivityToken).not.toHaveBeenCalled();
   expect(registry.setCardStart).not.toHaveBeenCalled();
+  expect(registry.readCardMarker).not.toHaveBeenCalled();
+  expect(registry.listUpdateTokens).not.toHaveBeenCalled();
 });
 
 test("paused: end sends nothing and keeps the token and marker", async () => {
@@ -79,6 +82,7 @@ test("paused: end sends nothing and keeps the token and marker", async () => {
   expect(sendLiveActivityPush).not.toHaveBeenCalled();
   expect(registry.deleteActivityToken).not.toHaveBeenCalled();
   expect(registry.clearCardMarker).not.toHaveBeenCalled();
+  expect(registry.readCardMarker).not.toHaveBeenCalled();
 });
 
 test("on: end sends and drops the token", async () => {

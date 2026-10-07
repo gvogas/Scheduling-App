@@ -10,6 +10,31 @@ All notable changes to this project are documented here.
 The `+N` build number after the version (e.g. `1.1.0+5`) is the store version
 code; it increments by one on every store upload regardless of the semver part.
 
+## [1.64.0+94] - 2026-10-07
+
+Features can be paused remotely without a new release, plus a safer admin
+password reset.
+
+### Added
+- **Features can be paused remotely.** Address suggestions, the live team
+  map and location sharing, Live Activity cards and Wave sync can each be
+  turned off from the server for a while. A paused feature says so and falls
+  back to the plain version (an address becomes a normal text field) instead
+  of failing, and everything comes back on its own when the pause is lifted.
+- **Very old versions are asked to update.** When a build is no longer
+  supported, the app shows an update screen with a button to the App Store.
+
+### Changed
+- **Resetting a team member's password asks for your own password first**,
+  and an admin's password can no longer be reset from the team screen.
+
+### Fixed
+- **The new password is never lost.** Swiping away a person's sheet while a
+  password reset or a new account is still being created now still shows the
+  new password.
+- **Signing out from the change-password screen fully signs you out**, the
+  same as signing out from Settings.
+
 ## [1.63.0+93] - 2026-09-29
 
 Admins can reset a team member's password, plus clearer client counts and

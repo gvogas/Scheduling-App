@@ -165,4 +165,32 @@ void main() {
     expect(find.text('123 Main St, Laval'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('a re-enable re-fetches the query typed before the pause', (
+    tester,
+  ) async {
+    final places = _MockPlaces();
+    final controller = TextEditingController();
+    addTearDown(controller.dispose);
+    final container = await _pumpWithSuggestion(tester, places, controller);
+
+    container.read(_addrEnabled.notifier).enabled = false;
+    await tester.tap(find.text('123 Main St, Laval'));
+    await tester.pump();
+    container.read(_addrEnabled.notifier).enabled = true;
+    await tester.pump();
+
+    // The first keystroke after a selection is absorbed by `_suppressFetch`.
+    await tester.enterText(find.byType(TextField), '1');
+    await tester.enterText(find.byType(TextField), '123 Main');
+    await tester.pump(const Duration(seconds: 2));
+
+    verify(
+      () => places.autocomplete(
+        '123 Main',
+        sessionToken: any(named: 'sessionToken'),
+      ),
+    ).called(2);
+    expect(tester.takeException(), isNull);
+  });
 }

@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:live_activities/live_activities.dart';
+import 'package:live_activities/models/activity_update.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/core/remote_config/feature_flags.dart';
@@ -29,6 +33,19 @@ class _MockUser extends Mock implements User {}
 class _MockEmployeesRepo extends Mock implements EmployeesRepository {}
 
 class _MockTokenRepo extends Mock implements LiveActivityTokenRepository {}
+
+class _MockPlugin extends Mock implements LiveActivities {}
+
+class _FlagsController extends Notifier<FeatureFlags> {
+  @override
+  FeatureFlags build() => _flags();
+
+  void liveActivities({required bool on}) => state = _flags(liveAct: on);
+}
+
+final _flagsSource = NotifierProvider<_FlagsController, FeatureFlags>(
+  _FlagsController.new,
+);
 
 // NOTE ON COVERAGE
 // The iOS gate is now an INJECTED `isIosPlatform` predicate rather than a bare
@@ -69,14 +86,11 @@ void main() {
   ProviderContainer makeContainer({
     bool onIos = false,
     Map<String, dynamic>? accountDoc,
-    bool liveActivitiesEnabled = true,
   }) {
     final container = ProviderContainer(
       overrides: [
         employeesRepositoryProvider.overrideWithValue(employees),
-        featureFlagsProvider.overrideWithValue(
-          _flags(liveAct: liveActivitiesEnabled),
-        ),
+        featureFlagsProvider.overrideWithValue(_flags()),
         liveActivityTokenRepositoryProvider.overrideWithValue(tokenRepo),
         if (accountDoc != null)
           currentUserDocProvider.overrideWith(
@@ -170,9 +184,7 @@ void main() {
       // stored opt-out is AUTHORITATIVE, so a sync reconciles by actively
       // removing rows an interrupted previous opt-out left behind. Skip it and
       // the server goes on push-starting cards on a device that opted out.
-      SharedPreferences.setMockInitialValues({
-        'live_activity_enabled': false,
-      });
+      SharedPreferences.setMockInitialValues({'live_activity_enabled': false});
       final container = makeContainer(onIos: true)
         ..listen(liveActivityEnabledProvider, (_, _) {});
       await container.read(liveActivityEnabledProvider.notifier).ready;
@@ -187,78 +199,81 @@ void main() {
       ).called(1);
     });
 
-    test('a remote pause tears down like an opt-out', () async {
-      final container = makeContainer(onIos: true, liveActivitiesEnabled: false)
-        ..listen(liveActivityEnabledProvider, (_, _) {});
-      await container.read(liveActivityEnabledProvider.notifier).ready;
+    test(
+      'an unsettled account doc registers nothing and deletes nothing',
+      () async {
+        // Null from `readAccountGateInputs` means "we don't know yet" — leaving
+        // the registration alone, NOT tearing it down. A transient stream error
+        // must never de-register a live device.
+        final container = makeContainer(onIos: true)
+          ..listen(liveActivityEnabledProvider, (_, _) {});
+        await container.read(liveActivityEnabledProvider.notifier).ready;
 
-      await controllerOf(container).sync();
+        await controllerOf(container).sync();
 
-      verify(
-        () => tokenRepo.deleteTokensOfKind(
-          userDocId: 'doc-1',
-          kind: LiveActivityTokenKind.pushToStart,
-        ),
-      ).called(1);
-    });
+        verifyNever(
+          () => tokenRepo.deleteTokensOfKind(
+            userDocId: any(named: 'userDocId'),
+            kind: any(named: 'kind'),
+          ),
+        );
+        verifyNever(() => employees.findUserByUid(any()));
+      },
+    );
 
-    test('an unsettled account doc registers nothing and deletes nothing',
-        () async {
-      // Null from `readAccountGateInputs` means "we don't know yet" — leaving
-      // the registration alone, NOT tearing it down. A transient stream error
-      // must never de-register a live device.
-      final container = makeContainer(onIos: true)
-        ..listen(liveActivityEnabledProvider, (_, _) {});
-      await container.read(liveActivityEnabledProvider.notifier).ready;
+    test(
+      'a disabled account is refused by the gate, without a teardown',
+      () async {
+        // The `shouldRegisterLiveActivity` arm: cancel local streams and stop.
+        // It must NOT delete server rows — that is the opt-out path's job, and
+        // a deactivated account has its rows purged server-side by
+        // `syncUsersByUid` instead.
+        final container =
+            makeContainer(
+                onIos: true,
+                accountDoc: const {'role': 'employee', 'status': 'disabled'},
+              )
+              ..listen(liveActivityEnabledProvider, (_, _) {})
+              ..listen(currentUserDocProvider, (_, _) {});
+        await container.read(liveActivityEnabledProvider.notifier).ready;
+        await container.read(currentUserDocProvider.future);
 
-      await controllerOf(container).sync();
+        await controllerOf(container).sync();
 
-      verifyNever(
-        () => tokenRepo.deleteTokensOfKind(
-          userDocId: any(named: 'userDocId'),
-          kind: any(named: 'kind'),
-        ),
-      );
-      verifyNever(() => employees.findUserByUid(any()));
-    });
-
-    test('a disabled account is refused by the gate, without a teardown',
-        () async {
-      // The `shouldRegisterLiveActivity` arm: cancel local streams and stop.
-      // It must NOT delete server rows — that is the opt-out path's job, and
-      // a deactivated account has its rows purged server-side by
-      // `syncUsersByUid` instead.
-      final container =
-          makeContainer(
-              onIos: true,
-              accountDoc: const {'role': 'employee', 'status': 'disabled'},
-            )
-            ..listen(liveActivityEnabledProvider, (_, _) {})
-            ..listen(currentUserDocProvider, (_, _) {});
-      await container.read(liveActivityEnabledProvider.notifier).ready;
-      await container.read(currentUserDocProvider.future);
-
-      await controllerOf(container).sync();
-
-      verifyNever(
-        () => tokenRepo.deleteTokensOfKind(
-          userDocId: any(named: 'userDocId'),
-          kind: any(named: 'kind'),
-        ),
-      );
-      verifyNever(() => employees.findUserByUid(any()));
-    });
+        verifyNever(
+          () => tokenRepo.deleteTokensOfKind(
+            userDocId: any(named: 'userDocId'),
+            kind: any(named: 'kind'),
+          ),
+        );
+        verifyNever(() => employees.findUserByUid(any()));
+      },
+    );
   });
 
-  group('off-iOS gates (this host cannot host a card)', () {
-    test('sync() is a no-op — never resolves a doc or upserts a token',
-        () async {
-      final controller = controllerOf(makeContainer());
+  group('remote pause (feature_live_activities off)', () {
+    late _MockPlugin plugin;
+    late StreamController<String> pushToStart;
 
-      await controller.sync();
-
-      verifyNever(() => employees.findUserByUid(any()));
-      verifyNever(
+    setUp(() {
+      SharedPreferences.setMockInitialValues({});
+      plugin = _MockPlugin();
+      pushToStart = StreamController<String>.broadcast();
+      addTearDown(pushToStart.close);
+      when(plugin.areActivitiesSupported).thenAnswer((_) async => true);
+      when(plugin.areActivitiesEnabled).thenAnswer((_) async => true);
+      when(plugin.allowsPushStart).thenAnswer((_) async => true);
+      when(
+        () => plugin.init(appGroupId: any(named: 'appGroupId')),
+      ).thenAnswer((_) async {});
+      when(
+        () => plugin.pushToStartTokenUpdateStream,
+      ).thenAnswer((_) => pushToStart.stream);
+      when(
+        () => plugin.activityUpdateStream,
+      ).thenAnswer((_) => const Stream<ActivityUpdate>.empty());
+      when(plugin.endAllActivities).thenAnswer((_) async {});
+      when(
         () => tokenRepo.upsertToken(
           userDocId: any(named: 'userDocId'),
           docId: any(named: 'docId'),
@@ -268,8 +283,137 @@ void main() {
           uid: any(named: 'uid'),
           expiresAt: any(named: 'expiresAt'),
         ),
-      );
+      ).thenAnswer((_) async {});
     });
+
+    Future<ProviderContainer> registered() async {
+      final container = ProviderContainer(
+        overrides: [
+          employeesRepositoryProvider.overrideWithValue(employees),
+          featureFlagsProvider.overrideWith((ref) => ref.watch(_flagsSource)),
+          liveActivityTokenRepositoryProvider.overrideWithValue(tokenRepo),
+          currentUserDocProvider.overrideWith(
+            (ref) => Stream<Map<String, dynamic>>.value(const {
+              'role': 'employee',
+              'status': 'active',
+            }),
+          ),
+          liveActivityRegistrationControllerProvider.overrideWith(
+            (ref) => LiveActivityRegistrationController(
+              ref,
+              auth: auth,
+              plugin: plugin,
+              isIosPlatform: () => true,
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container
+        ..listen(liveActivityEnabledProvider, (_, _) {})
+        ..listen(currentUserDocProvider, (_, _) {})
+        ..listen(_flagsSource, (_, _) {});
+      await container.read(liveActivityEnabledProvider.notifier).ready;
+      await container.read(currentUserDocProvider.future);
+      await controllerOf(container).sync();
+      pushToStart.add('token-a');
+      await pumpEventQueue();
+      return container;
+    }
+
+    void pause(ProviderContainer c, {required bool on}) =>
+        c.read(_flagsSource.notifier).liveActivities(on: !on);
+
+    test('keeps the push-to-start rows and token stream', () async {
+      final container = await registered();
+
+      pause(container, on: true);
+      await controllerOf(container).sync();
+
+      verifyNever(
+        () => tokenRepo.deleteTokensOfKind(
+          userDocId: any(named: 'userDocId'),
+          kind: any(named: 'kind'),
+        ),
+      );
+      expect(pushToStart.hasListener, isTrue);
+    });
+
+    test('ends local cards once per pause, not on every sync', () async {
+      final container = await registered();
+
+      pause(container, on: true);
+      await controllerOf(container).sync();
+      await controllerOf(container).sync();
+      await controllerOf(container).sync();
+
+      verify(plugin.endAllActivities).called(1);
+    });
+
+    test('re-enabling re-arms the guard for the next pause', () async {
+      final container = await registered();
+      final controller = controllerOf(container);
+
+      pause(container, on: true);
+      await controller.sync();
+      pause(container, on: false);
+      await controller.sync();
+      pause(container, on: true);
+      await controller.sync();
+
+      verify(plugin.endAllActivities).called(2);
+    });
+
+    test('a failed card end is retried on the next paused sync', () async {
+      final container = await registered();
+      var calls = 0;
+      when(plugin.endAllActivities).thenAnswer((_) async {
+        if (calls++ == 0) throw Exception('ActivityKit');
+      });
+
+      pause(container, on: true);
+      await controllerOf(container).sync();
+      await controllerOf(container).sync();
+      await controllerOf(container).sync();
+
+      expect(calls, 2);
+    });
+
+    test('resuming needs no token re-emission to stay registered', () async {
+      final container = await registered();
+      final controller = controllerOf(container);
+
+      pause(container, on: true);
+      await controller.sync();
+      pause(container, on: false);
+      await controller.sync();
+
+      verify(() => plugin.pushToStartTokenUpdateStream).called(1);
+    });
+  });
+
+  group('off-iOS gates (this host cannot host a card)', () {
+    test(
+      'sync() is a no-op — never resolves a doc or upserts a token',
+      () async {
+        final controller = controllerOf(makeContainer());
+
+        await controller.sync();
+
+        verifyNever(() => employees.findUserByUid(any()));
+        verifyNever(
+          () => tokenRepo.upsertToken(
+            userDocId: any(named: 'userDocId'),
+            docId: any(named: 'docId'),
+            token: any(named: 'token'),
+            kind: any(named: 'kind'),
+            locale: any(named: 'locale'),
+            uid: any(named: 'uid'),
+            expiresAt: any(named: 'expiresAt'),
+          ),
+        );
+      },
+    );
 
     test('canHostCards() returns false without probing the plugin', () async {
       final controller = controllerOf(makeContainer());

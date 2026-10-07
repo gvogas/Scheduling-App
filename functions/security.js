@@ -298,6 +298,9 @@ async function assertAdmin(uid) {
   }
 }
 
+// Re-auth window: deleteAccount, changeEmployeeEmail, resetEmployeePassword.
+const REAUTH_MAX_AGE_SECONDS = 5 * 60;
+
 /**
  * True when the caller's re-authentication is missing or too old to permit an
  * irreversible or identity-rewriting action.
@@ -352,6 +355,7 @@ module.exports = {
   assertAdmin,
   assertAdminCall,
   assertActiveCall,
+  REAUTH_MAX_AGE_SECONDS,
   isReauthStale,
   assertFreshReauth,
 };

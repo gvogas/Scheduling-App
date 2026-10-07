@@ -48,8 +48,11 @@ class GooglePlacesRepository implements PlacesRepository {
           )
           .call({'input': stripped, 'sessionToken': sessionToken});
     } catch (e, st) {
-      _logger.warn('ADDR-PLACES placesAutocomplete callable failed', e, st);
-      throw MapsErrorMapper.map(e, st);
+      throw _logFailure(
+        'ADDR-PLACES placesAutocomplete callable failed',
+        e,
+        st,
+      );
     }
 
     try {
@@ -83,8 +86,7 @@ class GooglePlacesRepository implements PlacesRepository {
           )
           .call({'placeId': placeId, 'sessionToken': sessionToken});
     } catch (e, st) {
-      _logger.warn('ADDR-PLACES placesGetDetails callable failed', e, st);
-      throw MapsErrorMapper.map(e, st);
+      throw _logFailure('ADDR-PLACES placesGetDetails callable failed', e, st);
     }
 
     try {
@@ -154,8 +156,11 @@ class GooglePlacesRepository implements PlacesRepository {
           )
           .call({'lat': lat, 'lng': lng, 'locale': locale});
     } catch (e, st) {
-      _logger.warn('ADDR-PLACES placesReverseGeocode callable failed', e, st);
-      throw MapsErrorMapper.map(e, st);
+      throw _logFailure(
+        'ADDR-PLACES placesReverseGeocode callable failed',
+        e,
+        st,
+      );
     }
 
     try {
@@ -171,5 +176,16 @@ class GooglePlacesRepository implements PlacesRepository {
       );
       throw MapsFailureParse(cause: e, stackTrace: st);
     }
+  }
+
+  /// Maps [e]; a server-side pause is an operator state, so only a breadcrumb.
+  MapsFailure _logFailure(String label, Object e, StackTrace st) {
+    final failure = MapsErrorMapper.map(e, st);
+    if (failure is MapsFailurePaused) {
+      _logger.breadcrumb('$label (feature paused)');
+    } else {
+      _logger.warn(label, e, st);
+    }
+    return failure;
   }
 }

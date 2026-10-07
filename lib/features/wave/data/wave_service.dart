@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/features/wave/domain/models/wave_connection.dart';
 import 'package:scheduling/features/wave/domain/wave_error_mapper.dart';
+import 'package:scheduling/features/wave/domain/wave_failure.dart';
 
 /// How long the app waits on a "Sync with Wave" run before reporting failure.
 ///
@@ -38,8 +39,7 @@ class WaveService {
           )
           .call(<String, dynamic>{});
     } catch (e, st) {
-      _logger.warn('WAVE-BOOT waveBootstrap callable failed', e, st);
-      throw WaveErrorMapper.map(e);
+      throw _logFailure('WAVE-BOOT waveBootstrap callable failed', e, st);
     }
 
     try {
@@ -62,8 +62,7 @@ class WaveService {
           )
           .call(<String, dynamic>{});
     } catch (e, st) {
-      _logger.warn('WAVE-CONN waveGetConnection callable failed', e, st);
-      throw WaveErrorMapper.map(e);
+      throw _logFailure('WAVE-CONN waveGetConnection callable failed', e, st);
     }
 
     try {
@@ -102,8 +101,7 @@ class WaveService {
           )
           .call(<String, dynamic>{});
     } catch (e, st) {
-      _logger.warn('WAVE-CUST waveImportCustomers callable failed', e, st);
-      throw WaveErrorMapper.map(e);
+      throw _logFailure('WAVE-CUST waveImportCustomers callable failed', e, st);
     }
 
     try {
@@ -141,8 +139,11 @@ class WaveService {
           )
           .call(<String, dynamic>{});
     } catch (e, st) {
-      _logger.warn('WAVE-RETRY waveRetryFailedJobs callable failed', e, st);
-      throw WaveErrorMapper.map(e);
+      throw _logFailure(
+        'WAVE-RETRY waveRetryFailedJobs callable failed',
+        e,
+        st,
+      );
     }
 
     try {
@@ -156,5 +157,16 @@ class WaveService {
       );
       throw WaveErrorMapper.map(e);
     }
+  }
+
+  /// Maps [e]; a server-side pause is an operator state, so only a breadcrumb.
+  WaveFailure _logFailure(String label, Object e, StackTrace st) {
+    final failure = WaveErrorMapper.map(e);
+    if (failure is WavePaused) {
+      _logger.breadcrumb('$label (feature paused)');
+    } else {
+      _logger.warn(label, e, st);
+    }
+    return failure;
   }
 }

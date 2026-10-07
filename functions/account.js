@@ -7,6 +7,7 @@ const {
   assertPayloadShape,
   enforceDurableRateLimit,
   assertFreshReauth,
+  REAUTH_MAX_AGE_SECONDS,
 } = require("./security");
 const {runAccountDeletion} = require("./account_policy");
 
@@ -15,10 +16,6 @@ const {runAccountDeletion} = require("./account_policy");
 // and cold starts.
 const AUTH_RATE_MAX = 5;
 const AUTH_RATE_WINDOW_MS = 15 * 60 * 1000;
-
-// deleteAccount requires the caller to have re-authenticated within this
-// window, since a still-valid ID token alone shouldn't trigger deletion.
-const REAUTH_MAX_AGE_SECONDS = 5 * 60;
 
 // ----- deleteAccount callable ------------------------------------------------
 //

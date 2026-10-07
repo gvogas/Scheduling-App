@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/features/maps/data/google_places_repository.dart';
+import 'package:scheduling/features/maps/domain/maps_failure.dart';
 import 'package:scheduling/features/maps/domain/places_repository.dart';
 
 final placesRepositoryProvider = Provider<PlacesRepository>(
@@ -78,14 +79,22 @@ final reverseGeocodeProvider = FutureProvider.autoDispose
         );
         ref.keepAlive();
         return address;
+      } on MapsFailurePaused {
+        // Not an error, but held like one: nothing else caps a refused call.
+        _holdForCooldown(ref);
+        return null;
       } on Object {
         // Held, then released — so the error still reaches the widget (the
         // row renders "No location" off it) but the cell is not re-requested
         // until the cooldown expires. A cache-eviction keep-alive is one of
         // the sanctioned raw-`Timer` uses; this is not a debounce.
-        final link = ref.keepAlive();
-        final timer = Timer(kReverseGeocodeFailureCooldown, link.close);
-        ref.onDispose(timer.cancel);
+        _holdForCooldown(ref);
         rethrow;
       }
     });
+
+void _holdForCooldown(Ref ref) {
+  final link = ref.keepAlive();
+  final timer = Timer(kReverseGeocodeFailureCooldown, link.close);
+  ref.onDispose(timer.cancel);
+}

@@ -51,3 +51,12 @@ class WaveUnknown extends WaveFailure {
   String toLocalizedMessage(BuildContext context) =>
       context.l10n.error_somethingWentWrongPleaseTryAgain;
 }
+
+/// The server refused because the Wave kill switch is off.
+class WavePaused extends WaveFailure {
+  const WavePaused();
+
+  @override
+  String toLocalizedMessage(BuildContext context) =>
+      context.l10n.settings_wavePaused;
+}

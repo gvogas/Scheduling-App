@@ -40,7 +40,7 @@ self-service settings. Root context: `../../CLAUDE.md`.
   uid is unknown) goes through `EmployeeFormController.resetPassword` (sealed
   `PasswordResetIssued` / `Failed` / `Busy`) to `resetEmployeePassword`.
   **The admin re-enters their OWN password first** (S1, owner call 2026-10-07):
-  the confirm is a `DeleteAccountReauthDialog` with reset copy, the controller
+  the confirm is a `PasswordReauthDialog` (`showPasswordReauthDialog`) with reset copy, the controller
   re-authenticates through `AccountDeletionService.reauthenticateWithPassword`
   BEFORE the callable, and the server restates it with `assertFreshReauth`
   (`stale-auth` → `EmployeesFailureReauthRequired`). The server refuses self,
