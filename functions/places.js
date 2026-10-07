@@ -10,6 +10,7 @@ const {
   shortHash,
 } = require("./security");
 const {GOOGLE_MAP_API_KEY} = require("./params");
+const {assertFeatureEnabled} = require("./feature_flags");
 const {repairMojibakeDeep} = require("./mojibake");
 
 // Both callables proxy the Places API v1 so the billing-sensitive key (kept in
@@ -140,6 +141,9 @@ const placesAutocomplete = onCall(
       const input = requireString(req.data, "input", INPUT_MAX_LEN);
       const sessionToken = readSessionToken(req.data);
 
+      await assertFeatureEnabled(
+          "feature_address_autocomplete", "placesAutocomplete");
+
       await enforceDurableRateLimit(
           "placesAutocomplete",
           uid,
@@ -197,6 +201,9 @@ const placesGetDetails = onCall(
       }
       const sessionToken = readSessionToken(req.data);
 
+      await assertFeatureEnabled(
+          "feature_address_autocomplete", "placesGetDetails");
+
       await enforceDurableRateLimit(
           "placesGetDetails",
           req.auth.uid,
@@ -253,6 +260,9 @@ const placesReverseGeocode = onCall(
       if (!REVERSE_GEOCODE_LOCALES.has(locale)) {
         throw new HttpsError("invalid-argument", "invalid-locale");
       }
+
+      await assertFeatureEnabled(
+          "feature_address_autocomplete", "placesReverseGeocode");
 
       await enforceDurableRateLimit(
           "placesReverseGeocode",
