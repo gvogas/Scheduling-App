@@ -12,6 +12,7 @@ import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/permissions/location_permission_service.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/utils/reentrant_sync.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
@@ -108,7 +109,9 @@ bool shouldTrackPresence({
   required String status,
   required bool signedIn,
   required bool locationSharingEnabled,
+  bool featureEnabled = true,
 }) =>
+    featureEnabled &&
     locationSharingEnabled &&
     shouldRegisterPush(role: role, status: status, signedIn: signedIn);
 
@@ -170,6 +173,7 @@ class PresenceSyncController with ReentrantSync {
         status: gate.status,
         signedIn: gate.signedIn,
         locationSharingEnabled: gate.locationSharingEnabled,
+        featureEnabled: _ref.read(featureFlagsProvider).presence,
       )) {
         _stop();
         return;
