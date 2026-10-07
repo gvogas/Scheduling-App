@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Commit, branch or tag to deploy
+        description: main, or a commit sha already merged into main
         required: true
         default: main
       targets:
@@ -87,9 +87,24 @@ jobs:
         id: plan
         env:
           TARGETS: ${{ inputs.targets }}
+          REF: ${{ inputs.ref }}
+          DISPATCH_REF: ${{ github.ref }}
         run: |
+          # Only main reaches production: dispatched from main, and the ref
+          # is main itself or a commit already merged into it.
+          if [ "$DISPATCH_REF" != "refs/heads/main" ]; then
+            echo "::error::This workflow deploys production and must be dispatched from main (got '$DISPATCH_REF')."
+            exit 1
+          fi
+          if [ "$REF" != "main" ]; then
+            if ! printf '%s' "$REF" | grep -Eq '^[0-9a-f]{7,40}$' ||
+                ! git merge-base --is-ancestor "$REF" origin/main; then
+              echo "::error::ref '$REF' is not main or a commit merged into origin/main. Unmerged work (dev included) never deploys to production; merge it first."
+              exit 1
+            fi
+          fi
           case "$TARGETS" in
-            all)               indexes="firestore:indexes"; rest="functions,firestore:rules,storage" ;;
+            all)              indexes="firestore:indexes"; rest="functions,firestore:rules,storage" ;;
             firestore:indexes) indexes="firestore:indexes"; rest="" ;;
             functions|firestore:rules|storage) indexes=""; rest="$TARGETS" ;;
             *)
