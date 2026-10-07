@@ -1,13 +1,10 @@
 "use strict";
 
-// The worked examples here are shared, value for value, with
-// `test/core/search/search_tokens_test.dart`. This tokenizer is hand-mirrored
-// in Dart: the app writes the tokens and this side queries them, so a
-// divergence is a search that silently returns nothing.
+// Examples shared with the Dart suite live in
+// test/fixtures/shared/search_tokens.json.
 
 const {
   TOKEN_FIELD_LIMIT,
-  TOKEN_QUERY_LIMIT,
   appointmentHistoryScopes,
   clientSearchTokens,
   normalize,
@@ -16,63 +13,27 @@ const {
   searchQueryTokens,
 } = require("../search_tokens");
 
+const fixture = require("../../test/fixtures/shared/search_tokens.json");
+
+const expectTokens = (tokens, c) => {
+  expect(["expect", "expectContains", "expectLength"].some((k) => k in c))
+      .toBe(true);
+  if ("expect" in c) expect(tokens).toEqual(c.expect);
+  if ("expectContains" in c) expect(tokens).toContain(c.expectContains);
+  if ("expectLength" in c) expect(tokens).toHaveLength(c.expectLength);
+};
+
 describe("searchQueryTokens", () => {
-  test("emits one whole-word token per word plus the full digit run", () => {
-    expect(searchQueryTokens("Marc 514")).toEqual(["t:marc", "t:514", "p:514"]);
-  });
-
-  test("is empty for a query with nothing searchable in it", () => {
-    expect(searchQueryTokens("  --  ")).toEqual([]);
-  });
-
-  test("never sends more than the query limit", () => {
-    expect(searchQueryTokens("a b c d e f g h i j k l m"))
-        .toHaveLength(TOKEN_QUERY_LIMIT);
+  test.each(fixture.queryTokens)("$name", (c) => {
+    expectTokens(searchQueryTokens(c.query), c);
   });
 });
 
 describe("searchIndexTokens", () => {
-  test("emits each whole word before any of its prefixes", () => {
-    expect(searchIndexTokens({texts: ["Marc"], phones: []}))
-        .toEqual(["t:marc", "t:m", "t:ma", "t:mar"]);
-  });
-
-  test("interleaves phones so a long name cannot starve them out", () => {
-    // The exact list the Dart twin asserts. Before the interleave the first
-    // ten were all name prefixes and the phone was never indexed at all.
-    expect(searchIndexTokens({
-      texts: ["Marc Tremblay"],
-      phones: ["(514) 555-4321"],
-      limit: 10,
-    })).toEqual([
-      "t:marc",
-      "p:5145554321",
-      "t:m",
-      "p:514",
-      "t:ma",
-      "p:5145",
-      "t:mar",
-      "p:51455",
-      "t:tremblay",
-      "p:514555",
-    ]);
-  });
-
-  test("a whole word and the whole number survive the tightest budget", () => {
-    expect(searchIndexTokens({
-      texts: ["Tremblay"],
-      phones: ["5145554321"],
-      limit: 2,
-    })).toEqual(["t:tremblay", "p:5145554321"]);
-  });
-
-  test("accent folding makes an accented name reachable unaccented", () => {
-    expect(searchIndexTokens({texts: ["Éric"], phones: []}))
-        .toContain("t:eric");
-  });
-
-  test("a run shorter than three digits is not indexed", () => {
-    expect(searchIndexTokens({texts: [], phones: ["12"]})).toEqual([]);
+  test.each(fixture.indexTokens)("$name", (c) => {
+    const args = {texts: c.texts, phones: c.phones};
+    if (c.limit != null) args.limit = c.limit;
+    expectTokens(searchIndexTokens(args), c);
   });
 
   test("honours the field cap", () => {
@@ -167,15 +128,8 @@ describe("recordMatchesQuery client/employee seam", () => {
 });
 
 describe("normalize", () => {
-  // The shared worked examples; the Dart twin asserts the same four.
-  test("folds the Latin-1 letters the Dart mirror folds", () => {
-    expect(normalize("Muñoz")).toBe("munoz");
-    expect(normalize("Éric Tremblay")).toBe("eric tremblay");
-    expect(normalize("Ångström")).toBe("angstrom");
-  });
-
-  test("a letter outside the table is a separator on both sides", () => {
-    expect(normalize("Šarko")).toBe("arko");
+  test.each(fixture.normalize)("$input", (c) => {
+    expect(normalize(c.input)).toBe(c.expect);
   });
 });
 

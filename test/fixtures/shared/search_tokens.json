@@ -1,0 +1,21 @@
+{
+  "queryTokens": [
+    {"name": "emits one whole-word token per word plus the full digit run", "query": "Marc 514", "expect": ["t:marc", "t:514", "p:514"]},
+    {"name": "is empty for a query with nothing searchable in it", "query": "  --  ", "expect": []},
+    {"name": "never sends more than the query limit", "query": "a b c d e f g h i j k l m", "expectLength": 10}
+  ],
+  "indexTokens": [
+    {"name": "emits each whole word before any of its prefixes", "texts": ["Marc"], "phones": [], "expect": ["t:marc", "t:m", "t:ma", "t:mar"]},
+    {"name": "interleaves phones so a long name cannot starve them out", "texts": ["Marc Tremblay"], "phones": ["(514) 555-4321"], "limit": 10,
+     "expect": ["t:marc", "p:5145554321", "t:m", "p:514", "t:ma", "p:5145", "t:mar", "p:51455", "t:tremblay", "p:514555"]},
+    {"name": "a whole word and the whole number survive the tightest budget", "texts": ["Tremblay"], "phones": ["5145554321"], "limit": 2, "expect": ["t:tremblay", "p:5145554321"]},
+    {"name": "accent folding makes an accented name reachable unaccented", "texts": ["Éric"], "phones": [], "expectContains": "t:eric"},
+    {"name": "a run shorter than three digits is not indexed", "texts": [], "phones": ["12"], "expect": []}
+  ],
+  "normalize": [
+    {"input": "Muñoz", "expect": "munoz"},
+    {"input": "Éric Tremblay", "expect": "eric tremblay"},
+    {"input": "Ångström", "expect": "angstrom"},
+    {"input": "Šarko", "expect": "arko"}
+  ]
+}
