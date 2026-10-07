@@ -1,4 +1,4 @@
-/// How the unfiltered client list is ordered.
+/// How the client list is ordered, under every filter.
 ///
 /// The field names are the Firestore field paths the repository orders by, so
 /// this enum is the ONE owner of that mapping — a sort added here without a

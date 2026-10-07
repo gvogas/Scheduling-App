@@ -11,12 +11,14 @@ import 'package:scheduling/l10n/l10n.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  PackageInfo.setMockInitialValues(
-    appName: 'Scheduling',
-    packageName: 'net.vogas.scheduling',
-    version: '1.0.3',
-    buildNumber: '4',
-    buildSignature: '',
+  setUpAll(
+    () => PackageInfo.setMockInitialValues(
+      appName: 'Scheduling',
+      packageName: 'net.vogas.scheduling',
+      version: '1.0.3',
+      buildNumber: '4',
+      buildSignature: '',
+    ),
   );
 
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));

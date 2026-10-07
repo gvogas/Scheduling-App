@@ -27,27 +27,35 @@ final liveMapTickProvider = StreamProvider.autoDispose<int>(
   (ref) => Stream<int>.periodic(const Duration(seconds: 30), (i) => i),
 );
 
-final liveMapPointsProvider =
-    Provider.autoDispose<AsyncValue<List<StaffMapPoint>>>((ref) {
-      final fixes = ref.watch(allPresenceStreamProvider);
-      final users = ref.watch(allUsersStreamProvider);
+/// Watches the tick so the team sheet's freshness labels age live.
+final liveMapTeamProvider = Provider.autoDispose<AsyncValue<LiveMapTeam>>((
+  ref,
+) {
+  final fixes = ref.watch(allPresenceStreamProvider);
+  final users = ref.watch(allUsersStreamProvider);
+  ref.watch(liveMapTickProvider);
 
-      final sources = <AsyncValue<Object?>>[fixes, users];
-      for (final source in sources) {
-        if (source.hasError) {
-          return AsyncValue.error(
-            source.error!,
-            source.stackTrace ?? StackTrace.current,
-          );
-        }
-      }
-      if (sources.any((source) => source.isLoading)) {
-        return const AsyncValue.loading();
-      }
-      return AsyncValue.data(
-        LiveMapAggregator.join(
-          fixes: fixes.requireValue,
-          users: users.requireValue,
-        ),
+  final sources = <AsyncValue<Object?>>[fixes, users];
+  for (final source in sources) {
+    if (source.hasError) {
+      return AsyncValue.error(
+        source.error!,
+        source.stackTrace ?? StackTrace.current,
       );
-    });
+    }
+  }
+  if (sources.any((source) => source.isLoading)) {
+    return const AsyncValue.loading();
+  }
+  return AsyncValue.data(
+    LiveMapAggregator.groupTeam(
+      fixes: fixes.requireValue,
+      users: users.requireValue,
+    ),
+  );
+});
+
+final liveMapPointsProvider =
+    Provider.autoDispose<AsyncValue<List<StaffMapPoint>>>(
+      (ref) => ref.watch(liveMapTeamProvider).whenData((team) => team.onMap),
+    );

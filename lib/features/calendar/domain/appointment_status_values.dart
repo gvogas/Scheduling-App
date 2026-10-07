@@ -8,6 +8,9 @@ final List<String> terminalStatusQueryValues = List.unmodifiable(
   terminalStatusRawValues,
 );
 
+/// Stored statuses of a job still open, as a Firestore `whereIn` list.
+const List<String> openStatusQueryValues = ['pending', 'in_progress'];
+
 /// True when [raw] is a stored status meaning the job is closed.
 bool isTerminalStatusRaw(String raw) =>
     terminalStatusRawValues.contains(raw.toLowerCase());

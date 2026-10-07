@@ -40,6 +40,8 @@ abstract interface class HubTabSelector {
 abstract interface class AppointmentLinkHub {
   bool get isAdmin;
 
+  String get employeeId;
+
   void showCalendar();
 
   void goHome();

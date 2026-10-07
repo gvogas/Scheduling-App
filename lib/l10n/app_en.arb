@@ -28,6 +28,18 @@
   "@auth_finishSetup": {
     "description": "Primary button on the account setup screen"
   },
+  "auth_changePasswordTitle": "Choose a new password",
+  "@auth_changePasswordTitle": {
+    "description": "Title of the forced Change password screen after an admin reset"
+  },
+  "auth_changePasswordBody": "Your admin reset your password. Choose a new one to continue.",
+  "@auth_changePasswordBody": {
+    "description": "Explains why the Change password screen is shown"
+  },
+  "auth_saveNewPassword": "Save password",
+  "@auth_saveNewPassword": {
+    "description": "Primary button on the Change password screen"
+  },
   "auth_signIn": "Sign In",
   "@auth_signIn": {
     "description": "Sign In"
@@ -96,6 +108,10 @@
   "@settings_logOut": {
     "description": "Log out"
   },
+  "common_backToTop": "Back to top",
+  "@common_backToTop": {
+    "description": "Tooltip and screen-reader label on the button that scrolls a long list back to its first row."
+  },
   "common_cancel": "Cancel",
   "@common_cancel": {
     "description": "Cancel"
@@ -156,10 +172,6 @@
         "type": "int"
       }
     }
-  },
-  "calendar_sectionTemplates": "TEMPLATES",
-  "@calendar_sectionTemplates": {
-    "description": "Mono all-caps section label above the job-template chips in the job form. Already uppercase in source."
   },
   "calendar_sectionWho": "WHO",
   "@calendar_sectionWho": {
@@ -640,10 +652,6 @@
   "@clients_typeCommercial": {
     "description": "Client type chip for a business customer"
   },
-  "clients_filterByAddress": "Address",
-  "@clients_filterByAddress": {
-    "description": "Label on the clients list menu that filters to one shared street address"
-  },
   "clients_noClientsAtAddress": "No clients at this address.",
   "@clients_noClientsAtAddress": {
     "description": "Empty state when the address filter matches nothing"
@@ -741,11 +749,11 @@
   "@calendar_endDate": {
     "description": "Label of the last day of a job's run, in the appointment form's schedule panel."
   },
-  "calendar_startTime": "Start Time",
+  "calendar_startTime": "Start time",
   "@calendar_startTime": {
     "description": "Start Time"
   },
-  "calendar_endTime": "End Time",
+  "calendar_endTime": "End time",
   "@calendar_endTime": {
     "description": "End Time"
   },
@@ -1735,6 +1743,10 @@
     "description": "Assign Employee"
   },
   "calendar_serviceTitle": "Service / Title",
+  "calendar_templateHint": "Tap one to fill the title and duration",
+  "@calendar_templateHint": {
+    "description": "Hint under the job-template chips in the job form, saying what tapping a chip does."
+  },
   "@calendar_serviceTitle": {
     "description": "Service / Title"
   },
@@ -1845,21 +1857,21 @@
       }
     }
   },
-  "calendar_scheduleConflict": "Schedule Conflict",
+  "calendar_scheduleConflict": "Double Booking",
   "@calendar_scheduleConflict": {
-    "description": "Schedule Conflict"
+    "description": "Title of the prompt shown when a picked assignee is already booked at that time"
   },
   "calendar_alreadyBookedThisSlot": "Already booked during this time:",
   "@calendar_alreadyBookedThisSlot": {
     "description": "Already booked during this time:"
   },
-  "calendar_doubleBookingWarning": "Scheduling them anyway will create a double booking.",
+  "calendar_doubleBookingWarning": "You are double booking them. Do you still want to book?",
   "@calendar_doubleBookingWarning": {
-    "description": "Scheduling them anyway will create a double booking."
+    "description": "Double-booking prompt: the question asked before booking an already-booked assignee"
   },
-  "calendar_scheduleAnyway": "Schedule Anyway",
+  "calendar_scheduleAnyway": "Book Anyway",
   "@calendar_scheduleAnyway": {
-    "description": "Schedule Anyway"
+    "description": "Double-booking prompt: confirms the booking despite the clash"
   },
   "settings_deleteAccount": "Delete account",
   "@settings_deleteAccount": {
@@ -1940,6 +1952,10 @@
   "error_introChangeEmployeeStatus": "Couldn't update the employee's account status",
   "@error_introChangeEmployeeStatus": {
     "description": "Error intro for EMP-STATUS"
+  },
+  "error_introResetPassword": "Couldn't reset the password",
+  "@error_introResetPassword": {
+    "description": "Error intro for EMP-RESETPW"
   },
   "employees_emergencyLoadFailed": "Couldn't load the emergency contact. Close and reopen to try again — saving now would leave it unchanged.",
   "@employees_emergencyLoadFailed": {
@@ -2175,26 +2191,6 @@
   "@wave_syncButton": {
     "description": "Button label: runs a two-way Wave sync — pending app edits are pushed to Wave, then Wave customers are pulled into the app"
   },
-  "wave_autoImportLabel": "Automatic import",
-  "@wave_autoImportLabel": {
-    "description": "Settings label for the Wave automatic-import cadence picker."
-  },
-  "wave_autoImportOff": "Off",
-  "@wave_autoImportOff": {
-    "description": "Wave automatic-import cadence: disabled."
-  },
-  "wave_autoImportWeekly": "Weekly",
-  "@wave_autoImportWeekly": {
-    "description": "Wave automatic-import cadence: once a week."
-  },
-  "wave_autoImportMonthly": "Monthly",
-  "@wave_autoImportMonthly": {
-    "description": "Wave automatic-import cadence: once a month."
-  },
-  "wave_autoImportUpdated": "Automatic import updated.",
-  "@wave_autoImportUpdated": {
-    "description": "Success notice after changing the Wave automatic-import cadence."
-  },
   "wave_connectedSuccess": "Connected to {businessName}",
   "@wave_connectedSuccess": {
     "description": "Success notice shown after a successful Wave bootstrap",
@@ -2288,6 +2284,53 @@
   "wave_syncError": "Sync error",
   "@wave_syncError": {
     "description": "Badge label shown on a client whose Wave sync has failed"
+  },
+  "wave_syncBlocked": "Can't sync to Wave",
+  "@wave_syncBlocked": {
+    "description": "Badge label on a client the Wave customer contract refused, so it was never queued for sync"
+  },
+  "wave_problemNameEmpty": "The client needs a name",
+  "@wave_problemNameEmpty": {
+    "description": "Wave contract problem: the composed customer name is blank, which Wave refuses"
+  },
+  "wave_problemTooLong": "{field} is too long ({length} / {cap})",
+  "@wave_problemTooLong": {
+    "description": "Wave contract problem: a field exceeds the length Wave accepts",
+    "placeholders": {
+      "field": { "type": "String" },
+      "length": { "type": "int" },
+      "cap": { "type": "int" }
+    }
+  },
+  "wave_problemInvalidEmail": "The email address isn't valid",
+  "@wave_problemInvalidEmail": {
+    "description": "Wave contract problem: the email address is malformed, which Wave refuses"
+  },
+  "wave_problemNotDialable": "{field} has no digits to dial",
+  "@wave_problemNotDialable": {
+    "description": "Wave contract problem (advisory): the stored number contains no digits, so nobody can call it",
+    "placeholders": {
+      "field": { "type": "String" }
+    }
+  },
+  "wave_problemUnknown": "Wave won't accept {field}",
+  "@wave_problemUnknown": {
+    "description": "Wave contract problem whose code this app build does not recognize; the vocabulary is server-owned",
+    "placeholders": {
+      "field": { "type": "String" }
+    }
+  },
+  "common_name": "Name",
+  "@common_name": {
+    "description": "Generic field label for a name"
+  },
+  "common_mobile": "Mobile",
+  "@common_mobile": {
+    "description": "Generic field label for a mobile phone number"
+  },
+  "common_addressLine2": "Address line 2",
+  "@common_addressLine2": {
+    "description": "Generic field label for the second street line of an address"
   },
   "common_copied": "Copied",
   "@common_copied": {
@@ -2630,22 +2673,116 @@
   "@liveMap_recenter": {
     "description": "Accessibility label / tooltip for the button that recenters the staff map on all staff pins"
   },
-  "liveMap_rosterButton": "Show staff list",
-  "@liveMap_rosterButton": {
-    "description": "Tooltip / accessibility label for the button that opens the bottom sheet listing every staff member on the map"
+  "liveMap_teamTitle": "Team",
+  "@liveMap_teamTitle": {
+    "description": "Header of the draggable team sheet on the admin staff map"
   },
-  "liveMap_rosterTitle": "Staff",
-  "@liveMap_rosterTitle": {
-    "description": "Title of the bottom sheet that lists every staff member currently sharing their location"
-  },
-  "liveMap_rosterCount": "{count, plural, =1{1 sharing} other{{count} sharing}}",
-  "@liveMap_rosterCount": {
-    "description": "Subtitle showing how many staff are currently sharing their location",
+  "liveMap_teamOnMapCount": "{count} on the map",
+  "@liveMap_teamOnMapCount": {
+    "description": "First half of the team sheet's count line: how many teammates have a pin on the map",
     "placeholders": {
       "count": {
         "type": "int"
       }
     }
+  },
+  "liveMap_teamOffMapCount": "{count} not on it",
+  "@liveMap_teamOffMapCount": {
+    "description": "Second half of the team sheet's count line: how many active teammates have no pin on the map",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "liveMap_sectionOnMap": "On the map",
+  "@liveMap_sectionOnMap": {
+    "description": "Team sheet section label for teammates with a pin on the map (the app uppercases it and appends a count)"
+  },
+  "liveMap_sectionAlsoNearby": "Also nearby",
+  "@liveMap_sectionAlsoNearby": {
+    "description": "Team sheet section label for the other pins, shown under the selected person"
+  },
+  "liveMap_sectionNotSeen": "Not seen yet",
+  "@liveMap_sectionNotSeen": {
+    "description": "Team sheet section label for teammates who turned sharing on but whose phone has never reported a location (the app uppercases it and appends a count)"
+  },
+  "liveMap_sectionSharingOff": "Location sharing off",
+  "@liveMap_sectionSharingOff": {
+    "description": "Team sheet section label for teammates who have not turned location sharing on"
+  },
+  "liveMap_noFixYet": "No location received yet",
+  "@liveMap_noFixYet": {
+    "description": "Row subtitle for a teammate who turned sharing on but whose phone has never reported a location"
+  },
+  "liveMap_sharingOffRow": "Hasn't turned sharing on",
+  "@liveMap_sharingOffRow": {
+    "description": "Row subtitle for a teammate in the Location sharing off section"
+  },
+  "liveMap_sharingOffFooter": "They can turn it on in Settings › Staff map location.",
+  "@liveMap_sharingOffFooter": {
+    "description": "Footer under the Location sharing off section, naming the Settings row that turns sharing on"
+  },
+  "employees_testAccount": "Test account",
+  "@employees_testAccount": {
+    "description": "Admin-only switch on the edit-person sheet that marks an account as a test account"
+  },
+  "employees_testAccountCaption": "Hides this person from the staff map, the job pickers and team counts.",
+  "@employees_testAccountCaption": {
+    "description": "Caption under the Test account switch explaining what it hides"
+  },
+  "employees_testAccountsSection": "{count, plural, =1{1 test account} other{{count} test accounts}}",
+  "@employees_testAccountsSection": {
+    "description": "Collapsed section at the bottom of the Team roster holding test accounts",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "onboarding_shareLocationTitle": "Be on the team map",
+  "@onboarding_shareLocationTitle": {
+    "description": "Headline of the team-map page, shown once per app build, asking a teammate to turn location sharing on"
+  },
+  "onboarding_shareLocationBody": "Share your spot so the office can send whoever is closest to the next job.",
+  "@onboarding_shareLocationBody": {
+    "description": "One sentence explaining why the team map asks for location sharing"
+  },
+  "onboarding_shareLocationOnlyOpen": "Only while the app is open",
+  "@onboarding_shareLocationOnlyOpen": {
+    "description": "First reassurance on the location-sharing ask page"
+  },
+  "onboarding_shareLocationOnlyLatest": "Only your latest spot, never a trail",
+  "@onboarding_shareLocationOnlyLatest": {
+    "description": "Second reassurance on the location-sharing ask page"
+  },
+  "onboarding_shareLocationOffAnytime": "Turn it off anytime in Settings",
+  "@onboarding_shareLocationOffAnytime": {
+    "description": "Third reassurance on the location-sharing ask page"
+  },
+  "onboarding_shareLocationTurnOn": "Turn on",
+  "@onboarding_shareLocationTurnOn": {
+    "description": "Primary button on the location-sharing ask page"
+  },
+  "onboarding_shareLocationNotNow": "Not now",
+  "@onboarding_shareLocationNotNow": {
+    "description": "Secondary button on the location-sharing ask page; the page comes back after the next app update"
+  },
+  "onboarding_shareLocationOnTitle": "You're on the team map",
+  "@onboarding_shareLocationOnTitle": {
+    "description": "Title of the team-map page for someone already sharing their location with iOS location allowed"
+  },
+  "onboarding_shareLocationOnBody": "The office sees your latest spot while the app is open, so they can send whoever is closest to the next job.",
+  "@onboarding_shareLocationOnBody": {
+    "description": "Body of the team-map page for someone already sharing their location"
+  },
+  "onboarding_shareLocationBlocked": "Location is turned off for this app. Allow it in Settings so your spot can reach the map.",
+  "@onboarding_shareLocationBlocked": {
+    "description": "Extra line on the team-map page when iOS location is refused for the app or Location Services are off"
+  },
+  "onboarding_shareLocationOpenSettings": "Open Settings",
+  "@onboarding_shareLocationOpenSettings": {
+    "description": "Primary button on the team-map page that opens this app's page in iOS Settings"
   },
   "liveMap_you": "You",
   "@liveMap_you": {
@@ -2773,21 +2910,29 @@
   "@tour_historySearchDesc": {
     "description": "Tour step description: history search bar"
   },
-  "tour_liveMapRosterTitle": "Staff roster",
+  "tour_liveMapRosterTitle": "Your team",
   "@tour_liveMapRosterTitle": {
-    "description": "Tour step title: live-map roster FAB"
+    "description": "Tour step title: live-map team sheet handle"
   },
-  "tour_liveMapRosterDesc": "See everyone sharing their location, sorted by distance from you.",
+  "tour_liveMapRosterDesc": "Drag this sheet up to see who is on the map, who hasn't sent a location yet, and who hasn't turned sharing on.",
   "@tour_liveMapRosterDesc": {
-    "description": "Tour step description: live-map roster FAB"
+    "description": "Tour step description: live-map team sheet handle"
   },
   "tour_liveMapRecenterTitle": "Recenter",
   "@tour_liveMapRecenterTitle": {
-    "description": "Tour step title: live-map recenter FAB"
+    "description": "Tour step title: live-map recenter tile"
   },
   "tour_liveMapRecenterDesc": "Bring the map back to your team after panning around.",
   "@tour_liveMapRecenterDesc": {
-    "description": "Tour step description: live-map recenter FAB"
+    "description": "Tour step description: live-map recenter tile"
+  },
+  "tour_liveMapNotOnMapTitle": "Not on the map?",
+  "@tour_liveMapNotOnMapTitle": {
+    "description": "Tour step title: live-map team count, why someone is missing from the map"
+  },
+  "tour_liveMapNotOnMapDesc": "People show up once they turn on location sharing. The app asks them after every update, and they can switch it on anytime in Settings › Staff map location.",
+  "@tour_liveMapNotOnMapDesc": {
+    "description": "Tour step description: live-map team count, why someone is missing and how staff turn sharing on"
   },
   "tour_settingsAppearanceTitle": "Make it yours",
   "@tour_settingsAppearanceTitle": {
@@ -3137,9 +3282,14 @@
   "@clients_since": {
     "description": "Read-only key for the date the client was first added"
   },
-  "clients_jobsCountLabel": "JOBS",
+  "clients_jobsCountLabel": "{count, plural, =1{JOB} other{JOBS}}",
   "@clients_jobsCountLabel": {
-    "description": "Mono micro-label under the job count on a client row"
+    "description": "Mono micro-label beside the job count on a client row, which renders the number itself in a separate span — so this is the WORD alone, not the count. The count EXCLUDES cancelled visits and counts a multi-day run once.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   },
   "clients_onSiteManager": "On-site manager",
   "@clients_onSiteManager": {
@@ -3508,6 +3658,19 @@
   "@employees_newPasswordIssued": {
     "description": "Caption under the credentials stating the password was just re-issued"
   },
+  "employees_resetPasswordConfirmTitle": "Reset {name}'s password?",
+  "@employees_resetPasswordConfirmTitle": {
+    "description": "Confirm-dialog title before an admin resets an active person's password",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "employees_resetPasswordConfirmBody": "They'll be signed out on every device and must choose a new password at next sign-in.",
+  "@employees_resetPasswordConfirmBody": {
+    "description": "Confirm-dialog body explaining what an admin password reset does"
+  },
   "wave_outboxPending": "{count, plural, =1{1 client waiting to sync} other{{count} clients waiting to sync}}",
   "@wave_outboxPending": {
     "description": "Settings > Wave: how many client edits are queued for Wave.",
@@ -3531,6 +3694,13 @@
     "description": "Settings > Wave: button that returns failed client edits to the sync queue."
   },
   "wave_retryNoneRecovered": "Nothing to retry — those clients were already back in the queue.",
+  "wave_retryBlocked": "{count, plural, =1{1 client needs fixing before it can sync} other{{count} clients need fixing before they can sync}}",
+  "@wave_retryBlocked": {
+    "description": "Part of the Retry failed notice: dead jobs dropped because the Wave contract refuses their client, so the reason now sits on the client",
+    "placeholders": {
+      "count": { "type": "int" }
+    }
+  },
   "@wave_retryNoneRecovered": {
     "description": "Settings > Wave: notice when Retry failed found nothing left to requeue."
   },
@@ -3558,51 +3728,6 @@
     "placeholders": {
       "count": {
         "type": "int"
-      }
-    }
-  },
-  "calendar_assigneeOnAnotherJob": "{name} is on another job",
-  "@calendar_assigneeOnAnotherJob": {
-    "description": "Assignee-picker line under a dimmed chip: this person is booked on another appointment during the chosen window. {name} is their short name, matching the chip above.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "calendar_assigneeOffStillOnJob": "{name} is off — still on this job",
-  "@calendar_assigneeOffStillOnJob": {
-    "description": "Assignee-picker line for someone already assigned who has since booked time off. Their chip stays selected and tappable, so this explains rather than forbids.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "calendar_assigneeBookedStillOnJob": "{name} is on another job — still on this one",
-  "@calendar_assigneeBookedStillOnJob": {
-    "description": "Assignee-picker line for someone already on this job who also has another booking in the window — typically because the date was moved after they were picked. Their chip stays selected and tappable, so this explains rather than forbids.",
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "calendar_assigneesMoreNotFree": "{count, plural, =1{1 more isn't free} other{{count} more aren't free}}",
-  "@calendar_assigneesMoreNotFree": {
-    "description": "Tappable row that expands the remaining assignee-availability lines; count is how many are hidden.",
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
-  "calendar_nobodyFreeThen": "Nobody is free on {when}. Try another time, or book the job and assign someone later.",
-  "@calendar_nobodyFreeThen": {
-    "description": "Replaces the per-person availability lines when every offered assignee clashes. {when} is the chosen span, for example '26 Aug, 8:00 AM - 12:00 PM'.",
-    "placeholders": {
-      "when": {
-        "type": "String"
       }
     }
   },
@@ -3929,11 +4054,80 @@
   "@clients_searchAllFields": {
     "description": "Hint of the clients search field, naming what the search matches."
   },
-  "clients_countLabel": "{count, plural, =0{No clients} =1{1 client} other{{count} clients}}",
-  "@clients_countLabel": {
-    "description": "How many clients the list is currently showing.",
+  "clients_showingAll": "{count, plural, =0{No clients} =1{Showing 1 client} other{Showing all {count} clients}}",
+  "@clients_showingAll": {
+    "description": "How many clients the unfiltered list is showing.",
     "placeholders": {
       "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clients_showingSome": "{count} of {total} clients",
+  "@clients_showingSome": {
+    "description": "How many clients the unfiltered list is showing while more pages remain. The list pages, so the rows it holds are not the roster — once every page is in, it says clients_showingAll instead.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "clients_searchMatches": "{count, plural, =0{No matching clients} =1{1 matching client} other{{count} matching clients}}",
+  "@clients_searchMatches": {
+    "description": "How many clients match the search typed above the unfiltered Clients list.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clients_showingType": "{count, plural, =0{No {type} clients} =1{1 {type} client} other{{count} {type} clients}}",
+  "@clients_showingType": {
+    "description": "How many clients the list is showing under a type or archived filter.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "clients_inThisBuilding": "{count, plural, =0{No clients in this building} =1{1 client in this building} other{{count} clients in this building}}",
+  "@clients_inThisBuilding": {
+    "description": "How many clients the list is showing under a shared-address filter.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "clients_showingSomeType": "{count} of {total} {type} clients",
+  "@clients_showingSomeType": {
+    "description": "How many clients a type or archived filter is showing while more pages remain, against how many match that filter. Once every page is in, it says clients_showingType instead.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "type": {
+        "type": "String"
+      }
+    }
+  },
+  "clients_inThisBuildingSome": "{count} of {total} clients in this building",
+  "@clients_inThisBuildingSome": {
+    "description": "How many clients a shared-address filter is showing while more pages remain, against how many are at that address. Once every page is in, it says clients_inThisBuilding instead.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "total": {
         "type": "int"
       }
     }
@@ -3954,17 +4148,9 @@
   "@clients_sortRecentlyAdded": {
     "description": "Sort the clients list by creation date, newest first."
   },
-  "clients_modePhone": "Phone",
-  "@clients_modePhone": {
-    "description": "Segment of the client picker's mode switch that opens the phone keypad."
-  },
-  "clients_modeNameOrAddress": "Name or address",
-  "@clients_modeNameOrAddress": {
-    "description": "Segment of the client picker's mode switch that opens the text keyboard and searches names, addresses, emails and contacts."
-  },
-  "clients_tapPhoneToStart": "Tap Phone to start",
-  "@clients_tapPhoneToStart": {
-    "description": "Placeholder in the add-job client field before it has focus."
+  "clients_searchNameOrPhone": "Search by name or phone",
+  "@clients_searchNameOrPhone": {
+    "description": "Placeholder in the add-job client field, which matches a name and a phone number from one input."
   },
   "clients_digitsTyped": "{typed} of {total}",
   "@clients_digitsTyped": {
@@ -3981,10 +4167,6 @@
   "clients_noExactMatchClosest": "NO EXACT MATCH · CLOSEST NUMBERS",
   "@clients_noExactMatchClosest": {
     "description": "Caption inside the client search dropdown when the results are a fallback rung rather than hits. They answer a query nobody typed, so they must never read as matches. Already uppercase in source."
-  },
-  "clients_attach": "Attach",
-  "@clients_attach": {
-    "description": "Button on a client result row that attaches that client to the job."
   },
   "clients_searchFailed": "Couldn't check that number",
   "@clients_searchFailed": {
@@ -4008,7 +4190,7 @@
   },
   "clients_jobsAndLastVisit": "{jobs, plural, =1{1 job} other{{jobs} jobs}} · last {date}",
   "@clients_jobsAndLastVisit": {
-    "description": "Second line of the attached-client card: how many jobs this client has had and when the last one was.",
+    "description": "Second line of the attached-client card: how many jobs this client has had and when the last one was. The count EXCLUDES cancelled visits and counts a multi-day run once.",
     "placeholders": {
       "jobs": { "type": "int", "example": "12" },
       "date": { "type": "String", "example": "14 Aug" }
@@ -4050,5 +4232,173 @@
   "tour_clientsSortDesc": "Sort by name, by who has had the most jobs, or by who was added most recently.",
   "@tour_clientsSortDesc": {
     "description": "Description of the clients tour step highlighting the sort control."
+  },
+  "nav_overdueReview": "Overdue jobs",
+  "@nav_overdueReview": {
+    "description": "Drawer row (admins only, THE BUSINESS group, after History) opening the overdue-job review screen."
+  },
+  "calendar_overdueReviewTitle": "Overdue jobs",
+  "@calendar_overdueReviewTitle": {
+    "description": "Top bar title of the overdue review screen: every open job whose end time has passed."
+  },
+  "calendar_overdueReviewSummary": "{count, plural, =1{job ended without being closed} other{jobs ended without being closed}}",
+  "@calendar_overdueReviewSummary": {
+    "description": "Caption under the big overdue count on the review screen. The number itself is rendered separately above it.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewOldest": "Oldest · {date}",
+  "@calendar_overdueReviewOldest": {
+    "description": "Mono line under the review summary naming the oldest overdue job's date, e.g. 'Oldest · Jul 22'.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "calendar_overdueReviewSelected": "{count} selected",
+  "@calendar_overdueReviewSelected": {
+    "description": "Replaces the 'Oldest' line while any job on the review screen is ticked.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewMonthSplitter": "{month} · {count}",
+  "@calendar_overdueReviewMonthSplitter": {
+    "description": "Month splitter on the review screen, e.g. 'JULY 2026 · 2'. The month arrives already uppercased.",
+    "placeholders": {
+      "month": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewSelectAll": "Select all",
+  "@calendar_overdueReviewSelectAll": {
+    "description": "Trailing button on a month splitter that ticks every job in that month."
+  },
+  "calendar_overdueReviewClear": "Clear",
+  "@calendar_overdueReviewClear": {
+    "description": "Replaces 'Select all' on a month splitter once every job in that month is ticked; unticks them."
+  },
+  "calendar_overdueReviewNotDoneCount": "Not done ({count})",
+  "@calendar_overdueReviewNotDoneCount": {
+    "description": "Destructive action-bar button on the review screen: marks the ticked jobs cancelled.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewCompleteCount": "Complete ({count})",
+  "@calendar_overdueReviewCompleteCount": {
+    "description": "Primary action-bar button on the review screen: marks the ticked jobs done.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewNotDone": "Not done",
+  "@calendar_overdueReviewNotDone": {
+    "description": "Confirm button of the Not done dialog. The stored status behind it is cancelled."
+  },
+  "calendar_overdueReviewComplete": "Complete",
+  "@calendar_overdueReviewComplete": {
+    "description": "Confirm button of the Complete dialog on the review screen."
+  },
+  "calendar_overdueReviewGoBack": "Go back",
+  "@calendar_overdueReviewGoBack": {
+    "description": "Dismiss button of both review dialogs. Deliberately not 'Cancel', which reads as the destructive choice in a dialog about cancelling jobs."
+  },
+  "calendar_overdueReviewConfirmCompleteTitle": "{count, plural, =1{Mark 1 job complete?} other{Mark {count} jobs complete?}}",
+  "@calendar_overdueReviewConfirmCompleteTitle": {
+    "description": "Title of the confirmation before marking the ticked overdue jobs done.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewConfirmCompleteBody": "{count, plural, =1{It'll move to History as Complete, stamped with today's date.} other{They'll move to History as Complete, stamped with today's date.}}",
+  "@calendar_overdueReviewConfirmCompleteBody": {
+    "description": "Body of the Complete confirmation. The finish time recorded is the review time, not when the work happened.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewConfirmNotDoneTitle": "{count, plural, =1{Mark 1 job not done?} other{Mark {count} jobs not done?}}",
+  "@calendar_overdueReviewConfirmNotDoneTitle": {
+    "description": "Title of the confirmation before marking the ticked overdue jobs not done (cancelled).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewConfirmNotDoneBody": "{count, plural, =1{It'll be cancelled and move to History. The crew won't be notified.} other{They'll be cancelled and move to History. The crew won't be notified.}}",
+  "@calendar_overdueReviewConfirmNotDoneBody": {
+    "description": "Body of the Not done confirmation.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewMarkedComplete": "{count, plural, =1{1 job marked complete} other{{count} jobs marked complete}}",
+  "@calendar_overdueReviewMarkedComplete": {
+    "description": "Success notice after the review marks jobs done.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewMarkedNotDone": "{count, plural, =1{1 job marked not done} other{{count} jobs marked not done}}",
+  "@calendar_overdueReviewMarkedNotDone": {
+    "description": "Success notice after the review marks jobs not done (cancelled).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_overdueReviewEmptyTitle": "No overdue jobs",
+  "@calendar_overdueReviewEmptyTitle": {
+    "description": "Empty-state title on the review screen."
+  },
+  "calendar_overdueReviewEmptyBody": "Every job that has ended was closed.",
+  "@calendar_overdueReviewEmptyBody": {
+    "description": "Empty-state body on the review screen."
+  },
+  "calendar_overdueReviewSelectJob": "Select {title}",
+  "@calendar_overdueReviewSelectJob": {
+    "description": "Screen-reader label of a job's checkbox on the review screen.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "employees_monthEndReviewPush": "Month-end overdue reminder",
+  "@employees_monthEndReviewPush": {
+    "description": "Admin-only switch on the edit-person sheet, shown only for an admin."
+  },
+  "employees_monthEndReviewPushDescription": "A push on the last day of each month counting jobs that ended without being closed",
+  "@employees_monthEndReviewPushDescription": {
+    "description": "Caption under the month-end overdue reminder switch."
+  },
+  "error_introReviewOverdue": "Couldn't update the jobs",
+  "@error_introReviewOverdue": {
+    "description": "Intro sentence of the failure notice when the overdue review's bulk status write fails (APPT-REVIEW)."
   }
 }

@@ -424,4 +424,63 @@ void main() {
       reason: 'the sheet route is current, so its tour ran',
     );
   });
+  testWidgets('a hub tab tour waits while a page covers the hub, then starts '
+      'once it closes', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final container = newContainer();
+    final key = GlobalKey();
+    const scope = DestinationTour(HubTab.clients);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          initialRoute: '/cover',
+          onGenerateRoute: (settings) => MaterialPageRoute<void>(
+            settings: settings,
+            builder: (context) => settings.name == '/cover'
+                ? Scaffold(
+                    body: TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('close'),
+                    ),
+                  )
+                : HubShellScope(
+                    shell: _FakeShell(),
+                    current: HubTab.clients,
+                    child: FeatureTourHost(
+                      scope: scope,
+                      isAdmin: true,
+                      stepKeys: {TourStepId.clientsSearch: key},
+                      child: Scaffold(
+                        body: TourShowcase(
+                          showcaseKey: key,
+                          scope: scope,
+                          id: TourStepId.clientsSearch,
+                          index: 0,
+                          count: 1,
+                          child: const Text('target'),
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Find a client'), findsNothing);
+
+    await tester.tap(find.text('close'));
+    // Bounded pumps: once the tour runs, its tooltip animation never settles.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Find a client'), findsOneWidget);
+  });
 }

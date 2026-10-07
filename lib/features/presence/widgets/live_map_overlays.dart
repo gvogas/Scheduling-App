@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 
-/// Stacked traffic and satellite toggles. A filled background signals which
-/// one is active.
+/// Stacked traffic and satellite toggles, filled while on.
 class MapToggles extends StatelessWidget {
   const MapToggles({
     required this.traffic,
@@ -22,59 +22,67 @@ class MapToggles extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.sp4),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _ToggleButton(
-              icon: Icons.traffic_outlined,
-              active: traffic,
-              tooltip: context.l10n.liveMap_trafficToggle,
-              onTap: onTrafficToggle,
-            ),
-            const SizedBox(height: AppSpacing.sp4),
-            _ToggleButton(
-              icon: Icons.layers_outlined,
-              active: satellite,
-              tooltip: context.l10n.liveMap_satelliteToggle,
-              onTap: onSatelliteToggle,
-            ),
-          ],
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        MapGhostIcon(
+          icon: Icons.traffic_outlined,
+          tooltip: context.l10n.liveMap_trafficToggle,
+          toggled: traffic,
+          onTap: onTrafficToggle,
         ),
-      ),
+        MapGhostIcon(
+          icon: Icons.layers_outlined,
+          tooltip: context.l10n.liveMap_satelliteToggle,
+          toggled: satellite,
+          onTap: onSatelliteToggle,
+        ),
+      ],
     );
   }
 }
 
-class _ToggleButton extends StatelessWidget {
-  const _ToggleButton({
+/// A ghost tile that floats over the map, so it carries the pill shadow the
+/// plain ghost tone has none of.
+class MapGhostIcon extends StatelessWidget {
+  const MapGhostIcon({
     required this.icon,
-    required this.active,
     required this.tooltip,
     required this.onTap,
+    this.toggled,
+    super.key,
   });
 
   final IconData icon;
-  final bool active;
   final String tooltip;
   final VoidCallback onTap;
 
+  /// Null for a one-shot action; a toggle paints active while true.
+  final bool? toggled;
+
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Semantics(
-      label: tooltip,
-      button: true,
-      toggled: active,
-      child: active
-          ? IconButton.filled(
-              icon: Icon(icon),
-              tooltip: tooltip,
-              onPressed: onTap,
-            )
-          : IconButton(icon: Icon(icon), tooltip: tooltip, onPressed: onTap),
+      toggled: toggled,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          DecoratedBox(
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              boxShadow: theme.cardStyle.pillShadow,
+            ),
+            child: const SizedBox.square(dimension: kGhostTile),
+          ),
+          GhostControl.icon(
+            onTap: onTap,
+            icon: icon,
+            tooltip: tooltip,
+            tone: toggled ?? false ? GhostTone.active : GhostTone.ghost,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -85,15 +93,20 @@ class EmptyMapCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Center(
-      child: Card(
-        color: theme.colorScheme.surface.withValues(alpha: 0.9),
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.sp16),
-          child: Text(
-            context.l10n.liveMap_emptyState,
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyMedium,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface,
+        borderRadius: BorderRadius.circular(AppRadius.r16),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+        boxShadow: theme.cardStyle.pillShadow,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.sp16),
+        child: Text(
+          context.l10n.liveMap_emptyState,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: theme.colorScheme.onSurface,
           ),
         ),
       ),

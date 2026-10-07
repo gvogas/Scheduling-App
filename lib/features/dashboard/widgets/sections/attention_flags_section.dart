@@ -236,8 +236,12 @@ class _FlagGroup extends StatelessWidget {
           AppointmentCard(
             appointment: shown[i],
             crew: crewFor(shown[i], colorMap: colorMap, nameMap: nameMap),
-            onTap: () =>
-                showEventDetails(context, shown[i], analyticsSource: AnalyticsSources.dashboard, showActions: isAdmin),
+            onTap: () => showEventDetails(
+              context,
+              shown[i],
+              analyticsSource: AnalyticsSources.dashboard,
+              showActions: isAdmin,
+            ),
           ),
         ],
         if (hidden > 0) ...[

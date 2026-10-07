@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/images/image_storage_service.dart';
 import 'package:scheduling/core/images/images_providers.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
@@ -68,6 +69,7 @@ void main() {
     () async {
       final container = ProviderContainer(
         overrides: [
+          isOfflineProvider.overrideWithValue(false),
           appointmentsRepositoryProvider.overrideWithValue(_ThrowingRepo()),
         ],
       );
@@ -110,6 +112,7 @@ void main() {
     final storage = _RecordingStorage();
     final container = ProviderContainer(
       overrides: [
+        isOfflineProvider.overrideWithValue(false),
         appointmentsRepositoryProvider.overrideWithValue(repo),
         imageStorageProvider.overrideWithValue(storage),
       ],
@@ -170,6 +173,7 @@ void main() {
     final storage = _RecordingStorage();
     final container = ProviderContainer(
       overrides: [
+        isOfflineProvider.overrideWithValue(false),
         appointmentsRepositoryProvider.overrideWithValue(repo),
         imageStorageProvider.overrideWithValue(storage),
       ],

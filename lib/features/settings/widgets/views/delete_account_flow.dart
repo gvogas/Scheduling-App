@@ -67,8 +67,9 @@ mixin DeleteAccountFlow<T extends ConsumerStatefulWidget> on ConsumerState<T> {
       //
       // `resetAnalyticsData` is deliberately NOT called: it would mint a new
       // app instance id, and retention ("do people come back?") is measured
-      // against that id. `user_role` is cleared instead, by
-      // `AnalyticsIdentityListener`, when the account doc empties.
+      // against that id. `user_role` is cleared instead — here rather than
+      // waiting for `AnalyticsIdentityListener`, so nothing logged between
+      // this call and the doc emptying carries the old role.
       analytics
         ..logSignOut()
         ..setUserRole(null);

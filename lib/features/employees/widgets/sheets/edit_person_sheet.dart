@@ -4,6 +4,7 @@ import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/analytics/analytics_screens.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
+import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/theme/button_styles.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/core/validators/email_format.dart';
@@ -18,12 +19,14 @@ import 'package:scheduling/features/employees/domain/policies/crew_color_policy.
 import 'package:scheduling/features/employees/domain/policies/employee_form_validator.dart';
 import 'package:scheduling/features/employees/domain/policies/employee_name_policy.dart';
 import 'package:scheduling/features/employees/domain/policies/work_schedule_policy.dart';
+import 'package:scheduling/features/employees/widgets/dialogs/new_account_dialog.dart';
 import 'package:scheduling/features/employees/widgets/fields/availability_panel.dart';
 import 'package:scheduling/features/employees/widgets/fields/employee_color_grid.dart';
 import 'package:scheduling/features/employees/widgets/fields/job_title_chips.dart';
 import 'package:scheduling/features/employees/widgets/fields/work_schedule_pickers.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/dialogs/confirm_dialog.dart';
+import 'package:scheduling/shared/widgets/feedback/user_status_chip.dart';
 import 'package:scheduling/shared/widgets/feedback/warning_note.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
 import 'package:scheduling/shared/widgets/fields/sheet_field_row.dart';
@@ -93,6 +96,8 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
   late int _selectedColor;
   late bool _onCall;
   late bool _isAdmin;
+  late bool _isTestAccount;
+  late bool _monthEndReviewPush;
   late bool _isDisabled;
   final Map<String, String?> errors = {};
 
@@ -137,6 +142,8 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     _selectedColor = e.color.toARGB32();
     _onCall = e.onCall;
     _isAdmin = e.isAdmin;
+    _isTestAccount = e.isTestAccount;
+    _monthEndReviewPush = e.monthEndReviewPush;
     _isDisabled = e.isDisabled;
   }
 
@@ -250,6 +257,8 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
       workEndMinutes: _workEndMinutes,
       maxJobsPerDay: _maxJobsPerDay,
       onCall: _onCall,
+      isTestAccount: _isTestAccount,
+      monthEndReviewPush: _isAdmin && _monthEndReviewPush,
     );
 
     final outcome = await ref
@@ -322,7 +331,11 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
         ref
             .read(analyticsServiceProvider)
             .logEmployeeStatusChanged(
-              status: _isDisabled ? 'active' : 'disabled',
+              // The account-status vocabulary has an owner; a second spelling
+              // here would drift from what the doc actually stores.
+              status: _isDisabled
+                  ? UserStatus.active.name
+                  : UserStatus.disabled.name,
             );
         setState(() => _isDisabled = !_isDisabled);
         ref
@@ -347,13 +360,67 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     }
   }
 
+  Future<void> _confirmResetPassword() async {
+    final l10n = context.l10n;
+    final name = widget.employee.displayName;
+    final confirmed = await showConfirmDialog(
+      context,
+      title: l10n.employees_resetPasswordConfirmTitle(name),
+      message: l10n.employees_resetPasswordConfirmBody,
+      confirmLabel: l10n.employees_resetPassword,
+    );
+    if (!mounted || !confirmed) return;
+    if (guardedOffline(context, ref, intro: l10n.error_introResetPassword)) {
+      return;
+    }
+
+    final outcome = await ref
+        .read(employeeFormControllerProvider.notifier)
+        .resetPassword(widget.employee.id);
+    if (!mounted) return;
+
+    switch (outcome) {
+      case PasswordResetBusy():
+        break;
+      case PasswordResetIssued(:final credentials):
+        await showNewAccountDialog(
+          context,
+          name: name,
+          credentials: credentials,
+          title: l10n.employees_passwordReset,
+          caption: l10n.employees_newPasswordIssued,
+        );
+      case PasswordResetFailed(:final error):
+        ref
+            .read(noticeServiceProvider)
+            .error(
+              composeErrorNotice(
+                context,
+                intro: l10n.error_introResetPassword,
+                error: error,
+              ),
+            );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = context.l10n;
     final materialL10n = MaterialLocalizations.of(context);
     final activity = ref.watch(employeeFormControllerProvider);
-    final sheetBusy = activity.isSaving || activity.isTogglingStatus;
+    final sheetBusy =
+        activity.isSaving ||
+        activity.isTogglingStatus ||
+        activity.isResettingPassword;
+    final signedInUid = ref.watch(authUidProvider).value;
+    // Fail closed: hidden until the signed-in uid is known and is not theirs.
+    final canResetPassword =
+        widget.employee.isActive &&
+        !_isDisabled &&
+        widget.employee.uid.isNotEmpty &&
+        signedInUid != null &&
+        signedInUid != widget.employee.uid;
 
     return FormSheetFrame(
       title: l10n.employees_editPerson,
@@ -366,7 +433,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
         ..._colourSection(theme, l10n),
         ..._availabilitySection(theme, l10n, materialL10n),
         ..._emergencySection(theme, l10n),
-        ..._accessSection(theme, l10n, sheetBusy),
+        ..._accessSection(theme, l10n, sheetBusy, canResetPassword),
       ],
     );
   }
@@ -452,9 +519,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     ),
     const SizedBox(height: AppSpacing.sp8),
     Text(
-      l10n.employees_coloursLeft(
-        availableCrewColorCount(widget.usedColors),
-      ),
+      l10n.employees_coloursLeft(availableCrewColorCount(widget.usedColors)),
       style: theme.textTheme.labelSmall?.copyWith(
         color: theme.palette.textTertiary,
       ),
@@ -541,6 +606,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     ThemeData theme,
     AppLocalizations l10n,
     bool sheetBusy,
+    bool canResetPassword,
   ) => [
     MonoSectionLabel(l10n.employees_sectionAccess),
     const SizedBox(height: AppSpacing.sp8),
@@ -553,32 +619,51 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
       subtitle: Text(l10n.employees_adminAccessDescription),
       onChanged: (value) => setState(() => _isAdmin = value),
     ),
+    SwitchListTile.adaptive(
+      key: const Key('testAccount'),
+      value: _isTestAccount,
+      activeTrackColor: theme.colorScheme.primary,
+      contentPadding: EdgeInsets.zero,
+      title: Text(l10n.employees_testAccount),
+      subtitle: Text(l10n.employees_testAccountCaption),
+      onChanged: (value) => setState(() => _isTestAccount = value),
+    ),
+    if (_isAdmin)
+      SwitchListTile.adaptive(
+        key: const Key('monthEndReviewPush'),
+        value: _monthEndReviewPush,
+        activeTrackColor: theme.colorScheme.primary,
+        contentPadding: EdgeInsets.zero,
+        title: Text(l10n.employees_monthEndReviewPush),
+        subtitle: Text(l10n.employees_monthEndReviewPushDescription),
+        onChanged: (value) => setState(() => _monthEndReviewPush = value),
+      ),
     const SizedBox(height: AppSpacing.sp24),
     _StatusFooter(
       employeeId: widget.employee.id,
       isDisabled: _isDisabled,
       isBusy: sheetBusy,
       onToggle: _confirmToggleStatus,
+      onResetPassword: canResetPassword ? _confirmResetPassword : null,
     ),
   ];
 }
 
-/// Disable / re-enable, with the count of jobs a human still has to move.
-///
-/// P4 reassigns nothing — the spec's words are "availability changes notify,
-/// a human moves the work". The count is information, not an action.
+/// Reset password, disable / re-enable, and the count of jobs still assigned.
 class _StatusFooter extends ConsumerWidget {
   const _StatusFooter({
     required this.employeeId,
     required this.isDisabled,
     required this.isBusy,
     required this.onToggle,
+    this.onResetPassword,
   });
 
   final String employeeId;
   final bool isDisabled;
   final bool isBusy;
   final VoidCallback onToggle;
+  final VoidCallback? onResetPassword;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -589,6 +674,18 @@ class _StatusFooter extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (onResetPassword case final onReset?) ...[
+          OutlinedButton.icon(
+            key: const Key('resetPassword'),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 48),
+            ),
+            onPressed: isBusy ? null : onReset,
+            icon: const Icon(Icons.lock_reset_outlined, size: 18),
+            label: Text(l10n.employees_resetPassword),
+          ),
+          const SizedBox(height: AppSpacing.sp8),
+        ],
         OutlinedButton.icon(
           style: destructiveOutlinedButtonStyle(
             context,

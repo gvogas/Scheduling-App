@@ -501,8 +501,12 @@ class _StopTile extends ConsumerWidget {
                   appointment: job,
                   crew: crew,
                   slice: slice,
-                  onTap: () =>
-                      showEventDetails(context, job, analyticsSource: AnalyticsSources.dayRoute, showActions: isAdmin),
+                  onTap: () => showEventDetails(
+                    context,
+                    job,
+                    analyticsSource: AnalyticsSources.dayRoute,
+                    showActions: isAdmin,
+                  ),
                   footer: (isOpen && hasAddress)
                       ? _NavigatePill(
                           label: navigateLabel,

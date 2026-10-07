@@ -15,6 +15,28 @@ paths:
   policy classes (`ClientSearchPolicy`, etc.) — no Firebase needed.
 - Always `await tester.pumpAndSettle()` after state changes. Assert `tester.takeException()` is null.
 
+## Shard isolation
+
+`dart run tool/test.dart` runs many test files in ONE isolate, so a file must
+not depend on state another file left behind, or on a plugin being ABSENT. The
+runner resets the SharedPreferences and secure-storage mocks to an empty store
+before each file; nothing else is reset. The leaks found when sharding landed
+(2026-10-01):
+
+- **Reset every `tester.view` value you set**, `devicePixelRatio` included —
+  `addTearDown(tester.view.reset)` covers all of them. A leaked DPR of 1 made
+  the next file's logical screen 2400 px wide, and its swipe stopped revealing
+  the action pane.
+- **A screen hosting a `DestinationTour` (Dashboard, Settings, Employees, the
+  day route) needs `markAllToursSeen()` in `setUp`** (`test/support/tour_test_support.dart`).
+  Run alone, the prefs read failed against the missing plugin, so the tour
+  never started; with a working mock store it starts and `pumpAndSettle` hangs.
+- **Override `isOfflineProvider` in a bare `ProviderContainer`** whose code
+  reads it. Once another file has initialised the test binding, the real
+  connectivity channel is called and throws `MissingPluginException`.
+- Set a global mock in `setUp`/`setUpAll`, never directly in `main()`: every
+  file's `main()` runs at load, so the last file loaded wins.
+
 ## Harness requirements
 
 - Wrap widgets that use `ThemeNotifier.of(context)` in a full `ThemeNotifier(..., child: ...)`.
@@ -66,6 +88,12 @@ paths:
   text scales 0.8–2.0 and assert no exceptions — reuse the `_scaled` /
   `_pumpAtViewport` harness pattern in
   `test/features/auth/screens/auth_screens_scale_sweep_test.dart`.
+- **The suite runs in UTC, so a DST fix cannot be pinned by it.**
+  `calendarDaysBetween` (`core/utils/date_utils_helper.dart`) normalizes
+  through UTC so the two DST-shift days can't round a 23- or 25-hour day to
+  the wrong integer, and it deliberately has no regression test: under UTC a
+  naive local-time subtraction passes the same cases, so such a test is a
+  false green. Don't add one on a UTC runner and call it pinned.
 - AutoDispose providers in tests need `container.listen(provider, (_, _) {})` in
   `setUp` so the family-keyed state survives across reads.
 - Repositories that accept optional deps (e.g. `FirebaseEmployeesRepository`

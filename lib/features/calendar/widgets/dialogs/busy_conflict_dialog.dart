@@ -5,6 +5,7 @@ import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/dialogs/app_dialog_frame.dart';
+import 'package:scheduling/shared/widgets/dialogs/dialog_action_pair.dart';
 import 'package:scheduling/shared/widgets/feedback/warning_note.dart';
 import 'package:scheduling/shared/widgets/primitives/app_avatar.dart';
 
@@ -132,28 +133,11 @@ class _BusyConflictDialog extends StatelessWidget {
     filled: false,
   );
 
-  Widget _actions(BuildContext context) => Row(
-    children: [
-      Expanded(
-        child: OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 44),
-          ),
-          onPressed: () => Navigator.pop(context, false),
-          child: Text(context.l10n.common_cancel),
-        ),
-      ),
-      const SizedBox(width: AppSpacing.sp12),
-      Expanded(
-        child: FilledButton(
-          style: FilledButton.styleFrom(
-            minimumSize: const Size(double.infinity, 44),
-          ),
-          onPressed: () => Navigator.pop(context, true),
-          child: Text(context.l10n.calendar_scheduleAnyway),
-        ),
-      ),
-    ],
+  Widget _actions(BuildContext context) => DialogActionPair(
+    secondaryLabel: context.l10n.common_cancel,
+    onSecondary: () => Navigator.pop(context, false),
+    primaryLabel: context.l10n.calendar_scheduleAnyway,
+    onPrimary: () => Navigator.pop(context, true),
   );
 }
 

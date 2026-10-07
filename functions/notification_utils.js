@@ -22,7 +22,6 @@ const {
 const {liveActivityCtx} = require("./live_activity_utils");
 const {
   toMillis,
-  MAX_APPOINTMENT_SPAN_MS,
   isCancelledStatus,
   isCompletedStatus,
 } = require("./time_utils");
@@ -30,6 +29,7 @@ const {
   buildNotificationMessage,
   buildDigestMessage,
   buildJobCompletedMessage,
+  buildOverdueReviewMessage,
 } = require("./notification_messages");
 
 const {
@@ -37,6 +37,8 @@ const {
   OVERDUE_LOOKBACK_MS,
   OVERDUE_SWEEP_MAX,
   DIGEST_SWEEP_MAX,
+  MONTH_END_REVIEW_MAX,
+  MONTH_END_SCAN_MAX,
   WIDGET_PAYLOAD_MAX_BYTES,
   OPEN_STATUSES,
   CHANGE_RECIPIENT_ROLES,
@@ -47,6 +49,8 @@ const {
   nowMillis,
   diffAppointmentForNotifications,
   selectOverdueCandidates,
+  isLastDayOfBusinessMonth,
+  selectMonthEndOverdue,
   groupTomorrowsJobsByEmployee,
   tomorrowWindowToronto,
   overduePromptLedgerId,
@@ -57,7 +61,6 @@ const {
   recordOf: _record,
   contextFor: _contextFor,
 } = require("./notification_policy");
-const {scanAppointmentWindow} = require("./appointment_scan");
 
 /**
  * Reads (and caches) one recipient's user doc plus their live token docs.
@@ -533,141 +536,6 @@ async function claimSeriesNotice(deps, opts) {
 }
 
 /**
- * Orchestrates the overdue "job finished?" sweep.
- * @param {!Object} deps
- * @return {!Promise<{prompted: number}>}
- */
-async function runOverduePromptSweep(deps) {
-  const {db, now} = deps;
-  const nowDate = now || new Date();
-  const nowMs = nowMillis(nowDate);
-  const windowStart = new Date(nowMs - OVERDUE_LOOKBACK_MS);
-  // Bounds mirror selectOverdueCandidates EXACTLY — `> floor`, `<= now` — so
-  // the query is the rule rather than a superset of it.
-  const candidates = selectOverdueCandidates(
-      await scanAppointmentWindow(db, {
-        statuses: OPEN_STATUSES,
-        field: "endTime",
-        lo: windowStart,
-        loOp: ">",
-        hi: nowDate,
-        hiOp: "<=",
-        descending: true,
-        cap: OVERDUE_SWEEP_MAX,
-        logger: deps.logger,
-        label: "runOverduePromptSweep",
-        consequence: "oldest jobs deferred to a later run",
-      }),
-      nowDate,
-  );
-  const cache = new Map();
-  // One flat list of (candidate, assignee) pairs, delivered concurrently.
-  const deliveries = [];
-  for (const c of candidates) {
-    const endMs = toMillis(c.endTime);
-    const ctx = _contextFor("doneCheck", null, c);
-    for (const employeeDocId of toIdList(c.employeeIds)) {
-      deliveries.push({c, endMs, ctx, employeeDocId});
-    }
-  }
-  const results = await Promise.all(deliveries.map(
-      ({c, endMs, ctx, employeeDocId}) => _deliverRecipientOnce(deps, {
-        collection: "appointmentOverduePrompts",
-        ledgerId: overduePromptLedgerId(String(c.id), endMs, employeeDocId),
-        appointmentId: String(c.id),
-        employeeDocId,
-        kind: "doneCheck",
-        buildMsg: (locale) =>
-          buildNotificationMessage("doneCheck", ctx, locale),
-        nowDate,
-        label: "overdue",
-        roles: TIMED_RECIPIENT_ROLES,
-        cache,
-      }),
-  ));
-  // Count recipients actually prompted — a job with N assignees can prompt up
-  // to N of them.
-  const prompted = results.filter((delivered) => delivered > 0).length;
-  return {prompted};
-}
-
-/**
- * Orchestrates the nightly digest.
- * @param {!Object} deps
- * @return {!Promise<{digests: number}>}
- */
-async function runDailyDigest(deps) {
-  const {db, now} = deps;
-  const nowDate = now || new Date();
-  const {start, end} = tomorrowWindowToronto(nowDate);
-  // Widened by the max span: the query filters on startTime, so a run that
-  // began days ago but is still on site tomorrow is only fetched if the floor
-  // reaches back that far.
-  const queryStart = new Date(start.getTime() - MAX_APPOINTMENT_SPAN_MS);
-  // Bounded like the travel and overdue sweeps beside it — this was the last
-  // one without a ceiling.
-  const window = await scanAppointmentWindow(db, {
-    statuses: OPEN_STATUSES,
-    field: "startTime",
-    lo: queryStart,
-    loOp: ">=",
-    hi: end,
-    hiOp: "<",
-    descending: true,
-    cap: DIGEST_SWEEP_MAX,
-    logger: deps.logger,
-    label: "runDailyDigest",
-    consequence: "some crews may not receive a digest",
-  });
-  // Back to ascending before grouping, so the per-employee job lists the digest
-  // text renders stay in chronological order.
-  const grouped = groupTomorrowsJobsByEmployee(window.reverse(), nowDate);
-  const cache = new Map();
-  // Concurrent per employee — see the note in runOverduePromptSweep.
-  const sends = Object.keys(grouped)
-      .filter((id) => grouped[id] && grouped[id].length > 0)
-      .map(async (employeeDocId) => {
-        const jobs = grouped[employeeDocId];
-        try {
-          // Reachability BEFORE the widget-window query, the order
-          // [handleAppointmentWrite] already establishes: an inactive, wrong-
-          // role or tokenless employee costs a 200-doc read and a whole payload
-          // build/JSON encode, every day, for a send that returns 0.
-          const recipient = await _loadRecipient(deps, employeeDocId, cache);
-          if (!_canReachRecipient(recipient, TIMED_RECIPIENT_ROLES)) return 0;
-          // The 18:00 digest also carries a fresh widget payload (+ content-
-          // available) so the home-screen widget rolls forward to tomorrow with
-          // the app closed, matching the digest text.
-          const records = await fetchEmployeeWidgetWindow(
-              db, employeeDocId, nowDate, deps.logger,
-          );
-          return await sendToEmployee(
-              deps,
-              employeeDocId,
-              {kind: "digest"},
-              (locale) => buildDigestMessage(jobs, locale),
-              TIMED_RECIPIENT_ROLES,
-              cache,
-              (locale) => ({
-                widgetPayload: JSON.stringify(
-                    buildWidgetPayload(records, nowDate, locale)),
-              }),
-          );
-        } catch (err) {
-          // A transient read/send failure must not abort the digest for the
-          // remaining employees.
-          if (deps.logger) {
-            deps.logger.warn("digest: send failed", {id: employeeDocId, err});
-          }
-          return 0;
-        }
-      });
-  const sentCounts = await Promise.all(sends);
-  const digests = sentCounts.filter((sent) => sent > 0).length;
-  return {digests};
-}
-
-/**
  * Pushes "Marc finished Leak fix" to every active admin who is not on the job.
  * @param {string} id appointment doc id.
  * @param {?Object} before
@@ -744,15 +612,18 @@ async function stampLifecycle(id, before, after, deps) {
  * @param {function(string): {title: string, body: string}} buildMsg Localized
  * message builder keyed by 'en'|'fr'.
  * @param {{excludeDocId: (string|undefined),
+ * includeUser: (function(!Object): boolean|undefined),
  * sendToEmployee: (!Function|undefined)}=} opts `excludeDocId` skips
  * the person who caused the notice — they do not need telling what they just
- * did. `sendToEmployee` is injectable for tests only.
- * @return {!Promise<void>}
+ * did. `includeUser` narrows the already-read admin docs with no new query.
+ * `sendToEmployee` is injectable for tests only.
+ * @return {!Promise<number>} Admins targeted after filtering.
  */
 async function sendToActiveAdmins(deps, data, buildMsg, opts) {
   const {db, logger} = deps;
   const options = opts || {};
   const send = options.sendToEmployee || sendToEmployee;
+  const include = options.includeUser || (() => true);
   try {
     const snap = await db.collection("users")
         .where("role", "==", "admin")
@@ -769,8 +640,10 @@ async function sendToActiveAdmins(deps, data, buildMsg, opts) {
     // read per active admin per notice.
     const cache = new Map(snap.docs.map(
         (doc) => [doc.id, {user: doc.data() || {}, tokenDocs: null}]));
-    await Promise.all(snap.docs
+    const targets = snap.docs
         .filter((doc) => doc.id !== options.excludeDocId)
+        .filter((doc) => include(doc.data() || {}));
+    await Promise.all(targets
         .map((doc) => send(
             deps, doc.id, data, buildMsg, ADMIN_RECIPIENT_ROLES, cache,
         ).catch((e) => {
@@ -779,10 +652,12 @@ async function sendToActiveAdmins(deps, data, buildMsg, opts) {
                 {docId: doc.id, err: String(e)});
           }
         })));
+    return targets.length;
   } catch (e) {
     if (logger) {
       logger.warn("sendToActiveAdmins: fan-out failed", {err: String(e)});
     }
+    return 0;
   }
 }
 
@@ -794,6 +669,8 @@ module.exports = {
   OVERDUE_LOOKBACK_MS,
   OVERDUE_SWEEP_MAX,
   DIGEST_SWEEP_MAX,
+  MONTH_END_REVIEW_MAX,
+  MONTH_END_SCAN_MAX,
   WIDGET_PAYLOAD_MAX_BYTES,
   OPEN_STATUSES,
   CHANGE_RECIPIENT_ROLES,
@@ -813,6 +690,9 @@ module.exports = {
   buildNotificationMessage,
   buildDigestMessage,
   selectOverdueCandidates,
+  isLastDayOfBusinessMonth,
+  selectMonthEndOverdue,
+  buildOverdueReviewMessage,
   groupTomorrowsJobsByEmployee,
   tomorrowWindowToronto,
   overduePromptLedgerId,
@@ -826,6 +706,7 @@ module.exports = {
   lifecycleStamps,
   deliverRecipientOnce: _deliverRecipientOnce,
   handleAppointmentWrite,
-  runDailyDigest,
-  runOverduePromptSweep,
+  loadRecipient: _loadRecipient,
+  canReachRecipient: _canReachRecipient,
+  fetchEmployeeWidgetWindow,
 };

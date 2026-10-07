@@ -93,6 +93,132 @@ void main() {
 
       expect(points.map((p) => p.name), ['Amy', 'Max', 'Zack']);
     });
+
+    test('drops a test account even when it is active and sharing', () {
+      final points = LiveMapAggregator.join(
+        fixes: [
+          const PresenceFix(userDocId: 't', lat: 1, lng: 2, updatedAt: null),
+        ],
+        users: [
+          const EmployeeRecord(id: 't', status: 'active', isTestAccount: true),
+        ],
+      );
+
+      expect(points, isEmpty);
+    });
+  });
+
+  group('LiveMapAggregator.groupTeam', () {
+    PresenceFix fix(String id, Duration age) => PresenceFix(
+      userDocId: id,
+      lat: 45.5,
+      lng: -73.6,
+      updatedAt: now.subtract(age),
+    );
+
+    EmployeeRecord person(
+      String id, {
+      bool sharing = false,
+      bool testAccount = false,
+      String status = 'active',
+    }) => EmployeeRecord(
+      id: id,
+      name: id,
+      status: status,
+      locationSharingEnabled: sharing,
+      isTestAccount: testAccount,
+    );
+
+    test('a fresh fix is on the map', () {
+      final team = LiveMapAggregator.groupTeam(
+        fixes: [fix('a', const Duration(minutes: 5))],
+        users: [person('a', sharing: true)],
+      );
+
+      expect(team.onMap.map((p) => p.userDocId), ['a']);
+      expect(team.notSeen, isEmpty);
+      expect(team.sharingOff, isEmpty);
+    });
+
+    test('a days-old fix stays on the map while sharing is on', () {
+      final team = LiveMapAggregator.groupTeam(
+        fixes: [fix('a', const Duration(days: 3))],
+        users: [person('a', sharing: true)],
+      );
+
+      expect(team.onMap.map((p) => p.userDocId), ['a']);
+    });
+
+    test('a fix whose owner has sharing off is SHARING OFF, not a pin', () {
+      final team = LiveMapAggregator.groupTeam(
+        fixes: [fix('a', const Duration(minutes: 5))],
+        users: [person('a')],
+      );
+
+      expect(team.onMap, isEmpty);
+      expect(team.sharingOff.single.userDocId, 'a');
+    });
+
+    test('sharing on with no fix at all is NOT SEEN, not SHARING OFF', () {
+      final team = LiveMapAggregator.groupTeam(
+        fixes: const [],
+        users: [person('a', sharing: true)],
+      );
+
+      expect(team.notSeen.single.userDocId, 'a');
+      expect(team.sharingOff, isEmpty);
+    });
+
+    test('sharing off with no fix is SHARING OFF', () {
+      final team = LiveMapAggregator.groupTeam(
+        fixes: const [],
+        users: [person('a')],
+      );
+
+      expect(team.sharingOff.single.userDocId, 'a');
+      expect(team.notSeen, isEmpty);
+    });
+
+    test('a test account is in none of the three sections', () {
+      final team = LiveMapAggregator.groupTeam(
+        fixes: [
+          fix('fresh', const Duration(minutes: 1)),
+          fix('old', const Duration(hours: 5)),
+        ],
+        users: [
+          person('fresh', sharing: true, testAccount: true),
+          person('old', sharing: true, testAccount: true),
+          person('none', testAccount: true),
+        ],
+      );
+
+      expect(team.onMap, isEmpty);
+      expect(team.notSeen, isEmpty);
+      expect(team.sharingOff, isEmpty);
+    });
+
+    test('a disabled or invited account is in none of the three sections', () {
+      final team = LiveMapAggregator.groupTeam(
+        fixes: const [],
+        users: [
+          person('d', status: 'disabled'),
+          person('i', status: 'invited'),
+        ],
+      );
+
+      expect(team.notSeen, isEmpty);
+      expect(team.sharingOff, isEmpty);
+    });
+
+    test('the off-map sections are sorted by name', () {
+      final team = LiveMapAggregator.groupTeam(
+        fixes: const [],
+        users: [person('zoe'), person('amy'), person('max')],
+      );
+
+      expect(team.sharingOff.map((a) => a.name), ['amy', 'max', 'zoe']);
+      expect(team.offMapCount, 3);
+    });
   });
 
   group('LiveMapAggregator.isStale', () {
@@ -180,10 +306,7 @@ void main() {
     });
 
     test('extracts city from a province-only tail', () {
-      expect(
-        LiveMapAggregator.cityFromAddress('Québec, QC, Canada'),
-        'Québec',
-      );
+      expect(LiveMapAggregator.cityFromAddress('Québec, QC, Canada'), 'Québec');
     });
 
     test('handles no postal code', () {
@@ -205,10 +328,7 @@ void main() {
 
   group('LiveMapAggregator.freshnessOf', () {
     test('null updatedAt is justNow', () {
-      expect(
-        LiveMapAggregator.freshnessOf(null, now),
-        isA<FreshnessJustNow>(),
-      );
+      expect(LiveMapAggregator.freshnessOf(null, now), isA<FreshnessJustNow>());
     });
 
     test('under 60s is justNow', () {

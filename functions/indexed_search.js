@@ -82,16 +82,30 @@ function callableRecord(doc) {
  * Server-side client search, admin-only because clients are PII.
  */
 const searchClients = onCall(APP_CHECK, async (req) => {
-  const uid = await assertAdminCall(req, new Set(["query"]));
+  const uid = await assertAdminCall(req, new Set([
+    "query", "archived", "type", "buildingKey",
+  ]));
   const query = optionalString(req.data, "query", SEARCH_QUERY_MAX);
+  const type = optionalString(req.data, "type", 32);
+  const buildingKey = optionalString(req.data, "buildingKey", 1000);
+  const archived = req.data?.archived;
+  if ((archived !== undefined && typeof archived !== "boolean") ||
+      (type && !["residential", "commercial", "building"].includes(type)) ||
+      (type && buildingKey)) {
+    throw new HttpsError("invalid-argument", "invalid-client-filter");
+  }
   const tokens = searchQueryTokens(query);
   if (tokens.length === 0) return {clients: []};
   await enforceDurableRateLimit(
       "searchClients", uid, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_MS);
 
-  const snap = await getFirestore()
+  let source = getFirestore()
       .collection("clients")
-      .where("searchTokens", "array-contains-any", tokens)
+      .where("searchTokens", "array-contains-any", tokens);
+  if (archived !== undefined) source = source.where("archived", "==", archived);
+  if (type) source = source.where("type", "==", type);
+  if (buildingKey) source = source.where("buildingKey", "==", buildingKey);
+  const snap = await source
       .orderBy("name")
       .limit(SEARCH_READ_LIMIT)
       .get();

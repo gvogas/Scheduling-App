@@ -1,13 +1,10 @@
 import 'package:flutter/foundation.dart';
 
-import 'package:scheduling/features/wave/domain/models/wave_import_schedule.dart';
-
 @immutable
 class WaveConnection {
   const WaveConnection({
     required this.businessId,
     required this.businessName,
-    this.importSchedule = WaveImportSchedule.off,
     this.pendingCount,
     this.failedCount,
   });
@@ -16,9 +13,6 @@ class WaveConnection {
     return WaveConnection(
       businessId: (map['businessId'] as String?) ?? '',
       businessName: (map['businessName'] as String?) ?? '',
-      importSchedule: WaveImportSchedule.fromRaw(
-        map['importSchedule'] as String?,
-      ),
       pendingCount: (map['pendingCount'] as num?)?.toInt(),
       failedCount: (map['failedCount'] as num?)?.toInt(),
     );
@@ -26,7 +20,6 @@ class WaveConnection {
 
   final String businessId;
   final String businessName;
-  final WaveImportSchedule importSchedule;
 
   /// Client edits queued for Wave but not pushed yet.
   ///
@@ -52,17 +45,13 @@ class WaveConnection {
   /// Whether any client edit has permanently failed to reach Wave.
   bool get hasFailed => (failedCount ?? 0) > 0;
 
-  WaveConnection copyWith({
-    WaveImportSchedule? importSchedule,
-    int? pendingCount,
-    int? failedCount,
-  }) => WaveConnection(
-    businessId: businessId,
-    businessName: businessName,
-    importSchedule: importSchedule ?? this.importSchedule,
-    pendingCount: pendingCount ?? this.pendingCount,
-    failedCount: failedCount ?? this.failedCount,
-  );
+  WaveConnection copyWith({int? pendingCount, int? failedCount}) =>
+      WaveConnection(
+        businessId: businessId,
+        businessName: businessName,
+        pendingCount: pendingCount ?? this.pendingCount,
+        failedCount: failedCount ?? this.failedCount,
+      );
 
   @override
   bool operator ==(Object other) =>
@@ -71,18 +60,12 @@ class WaveConnection {
           runtimeType == other.runtimeType &&
           businessId == other.businessId &&
           businessName == other.businessName &&
-          importSchedule == other.importSchedule &&
           pendingCount == other.pendingCount &&
           failedCount == other.failedCount;
 
   @override
-  int get hashCode => Object.hash(
-    businessId,
-    businessName,
-    importSchedule,
-    pendingCount,
-    failedCount,
-  );
+  int get hashCode =>
+      Object.hash(businessId, businessName, pendingCount, failedCount);
 }
 
 /// What one "Retry failed" press recovered.
@@ -93,6 +76,7 @@ class WaveRetryResult {
     required this.scanned,
     required this.pushed,
     required this.failed,
+    this.blocked = 0,
   });
 
   factory WaveRetryResult.fromMap(Map<String, dynamic> map) => WaveRetryResult(
@@ -100,6 +84,7 @@ class WaveRetryResult {
     scanned: (map['scanned'] as num?)?.toInt() ?? 0,
     pushed: (map['pushed'] as num?)?.toInt(),
     failed: (map['failed'] as num?)?.toInt(),
+    blocked: (map['blocked'] as num?)?.toInt() ?? 0,
   );
 
   /// Jobs returned to the queue. This is the durable part of the action.
@@ -123,6 +108,14 @@ class WaveRetryResult {
   /// count is unchanged, and without this the app announces a success over a
   /// row that still reads "1 client failed to sync".
   final int? failed;
+
+  /// Dead jobs DROPPED because the contract refuses their client.
+  ///
+  /// Not a failure and not a recovery: requeuing them would dead-letter them
+  /// again inside the same call, so the job goes and the reason moves onto the
+  /// client, where it is fixable. Without reporting it, a press that cleared
+  /// the whole queue this way reads as "nothing could be recovered".
+  final int blocked;
 
   /// Whether any requeued job died again on the push that followed. Null reads
   /// as "not known", never as "nothing failed".

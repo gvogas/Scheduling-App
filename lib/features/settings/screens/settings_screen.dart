@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
+import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
 import 'package:scheduling/core/layout/breakpoints.dart';
@@ -166,7 +167,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       // reverts the switch, and reporting the intent would count a setting the
       // person does not actually have.
       analytics.logSettingsChanged(
-        settingName: 'app_lock',
+        settingName: AnalyticsSettings.appLock,
         settingValue: value ? 'on' : 'off',
       );
     } catch (e, st) {
@@ -265,7 +266,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     try {
       await enabled.setEnabled(value: value);
       analytics.logSettingsChanged(
-        settingName: 'live_activity',
+        settingName: AnalyticsSettings.liveActivity,
         settingValue: value ? 'on' : 'off',
       );
       if (value) {

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
+import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/employees/application/employee_schedule_providers.dart';
@@ -59,6 +60,9 @@ Widget _wrap(Widget child, double scale, {EmployeesRepository? repo}) =>
       overrides: [
         employeesRepositoryProvider.overrideWithValue(repo ?? _MockRepo()),
         isOfflineProvider.overrideWithValue(false),
+        authUidProvider.overrideWith(
+          (ref) => Stream<String?>.value('admin-uid'),
+        ),
         employeeJobsTodayProvider.overrideWithValue(const {'e1': 3}),
         employeeTodayJobsProvider('e1').overrideWithValue(const []),
         futureAssignmentCountProvider('e1').overrideWith((_) async => 2),

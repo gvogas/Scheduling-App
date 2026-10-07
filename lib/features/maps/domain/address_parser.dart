@@ -20,8 +20,7 @@ class AddressParser {
   );
   static final _leadingHashes = RegExp('^#+');
   // `_localityKey` runs ~6-10x per `streetOnly`, and `streetOnly` runs per row
-  // in the clients list builder AND once per client in `buildingsIn` — so a
-  // per-call constructor here cost thousands of compilations per window fetch.
+  // in the clients list builder — a per-call constructor here recompiles each.
   static final _whitespaceRun = RegExp(r'\s+');
   static final _postalCode = RegExp(
     r'\b[ABCEGHJ-NPRSTVXY]\d[ABCEGHJ-NPRSTV-Z][ -]?\d[ABCEGHJ-NPRSTV-Z]\d\b',

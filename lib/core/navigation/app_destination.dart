@@ -10,6 +10,7 @@ enum HubTab implements AppDestination { calendar, clients, employees, liveMap }
 enum PushedDestination implements AppDestination {
   dayRoute,
   history,
+  overdueReview,
   dashboard,
   settings,
 }
@@ -51,6 +52,10 @@ const List<AppDestination> allDestinations = [
   PushedDestination.history => (
     route: AppRoutes.history,
     arguments: HistoryArgs(isAdmin: isAdmin, employeeId: employeeId),
+  ),
+  PushedDestination.overdueReview => (
+    route: AppRoutes.overdueReview,
+    arguments: OverdueReviewArgs(isAdmin: isAdmin, employeeId: employeeId),
   ),
   PushedDestination.dashboard => (
     route: AppRoutes.dashboard,

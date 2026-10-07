@@ -14,7 +14,9 @@
  */
 module.exports = {
   testEnvironment: "node",
-  testPathIgnorePatterns: ["/node_modules/", "/__tests__/mocks/"],
+  testPathIgnorePatterns: [
+    "/node_modules/", "/__tests__/mocks/", "/__tests__/emulator/",
+  ],
   moduleNameMapper: {
     "^jose$": "<rootDir>/__tests__/mocks/jose.js",
   },

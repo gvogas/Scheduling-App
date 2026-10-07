@@ -16,6 +16,7 @@ import 'package:scheduling/features/calendar/application/appointments_providers.
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/routes/app_routes.dart';
 
 class _MockRepository extends Mock implements AppointmentsRepository {}
 
@@ -26,6 +27,9 @@ class _FakeHub implements AppointmentLinkHub {
 
   @override
   final bool isAdmin;
+
+  @override
+  String get employeeId => 'me';
 
   final calls = <String>[];
 
@@ -63,6 +67,7 @@ void main() {
     AppointmentLinkHub? hub,
     List<AppointmentRecord?>? shown,
     List<bool>? shownWithActions,
+    List<RouteSettings>? pushedRoutes,
     Duration hubPollInterval = const Duration(milliseconds: 200),
   }) async {
     late AppointmentLinkOpener opener;
@@ -74,6 +79,13 @@ void main() {
         ],
         child: MaterialApp(
           navigatorKey: navigatorKey,
+          onGenerateRoute: (settings) {
+            pushedRoutes?.add(settings);
+            return MaterialPageRoute<void>(
+              settings: settings,
+              builder: (_) => const SizedBox.shrink(),
+            );
+          },
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
           home: Consumer(
@@ -86,10 +98,15 @@ void main() {
                 resolveHub: () => hub,
                 hubPollInterval: hubPollInterval,
                 showDetails:
-                    (context, record, {required showActions, required analyticsSource}) async {
-                  shown?.add(record);
-                  shownWithActions?.add(showActions);
-                },
+                    (
+                      context,
+                      record, {
+                      required showActions,
+                      required analyticsSource,
+                    }) async {
+                      shown?.add(record);
+                      shownWithActions?.add(showActions);
+                    },
               );
               return const SizedBox.shrink();
             },
@@ -203,6 +220,27 @@ void main() {
     verify(() => notices.info(any())).called(1);
   });
 
+  testWidgets('an id that is not a doc id is never fetched', (tester) async {
+    final shown = <AppointmentRecord?>[];
+    final opener = await pumpOpener(
+      tester,
+      signedIn: true,
+      hub: _FakeHub(),
+      shown: shown,
+    );
+
+    for (final id in ['a1/fieldNotes/n1', 'x' * 129]) {
+      await opener.handleWidgetTap(
+        Uri.parse('esproschedule://appointment?id=$id'),
+      );
+      await tester.pump();
+    }
+
+    expect(shown, isEmpty);
+    verifyNever(() => repository.getAppointmentById(any()));
+    verify(() => notices.info(any())).called(2);
+  });
+
   testWidgets('an id-less tap just shows the calendar', (tester) async {
     final hub = _FakeHub();
     final shown = <AppointmentRecord?>[];
@@ -275,8 +313,12 @@ void main() {
                 isSignedIn: () => true,
                 resolveHub: _FakeHub.new,
                 showDetails:
-                    (context, record, {required showActions, required analyticsSource}) async =>
-                    throw StateError('boom'),
+                    (
+                      context,
+                      record, {
+                      required showActions,
+                      required analyticsSource,
+                    }) async => throw StateError('boom'),
               );
               return const SizedBox.shrink();
             },
@@ -286,10 +328,54 @@ void main() {
     );
 
     await expectLater(
-      opener.handlePushTap(
-        const RemoteMessage(data: {'appointmentId': 'a1'}),
-      ),
+      opener.handlePushTap(const RemoteMessage(data: {'appointmentId': 'a1'})),
       completes,
     );
+  });
+
+  testWidgets('an overdueReview push opens the review, never an appointment', (
+    tester,
+  ) async {
+    final hub = _FakeHub(isAdmin: true);
+    final pushed = <RouteSettings>[];
+    final opener = await pumpOpener(
+      tester,
+      signedIn: true,
+      hub: hub,
+      pushedRoutes: pushed,
+    );
+
+    await opener.handlePushTap(
+      const RemoteMessage(data: {'kind': 'overdueReview', 'count': '3'}),
+    );
+    await tester.pump();
+
+    final route = pushed.singleWhere((s) => s.name == AppRoutes.overdueReview);
+    final args = route.arguments! as OverdueReviewArgs;
+    expect(args.isAdmin, isTrue);
+    expect(args.employeeId, 'me');
+    expect(hub.calls, ['showCalendar', 'goHome']);
+    verifyNever(() => repository.getAppointmentById(any()));
+  });
+
+  testWidgets('an overdueReview push to a non-admin just shows the calendar', (
+    tester,
+  ) async {
+    final hub = _FakeHub();
+    final pushed = <RouteSettings>[];
+    final opener = await pumpOpener(
+      tester,
+      signedIn: true,
+      hub: hub,
+      pushedRoutes: pushed,
+    );
+
+    await opener.handlePushTap(
+      const RemoteMessage(data: {'kind': 'overdueReview', 'count': '3'}),
+    );
+    await tester.pump();
+
+    expect(pushed.where((s) => s.name == AppRoutes.overdueReview), isEmpty);
+    expect(hub.calls, ['showCalendar', 'goHome']);
   });
 }

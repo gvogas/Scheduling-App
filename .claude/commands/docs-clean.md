@@ -73,7 +73,8 @@ superseded audit snapshot moves with it.
 
 These drift quietly and are cheap to verify:
 
-- `ARCHITECTURE.md` test count — `flutter test` and `npx jest` in `functions/`.
+- `ARCHITECTURE.md` test count — `dart run tool/test.dart` (same count as bare
+  `flutter test`) and `npx jest` in `functions/`.
   Use the runner's real number; do not copy one forward from a plan or a memory
   note. (It has been off by one against the live suite.)
 - `CLOUD_FUNCTIONS.md` — the export count against

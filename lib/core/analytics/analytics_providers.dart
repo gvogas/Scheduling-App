@@ -1,5 +1,5 @@
-import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/foundation.dart' show kDebugMode;
+import 'package:flutter/widgets.dart' show NavigatorObserver;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:scheduling/core/analytics/analytics_events.dart';
@@ -37,11 +37,10 @@ final analyticsServiceProvider = Provider<AnalyticsService>(
 /// an unnamed modal sheet, or one of the four hub-tab routes the shell reports
 /// itself — and a null `nameExtractor` result makes the observer ignore that
 /// push entirely.
-final analyticsObserverProvider = Provider<FirebaseAnalyticsObserver>((ref) {
+final analyticsObserverProvider = Provider<NavigatorObserver>((ref) {
   final analytics = ref.watch(analyticsServiceProvider);
   final logger = ref.read(loggerProvider);
-  return FirebaseAnalyticsObserver(
-    analytics: analytics.rawAnalytics,
+  return analytics.navigationObserver(
     nameExtractor: (settings) => analyticsScreenForRoute(settings.name),
     onError: (error) => logger.warn('ANALYTICS route observer failed', error),
   );

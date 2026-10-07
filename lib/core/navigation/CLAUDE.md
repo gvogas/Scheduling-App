@@ -5,8 +5,11 @@ Loaded when working under `lib/core/navigation/`. Root context: `../../../CLAUDE
 - **Navigation (`lib/core/navigation/`, restructured 2026-07-30):**
   `AppDestination` is a **sealed** family — `enum HubTab {calendar, clients,
   employees, liveMap}` (the four `IndexedStack` panes) and
-  `enum PushedDestination {dayRoute, history, dashboard, settings}` (plain
-  routes above the shell). The split makes `select(settings)` a **compile
+  `enum PushedDestination {dayRoute, history, overdueReview, dashboard, settings}` (plain
+  routes above the shell). `overdueReview` (2026-09-13) is admin-only,
+  follows History in THE BUSINESS group and has no tour
+  (`tour_definitions` returns `const []`), but its `.name` is still a storage
+  key, so it is named once. The split makes `select(settings)` a **compile
   error** instead of an `IndexedStack` range crash; that is the whole point —
   never collapse it back to one enum plus a list or an `isHubTab` flag.
   `implements Enum` keeps `.name`/`.values` on the union type, and `.name` is
@@ -33,7 +36,7 @@ Loaded when working under `lib/core/navigation/`. Root context: `../../../CLAUDE
 - **An interface `core/` needs the shell to satisfy lives in
   `hub_shell_scope.dart`, never in the consumer's own file.** Two do:
   `HubTabSelector` (tab switching) and `AppointmentLinkHub` (the
-  `isAdmin`/`showCalendar`/`goHome` slice an inbound push or widget tap
+  `isAdmin`/`employeeId`/`showCalendar`/`goHome` slice an inbound push or widget tap
   drives), and `HubShellState` implements both. Declaring one where its
   consumer lives instead forces `routes/hub_shell.dart` to import back into
   `core/app/`, and the mutual dependency gets papered over with a forwarding

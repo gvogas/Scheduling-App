@@ -13,7 +13,7 @@ description: >-
 
 Project `schedulingapp-88727`, region `us-central1`. Functions live in
 `functions/` and are all re-exported from `functions/index.js` — that export
-list (**29 exports**) is the source of truth for what should exist in prod.
+list (**32 exports**) is the source of truth for what should exist in prod.
 
 ## 0. Establish the ordering before touching anything
 
@@ -124,7 +124,7 @@ again. Confirm with `$env:AI_AGENT` (PowerShell) before deploying.
 
 - List deployed functions (Firebase MCP `functions_list_functions`, or
   `firebase functions:list`) and diff against the exports in
-  `functions/index.js` — all 29 deployed, no orphans. **An unchanged count is
+  `functions/index.js` — all 32 deployed, no orphans. **An unchanged count is
   not a verification**: the set changed by six at an unchanged count of 25
   once, and the drift went unnoticed for three days. Diff the names.
 - If new composites went out in step 0.1, re-read `firestore_list_indexes` and

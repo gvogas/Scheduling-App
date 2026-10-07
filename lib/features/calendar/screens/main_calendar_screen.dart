@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/app/photo_upload_failure_listener.dart';
 import 'package:scheduling/core/app/role_upgrade_listener.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
 import 'package:scheduling/core/layout/breakpoints.dart';
+import 'package:scheduling/core/layout/floating_controls.dart';
 import 'package:scheduling/core/layout/primary_scroll_scope.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/navigation/app_destination.dart';
@@ -39,8 +41,10 @@ import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_steps.dart';
 import 'package:scheduling/features/feature_tour/widgets/feature_tour_host.dart';
 import 'package:scheduling/features/navigation/widgets/app_nav_drawer.dart';
+import 'package:scheduling/features/presence/widgets/location_share_ask_gate.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
+import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 
 /// Most of the portrait pane the month grid may take before it starts clipping.
 const double _kMaxGridShare = 0.7;
@@ -142,7 +146,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
   }
 
   void _goToToday(DateTime today) {
-    _logDateChange('today');
+    _logDateChange(AnalyticsDirections.today);
     setState(() {
       _focusedDay = today;
       _selectedDay = today;
@@ -188,12 +192,19 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
   /// A tap on a week bar: that day, in day mode.
   void _onWeekDaySelected(DateTime day) {
     setState(() => _agendaMode = _AgendaMode.day);
-    _onDaySelected(day, direction: 'week_strip');
+    _onDaySelected(day, direction: AnalyticsDirections.weekStrip);
   }
 
   /// Moves focus and selection to the given month/day.
-  void _setFocusedDay(DateTime day) {
-    _logDateChange('picked');
+  ///
+  /// The direction is a parameter because the two callers are different
+  /// gestures — the date-picker dialog and a month swipe — and reporting both
+  /// as `picked` made them indistinguishable in the console.
+  void _setFocusedDay(
+    DateTime day, {
+    String direction = AnalyticsDirections.picked,
+  }) {
+    _logDateChange(direction);
     final newRange = _rangeFor(day, day);
     setState(() {
       _focusedDay = day;
@@ -210,7 +221,9 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
     final target = DateTime(from.year, from.month, from.day + 7 * direction);
     _onDaySelected(
       weekOf(target, weekStart: weekStart).first,
-      direction: direction > 0 ? 'next' : 'previous',
+      direction: direction > 0
+          ? AnalyticsDirections.next
+          : AnalyticsDirections.previous,
     );
   }
 
@@ -327,6 +340,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
     String monthLabelShort,
     String yearLabel,
     String dayTitle,
+    String dayTitleShort,
     String jobLabel,
     DateTime today,
     List<DateTime> weekDays,
@@ -379,6 +393,10 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
       dayTitle: _agendaMode == _AgendaMode.week
           ? _weekLabel(weekDays)
           : DateUtilsHelper.formatDayHeader(selectedDay),
+      // The week label is already short; only the day title has two forms.
+      dayTitleShort: _agendaMode == _AgendaMode.week
+          ? _weekLabel(weekDays)
+          : DateUtilsHelper.formatDayHeaderShort(selectedDay),
       jobLabel: _jobLabel(context, agendaEvents),
       today: today,
       weekDays: weekDays,
@@ -416,67 +434,70 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
     final data = _prepareBuild(context);
 
     // Session listeners are hosted at the calendar shell.
-    return RoleUpgradeListener(
-      employeeId: widget.employeeId,
-      isAdmin: widget.isAdmin,
-      child: PhotoUploadFailureListener(
-        showActions: widget.isAdmin,
-        child: FeatureTourHost(
-          scope: _tour.scope,
-          isAdmin: widget.isAdmin,
-          ready: !data.isLoading,
-          stepKeys: _tour.keys,
-          child: Scaffold(
-            floatingActionButton: _addAppointmentFab(context),
-            endDrawer: AppNavDrawer(
-              isAdmin: widget.isAdmin,
-              employeeId: widget.employeeId,
-              userName: data.userName,
-            ),
-            body: Column(
-              children: [
-                CalendarHeaderBlock(
-                  monthLabel: data.monthLabel,
-                  monthLabelShort: data.monthLabelShort,
-                  yearLabel: data.yearLabel,
-                  onPickMonth: _pickMonth,
-                  crewFilterButton: widget.isAdmin
-                      ? _tour.stepIf(
-                          TourStepId.calendarCrewFilter,
-                          const CrewFilterButton(),
-                        )
-                      : null,
-                  routeButton: _dayRouteButton(context),
-                  weekStrip: _weekStrip(data.today, data.colorMap),
-                ),
-                Expanded(
-                  // The header block reserves the status bar itself.
-                  child: SafeArea(
-                    top: false,
-                    child: Stack(
-                      children: [
-                        _content(
-                          isLoading: data.isLoading,
-                          colorMap: data.colorMap,
-                          nameMap: data.nameMap,
-                          today: data.today,
-                          dayTitle: data.dayTitle,
-                          jobLabel: data.jobLabel,
-                          weekDays: data.weekDays,
-                        ),
-                        Positioned(
-                          bottom: AppSpacing.sp16,
-                          left: AppSpacing.sp16,
-                          child: TodayPill(
-                            visible: _showTodayButton(data.today),
-                            onPressed: () => _goToToday(data.today),
+    return LocationShareAskGate(
+      builder: (_, {required holdsTour}) => RoleUpgradeListener(
+        employeeId: widget.employeeId,
+        isAdmin: widget.isAdmin,
+        child: PhotoUploadFailureListener(
+          showActions: widget.isAdmin,
+          child: FeatureTourHost(
+            scope: _tour.scope,
+            isAdmin: widget.isAdmin,
+            ready: !data.isLoading && !holdsTour,
+            stepKeys: _tour.keys,
+            child: Scaffold(
+              floatingActionButton: _addAppointmentFab(context),
+              endDrawer: AppNavDrawer(
+                isAdmin: widget.isAdmin,
+                employeeId: widget.employeeId,
+                userName: data.userName,
+              ),
+              body: Column(
+                children: [
+                  CalendarHeaderBlock(
+                    monthLabel: data.monthLabel,
+                    monthLabelShort: data.monthLabelShort,
+                    yearLabel: data.yearLabel,
+                    onPickMonth: _pickMonth,
+                    crewFilterButton: widget.isAdmin
+                        ? _tour.stepIf(
+                            TourStepId.calendarCrewFilter,
+                            const CrewFilterButton(),
+                          )
+                        : null,
+                    routeButton: _dayRouteButton(context),
+                    weekStrip: _weekStrip(data.today, data.colorMap),
+                  ),
+                  Expanded(
+                    // The header block reserves the status bar itself.
+                    child: SafeArea(
+                      top: false,
+                      child: Stack(
+                        children: [
+                          _content(
+                            isLoading: data.isLoading,
+                            colorMap: data.colorMap,
+                            nameMap: data.nameMap,
+                            today: data.today,
+                            dayTitle: data.dayTitle,
+                            dayTitleShort: data.dayTitleShort,
+                            jobLabel: data.jobLabel,
+                            weekDays: data.weekDays,
                           ),
-                        ),
-                      ],
+                          Positioned(
+                            bottom: AppSpacing.sp16,
+                            left: AppSpacing.sp16,
+                            child: TodayPill(
+                              visible: _showTodayButton(data.today),
+                              onPressed: () => _goToToday(data.today),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -510,47 +531,22 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
   }
 
   /// Day-route control owned by this screen's tour.
-  Widget _dayRouteButton(BuildContext context) {
-    final theme = Theme.of(context);
-    return _tour.step(
-      TourStepId.calendarDayRoute,
-      targetBorderRadius: BorderRadius.circular(AppRadius.rIcon),
-      child: Tooltip(
-        message: context.l10n.calendar_dayRouteTitle,
-        child: SizedBox(
-          width: 48,
-          height: 48,
-          child: Center(
-            child: Material(
-              color: theme.colorScheme.primaryContainer,
-              borderRadius: BorderRadius.circular(AppRadius.rIcon),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.dayRoute,
-                  arguments: DayRouteArgs(
-                    isAdmin: widget.isAdmin,
-                    employeeId: widget.employeeId,
-                  ),
-                ),
-                highlightColor: theme.palette.blueTintPressed,
-                child: SizedBox(
-                  width: 38,
-                  height: 38,
-                  child: Icon(
-                    Icons.alt_route_rounded,
-                    size: 19,
-                    color: theme.colorScheme.onPrimaryContainer,
-                  ),
-                ),
-              ),
-            ),
-          ),
+  Widget _dayRouteButton(BuildContext context) => _tour.step(
+    TourStepId.calendarDayRoute,
+    targetBorderRadius: BorderRadius.circular(AppRadius.rFull),
+    child: GhostControl.icon(
+      onTap: () => Navigator.pushNamed(
+        context,
+        AppRoutes.dayRoute,
+        arguments: DayRouteArgs(
+          isAdmin: widget.isAdmin,
+          employeeId: widget.employeeId,
         ),
       ),
-    );
-  }
+      icon: Icons.alt_route_rounded,
+      tooltip: context.l10n.calendar_dayRouteTitle,
+    ),
+  );
 
   Widget? _addAppointmentFab(BuildContext context) {
     if (!widget.isAdmin) return null;
@@ -586,7 +582,8 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
           selectedDay: _selectedDay ?? _focusedDay,
           today: today,
           onDaySelected: _onDaySelected,
-          onMonthChanged: _setFocusedDay,
+          onMonthChanged: (day) =>
+              _setFocusedDay(day, direction: AnalyticsDirections.month),
           dotColorsFor: (day) =>
               dayJobDotColors(_appointmentsOn(day), colorMap),
           // Semantics count the same jobs as the dots.
@@ -600,6 +597,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
     required Map<String, String> nameMap,
     required DateTime today,
     required String dayTitle,
+    required String dayTitleShort,
     required String jobLabel,
     required List<DateTime> weekDays,
   }) {
@@ -615,6 +613,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
           TourStepId.calendarDayList,
           child: AgendaHeader(
             dayTitle: dayTitle,
+            dayTitleShort: dayTitleShort,
             jobLabel: jobLabel,
             trailing: _tour.stepIf(
               TourStepId.calendarWeekToggle,
@@ -637,7 +636,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
             colorMap: colorMap,
             isAdmin: widget.isAdmin,
             isLoading: isLoading,
-            bottomClearance: kAgendaFloatingControlsClearance,
+            bottomClearance: kFloatingControlsClearance,
           )
         : [
             AgendaSliverList(
@@ -647,7 +646,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
               isLoading: isLoading,
               isAdmin: widget.isAdmin,
               day: agendaDay,
-              bottomClearance: kAgendaFloatingControlsClearance,
+              bottomClearance: kFloatingControlsClearance,
             ),
           ];
 
@@ -669,33 +668,33 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
   }
 
   /// Icon-only day/week toggle.
+  /// Day / week agenda toggle, in the header's own vocabulary: two ghost
+  /// tiles with the active one inverted. It was a Material `SegmentedButton`,
+  /// which painted its selected half `secondaryContainer` green beside the
+  /// ghost controls directly above it.
   Widget _agendaModeToggle(BuildContext context) {
     final l10n = context.l10n;
-    return SizedBox(
-      height: 32,
-      child: SegmentedButton<_AgendaMode>(
-        segments: [
-          ButtonSegment(
-            value: _AgendaMode.day,
-            icon: const Icon(Icons.view_day_outlined, size: 18),
-            tooltip: l10n.calendar_agendaDayView,
-          ),
-          ButtonSegment(
-            value: _AgendaMode.week,
-            icon: const Icon(Icons.view_week_outlined, size: 18),
-            tooltip: l10n.calendar_agendaWeekView,
-          ),
-        ],
-        selected: {_agendaMode},
-        onSelectionChanged: (modes) => _setAgendaMode(modes.single),
-        showSelectedIcon: false,
-        style: const ButtonStyle(
-          visualDensity: VisualDensity.compact,
-          padding: WidgetStatePropertyAll(
-            EdgeInsets.symmetric(horizontal: AppSpacing.sp8),
-          ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        GhostControl.icon(
+          onTap: () => _setAgendaMode(_AgendaMode.day),
+          icon: Icons.calendar_view_day_rounded,
+          tooltip: l10n.calendar_agendaDayView,
+          tone: _agendaMode == _AgendaMode.day
+              ? GhostTone.selected
+              : GhostTone.ghost,
         ),
-      ),
+        const SizedBox(width: 6),
+        GhostControl.icon(
+          onTap: () => _setAgendaMode(_AgendaMode.week),
+          icon: Icons.calendar_view_week_rounded,
+          tooltip: l10n.calendar_agendaWeekView,
+          tone: _agendaMode == _AgendaMode.week
+              ? GhostTone.selected
+              : GhostTone.ghost,
+        ),
+      ],
     );
   }
 

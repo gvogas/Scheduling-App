@@ -164,6 +164,14 @@ final List<_WriteCase> _writeCases = [
   ),
 ];
 
+/// The writes that touch only a subcollection, so wake `onLocalWrite` alone.
+const _noRecordEvent = {
+  'appendAppointmentPictures',
+  'removeAppointmentPictures',
+  'appendFieldNote',
+  'updateFieldNotes',
+};
+
 void main() {
   setUpAll(() {
     registerFallbackValue(_FakeDoc());
@@ -301,6 +309,23 @@ void main() {
 
         expect(wakes, greaterThan(0));
       });
+
+      final isPoke = _noRecordEvent.contains(c.method);
+      test(
+        '${c.method} ${isPoke ? 'does NOT wake' : 'wakes'} onRecordWrite',
+        () async {
+          // The client Job history re-reads off this stream, and a photo or
+          // crew-note append changes nothing it lists.
+          final r = repo();
+          var wakes = 0;
+          final sub = r.onRecordWrite.listen((_) => wakes++);
+          await c.run(r);
+          await Future<void>.delayed(Duration.zero);
+          await sub.cancel();
+
+          expect(wakes, isPoke ? 0 : greaterThan(0));
+        },
+      );
 
       test('${c.method}: ${c.why}', () async {
         final r = repo();

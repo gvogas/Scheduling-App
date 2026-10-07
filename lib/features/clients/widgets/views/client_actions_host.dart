@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
@@ -41,7 +42,11 @@ mixin ClientActionsHost<T extends ConsumerStatefulWidget> on ConsumerState<T> {
         // One toggle, one event — the direction is a parameter.
         ref
             .read(analyticsServiceProvider)
-            .logClientArchived(action: archived ? 'archive' : 'unarchive');
+            .logClientArchived(
+              action: archived
+                  ? AnalyticsArchiveActions.archive
+                  : AnalyticsArchiveActions.unarchive,
+            );
         notices.success(
           archived
               ? context.l10n.clients_archivedNotice(client.displayName)

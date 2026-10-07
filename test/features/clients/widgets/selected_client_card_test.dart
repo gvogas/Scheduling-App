@@ -90,6 +90,7 @@ void main() {
   testWidgets('no overflow at 260px and 2x text', (tester) async {
     tester.view.physicalSize = const Size(260, 640);
     tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(harness(client: marie, textScale: 2));
     expect(tester.takeException(), isNull);

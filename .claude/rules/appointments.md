@@ -13,6 +13,22 @@ paths:
 Loaded when working on appointments. Root context: `../../CLAUDE.md`.
 Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
 
+- **An appointment's times snap to the QUARTER HOUR.** `appointmentMinuteStep`
+  (`calendar/domain/appointment_time_step.dart`) is 15, and the four
+  appointment pickers — start and end on the add sheet and on the details edit
+  body — pass it to `showAdaptiveTimePicker`, which hands it to
+  `CupertinoDatePicker.minuteInterval` so the wheel offers 00/15/30/45 and
+  nothing else. Jobs are booked and invoiced by the quarter hour, so the other
+  45 minutes are answers nobody wants. **`CupertinoDatePicker` ASSERTS that its
+  initial minute is already a multiple of the interval**, so a stored time is
+  put through `snapToMinuteInterval` first — nearest, except where rounding up
+  would leave the day (23:53 floors to 23:45 rather than producing an hour of
+  24). The Material branch cannot restrict its minutes, so it snaps the result
+  on the way out instead; iOS is the only platform that ships, so that path is
+  the test harness's. **Employee AVAILABILITY keeps the full minute wheel** —
+  `showAdaptiveTimePicker`'s interval defaults to 1 and the availability panel
+  passes nothing; working hours are not billed in quarters.
+
 - **Appointment status allowlist:** The lifecycle is `pending` →
   `in_progress` → `done`, plus `cancelled` (set by the separate Cancel action).
   These four are the ONLY valid *stored* values — enforced by
@@ -336,7 +352,7 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   reason — "job finished?" is the wrong question for a dentist appointment.
   Keep those two in sync. **`isAllDay` is threaded through all four off-screen
   mirrors** (2026-07-31), and each one needs it for a different reason:
-  - **Reminder sweep** — `selectTravelCandidates` (`functions/travel_utils.js`)
+  - **Reminder sweep** — `selectTravelCandidates` (`functions/travel_policy.js`)
     skips all-day records. Without it the midnight start put the block inside
     the 90-min window at ~23:30 the night before and fired a "time to leave"
     push for something that has no departure time. A *timed* personal job keeps
@@ -525,7 +541,8 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   inequality excludes a single-day job, which has no such field, and day 1,
   which stores 1 — so no backfill was needed), served by the
   `(clientId ASC, dayIndex ASC)` composite; `fetchClientHistory` filters
-  `dayIndex <= 1` in DART, because a server-side inequality would drop every
+  `dayIndex <= 1` in DART (the Job history window carries 10 docs of headroom
+  for it), because a server-side inequality would drop every
   document written before the field existed. A document count made a
   Monday-to-Friday booking read as five jobs on a badge captioned "jobs".
   Known and accepted: nothing renumbers the pair after a this-day-only delete,
@@ -712,6 +729,18 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   exact outcome this dialog exists to undo. Keyed per ROW it has the same
   hole, since two rows are two keys over one document. Pinned by "a SECOND
   swap on the same job builds on the first".
+  **Undo INVERTS the swap off `_RowDone.took`, never writes a snapshot back.**
+  A whole-record snapshot is only correct until the next swap on the same job:
+  with two people off one job, undoing the first row silently reverted the
+  second row's swap AND re-added someone who is off. `_undo` takes the whole
+  `_ClashGroup` rather than its id and name as two adjacent strings — the one
+  shape where a transposed pair still compiles, on a method that writes.
+  **Opening a row resets the previous one when it is open OR still LOADING.**
+  A loading row's own completion is dropped by the `_openKey != key` staleness
+  guard, so left as-is it spins forever with no action left to recover it.
+  **A failed clash LOOKUP is silent to the user and logged** (`APPT-BUSY`): the
+  alert is a courtesy on top of a save that already succeeded, and an error
+  notice there would read as the save having failed.
   **A swap re-serializes the WHOLE record, so it must normalize the status
   through `AppointmentStatus.storedRaw`** like every other such write — a
   legacy `confirmed`/unknown value would otherwise be written back verbatim
@@ -936,23 +965,31 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   the history filter shows nothing), so the helper owns only the LOOKUP and each
   caller keeps its own substitute. The edit-sheet copy is the dangerous one — a
   blank name there flows into `mergeRetainedAssignees` and is written back.
-- **The picker DIMS whoever can't take the job on the chosen date, and the
+- **The picker DIMS whoever is on TIME OFF on the chosen date, and the
   already-assigned test WINS over it.** `assigneeOfferState`
   (`calendar/domain/assignee_resolver.dart`, beside the two rules above because
-  all three must agree) returns `free` / `unavailable` / `onTheJob`; only
-  `unavailable` dims, and it is dimmed AND untappable, which is precisely why
-  someone already on the job must never be. A chip that can't be tapped can't
+  all three must agree) returns `free` / `booked` / `unavailable` / `onTheJob`;
+  only `unavailable` dims, and it is dimmed AND untappable, which is precisely
+  why someone already on the job must never be. A chip that can't be tapped can't
   be taken off, and — worse — an assignee who is active but merely un-offered
   is NOT retained by `mergeRetainedAssignees`, so they'd be silently
   unassigned. The "on the job" set is the live selection **union the
   appointment's STORED `employeeIds`**: keyed on the selection alone,
   deselecting an unavailable stored assignee dims their own chip on the next
   rebuild and the toggle is one-way. Same trap as `offerableAssignees`.
-  **ANY clash dims, not just a day off** (owner call, 2026-08-24), and the
-  accepted cost is that deliberate double-booking is no longer reachable from
-  the picker — the Save-time prompt stays as a backstop for races but will
-  rarely fire. If putting two people on one big job turns out to matter, keep
-  BOOKED chips tappable with a warning look and dim only time off.
+  **Someone on another JOB is `booked`, not dimmed — they stay tappable**
+  (owner call, 2026-09-19, reversing the 2026-08-24 "any clash dims"). That
+  rule made deliberate double-booking unreachable from the picker; now the
+  admin picks them and the Save-time "Double Booking — do you still want to
+  book?" prompt (`busy_conflict_dialog.dart`) is where it is decided. Only time
+  off (`clash.isTimeOff`, which `clashesByAssignee` already prefers over a job)
+  stays untappable: booking someone on their day off is not a double booking.
+  **The picker renders NO availability text** (owner call, 2026-09-19): the
+  per-person "is off" / "is on another job" lines, their collapse-behind-a-count
+  row and the "Nobody is free" sentence were all removed, along with
+  `AssigneeAvailabilityNotes` and `AssigneeAvailability.whenLabel`. The dashed,
+  dimmed chip is the only day-off cue; the prompt is the only double-booking
+  one. Don't restore the lines from an older diff.
   **Availability is date-DERIVED, live where it can be, one-shot where it
   can't.** `assigneeAvailabilityProvider` reduces the range the calendar
   ALREADY holds open (`openCalendarRangeProvider`, published by
@@ -1013,6 +1050,35 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   be able to disagree. It compares against `fullAddress` and canonicalises both
   sides; a `noFixedAddress` client is always custom. See the comment there for
   why the raw `address` field is the wrong side of the comparison.
+- **The overdue review is the one BULK close** (`OverdueReviewScreen`,
+  admin-only, 2026-09-13). `watchOverdueOpen(now)` queries `status whereIn
+  openStatusQueryValues` (the STORED `pending`/`in_progress`, so a legacy
+  `confirmed` doc is not listed even though the server's `OPEN_STATUSES` still
+  counts it for the push) with `endTime < now` ordered DESC, served by the
+  existing `(status ASC, endTime DESC)` composite. **It has TWO caps, mirroring
+  the server's `MONTH_END_SCAN_MAX`/`MONTH_END_REVIEW_MAX` (audit B2,
+  2026-09-19)**: the live query scans up to `_overdueScanLimit` (5000) raw rows,
+  the repository filters them through `overdueJobsAt` (`displayStatusAt(now)`,
+  which drops personal blocks and time off), and only THEN trims to
+  `_overdueReviewLimit` (1000, oldest kept). One cap of 500 applied before the
+  filter let past personal blocks and days off — which never reach a terminal
+  status and so sit in this window forever — push the oldest real overdue jobs
+  out of both the screen and the badge. It warns under `APPT-REVIEW` once per
+  stream, when more than 1000 overdue jobs remain (jobs are missing) or the raw
+  scan hit 5000 (older ones may be). `overdueOpenJobsProvider` feeds BOTH the
+  screen and the drawer badge so the two cannot disagree (the badge therefore
+  tops out at 1000), re-issues its boundary every 15 minutes while watched, and
+  is held warm for that same 15 minutes (`keepWarmWithGrace(grace:)`, audit I2)
+  rather than the shared 3, so a drawer reopened inside the window does not
+  re-read the whole set. Writes go through
+  `updateAppointmentStatuses` in 450-id chunks (`chunkIds`), so History's
+  window is patched and every doc is written alone — a run or a series never
+  gets a scope dialog. Complete writes `done`, which stamps `completedAt` with
+  the REVIEW time rather than when the work happened (accepted; the dialog
+  says so); Not done writes `cancelled`. There is no Undo:
+  `restoreAppointmentStatus` is one doc per call behind a rate limit, so a
+  confirmation (`showConfirmDialog(cancelLabel:)`, "Go back") names the
+  consequence before anything is written.
 - **The dashboard's window is SPLIT: one live listener, one `.get()`.**
   `DashboardAggregator.liveRangeAround` (this ISO week through next Monday /
   the 3-day pending horizon) is watched; `historyRangeAround` (the seven
@@ -1024,7 +1090,20 @@ Calendar *rendering* rules live in `lib/features/calendar/CLAUDE.md`.
   (`DashboardAggregator.mergeById`, live wins) and never concatenated — each
   query reaches back to its own `fetchStart`, so they overlap by a fortnight.
   Adding a reducer that needs older data means widening the HISTORY half, not
-  the live one.
+  the live one. **`dashboardPeriodProvider` must never reach a query**: all
+  three periods fit inside the window already fetched, so it is a pure
+  in-memory filter, and a period that widened the live listener would undo the
+  split. `availabilityConflictsProvider` is scoped to the LIVE window on
+  purpose — it is the data already on screen, and a conflict further out
+  surfaces when the window reaches it. **`_firstFailure` reports an error BEFORE
+  a loading sibling**, or a source that has already failed is masked by one
+  still in flight and the screen sits on a skeleton forever.
+  **`newClientsProvider` drops archived clients and those with no `createdAt`
+  IN DART** (owner call 2026-08-10: an archived client is one you decided not
+  to look at). A `.where('archived', ...)` would need an `(archived, createdAt)`
+  composite and a deploy. The "never filter a server page in Dart" rule is
+  about `fetchClientsPage`, where a shortened page breaks the cursor; this is a
+  bounded one-shot read with no cursor, so that hazard does not apply.
 - **A technician's History is the same terminal archive narrowed by
   `employeeIds`** (2026-09-01, the audit's "technician has no search").
   `_historyQuery(employeeId)` (`firebase_appointments_repository.dart`) is the

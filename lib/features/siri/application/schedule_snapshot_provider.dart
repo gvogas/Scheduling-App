@@ -4,6 +4,8 @@ import 'package:scheduling/core/utils/current_day_provider.dart';
 import 'package:scheduling/features/auth/application/active_user_identity_provider.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
+import 'package:scheduling/features/employees/application/employees_providers.dart';
+import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/features/siri/domain/schedule_snapshot.dart';
 
 /// The current Siri schedule snapshot, or null when signed out. Admins see
@@ -41,12 +43,25 @@ final scheduleSnapshotProvider =
                 range: range,
               )),
             );
+      // Crew colour lives on the roster, not on the appointment, and only an
+      // admin's snapshot carries crew at all. `allUsersStreamProvider` is not
+      // autoDispose, so every watcher shares its ONE `users` listener — this
+      // opens no second Firestore query. A roster that has not settled yet
+      // simply yields names without colours rather than stalling the snapshot.
+      final roster = identity.role == 'admin'
+          ? ref.watch(allUsersStreamProvider).value ?? const <EmployeeRecord>[]
+          : const <EmployeeRecord>[];
+      final crewColors = {for (final e in roster) e.id: e.color.toARGB32()};
+      // Fallback only: `crew` carries the name denormalized at booking.
+      final self = roster.where((e) => e.id == identity.docId);
       return appts.whenData(
         (list) => buildScheduleSnapshot(
           appointments: list,
           role: identity.role,
           now: DateTime.now(),
           viewerDocId: identity.docId,
+          viewerName: self.isEmpty ? '' : self.first.name,
+          crewColors: crewColors,
         ),
       );
     });

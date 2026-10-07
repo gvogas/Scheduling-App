@@ -4,6 +4,7 @@ import 'package:scheduling/core/utils/firestore_parsing.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/policies/client_name_policy.dart';
 import 'package:scheduling/features/maps/domain/address_parser.dart';
+import 'package:scheduling/features/wave/domain/models/wave_problem.dart';
 
 part 'client_record.freezed.dart';
 
@@ -69,6 +70,7 @@ abstract class ClientRecord with _$ClientRecord {
     @Default(null) String? waveCustomerId,
     @Default('') String waveSyncState,
     @Default(null) String? waveSyncError,
+    @Default(<WaveProblem>[]) List<WaveProblem> waveProblems,
   }) = _ClientRecord;
   const ClientRecord._();
 
@@ -115,6 +117,7 @@ abstract class ClientRecord with _$ClientRecord {
       waveCustomerId: data['waveCustomerId']?.toString(),
       waveSyncState: (wave?['syncState'] ?? '').toString(),
       waveSyncError: wave?['syncError']?.toString(),
+      waveProblems: WaveProblem.parseList(wave?['problems']),
     );
   }
 

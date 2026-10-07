@@ -2,13 +2,11 @@ import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:scheduling/core/adaptive/adaptive.dart';
 import 'package:scheduling/core/adaptive/adaptive_action_sheet.dart';
 import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/launchers/external_uri_launcher.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
-import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/maps/domain/address_parser.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/error_snack_bar.dart';
@@ -60,72 +58,19 @@ class AddressMapLauncher {
 
     if (!context.mounted) return;
 
-    // iOS uses a native CupertinoActionSheet, Android uses the Material sheet
-    // — both just resolve to one launched URI.
-    final Uri? chosen;
-    if (context.isCupertino) {
-      chosen = await showAdaptiveActionSheet<Uri>(
-        context,
-        title: context.l10n.maps_openAddressWith,
-        message: displayAddress,
-        actions: [
-          for (final option in options)
-            AdaptiveSheetAction(
-              value: option.uri,
-              label: option.label,
-              icon: option.icon,
-            ),
-        ],
-      );
-    } else {
-      chosen = await showModalBottomSheet<Uri>(
-        context: context,
-        showDragHandle: true,
-        sheetAnimationStyle: AppMotion.sheetStyle,
-        builder: (sheetContext) {
-          final theme = Theme.of(sheetContext);
-
-          return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.sp16,
-                AppSpacing.sp4,
-                AppSpacing.sp16,
-                AppSpacing.sp16,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context.l10n.maps_openAddressWith,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sp4),
-                  Text(
-                    displayAddress,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.sp12),
-                  ...options.map(
-                    (option) => ListTile(
-                      leading: Icon(option.icon),
-                      title: Text(option.label),
-                      contentPadding: EdgeInsets.zero,
-                      onTap: () => Navigator.pop(sheetContext, option.uri),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          );
-        },
-      );
-    }
+    final chosen = await showAdaptiveActionSheet<Uri>(
+      context,
+      title: context.l10n.maps_openAddressWith,
+      message: displayAddress,
+      actions: [
+        for (final option in options)
+          AdaptiveSheetAction(
+            value: option.uri,
+            label: option.label,
+            icon: option.icon,
+          ),
+      ],
+    );
 
     if (chosen == null || !context.mounted) return;
     // launchUrl can throw and an unguarded throw here would be fatal, so log
@@ -136,9 +81,7 @@ class AddressMapLauncher {
     try {
       opened = await launchUrl(chosen, mode: LaunchMode.externalApplication);
       if (opened) {
-        analytics.logContactAction(
-          action: AnalyticsContactActions.directions,
-        );
+        analytics.logContactAction(action: AnalyticsContactActions.directions);
       }
     } catch (e, st) {
       // Same reason as `launchExternalUri`: the chosen URI is a Maps route

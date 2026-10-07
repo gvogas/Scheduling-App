@@ -54,16 +54,10 @@ final historySearchProvider = FutureProvider.autoDispose
     });
 
 /// How far back the booking form looks for a client's previous addresses and
-/// last visit. The form renders two lines off this, so it must not buy the
-/// whole archive [clientJobHistoryProvider] pages through.
+/// last visit. The form renders two lines off this.
 const int kClientBookingHistoryVisits = 20;
 
-/// The newest [kClientBookingHistoryVisits] visits for the booking form.
-///
-/// Deliberately NOT self-invalidating on `onLocalWrite` the way the Job
-/// history section does: this backs hints on an open form, and re-reading on
-/// every local write re-fired the whole scan while the photo-upload queue
-/// drained.
+/// The booking form's newest visits; never self-invalidates on an open form.
 final clientBookingHistoryProvider = FutureProvider.autoDispose
     .family<List<AppointmentRecord>, String>((ref, clientId) async {
       final repo = ref.watch(appointmentsRepositoryProvider);
@@ -77,17 +71,30 @@ final clientBookingHistoryProvider = FutureProvider.autoDispose
       );
     });
 
-/// Client appointments for the Job history section.
+/// How many past visits the Job history section lists.
+const int kClientJobHistoryVisits = 50;
+
+/// Documents read for them: days 2+ of a multi-day run are dropped in Dart.
+const int kClientJobHistoryScan = kClientJobHistoryVisits + 10;
+
+/// The newest [kClientJobHistoryVisits] PAST visits for the Job history section.
 final clientJobHistoryProvider = FutureProvider.autoDispose
     .family<List<AppointmentRecord>, String>((ref, clientId) async {
       final repo = ref.watch(appointmentsRepositoryProvider);
       // Hoisted for the same reason as `historySearchProvider` above.
       final logger = ref.read(loggerProvider);
-      final sub = repo.onLocalWrite.listen(
+      // Not `onLocalWrite`: a photo or crew note changes nothing listed here.
+      final sub = repo.onRecordWrite.listen(
         (_) => ref.invalidateSelf(),
         onError: (Object e, StackTrace st) =>
             logger.warn('HIST-LOAD invalidate error', e, st),
       );
       ref.onDispose(sub.cancel);
-      return await repo.fetchClientHistory(clientId: clientId);
+      final visits = await repo.fetchClientHistory(
+        clientId: clientId,
+        limit: kClientJobHistoryScan + 1,
+        cap: kClientJobHistoryScan,
+        pastOnly: true,
+      );
+      return visits.take(kClientJobHistoryVisits).toList();
     });

@@ -7,6 +7,7 @@ import 'package:scheduling/core/layout/master_detail_scaffold.dart';
 import 'package:scheduling/core/navigation/app_destination.dart';
 import 'package:scheduling/core/navigation/hub_shell_scope.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
+import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
@@ -27,6 +28,7 @@ import 'package:scheduling/shared/widgets/app_bars/app_header_pair.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_top_bar.dart';
 import 'package:scheduling/shared/widgets/feedback/app_empty_state.dart';
 import 'package:scheduling/shared/widgets/fields/app_search_bar.dart';
+import 'package:scheduling/shared/widgets/primitives/scroll_to_top_button.dart';
 
 class ListInformation extends ConsumerStatefulWidget {
   const ListInformation({
@@ -70,27 +72,41 @@ class _ListInformationState extends ConsumerState<ListInformation> {
   Future<void> _openFilterSheet() async {
     final picked = await showClientsFilterSheet(context, selected: _filter);
     if (picked == null || !mounted) return;
-    // The building KEY is a street address — reported as the filter KIND only,
-    // never its value.
-    ref
-        .read(analyticsServiceProvider)
-        .logFilterUsed(
-          surface: AnalyticsSurfaces.clients,
-          filterName: switch (picked.filter) {
-            ClientsFilterAll() => 'none',
-            ClientsFilterType() => 'type',
-            ClientsFilterBuilding() => 'building',
-            ClientsFilterArchived() => 'archived',
-          },
-          filterValue: switch (picked.filter) {
-            ClientsFilterType(:final type) => type.name,
-            _ => null,
-          },
-        );
+    _logFilter(picked.filter);
     setState(() {
       _filter = picked.filter;
       _activeBuildingLabel = picked.buildingLabel;
     });
+  }
+
+  /// A chip picks one of the fixed filters, so it never carries an address —
+  /// any of them clears the label the sheet left behind.
+  void _applyFilter(ClientsFilter filter) {
+    _logFilter(filter);
+    setState(() {
+      _filter = filter;
+      _activeBuildingLabel = null;
+    });
+  }
+
+  void _logFilter(ClientsFilter filter) {
+    // The building KEY is a street address — reported as the filter KIND only,
+    // never its value.
+    // One switch, so a fifth variant cannot report a value under a name the
+    // other half got right — a `_ =>` default on either defeats exhaustiveness.
+    final (filterName, filterValue) = switch (filter) {
+      ClientsFilterAll() => (AnalyticsFilters.none, null),
+      ClientsFilterType(:final type) => (AnalyticsFilters.type, type.name),
+      ClientsFilterBuilding() => (AnalyticsFilters.building, null),
+      ClientsFilterArchived() => (AnalyticsFilters.archived, null),
+    };
+    ref
+        .read(analyticsServiceProvider)
+        .logFilterUsed(
+          surface: AnalyticsSurfaces.clients,
+          filterName: filterName,
+          filterValue: filterValue,
+        );
   }
 
   void _onListSettled() {
@@ -126,6 +142,14 @@ class _ListInformationState extends ConsumerState<ListInformation> {
       controller: _searchController,
       hintText: context.l10n.clients_searchAllFields,
     );
+    // The roster count stays watched under every filter, so a round trip
+    // through one re-counts nothing.
+    final rosterTotal = ref
+        .watch(clientsTotalCountProvider(const ClientsFilterAll()))
+        .value;
+    final total = _filter is ClientsFilterAll
+        ? rosterTotal
+        : ref.watch(clientsTotalCountProvider(_filter)).value;
     return FeatureTourHost(
       scope: _tour.scope,
       isAdmin: widget.isAdmin,
@@ -162,29 +186,31 @@ class _ListInformationState extends ConsumerState<ListInformation> {
         body: MasterDetailScaffold(
           master: Column(
             children: [
-              _tour.stepIf(
-                TourStepId.clientsFilter,
-                ClientsFilterBar(
-                  selected: _filter,
-                  onOpen: _openFilterSheet,
-                  onClear: () => setState(() {
-                    _filter = const ClientsFilterAll();
-                    _activeBuildingLabel = null;
-                  }),
-                  activeBuildingLabel: _activeBuildingLabel,
-                ),
-              ),
-              _tour.stepIf(
-                TourStepId.clientsSort,
-                ClientsListHeader(
+              // One row: Filter, what the list is showing, and the order.
+              ListenableBuilder(
+                listenable: _searchController,
+                builder: (context, _) => ClientsListHeader(
+                  leading: _tour.stepIf(
+                    TourStepId.clientsFilter,
+                    ClientsFilterBar(
+                      selected: _filter,
+                      onOpen: _openFilterSheet,
+                    ),
+                  ),
+                  sortWrap: (child) =>
+                      _tour.stepIf(TourStepId.clientsSort, child),
+                  onClearFilter: () => _applyFilter(const ClientsFilterAll()),
                   count: _visibleCount,
+                  isSearching: _searchController.text.trim().isNotEmpty,
+                  total: total,
+                  filter: _filter,
                   sort: _sort,
                   onSortChanged: (next) {
                     ref
                         .read(analyticsServiceProvider)
                         .logFilterUsed(
                           surface: AnalyticsSurfaces.clients,
-                          filterName: 'sort',
+                          filterName: AnalyticsFilters.sort,
                           filterValue: next.name,
                         );
                     setState(() => _sort = next);
@@ -192,25 +218,44 @@ class _ListInformationState extends ConsumerState<ListInformation> {
                 ),
               ),
               Expanded(
-                child: ListenableBuilder(
-                  listenable: _searchController,
-                  builder: (context, _) => ClientsListView(
-                    searchQuery: _searchController.text,
-                    isAdmin: widget.isAdmin,
-                    filter: _filter,
-                    // Only highlight the selected row when the detail pane is shown (two-pane).
-                    selectedClientId: context.isTwoPane
-                        ? _selectedClient?.id
-                        : null,
-                    onClientTap: _onClientTap,
-                    firstRowTourWrap: (child) =>
-                        _tour.stepIf(TourStepId.clientsRow, child),
-                    onFirstPageSettled: _onListSettled,
-                    sort: _sort,
-                    onCountChanged: (count) {
-                      if (_visibleCount == count) return;
-                      setState(() => _visibleCount = count);
-                    },
+                // The floating controls and the list's bottom clearance are
+                // both measured from here, so this has to end ABOVE the home
+                // indicator — the same wrap the calendar's agenda uses.
+                child: SafeArea(
+                  top: false,
+                  child: Stack(
+                    children: [
+                      ListenableBuilder(
+                        listenable: _searchController,
+                        builder: (context, _) => ClientsListView(
+                          searchQuery: _searchController.text,
+                          isAdmin: widget.isAdmin,
+                          filter: _filter,
+                          grouped: true,
+                          buildingLabel: _activeBuildingLabel,
+                          // Only highlight the selected row when the detail pane is shown (two-pane).
+                          selectedClientId: context.isTwoPane
+                              ? _selectedClient?.id
+                              : null,
+                          onClientTap: _onClientTap,
+                          firstRowTourWrap: (child) =>
+                              _tour.stepIf(TourStepId.clientsRow, child),
+                          onFirstPageSettled: _onListSettled,
+                          sort: _sort,
+                          onCountChanged: (count) {
+                            if (_visibleCount == count) return;
+                            setState(() => _visibleCount = count);
+                          },
+                        ),
+                      ),
+                      // Bottom LEFT: the add FAB owns the right corner, the same
+                      // split the calendar's Today pill keeps.
+                      const Positioned(
+                        left: AppSpacing.sp16,
+                        bottom: AppSpacing.sp16,
+                        child: ScrollToTopButton(),
+                      ),
+                    ],
                   ),
                 ),
               ),

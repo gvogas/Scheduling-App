@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/features/wave/data/wave_service.dart';
-import 'package:scheduling/features/wave/domain/models/wave_import_schedule.dart';
 import 'package:scheduling/features/wave/domain/wave_failure.dart';
 
 class _MockFunctions extends Mock implements FirebaseFunctions {}
@@ -43,7 +42,6 @@ void main() {
       when(() => result.data).thenReturn(<String, dynamic>{
         'businessId': 'biz-1',
         'businessName': 'Acme Plumbing',
-        'importSchedule': 'weekly',
       });
       when(
         () => callable.call<dynamic>(any<Object?>()),
@@ -53,7 +51,6 @@ void main() {
 
       expect(conn.businessId, 'biz-1');
       expect(conn.businessName, 'Acme Plumbing');
-      expect(conn.importSchedule, WaveImportSchedule.weekly);
     });
 
     test(
@@ -74,7 +71,6 @@ void main() {
         final conn = await service.bootstrap();
 
         expect(conn.businessId, 'biz-2');
-        expect(conn.importSchedule, WaveImportSchedule.off);
       },
     );
 
@@ -107,7 +103,6 @@ void main() {
         'connected': true,
         'businessId': 'biz-9',
         'businessName': 'Gamma Ltd',
-        'importSchedule': 'monthly',
       });
       when(
         () => callable.call<dynamic>(any<Object?>()),
@@ -117,7 +112,6 @@ void main() {
 
       expect(conn, isNotNull);
       expect(conn!.businessId, 'biz-9');
-      expect(conn.importSchedule, WaveImportSchedule.monthly);
     });
   });
 
@@ -143,35 +137,6 @@ void main() {
       expect(summary.updated, 2);
       expect(summary.skippedArchived, 1);
       expect(summary.pages, 3);
-    });
-  });
-
-  group('setImportSchedule', () {
-    test('sends schedule.raw and completes on success', () async {
-      bind('waveSetImportSchedule');
-      when(
-        () => callable.call<void>(any<Object?>()),
-      ).thenAnswer((_) async => _MockResult());
-
-      await service.setImportSchedule(WaveImportSchedule.weekly);
-
-      final captured = verify(
-        () => callable.call<void>(captureAny<Object?>()),
-      ).captured.single;
-      final payload = (captured as Map).cast<String, dynamic>();
-      expect(payload['schedule'], 'weekly');
-    });
-
-    test('maps a callable failure to a WaveFailure', () async {
-      bind('waveSetImportSchedule');
-      when(
-        () => callable.call<void>(any<Object?>()),
-      ).thenThrow(Exception('nope'));
-
-      await expectLater(
-        service.setImportSchedule(WaveImportSchedule.off),
-        throwsA(isA<WaveFailure>()),
-      );
     });
   });
 

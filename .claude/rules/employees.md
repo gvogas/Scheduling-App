@@ -15,6 +15,76 @@ paths:
 Loaded when working on employee records, account provisioning, or
 self-service settings. Root context: `../../CLAUDE.md`.
 
+- **Authorization uses the live user document, not a trigger snapshot.**
+  `bridge_reconcile.js` transactionally reads the current profile and bridge
+  rows before changing authorization. Firestore events may arrive out of order;
+  an old activation must not restore a disabled or deleted account. Preserve
+  bridge ownership checks when removing stale uids. Auth writes are separate,
+  so re-check the live profile after applying access and retry reconciliation
+  when it changes. Invited accounts must remain able to complete setup.
+  **`reconcileAuthAccess` no longer short-circuits on a live `invited` doc**
+  (2026-09-28): only a uid mismatch returns early, and an invited doc computes
+  "revoke", so this path never re-enables an invited account and an
+  active-to-invited demotion revokes the credential again. Setup is unaffected
+  because it is only called when `authAccessChange(before, after)` is non-null,
+  so a newly created invited doc is never disabled. **Open, owner decision:**
+  resetting the password of an account an admin demoted active-to-invited in the
+  console does not re-enable the disabled credential (`resetProvisionedPassword`
+  sets only password/displayName).
+
+- **Admin password reset for an ACTIVE account** (2026-09-29). Employee emails are not
+  real inboxes, so Forgot password can never reach anyone. Reset password in the
+  account footer of `edit_person_sheet.dart` (shown only for an `active` doc with
+  a `uid` that is NOT the signed-in admin; hidden while that uid is unknown) goes
+  through `EmployeeFormController.resetPassword` (sealed `PasswordResetIssued` /
+  `Failed` / `Busy`) to `resetEmployeePassword`, which refuses self and non-active,
+  then under `accountOperations/{uid}` (`password-reset`) re-checks `active` + the
+  same `uid` in a transaction and writes the server-owned
+  **`passwordResetRequired: true`** FIRST, then sets a
+  `generateStartingPassword()` value, then `revokeRefreshTokens`. The order is
+  fail-safe: an Auth failure leaves the flag set, so the worst case is being asked
+  to change a password that did not change; a revoke failure after the password
+  changed logs `logger.error` with `uidHash` and still RETURNS the credentials
+  (2026-09-29) — the password is already set, so rethrowing locked the person out
+  behind a password nobody had seen, and `updateUser` with a password already
+  invalidates their sessions. The response carries
+  the email off the Auth record `updateUser` returns, never the Firestore copy,
+  which can disagree with Auth on older docs (and may be empty). The admin reads the
+  result off `NewAccountDialog` (title `employees_passwordReset`, caption
+  `employees_newPasswordIssued`). Both gates
+  (`splash_controller.dart`, `sign_in_controller.dart`) route
+  `active && passwordResetRequired` to `AppRoutes.changePassword` AFTER the
+  unchanged `invited` and `!isActive` checks (so an inactive flagged account is
+  still signed out) and KEEP the session; sign-in also **clears the identity
+  cache** on that branch, because a stale `AuthCache` hit lets a cold start
+  fast-path past the screen. `ChangePasswordScreen` (`auth/screens/`) calls
+  `completePasswordReset` (`assertActiveCall`; the SAME `isStrongPassword` as
+  setup; the `setSetupPassword` policy-code mapping to `invalid-newPassword`; Auth
+  first, then the flag clear in a TRANSACTION that re-checks `active` + `uid`, so
+  a doc disabled mid-change keeps its flag; `not-required` reads as already done),
+  reauthenticates best-effort (`_renewSession`) and routes in through
+  `resumeAfterSignUp`, which now also refuses a still-flagged doc. It surfaces
+  offline through its own banner, and logs ONCE through `logger.authFailure`
+  (`AUTH-CHANGEPW`; the service does not double-file). **Log out on that screen
+  deregisters the device (`deregisterThisDevice`) BEFORE `signOut()` and restores
+  it if the sign-out fails**, the same order as account exit, because the account
+  is active and holds push, presence and Live Activity registrations. The flag is
+  in BOTH `/users` rules denylists and neither `EmployeeRecord.toMap()` nor
+  `updateEmployee` emits it — never add it to a client write path. Status never
+  moves, so `syncUsersByUid` and the Auth-access reconcile have nothing to do and
+  S1's active-to-invited revoke never fires. Builds <= 1.62.x ignore the flag and
+  simply keep the temporary password. **`completePasswordReset` in `AuthService`
+  REFUSES the temporary password** through the same
+  `_refuseIfStillTheStartingPassword` reauth probe as setup (owner call,
+  2026-09-29, reversing the earlier "the admin can just reset again" note):
+  otherwise the forced change completes on a password the admin read off
+  `NewAccountDialog`. `ChangePasswordScreen` shows it as a password-field error,
+  never a banner. The splash cached-identity fast path does
+  not read the flag: a device that signed in with the temporary password on a
+  pre-1.63 build and then upgrades keeps its cache and skips Change password until
+  it signs out — accepted, consistent with old builds ignoring the flag.
+  **S4 (an invited-account re-provision reset does not set `disabled: false`, noted above) is still OPEN** — this flow does
+  not touch it. Tags: `EMP-RESETPW` (notice), `AUTH-CHANGEPW` (log-only).
 - **Employee accounts: the admin invites, the employee sets up** (P4c,
   2026-08-02 — this REPLACED the one-time signup-code flow entirely). The
   admin's person sheet calls `createEmployeeAccount`, which mints a **Firebase
@@ -45,23 +115,47 @@ self-service settings. Root context: `../../CLAUDE.md`.
   signs in normally; both gates see `invited` and route to
   `AccountSetupScreen`, where they **choose their own password** and fill in
   name/phone/consent → `completeEmployeeSetup` flips the doc to `active`.
-  **ORDER IS THE APP-LAYER GUARANTEE: the password is replaced FIRST,
-  client-side, then the account is activated.** The server cannot see a
-  password, so "you must replace the starting password" holds because
-  `AuthService.completeAccountSetup` calls `User.updatePassword` before the
-  callable — swap the two and an interrupted setup leaves an *active* account
-  still on the password the admin read out. Pinned by a test (`verifyInOrder`,
-  plus the half that matters: a thrown `updatePassword` must `verifyNever` the
-  activation).
-  **Be precise about how strong this is: it is client-side ordering, NOT a
-  server check.** `completeEmployeeSetup` verifies auth + a matching doc +
-  `status == 'invited'`; it does not verify that the password
-  actually rotated, so anything reaching the callable directly activates an
-  un-rotated account. The reauth check above is client-side too — it closes
-  the case of an employee retyping their starting password IN THE APP, not
-  the case of someone calling the callable directly. `enforceAppCheck: true` is all that stands in the way
-  there, and App Check is attestation, not authorization.
-  Don't build on the ordering as if the server enforced it.
+  **Password writes and activation now share a server lock** (2026-09-23,
+  local audit changes). The app sends `newPassword` to `completeEmployeeSetup`;
+  the callable holds `accountOperations/{uid}` across the Auth password update
+  and activation transaction. Admin re-provisioning holds the same lock across
+  its invitation re-check and starting-password reset. Duplicate creates also
+  take an email-hash lock before minting Auth. The app then reauthenticates with
+  the chosen password to replace its revoked refresh credential, BEST-EFFORT
+  (`_renewSession(label:)`): the account is already active, so a failed
+  renewal logs and completes — reporting it as a setup failure sent a retry to
+  `not-pending` on an account still holding the FIRST password.
+  The server's letter classes are Unicode (`\p{Lu}`/`\p{Ll}`) to match
+  `PasswordRequirement`; an ASCII class refused `Éric2024` behind a green
+  checklist. **The Admin SDK bypasses the console password policy**, so that
+  server check (8+, an uppercase and a lowercase Unicode letter, a digit) must stay at least as strict as
+  the console policy, which is binding config living nowhere in the repo;
+  `completeEmployeeSetup` maps Auth's `auth/password-does-not-meet-requirements`
+  and `auth/invalid-password` to `invalid-argument` `invalid-newPassword`
+  (`AuthFailureWeakPassword`) instead of an internal error.
+  `TextLimits.password` (128) matches the callable's `newPassword` cap and is
+  bound only on the two `AccountSetupScreen` fields — sign-in stays uncapped
+  deliberately; pinned by `text_limits_test.dart`.
+  `newPassword` remains optional for older builds. Re-provisioning stamps the
+  server-owned `setupRequiresPassword` flag BEFORE rotating Auth; legacy setup
+  may activate only invitations without that flag. Once flagged, it gets
+  `setup-upgrade-required` and must use the new app. Never clear the flag in a
+  client write or silently fall back to the uncoordinated password path.
+  The different-from-current-password check remains client-side. Auth and
+  Firestore are still separate stores: partial failures can leave an invited
+  account using the chosen password. Locks have no TTL or automatic takeover;
+  recovery instructions are in `docs/audits/AUDIT_ROLLOUT_2026-09-23.md`.
+  **Three `AccountSetupScreen` guards that look redundant and are not.**
+  Consent is re-checked inside `_submit`, not only by the disabled CTA — the
+  confirm-password field's keyboard submit reaches `_submit` without consulting
+  the button. An `already active` failure WALKS THEM IN rather than reporting
+  it: the password change that precedes activation landed, so the person is
+  finished, not stuck. And abandoning setup is a PLAIN `signOut`, deliberately
+  not `AccountExitController`'s teardown — an `invited` account has no push,
+  presence or Live Activity registration to remove (the rules deny it every
+  collection those write), so nothing needs the credential first. **If any
+  registration ever starts before activation, this must route through the
+  shared exit path instead.**
   **The password itself is validated TRIMMED** — `completeAccountSetup` stores
   `newPassword.trim()`, so checking the raw text let `"Aa1!bcd "` pass the
   8-character rule and set a 7-character password. The strength meter and the
@@ -82,7 +176,7 @@ self-service settings. Root context: `../../CLAUDE.md`.
   `auth_setUpYourAccountBody` promised them "the temporary one stops working
   once you finish".
   **The replacement is `AuthService._refuseIfStillTheStartingPassword`**, which
-  reauthenticates with the typed value BEFORE `updatePassword`: reauth succeeds
+  reauthenticates with the typed value BEFORE the setup callable: reauth succeeds
   only while that value is still the account's current credential, so success
   means they retyped what they were given →
   `AuthFailureStartingPasswordReused`, surfaced as a FIELD error on the
@@ -121,14 +215,9 @@ self-service settings. Root context: `../../CLAUDE.md`.
   uid denylist restated for the one path that bypasses rules). And resetting
   before the claim meant a setup committing in that window left the person
   active on a password nobody told them had been reverted.
-  **Be precise about what the deferral bought: the window is NARROWED, not
-  closed.** Firestore serializes the two transactions, but the Auth call sits
-  outside both — a `completeEmployeeSetup` that commits between
-  `performCreateAccount` committing and `resetProvisionedPassword` returning
-  still ends with an `active` employee on the freshly issued starting password
-  rather than the one they just chose. That residue is
-  milliseconds wide instead of a whole round trip, and it cannot be closed
-  from here (Auth is not transactional); don't write it up as fixed.
+  The former post-transaction reset race is closed by `withAccountOperation`
+  and the legacy setup barrier described above. Keep the lock held through the
+  Auth call; releasing at the Firestore commit would reopen that race.
   `deleteEmployeeAccount` likewise
   only works while `invited` (transactional, so a setup that commits first makes
   the delete refuse); after that the no-delete invariant applies and disable is
@@ -626,17 +715,53 @@ self-service settings. Root context: `../../CLAUDE.md`.
   sign-out, self-service account deletion, and the server-side disable/delete
   bridge (`functions/bridge.js`). Losing the OS permission mid-stream only runs
   `_stop()`, which cancels the subscription and timers — no network call. That
-  matters because **the stored fix keeps rendering on the admin live map**:
-  `LiveMapAggregator.join` filters on missing/inactive user, never on freshness,
-  and `staff_marker_icon.dart` has no staleness branch, so a months-old pin is
-  visually identical to a live one (only the roster row and info card show the
-  age). The policy used to promise deletion on revocation and promise the pin
-  disappeared; owner call was to correct the TEXT rather than the code, so
-  `docs/legal/privacy-policy.html` §6 and §8 now describe this behaviour
-  exactly. **The two must stay in step**: if you ever wire permission-revocation
-  into a delete, or add a freshness filter to the map, update those two sections
-  in the same change — and republish (see below), or the site keeps describing
-  the old behaviour.
+  matters because **the stored fix keeps rendering on the admin live map for as
+  long as it exists**: the 2 h `presenceHiddenAfter` cutoff (2026-09-13) was
+  REMOVED 2026-09-14 by owner call, so `LiveMapAggregator.groupTeam` pins every
+  fix at any age, and `staff_marker_icon.dart` has no staleness branch — a
+  day-old pin looks like a live one (only the sheet row shows the age). **A pin
+  needs its owner's `locationSharingEnabled` ON, and that gate is the backstop
+  that replaced the cutoff**: without it, presence docs written before sharing
+  became opt-in (2026-09-04) would reappear for people who never turned it on,
+  and a failed `unregister()` delete would pin someone who switched sharing off.
+  NOT SEEN now means sharing on with no fix yet. The policy used to promise
+  deletion on revocation and promise the pin disappeared; owner call was to
+  correct the TEXT rather than the code, so `docs/legal/privacy-policy.html`
+  §2, §6 and §8 now describe this behaviour exactly. **The two must stay in
+  step**: if you ever wire permission-revocation into a delete, reintroduce an
+  age cutoff, or drop the sharing gate, update those sections in the same change
+  — and republish (see below), or the site keeps describing the old behaviour.
+- **`isTestAccount` hides an account from every teammate LIST and COUNT, and
+  from no LOOKUP** (2026-09-13, for the Apple App Review account). It is an
+  ADMIN-ONLY field: a switch on `edit_person_sheet.dart`, on `updateEmployee`'s
+  patch and in `toMap()`, and deliberately absent from
+  `kSelfServiceUserFields` and `isAvailabilityOnlyChange()`'s `hasOnly`, so a
+  person cannot un-hide themselves (an ADMIN tester can clear its own flag
+  through the admin branch — accepted). No rules change: `isValidUserData` is a
+  per-key check, not a `hasOnly`. **The filter has two owners, never a call-site
+  copy.** `EmployeeRecord.isAssignable` is `jobTitle.isAssignable &&
+  !isTestAccount`, which removes the account from `assignableEmployeesProvider`
+  (both assignee pickers, the dashboard's workload, capacity and availability
+  flags, the picker's availability reducer), the calendar crew filter, the
+  time-off clash swap pool and a book-again crew in one place; and
+  `LiveMapAggregator` (`join`/`groupTeam`) removes it from the map, its sheet
+  and the drawer's on-the-clock badge. The Team roster splits it into a
+  collapsed `TestAccountsSection` at the bottom rather than dropping it —
+  without that an admin could never reach the switch again. **Never filter a
+  LOOKUP**: `employeeColorMapProvider`/`employeeNameMapProvider`, the detail
+  sheet's and My details' own-record reads, `usedColors` (a tester's colour is
+  still taken) and the clash dialog's `_rosterName` keep it, or crew names and
+  colours blank on jobs already assigned to it. `offerableAssignees` still
+  offers a tester STORED on a job, so hiding it from the picker cannot strand
+  it there. `neverSetUpAccountsProvider` keeps it too — that list is a security
+  flag about a starting password, not a teammate listing. It reads
+  `allUsersStreamProvider` for the same reason: `employeesStreamProvider`
+  filters to `active`, so the flag would be permanently empty and never fire,
+  and `assignableEmployeesProvider` would also hide a pending dispatcher. Its
+  sort is oldest-first with a null `createdAt` LISTED LAST, never dropped — the
+  field is function-owned and absent on legacy docs, and "unknown age" must not
+  become "not shown". History, the tester's
+  own session and every server-side push are untouched.
 - **`docs/legal/*.html` are SOURCES, not the published pages.** The live site is
   the separate `gvogas/es-pro-legal` GitHub Pages repo, where
   `privacy-policy.html` is published as **`index.html`** (which is why the other
@@ -681,6 +806,14 @@ self-service settings. Root context: `../../CLAUDE.md`.
   absent `travelAlertsEnabled` reads as ON, absent `locationSharingEnabled` as
   OFF. Both are also on `isAvailabilityOnlyChange`'s `hasOnly` set, so the
   Settings toggle and the availability form can each write theirs alone.
+  **`monthEndReviewPush` is the opposite case: ADMIN-ONLY and on NEITHER
+  list** (2026-09-13). It decides who receives the month-end overdue push, an
+  operational setting rather than a personal preference, so nobody may opt
+  themselves in or out. It is written only by the admin `updateEmployee` path
+  (and `toMap`), shown on `EditPersonSheet` only while the person is an admin,
+  saved `false` whenever the admin switch is off, and absent reads as OFF. No
+  rules change was needed: `isValidUserData` is per-key and the admin
+  `allow update` carries no key allowlist.
   **`email` must never join it** — it is a sign-in
   identity, and Auth and Firestore move together through `changeEmployeeEmail`
   or not at all. Neither may `maxJobsPerDay`, `role`, `jobTitle`, `colorValue`

@@ -94,6 +94,27 @@ class AccountDeleteBusy extends AccountDeleteOutcome {
   const AccountDeleteBusy();
 }
 
+/// Outcome of an admin resetting an active person's password.
+sealed class PasswordResetOutcome {
+  const PasswordResetOutcome();
+}
+
+/// The server issued a temporary password; [credentials] are what the admin reads out.
+class PasswordResetIssued extends PasswordResetOutcome {
+  const PasswordResetIssued(this.credentials);
+  final NewAccountCredentials credentials;
+}
+
+class PasswordResetFailed extends PasswordResetOutcome {
+  const PasswordResetFailed(this.error);
+  final Object error;
+}
+
+/// A duplicate tap while a reset is in flight; surfaces nothing.
+class PasswordResetBusy extends PasswordResetOutcome {
+  const PasswordResetBusy();
+}
+
 /// Busy state for the employee form/detail surfaces — these drive the Save
 /// button and the status button spinners.
 ///
@@ -114,11 +135,13 @@ class EmployeeFormActivity {
     this.savingIds = const {},
     this.deletingAccountIds = const {},
     this.isTogglingStatus = false,
+    this.isResettingPassword = false,
   });
 
   final Set<String> savingIds;
   final Set<String> deletingAccountIds;
   final bool isTogglingStatus;
+  final bool isResettingPassword;
 
   /// Is *anything* saving. The two person sheets are modal and own the only
   /// operation in flight when they are open, so they read this rather than
@@ -141,11 +164,13 @@ class EmployeeFormActivity {
     Set<String>? savingIds,
     Set<String>? deletingAccountIds,
     bool? isTogglingStatus,
+    bool? isResettingPassword,
   }) {
     return EmployeeFormActivity(
       savingIds: savingIds ?? this.savingIds,
       deletingAccountIds: deletingAccountIds ?? this.deletingAccountIds,
       isTogglingStatus: isTogglingStatus ?? this.isTogglingStatus,
+      isResettingPassword: isResettingPassword ?? this.isResettingPassword,
     );
   }
 
@@ -154,13 +179,15 @@ class EmployeeFormActivity {
       other is EmployeeFormActivity &&
       setEquals(other.savingIds, savingIds) &&
       setEquals(other.deletingAccountIds, deletingAccountIds) &&
-      other.isTogglingStatus == isTogglingStatus;
+      other.isTogglingStatus == isTogglingStatus &&
+      other.isResettingPassword == isResettingPassword;
 
   @override
   int get hashCode => Object.hash(
     Object.hashAllUnordered(savingIds),
     Object.hashAllUnordered(deletingAccountIds),
     isTogglingStatus,
+    isResettingPassword,
   );
 }
 
@@ -320,6 +347,23 @@ class EmployeeFormController extends Notifier<EmployeeFormActivity> {
           deletingAccountIds: {...state.deletingAccountIds}..remove(docId),
         );
       }
+    }
+  }
+
+  /// Issues a temporary password for an active person and forces a change at next sign-in.
+  Future<PasswordResetOutcome> resetPassword(String docId) async {
+    if (state.isResettingPassword) return const PasswordResetBusy();
+    // Resolved before the first await — see _save.
+    final repo = ref.read(employeesRepositoryProvider);
+    final logger = ref.read(loggerProvider);
+    state = state.copyWith(isResettingPassword: true);
+    try {
+      return PasswordResetIssued(await repo.resetEmployeePassword(docId));
+    } catch (e, st) {
+      logger.warn('EMP-RESETPW resetEmployeePassword failed', e, st);
+      return PasswordResetFailed(e);
+    } finally {
+      if (ref.mounted) state = state.copyWith(isResettingPassword: false);
     }
   }
 }

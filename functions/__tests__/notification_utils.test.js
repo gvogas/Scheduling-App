@@ -16,13 +16,15 @@ const {
   isStaleTokenError,
   deliverRecipientOnce,
   handleAppointmentWrite,
-  runDailyDigest,
-  runOverduePromptSweep,
   OPEN_STATUSES,
   SERIES_CLAIM_WINDOW_MS,
   TIMED_RECIPIENT_ROLES,
   OVERDUE_LOOKBACK_MS,
 } = require("../notification_utils");
+const {
+  runDailyDigest,
+  runOverduePromptSweep,
+} = require("../notification_sweeps");
 
 // Noon Toronto (EDT -4) on Wed 2026-07-08.
 const NOW = new Date("2026-07-08T16:00:00.000Z");

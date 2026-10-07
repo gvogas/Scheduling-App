@@ -73,7 +73,15 @@ function expectCalledBefore(first, second) {
  * @return {!Object}
  */
 function cleanDb() {
+  let data = {};
   return {
+    runTransaction: async (work) => work({
+      get: async () => ({exists: true, data: () => data}),
+      update: (_ref, patch) => {
+        data = {...data, ...patch};
+      },
+      delete: () => {},
+    }),
     collection: () => ({
       doc: () => ({
         get: async () => ({exists: true, id: "c1"}),

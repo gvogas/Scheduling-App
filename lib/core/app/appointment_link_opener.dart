@@ -17,6 +17,7 @@ import 'package:scheduling/features/calendar/utils/sheet_helpers.dart';
 import 'package:scheduling/features/home_widget/application/widget_sync_service.dart';
 import 'package:scheduling/features/notifications/application/push_registration_controller.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/routes/app_routes.dart';
 import 'package:scheduling/routes/hub_shell.dart';
 
 /// Routes the two non-`app_links` external entry points — iOS home-widget taps
@@ -86,6 +87,9 @@ class AppointmentLinkOpener {
 
   /// Number of [_hubPollInterval] ticks spent waiting for the hub — ~10s.
   static const int _hubPollAttempts = 50;
+
+  /// The `kind` the month-end overdue review push carries.
+  static const String _overdueReviewKind = 'overdueReview';
 
   void start() {
     _startPushTaps();
@@ -160,15 +164,36 @@ class AppointmentLinkOpener {
   @visibleForTesting
   Future<void> handlePushTap(RemoteMessage? message) async {
     if (message == null) return;
-    final appointmentId =
-        (message.data['appointmentId'] as String?)?.trim() ?? '';
     final logger = ref.read(loggerProvider);
     // Swallow errors to prevent leaking into zone handlers as FATAL crashes.
     try {
+      // Kind BEFORE the id: the month-end review push carries no appointmentId.
+      if (message.data['kind'] == _overdueReviewKind) {
+        await openOverdueReview();
+        return;
+      }
+      final appointmentId =
+          (message.data['appointmentId'] as String?)?.trim() ?? '';
       await openAppointment(appointmentId);
     } catch (e, st) {
       logger.warn('PUSH-TAP open failed', e, st);
     }
+  }
+
+  /// The month-end push: lands on the calendar, then opens the overdue review
+  /// over it for an admin.
+  Future<void> openOverdueReview() async {
+    if (!isSignedIn()) return;
+    final shell = await _landOnCalendar(ref.read(loggerProvider));
+    if (shell == null) return;
+    final navContext = navigatorKey.currentContext;
+    if (navContext == null || !navContext.mounted) return;
+    shell.goHome();
+    if (!shell.isAdmin) return;
+    Navigator.of(navContext).pushNamed(
+      AppRoutes.overdueReview,
+      arguments: OverdueReviewArgs(isAdmin: true, employeeId: shell.employeeId),
+    );
   }
 
   /// Shared deep-link handler — shows the calendar, then opens the
@@ -183,7 +208,7 @@ class AppointmentLinkOpener {
     final repository = ref.read(appointmentsRepositoryProvider);
     // Fetch this concurrently with hub startup, on the shared retry ladder —
     // a cold start right after sign-in can lose the auth-token race.
-    final recordFuture = appointmentId.isEmpty
+    final recordFuture = appointmentId.isEmpty || !_isDocId(appointmentId)
         ? Future<AppointmentRecord?>.value()
         : retryAsync<AppointmentRecord?>(
             () => repository.getAppointmentById(appointmentId),
@@ -192,15 +217,8 @@ class AppointmentLinkOpener {
             return null;
           });
 
-    final shell = await _awaitLiveHub();
-    if (!isMounted()) return;
-    if (shell == null) {
-      // The tap is discarded here. Without this the user taps a notification,
-      // the app opens, and nothing happens with no trace anywhere.
-      logger.warn('PUSH-TAP hub never appeared');
-      return;
-    }
-    shell.showCalendar();
+    final shell = await _landOnCalendar(logger);
+    if (shell == null) return;
 
     final record = await recordFuture;
     if (!isMounted()) return;
@@ -229,6 +247,18 @@ class AppointmentLinkOpener {
     );
   }
 
+  /// Shows the calendar once the hub is live; null (logged) if it never is.
+  Future<AppointmentLinkHub?> _landOnCalendar(AppLogger logger) async {
+    final shell = await _awaitLiveHub();
+    if (!isMounted()) return null;
+    if (shell == null) {
+      logger.warn('PUSH-TAP hub never appeared');
+      return null;
+    }
+    shell.showCalendar();
+    return shell;
+  }
+
   /// Polls for up to ~10s waiting for the live hub to appear. Returns null
   /// if it never shows up.
   Future<AppointmentLinkHub?> _awaitLiveHub() async {
@@ -241,3 +271,6 @@ class AppointmentLinkOpener {
     return null;
   }
 }
+
+/// Mirrors `isValidDocIdField` in `firestore.rules`: no path separator, ≤ 128.
+bool _isDocId(String id) => id.length <= 128 && !id.contains('/');

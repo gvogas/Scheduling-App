@@ -6,8 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/utils/retry.dart';
+import 'package:scheduling/features/auth/data/auth_cache.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/employees_repository.dart';
+import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/features/splash/application/splash_controller.dart';
 
 class _MockFirebaseAuth extends Mock implements FirebaseAuth {}
@@ -16,19 +18,25 @@ class _MockUser extends Mock implements User {}
 
 class _MockRepo extends Mock implements EmployeesRepository {}
 
+class _MockAuthCache extends Mock implements AuthCache {}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  setUpAll(() => registerFallbackValue(const EmployeeRecord(id: '_')));
 
   group('splashDestinationProvider — disabled account', () {
     late _MockFirebaseAuth mockAuth;
     late _MockUser mockUser;
     late _MockRepo mockRepo;
+    late _MockAuthCache mockCache;
 
     setUp(() {
       FlutterSecureStorage.setMockInitialValues({});
       mockAuth = _MockFirebaseAuth();
       mockUser = _MockUser();
       mockRepo = _MockRepo();
+      mockCache = _MockAuthCache();
+      when(() => mockCache.save(any())).thenAnswer((_) async {});
       when(() => mockAuth.currentUser).thenReturn(mockUser);
       when(() => mockUser.uid).thenReturn('uid1');
       when(() => mockAuth.signOut()).thenAnswer((_) async {});
@@ -301,6 +309,68 @@ void main() {
         expect(surfaced, isA<FirebaseException>());
         verifyNever(() => mockAuth.signOut());
       });
+    });
+
+    ProviderContainer containerFor(Map<String, dynamic> data) {
+      when(
+        () => mockRepo.findUserByUid('uid1'),
+      ).thenAnswer((_) async => UserUidMatch(id: 'doc1', data: data));
+      final container = ProviderContainer(
+        overrides: [
+          firebaseAuthProvider.overrideWithValue(mockAuth),
+          employeesRepositoryProvider.overrideWithValue(mockRepo),
+          authCacheProvider.overrideWithValue(mockCache),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test(
+      'routes a reset account to Change password and KEEPS the session',
+      () async {
+        final container = containerFor({
+          'uid': 'uid1',
+          'role': 'employee',
+          'status': 'active',
+          'name': 'Jane',
+          'passwordResetRequired': true,
+        });
+
+        final result = await container.read(splashDestinationProvider.future);
+
+        expect(result, isA<SplashGoToChangePassword>());
+        verifyNever(() => mockAuth.signOut());
+        verifyNever(() => mockCache.save(any()));
+      },
+    );
+
+    test('an invited doc carrying the flag still goes to setup', () async {
+      final container = containerFor({
+        'uid': 'uid1',
+        'role': 'employee',
+        'status': 'invited',
+        'firstName': 'Jane',
+        'passwordResetRequired': true,
+      });
+
+      final result = await container.read(splashDestinationProvider.future);
+
+      expect(result, isA<SplashGoToAccountSetup>());
+    });
+
+    test('a disabled doc carrying the flag is still signed out', () async {
+      final container = containerFor({
+        'uid': 'uid1',
+        'role': 'employee',
+        'status': 'disabled',
+        'passwordResetRequired': true,
+      });
+
+      final result = await container.read(splashDestinationProvider.future);
+
+      expect(result, isA<SplashGoToLogin>());
+      verify(() => mockAuth.signOut()).called(1);
     });
   });
 }

@@ -14,6 +14,9 @@ abstract final class Breakpoints {
   /// Large-text gate: above this text scale, dense rows stack as if narrow.
   static const double compactTextScale = 1.4;
 
+  /// The composed text-scale cap `main()` applies app-wide.
+  static const double maxTextScale = 2.2;
+
   /// Short-viewport height gate (e.g. landscape phones): sheets grow taller.
   static const double shortViewportHeight = 700;
 }

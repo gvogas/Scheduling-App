@@ -21,25 +21,22 @@
 
 const {onDocumentWritten} = require("firebase-functions/v2/firestore");
 const logger = require("firebase-functions/logger");
-const {getFirestore, FieldValue} = require("firebase-admin/firestore");
+const {getFirestore} = require("firebase-admin/firestore");
 
 const {WAVE_FULL_ACCESS_TOKEN} = require("./auth");
 const {
   enqueueCustomerUpsert,
+  cancelCustomerUpsert,
   drainQueue,
-  listOutstandingClientIds,
   shouldEnqueueClientWrite,
+  isBlockedRevertToSynced,
 } = require("./worker");
 const {mappedFieldsHash} = require("./mappers");
-const {problemsPatch} = require("./customer_contract");
-const {classifyWaveError} = require("./errors");
-const {isImportDue} = require("./import_schedule");
+const {buildCustomerPayload, verdictPatch} = require("./customer_contract");
 const {
-  importWithWatermark,
   readWaveBusinessIdCached,
   readWaveConnection,
 } = require("./sync_run");
-const {toMillis} = require("../time_utils");
 
 // waveUpsertCustomer — enqueues a Wave write-back when a client doc's mapped
 // fields change, AND pushes it (see the inline drain at the bottom).
@@ -112,7 +109,12 @@ const waveUpsertCustomer = onDocumentWritten(
       if (!after) return;
 
       const before = beforeSnap?.exists ? beforeSnap.data() : null;
-      if (!shouldEnqueueClientWrite(before, after)) return;
+      if (!shouldEnqueueClientWrite(before, after)) {
+        if (isBlockedRevertToSynced(before, after)) {
+          await clearStaleBlock(getFirestore(), event.params.clientId, after);
+        }
+        return;
+      }
 
       // The mark-pending write below only touches wave.* fields, so when
       // the trigger re-fires on it, mappedFieldsHash is unchanged and
@@ -126,12 +128,41 @@ const waveUpsertCustomer = onDocumentWritten(
       // explicit hash computed at the enqueue site.
       const hash = mappedFieldsHash(after);
 
+      // The contract decides BEFORE anything is queued. A payload Wave would
+      // refuse must never become a job: the push dead-letters permanently and
+      // "Retry failed" re-sends the identical payload into the identical
+      // refusal, so the client is stranded with a counter and no reason.
+      const contract = buildCustomerPayload(after);
+      const verdict = verdictPatch(contract);
+      if (!contract.ok) {
+        // Different documents, neither depending on the other's result. The
+        // second is why this branch exists: an earlier edit may have left a job
+        // queued, and the worker re-reads the LIVE doc — so that job would push
+        // what was just refused.
+        //
+        // Best-effort, like the mark-pending write below: the client can be
+        // deleted between this event and the write, and an uncaught NOT_FOUND
+        // here re-runs the whole handler under `retry: true` against the same
+        // missing doc until the retry window expires.
+        try {
+          await Promise.all([
+            db.doc("clients/" + clientId).update(verdict),
+            cancelCustomerUpsert(clientId),
+          ]);
+        } catch (e) {
+          logger.warn("waveUpsertCustomer: recording the refusal failed",
+              {clientId, err: e.message});
+        }
+        logger.debug("waveUpsertCustomer: blocked by contract", {clientId});
+        return;
+      }
+
       // Mark-pending + enqueue land in ONE WriteBatch so a crash between the
       // two can't leave the doc stuck at 'pending' with no queued job (or a
       // queued job with no visible pending state).
       const batch = db.batch();
       // `wave.problems` rides the batch that was already updating this doc, so
-      // report-only costs no extra write. It is NOT a mapped field, so the
+      // recording it costs no extra write. It is NOT a mapped field, so the
       // hash is unchanged and `shouldEnqueueClientWrite` returns false when
       // the trigger re-fires on this write — the same protection the
       // mark-pending update above already relies on, and the reason this
@@ -139,7 +170,7 @@ const waveUpsertCustomer = onDocumentWritten(
       batch.update(db.doc("clients/" + clientId), {
         "wave.syncState": "pending",
         "wave.syncError": null,
-        ...problemsPatch(after),
+        ...verdict,
       });
       // payloadHash is diagnostic only — the worker re-reads the live doc
       // and recomputes the hash before writing, since the doc is the real
@@ -155,6 +186,15 @@ const waveUpsertCustomer = onDocumentWritten(
         logger.warn("waveUpsertCustomer: batched mark-pending failed; " +
             "enqueueing without it", {clientId, err: e.message});
         await enqueueCustomerUpsert(clientId, {payloadHash: hash});
+        // Best-effort: the doc changed, so the record of what is wrong with it
+        // has to change too. The batch above failed atomically, which takes
+        // the verdict with it.
+        try {
+          await db.doc("clients/" + clientId).update(verdict);
+        } catch (patchErr) {
+          logger.warn("waveUpsertCustomer: verdict patch failed",
+              {clientId, err: patchErr.message});
+        }
       }
       logger.debug("waveUpsertCustomer: enqueued", {clientId});
 
@@ -198,29 +238,35 @@ const waveUpsertCustomer = onDocumentWritten(
     },
 );
 
-// runWaveDaily — the daily Wave job. It does TWO things, and the first
-// runs unconditionally:
+/**
+ * Clears a `blocked` verdict once the doc is back on values Wave already holds.
+ * @param {!Object} db Firestore handle.
+ * @param {string} clientId Firestore `clients` document id.
+ * @param {!Object} after Post-write client document data.
+ * @return {!Promise<void>}
+ */
+async function clearStaleBlock(db, clientId, after) {
+  const contract = buildCustomerPayload(after);
+  if (!contract.ok) return;
+  try {
+    await db.doc("clients/" + clientId)
+        .update(verdictPatch(contract, {clearedState: "synced"}));
+  } catch (e) {
+    logger.warn("waveUpsertCustomer: clearing a stale block failed",
+        {clientId, err: e.message});
+  }
+}
+
+// runWaveDaily — the daily Wave job: drain the outbox (app → Wave).
 //
-//  1. Drains the outbox (app → Wave). This is the safety net under the
-//     event-driven push in `waveUpsertCustomer`, and it exists because two
-//     states cannot produce a client write to ride on: a job that failed and
-//     is sitting on its `nextAttemptAt` backoff, and a job left `inflight` by
-//     an instance that died mid-dispatch (reclaimed by `drainQueue`'s lease
-//     pass). Without this they would wait for the next unrelated client edit
-//     or for an admin to press Sync. It runs even when `importSchedule` is
-//     `off` — that setting governs the PULL, and gating the push on it would
-//     mean the default configuration never pushes automatically at all.
+// This is the safety net under the event-driven push in `waveUpsertCustomer`,
+// and it exists because two states cannot produce a client write to ride on:
+// a job that failed and is sitting on its `nextAttemptAt` backoff, and a job
+// left `inflight` by an instance that died mid-dispatch (reclaimed by
+// `drainQueue`'s lease pass). Without this they would wait for the next
+// unrelated client edit or for an admin to press Sync.
 //
-//  2. Pulls (Wave → app), but only when the configured cadence is due.
-//
-// The order is also the push-before-pull invariant: an import overwrites every
-// mapped field of a linked client AND stamps `wave.lastSyncedHash` from Wave's
-// values, so an un-pushed local edit underneath it is not merely overwritten
-// but marked synced — silently lost. Draining first, and passing the
-// `skipClientIds` protect-list for whatever the drain could not finish, is the
-// same belt-and-braces the interactive sync uses. The old
-// `waveSyncWorker` scheduler is what made the drain here look redundant;
-// it was deleted 2026-08-13.
+// Its weekly/monthly pull was deleted in Wave Phase 4 (Task 12).
 //
 // **It is NOT its own scheduler.** It used to be `waveScheduledImport`, an
 // `every 24 hours` `onSchedule`; it now rides `sendDailyJobDigest`
@@ -232,12 +278,11 @@ const waveUpsertCustomer = onDocumentWritten(
 // re-promoting it to a timer, and note the caller isolates it in its own
 // try/catch so a Wave failure cannot affect the push that already went out.
 //
-// The drain takes a bounded slice of the caller's budget and leaves the rest
-// to the pull below it.
+// The drain takes a bounded slice of the caller's budget.
 const SWEEP_DRAIN_BUDGET_MS = 180 * 1000;
 
 /**
- * Runs the daily Wave maintenance: drain the outbox, then import if due.
+ * Runs the daily Wave maintenance: drain the outbox.
  *
  * Never throws — every failure path inside is caught and logged, because the
  * caller is a user-facing push function whose own work has already completed
@@ -258,23 +303,16 @@ async function runWaveDaily() {
     logger.warn("WAVE-BOOT runWaveDaily: connection read failed", {err});
     return;
   }
-  const {ref, data, businessId, importSchedule: schedule} = connection;
+  const {businessId} = connection;
   if (!businessId) {
     logger.debug("runWaveDaily: not connected — nothing to do");
     return;
   }
-  // One clock instant for the due check AND the watermark — two Date.now()
-  // calls would let them disagree about when this run started.
-  const startedAtMs = Date.now();
 
-  // Step 1: drain, ALWAYS — before the due check, so an `off` install
-  // still gets its backed-off and stale-leased jobs retried. Isolated so a
-  // drain failure cannot skip the import below it, exactly as the digest
-  // isolates its TTL prune.
   try {
     const drained = await drainQueue({
       businessId,
-      deadlineMs: startedAtMs + SWEEP_DRAIN_BUDGET_MS,
+      deadlineMs: Date.now() + SWEEP_DRAIN_BUDGET_MS,
     });
     if (drained.processed > 0 || drained.reclaimed > 0) {
       logger.info("WAVE-SCHED drain done", {
@@ -287,53 +325,9 @@ async function runWaveDaily() {
       });
     }
   } catch (e) {
-    // Warn, not throw: the import below is still worth running, and
-    // `skipClientIds` protects whatever this failed to push.
+    // Warn, not throw: the jobs stay queued for the next sweep or edit.
     logger.warn("WAVE-SCHED drain failed", {error: String(e)});
   }
-
-  if (!isImportDue(schedule, toMillis(data.lastAutoImportAt), startedAtMs)) {
-    logger.debug("runWaveDaily: import not due", {schedule});
-    return;
-  }
-
-  logger.info("WAVE-SCHED import starting", {businessId, schedule});
-  let summary;
-  let window;
-  try {
-    // Same protect-list as the interactive sync, and it matters more
-    // here: this runs unattended, so a client edit clobbered by it is
-    // lost with nobody watching. Read AFTER the drain above, so a job the
-    // drain completed isn't protected for nothing — and so anything the
-    // drain could not finish (backed off, dead-lettered, or past its
-    // budget) is still shielded from the import.
-    const skipClientIds = await listOutstandingClientIds();
-    // Neither stamp advances on a throw — the cadence retries tomorrow
-    // AND the delta window is redone, so nothing edited inside it is
-    // skipped. `lastAutoImportAt` rides the same write as the watermark.
-    ({summary, window} = await importWithWatermark({
-      connectionRef: ref,
-      connection: data,
-      businessId,
-      skipClientIds,
-      nowMs: startedAtMs,
-      extraPatch: {lastAutoImportAt: FieldValue.serverTimestamp()},
-    }));
-  } catch (e) {
-    const {code, message} = classifyWaveError(e);
-    logger.warn("WAVE-SCHED import failed", {code, message});
-    return;
-  }
-
-  logger.info("WAVE-SCHED import done", {
-    window: window.reason,
-    imported: summary.imported,
-    updated: summary.updated,
-    skippedArchived: summary.skippedArchived,
-    skippedPending: summary.skippedPending,
-    skippedUnchanged: summary.skippedUnchanged,
-    pages: summary.pages,
-  });
 }
 
 module.exports = {

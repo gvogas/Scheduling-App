@@ -10,6 +10,209 @@ All notable changes to this project are documented here.
 The `+N` build number after the version (e.g. `1.1.0+5`) is the store version
 code; it increments by one on every store upload regardless of the semver part.
 
+## [1.63.0+93] - 2026-09-29
+
+Admins can reset a team member's password, plus clearer client counts and
+friendlier password errors.
+
+### Added
+- **Reset a team member's password.** An admin can tap Reset password in a
+  person's profile. The person is signed out on every device, and the app
+  shows a new temporary password to share with them. At their next sign-in
+  they choose their own password before anything else, and the app won't
+  accept the temporary one again.
+
+### Changed
+- **A client's Job history opens faster.** It reads only the recent visits it
+  lists, and no longer reloads when someone adds a photo or crew notes.
+
+### Fixed
+- **Filtered client lists show the real total.** The header reads "50 of 120
+  Commercial clients" while the list is still loading, instead of counting up
+  as you scroll.
+- **New clients show up in the "Most jobs" sort right away**, instead of only
+  after their first booking.
+- **Password fields stop at 128 characters** instead of rejecting a long
+  passphrase as too weak, and a password the server refuses during account
+  setup now says why instead of showing a generic error.
+- **Deleting a client with past jobs always offers to archive them instead**,
+  even when the cleanup behind the refusal fails.
+
+## [1.62.1+92] - 2026-09-28
+
+Client filters that reach the whole list, a sturdier first sign-in for new
+team members, and tighter protection for job photos.
+
+### Changed
+- **Client filters now load the whole list, page by page.** Filtering by
+  type, by address or to Archived used to read a large batch of clients up
+  front. It now loads like the full list does, 50 at a time, and every sort
+  works under every filter.
+- **Searching with a filter on searches only that filter.** A search while
+  "Commercial" or an address is picked looks through those clients only, and
+  no longer stops short on a very large client list.
+- **A filtered client list is one card, without letter headings**, the same
+  as the unfiltered list.
+- **The address filter's list of shared addresses comes from a running
+  tally.** Opening the filter no longer reads the whole client list first. A
+  just-edited address can take a moment to move to its new group.
+
+### Fixed
+- **Setting up a new account can no longer end on the wrong password.** The
+  password a new team member picks is now saved in the same step that
+  finishes their setup. If an admin issues a new starting password while the
+  person is part-way through, setup can no longer finish on the old password
+  or skip the new one.
+- **Crew members can add job photos but can no longer replace existing
+  ones.** Replacing or removing a photo stays with admins.
+- **Search results no longer go stale.** A search you repeat often now
+  refreshes on schedule instead of showing the same answer indefinitely, and
+  a search that was still loading when you saved or signed out can no longer
+  bring back the old results.
+- **A client being deleted can no longer get a new job booked in the
+  meantime**, and can't be edited until the delete finishes or is refused.
+
+## [1.62.0+91] - 2026-09-19
+
+A month-end review for jobs nobody closed, a crew map that shows who is
+missing and why, and a crew picker that lets you double-book on purpose.
+
+### Added
+- **An overdue jobs review for admins.** "Overdue jobs" in the menu, with a
+  live count, lists every job whose end has passed without being closed,
+  oldest first and grouped by month. Tick jobs one at a time or a whole
+  month, then mark them all Complete or Not done in one step. The app
+  confirms before anything changes.
+- **A month-end reminder.** On the last day of the month, any admin with
+  "Month-end overdue reminder" turned on in their Team profile gets one
+  notification counting the jobs still open. Tapping it opens Overdue jobs.
+- **A "Be on the team map" page.** After each app update, everyone sees it
+  once before the calendar tour. It turns location sharing on, opens Settings
+  when iOS has already refused location, or confirms you're already on the
+  map.
+- **Test accounts.** An admin can mark a person as a test account in their
+  profile. They drop out of the crew map, the crew pickers and the team
+  counts, and sit in a collapsed "test accounts" section at the bottom of the
+  Team list.
+
+### Changed
+- **The crew map has a Team sheet.** It rests at the bottom of the map and
+  lists who's on it, nearest first. Tap a pin or a name to bring that person
+  to the top, with their address and an Open in Maps button. Swipe it up to
+  see who isn't on the map: people not seen yet, and people who haven't turned
+  sharing on. Traffic and satellite are buttons at the top of the map.
+- **A pin leaves the map after two hours without an update**, instead of
+  staying put on an old position. Opening the app sends a fresh position if
+  you're sharing.
+- **The crew picker no longer greys out someone who is on another job.** Pick
+  them anyway, and Save asks whether you mean to double-book them. Only
+  someone on a day off is still greyed out. The lines explaining who is off or
+  busy under the picker are gone.
+- **Wave imports only when you tap "Sync with Wave".** The weekly and monthly
+  automatic import is gone from Settings.
+
+### Fixed
+- **Accented addresses from suggestions no longer come out garbled**, such as
+  "MontrÃ©al" for "Montréal".
+- **A client Wave couldn't sync no longer stays flagged after you undo the
+  edit.** Putting its details back to what Wave already has now clears the
+  "can't sync" badge, instead of leaving the client listed until some other
+  change came along.
+- **Retry works on the crew map and the Dashboard.** When either failed to
+  load, tapping Retry showed the same error again without trying; it now
+  reloads whatever failed.
+
+## [1.61.0+90] - 2026-09-12
+
+A fresh look for every screen header and the Clients list, a quicker booking
+form, and a client's job count that finally ignores visits that were called
+off.
+
+### Added
+- **A "back to top" button on the Clients list.** It appears once you have
+  scrolled a long way down and takes you straight back to the first client.
+
+### Changed
+- **Screen headers have a new, lighter look.** The coloured bar is gone:
+  each screen opens with a large title on the page itself, with round
+  controls beside it. Every one of those controls, and the Cancel and Save
+  buttons on every form, now responds to a full-size tap. Several used to
+  react only to the small painted button in the middle.
+- **The Clients list sits in cards.** Filtering by a client type or to
+  archived clients, sorted by name, splits them into cards under each first
+  letter. Each row shows the name with its client type, the
+  address, then the phone number beside the job count. The line above the
+  list says exactly what you are looking at, like "50 of 717 clients" or
+  "45 Commercial clients", and the sort shows as an icon with its name.
+- **Booking a job has one search box for the client.** Type a name or a
+  phone number into the same field. There is no Phone / Name switch to find
+  first.
+- **The job-type shortcuts sit right under the job title**, with a hint that
+  tapping one fills in the title and the length. The title is now the first
+  thing on the form.
+- **Appointment start and end times move in quarter hours** — :00, :15, :30
+  and :45. Working hours in availability still offer every minute.
+- **Client and address suggestions look the same, and are easier to tap.**
+  Both lists float clearly above the form, every row is a full-size target,
+  client rows show the client's avatar, and addresses use two lines so the
+  town is no longer cut off.
+- **Finished jobs in the calendar are easier to read.** A done or cancelled
+  job still takes less room than an open one, but it shows the crew again,
+  and its time has its own line so "Day 3 of 5" is no longer cut off.
+- **The notes field no longer shows a "0/4000" character counter.**
+
+### Fixed
+- **A client's job count no longer includes cancelled visits.** Cancelling a
+  job now lowers the count, which also affects where that client appears
+  under "Most jobs".
+- **Changing the sort while a filter is on now re-sorts the list.** It used to
+  do nothing until the filter was cleared.
+- **"New Appointment" no longer shows as "New Appoin…"** in the form header.
+  The job address is labelled once instead of three times, and each crew
+  member in the picker no longer takes a whole row.
+- **The calendar's day title shortens to "Fri, Sep 11"** when there isn't
+  room, instead of trailing off mid-word.
+
+## [1.60.0+89] - 2026-09-10
+
+A client Wave will not accept is now something you can fix, instead of a
+number in Settings that never goes down. The app also starts reporting how it
+is used — in buckets and counts, never names, numbers or addresses.
+
+### Added
+- **The app reports how it is used, and deliberately reports nothing about
+  anyone.** Which screens get opened, which filters get used, whether a job or
+  a client was saved — counted in rounded buckets. No client name, phone
+  number, address or job note is ever sent, and searches are reported as a
+  length rather than as what was typed. Nothing identifies a person: the only
+  thing attached is whether the account is an admin or a technician.
+- **CarPlay.** ES Pro now has a native CarPlay screen: the day's jobs
+  ranked around the one you're driving to, a week view, and directions
+  handed off to the car's own navigation app. It reads from the same
+  on-device schedule the Siri shortcuts already use, so it still shows
+  your jobs with no signal; marking a job started or complete, and
+  calling the client, work from the car too once the phone app is
+  reachable. Times read in 12-hour form, finishing a job returns straight
+  to the list, and the job screen shows only when, where and the crew.
+  Not yet visible on any device — Apple's CarPlay entitlement reaches the
+  development profile but has not been proved on an App Store one.
+
+### Changed
+- **Wave sync now says which client can't sync, and why.** A customer Wave
+  would refuse is caught before it is ever queued, so instead of failing over
+  and over with nothing but a number in Settings, it shows up as a named
+  client with the field to fix — on the client's own page and in a list under
+  the Wave section. Fixing the field puts it back in the queue by itself, with
+  no button to press. "Retry failed" no longer offers to retry the ones that
+  can only fail again; it clears them out and tells you how many need
+  attention.
+
+### Fixed
+- **"Time to leave" alerts now break through Focus and Do Not Disturb.** They
+  were always sent as time-sensitive, but the app had never been granted the
+  permission that lets iOS honour it, so a departure alert could sit silently
+  behind a Focus mode until the crew looked at their phone.
+
 ## [1.59.0+88] - 2026-09-07
 
 What happened on a job is now something the office can read. The crew's notes

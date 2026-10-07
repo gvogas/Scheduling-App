@@ -10,6 +10,7 @@ const {
   shortHash,
 } = require("./security");
 const {GOOGLE_MAP_API_KEY} = require("./params");
+const {repairMojibakeDeep} = require("./mojibake");
 
 // Both callables proxy the Places API v1 so the billing-sensitive key (kept in
 // Secret Manager) never ships in the Flutter binary.
@@ -176,8 +177,9 @@ const placesAutocomplete = onCall(
             uid,
           },
       );
-      return {suggestions: Array.isArray(data.suggestions) ?
-        data.suggestions : []};
+      return repairMojibakeDeep({
+        suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+      });
     },
 );
 
@@ -223,12 +225,12 @@ const placesGetDetails = onCall(
             uid: req.auth.uid,
           },
       );
-      return {
+      return repairMojibakeDeep({
         formattedAddress: typeof data.formattedAddress === "string" ?
           data.formattedAddress : "",
         addressComponents: Array.isArray(data.addressComponents) ?
           data.addressComponents : [],
-      };
+      });
     },
 );
 
@@ -295,7 +297,7 @@ const placesReverseGeocode = onCall(
       const address = results.length > 0 &&
         typeof results[0].formatted_address === "string" ?
         results[0].formatted_address : null;
-      return {address};
+      return repairMojibakeDeep({address});
     },
 );
 

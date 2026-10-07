@@ -40,6 +40,11 @@ class SplashGoToAccountSetup extends SplashDestination {
   final String lastName;
 }
 
+/// An active account an admin has reset: keep the session and force a new password.
+class SplashGoToChangePassword extends SplashDestination {
+  const SplashGoToChangePassword();
+}
+
 Future<SplashDestination> _signOutToLogin(
   Ref ref,
   AppLogger logger, {
@@ -102,6 +107,7 @@ final splashDestinationProvider = FutureProvider<SplashDestination>((
       logContext: 'SPLASH signOut failed for non-active employee',
     );
   }
+  if (employee.passwordResetRequired) return const SplashGoToChangePassword();
   unawaited(
     authCache.save(employee).catchError((Object e, StackTrace st) {
       logger.warn('SPLASH auth cache save failed', e, st);

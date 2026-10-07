@@ -2,74 +2,26 @@
 
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
-refreshed 2026-09-07 (release 1.59.0+88 — **the export list is unchanged at 29**,
-and all 29 are now DEPLOYED. This pass changed no signature: the five Wave
-callables opened with a hand-spelled auth/`assertAdmin`/payload preamble and now
-open with the composed `assertAdminCall`, which changes the opening and not one
-allowlist key, and every `wave/connection` read went through the new
-`readWaveConnection`/`connectionFieldsOf` pair in `sync_run.js` — eight
-hand-copied coercions, one of which applied the unknown-cadence fallback and one
-of which did not. `firestore.rules` gained the `appointments/{id}/fieldNotes`
-grants. Previously refreshed 2026-09-05 (release 1.58.0+87 — **the export list was unchanged at 29**;
-this pass hardened three guards rather than adding any. `assertActiveCall` now
-resolves the caller's uid so a bridge-row field cannot shadow it,
-`matchPhoneInName` gained the whole-field branch its Dart twin already had (a
-Wave customer named by a 7- or 11-digit number was importing undialable), and
-the callables that log a caller now log `shortHash(uid)` rather than the raw
-Auth uid. Previously refreshed 2026-09-04 (release 1.57.0+86 — **the export list GREW 25 -> 29**,
-the first change since 2026-08-13. Four callables were added: `searchClients`,
-`searchHistory` and `findAppointmentConflicts` (`indexed_search.js`), which move
-client search, appointment-history search and the pre-save conflict check off
-capped client-side scans onto indexed queries; and `restoreAppointmentStatus`
-(`appointment_actions.js`), the Undo behind the mobile "mark complete". Two new
-composite indexes serve them (`clients` searchTokens+name, `appointments`
-historySearchScopes+status+startTime) and **both must be READY, and
-`functions/scripts/backfill-search-tokens.js` must have run, before the app
-build that calls them ships** — an unbackfilled document is invisible to the
-search that replaced the scan. Also here: `placesAutocomplete` moved from the
-in-memory limiter to `enforceDurableRateLimit`, and a self-service composed
-guard `assertActiveCall` joined `assertAdminCall` in `security.js`. Rules gained
-bounded `searchTokens` / `historySearchScopes` list fields and a
-`locationSharingEnabled` bool on `/users`; the crew-signal rules removed on
-2026-09-03 stay removed.)
-Previously refreshed 2026-09-02 (release 1.56.0+85 — **the export list is unchanged at 25
-and no row below moved**. The security-relevant change is that every ADMIN-ONLY
-callable now opens with the composed `assertAdminCall(req, allowedKeys)`
-(`security.js`) instead of re-deciding auth → `assertAdmin` →
-`assertPayloadShape` at each site — `deleteClient`, `createEmployeeAccount`,
-`deleteEmployeeAccount` and all three `places.js` callables, six in all.
-It returns the caller's uid, which every one of them needs next for its
-rate limiter. It exists because on 2026-09-01 three of those `assertAdmin` gates
-turned out to be DELETABLE with the whole suite green — on the callables that
-mint and delete real Firebase Auth accounts. The composition and its ORDER are
-proved against the real `assertAdmin` in `assert_admin.test.js`; the callable
-suites stub the COMPOSER, because stubbing `assertAdmin` alone intercepts
-nothing (the composer holds a module-internal reference) and every gate
-assertion would pass vacuously — the same shape that hid the original gap. NOT
-for a self-service callable: `changeEmployeeEmail` keeps
-`resolveEmailChangeCaller`. Two other server-side changes:
-`assertPayloadShape`'s 4 KB cap now measures BYTES
-(`Buffer.byteLength`) rather than UTF-16 code units, which accented and CJK
-text could exceed by 3-4x under a constant and an error code that both said
-bytes; and `notifyAppointmentChanges` additionally stamps the server-owned
-`startedAt`/`completedAt` job time record on the status transition and pushes
-an assignee's On-my-way / Running-late signal to active admins not on the job.
-Rules WIDENED — the crew branches now admit an assignee's `fieldNotes` and
-their photo writes to the `images` subcollection.)
-Previously refreshed 2026-09-01 (release 1.55.0+84 — **the export list is unchanged at 25
-and no row below moved**. Three server-side changes, all inside existing
-functions: `waveUpsertCustomer` now records `wave.problems` from the new
-customer contract (report-only — see below the summary table);
-`notifyAppointmentChanges` wraps its per-recipient loop so one transient
-failure no longer drops recipients 2..N on a function registered WITHOUT
-`retry: true`; and all three `places.js` callables abort their upstream
-request at 8 s, deliberately under the client's own 10 s callable timeout, so
-an abandoned lookup stops burning a billed Places call and its rate-limit
-slot. `runWaveDaily` also guards its connection read, making its documented
-"never throws" contract true on its own terms. Rules unchanged; one composite
-index RESTORED — see `sendUpcomingJobReminders`.)
-Refresh entries older than 2026-09-01 were moved to
-`docs/archive/CLOUD_FUNCTIONS_refresh_history.md` on 2026-09-06.
+refreshed 2026-09-29 (release 1.63.0+93 — **32 exports, all 32 deployed**:
+`resetEmployeePassword` and `completePasswordReset` went live at `306ed848`, and
+the release's review fixes to both bodies at `cc38be5d` the same day — see the
+deploy log; re-checked 2026-10-01, nothing in `functions/` has changed since). Earlier 2026-09-29: `syncClientBuilding` went live at `e70b494d`. Previously refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
+and NOT YET DEPLOYED; the other 29 are deployed at `bec23b85`**, though five of
+their bodies changed in source and are also undeployed: `createEmployeeAccount`
+and `completeEmployeeSetup` (per-account operation lock, optional `newPassword`),
+`syncUsersByUid` (transactional live reconciliation), `deleteClient` (deletion
+barrier) and `searchClients` (optional `archived`/`type`/`buildingKey` filters).
+Deploy ordering — rules, then the nine new client composites READY, then
+functions, then `functions/scripts/backfill-client-buildings.js` — is in
+[audit rollout](audits/AUDIT_ROLLOUT_2026-09-23.md). Previously refreshed 2026-09-19 (release 1.62.0+91 — **still 29 exports, all DEPLOYED**: the
+month-end overdue rider on `sendDailyJobDigest` and Wave Phase 4 (the `worker.js`
+split, the guarded import updates, the cadence deleted and
+`waveSetImportSchedule` retired to a no-op) went live 2026-09-19 16:37Z
+(`608b817a`), ahead of the app build; the audit's stale-block clear in
+`waveUpsertCustomer` followed at ~19:45Z (`bec23b85`).
+Refresh entries older than 2026-09-19 were moved to
+`docs/archive/CLOUD_FUNCTIONS_refresh_history.md` (2026-09-06, 2026-09-13 and
+2026-10-01).
 
 **Every callable now enforces App Check** (`enforceAppCheck: true`); the
 earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
@@ -213,9 +165,20 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
   *count* never moved (25 throughout, `index.js` untouched), so a count check
   looked clean for three days while prod ran older bodies — check the deploy
   log, not the count.
-- **29 functions defined and 29 DEPLOYED**, verified by NAME rather than by
-  count on 2026-09-07 (`functions_list_functions` diffed against the 29
-  `exports.` in `index.js`: zero missing, zero orphans). The 25 -> 29 deploy ran
+- **32 functions defined, 32 DEPLOYED** (2026-09-29, `306ed848`). Release
+  1.63.0+93 then changed the bodies of `resetEmployeePassword` (a failed revoke
+  no longer rethrows) and `completePasswordReset` (transactional flag clear) in
+  source; redeploy `functions` BEFORE that app build.
+- **30 functions defined, 29 DEPLOYED** (2026-09-28, release 1.62.1+92):
+  `syncClientBuilding` is the only export not live, and five deployed bodies
+  changed in source since `bec23b85` (see the refresh stamp above). Until that
+  deploy no `clientBuildings` catalog exists and `archived`/`buildingKey` are
+  unstamped, so rules, indexes, functions and `backfill-client-buildings.js` go
+  out in the rollout doc's order.
+- **29 functions defined and 29 DEPLOYED** as of 2026-09-13, verified by NAME rather than by
+  count on 2026-09-07 and again on 2026-09-13 after `38c8225b`
+  (`functions_list_functions` diffed against the 29 `exports.` in `index.js`:
+  zero missing, zero orphans). The 25 -> 29 deploy ran
   2026-09-06 with its `firestore:indexes` prerequisite READY and the
   `searchTokens`/`historySearchScopes` backfill already run; 2026-09-07 then
   redeployed all 29 unchanged alongside the `fieldNotes` rules grant. **The
@@ -223,7 +186,7 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
   `docs/DEPLOYMENT.md`, which is the authority for what prod actually runs.
   Note the rollback asymmetry this creates: the old client-side scan path is
   unreachable in a shipped build (`firebaseFunctionsProvider` is non-nullable),
-  so once the app build ships, roll back the APP, never the backend.
+  and 1.61.0+90 has shipped, so roll back the APP, never the backend.
   Previously **25 defined and 25 deployed**, verified against
   `functions_list_functions` on 2026-08-22 (the CONTRACT deploy reported 25
   updates, 0 creates, 0 deletions) — an exact match, no orphans and no
@@ -326,22 +289,25 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
 | `placesGetDetails` | callable | `onCall` | `places.js` | `google_places_repository.dart` (address selected) | `GOOGLE_MAP_API_KEY` | App Check ✓ · admin · durable 40/15min |
 | `placesReverseGeocode` | callable | `onCall` | `places.js` | live staff-location map (admin) | `GOOGLE_MAP_API_KEY` | App Check ✓ · admin · durable 120/hr |
 | `deleteAccount` | callable | `onCall` | `account.js` | `account_deletion_service.dart` | — | App Check ✓ · reauth ≤5min · durable 5/15min |
-| `createEmployeeAccount` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (invite sheet, roster row Reset password) | — | App Check ✓ · admin · durable 20/hr·uid |
-| `completeEmployeeSetup` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` → `auth_service.dart` (account setup screen) | — | App Check ✓ · authed (own doc) · durable 5/15min·uid |
+| `createEmployeeAccount` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (invite sheet, roster row Reset password) | — | App Check ✓ · admin · durable 20/hr·uid · `accountOperations` locks (email hash + uid) |
+| `completeEmployeeSetup` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` → `auth_service.dart` (account setup screen) | — | App Check ✓ · authed (own doc) · durable 5/15min·uid · `accountOperations` lock · optional `newPassword` |
 | `deleteEmployeeAccount` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (pending-account row) | — | App Check ✓ · admin · durable 20/hr·uid |
 | `changeEmployeeEmail` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (inside `updateEmployee`, when the email changed on a doc with a `uid`); `self_email_service.dart` (a person changing their own) | — | App Check ✓ · admin **or self** · non-admin also needs re-auth <5 min · durable 5/hr·uid |
+| `resetEmployeePassword` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (edit-person sheet, Reset password on an active person) | — | App Check ✓ · admin · durable 20/hr·uid · `accountOperations` lock (uid) · refuses self and non-active |
+| `completePasswordReset` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` → `auth_service.dart` (Change password screen) | — | App Check ✓ · active caller (`assertActiveCall`) · durable 5/15min·uid · `accountOperations` lock · requires `passwordResetRequired` |
 | `waveBootstrap` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` | `WAVE_FULL_ACCESS_TOKEN`, `WAVE_BUSINESS_NAME` | App Check ✓ · admin · durable 10/hr |
 | `waveGetConnection` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (Settings mount) | — | App Check ✓ · admin · durable 60/hr |
-| `waveSetImportSchedule` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (Settings cadence picker) | — | App Check ✓ · admin · durable 20/hr |
+| `waveSetImportSchedule` | callable | `onCall` | `wave/callables.js` | none in the current app; builds ≤ 1.61.0 (Settings cadence picker) | — | App Check ✓ · admin · RETIRED no-op, `#compat-1.61.0` |
 | `waveImportCustomers` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (`syncCustomers`, Settings "Sync with Wave") | `WAVE_FULL_ACCESS_TOKEN` | App Check ✓ · admin · durable 5/hr · 300s |
-| `searchClients` | callable | `onCall` | `indexed_search.js` | `firebase_clients_repository.dart` (`searchClients`, the debounced clients/history search bar) | — | App Check ✓ · `assertAdminCall` (clients are PII) |
+| `searchClients` | callable | `onCall` | `indexed_search.js` | `firebase_clients_repository.dart` (`searchClients`, the debounced clients/history search bar) | — | App Check ✓ · `assertAdminCall` (clients are PII) · optional `archived`/`type`/`buildingKey` filters |
 | `searchHistory` | callable | `onCall` | `indexed_search.js` | `firebase_appointments_repository.dart` (`searchHistory`, History screen + the technician's own History) | — | App Check ✓ · `assertActiveCall` · scope from role: `all:` for admin, own doc id for an employee |
 | `findAppointmentConflicts` | callable | `onCall` | `indexed_search.js` | `firebase_appointments_repository.dart` (`findClashingAppointments`/`findBusyEmployees`, pre-save clash check + assignee picker) | — | App Check ✓ · `assertActiveCall` · a non-admin is narrowed to their own doc id |
 | `restoreAppointmentStatus` | callable | `onCall` | `appointment_actions.js` | `firebase_appointments_repository.dart` (`restoreAppointmentStatus`, the mark-complete Undo) | — | App Check ✓ · `assertActiveCall` · admin **or assigned** · target must be `pending`/`in_progress` |
-| `deleteClient` | callable | `onCall` | `clients.js` | `firebase_clients_repository.dart` | — | App Check ✓ · admin · durable 20/hr |
-| `syncUsersByUid` | trigger | `onDocumentWritten users/{id}` | `bridge.js` | any `users` doc write | — | `retry: true` |
+| `deleteClient` | callable | `onCall` | `clients.js` | `firebase_clients_repository.dart` | — | App Check ✓ · admin · durable 20/hr · deletion-token barrier |
+| `syncUsersByUid` | trigger | `onDocumentWritten users/{id}` | `bridge.js` | any `users` doc write | — | `retry: true` · transactional live reconcile |
+| `syncClientBuilding` | trigger | `onDocumentWritten clients/{clientId}` | `client_buildings.js` | any `clients` doc write (early-returns unless `archived`, the building key or a filter field moved) | — | `retry: true` · **NOT YET DEPLOYED** |
 | `propagateClientEdits` | trigger | `onDocumentUpdated clients/{id}` | `client_propagation.js` | any `clients` doc edit | — | `retry: true` |
-| `recountClientJobs` | trigger | `onDocumentWritten appointments/{id}` | `client_job_count.js` | a write that changes `clientId` | — | `retry: true` |
+| `recountClientJobs` | trigger | `onDocumentWritten appointments/{id}` | `client_job_count.js` | a write that changes `clientId`, or flips a job's cancelled-ness | — | `retry: true` |
 | `waveUpsertCustomer` | trigger | `onDocumentWritten clients/{id}` | `wave/triggers.js` | any `clients` doc write | `WAVE_FULL_ACCESS_TOKEN` | `retry: true` · 300s · enqueues **and pushes** |
 | `validateUploadedImage` | trigger | `onObjectFinalized` (Storage) | `maintenance.js` | `appointments/*/images/*` upload | — | region `us-east1` |
 | `notifyAppointmentChanges` | trigger | `onDocumentWritten appointments/{id}` | `notifications.js` | any appointment write | `APNS_AUTH_KEY` · `APNS_KEY_ID` · `APNS_TEAM_ID` | no `retry` (dupe push worse than missed); since 2026-09-01 also stamps `startedAt`/`completedAt` on the status transition (best-effort Admin-SDK update, its own re-fire is silent) and pushes the crew's On-my-way / Running-late signal to active admins not on the job |
@@ -350,20 +316,39 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
 | `recountAppointmentPictures` | trigger | `onDocumentWritten appointments/{id}/images/{imageId}` | `appointment_images.js` | any photo doc write | — | `retry: true` · absolute `count()` |
 | `purgeExpiredHistory` | scheduled | `0 3 1 1,4,7,10 *` — quarterly, 1st of Jan/Apr/Jul/Oct 03:00 (Toronto) | `maintenance.js` | quarterly | — | `maxInstances: 1` · 1800s |
 | `sendUpcomingJobReminders` | scheduled | `every 5 minutes` (Toronto) | `notifications.js` + `travel_utils.js` | timer | `GOOGLE_MAP_API_KEY` · `APNS_AUTH_KEY` · `APNS_KEY_ID` · `APNS_TEAM_ID` | `maxInstances: 1` · ledger · Routes API · **also carries the overdue sweep** |
-| `sendDailyJobDigest` | scheduled | `0 18 * * *` (Toronto) | `notifications.js` | timer | — | `maxInstances: 1` · **also calls `runWaveDaily()`** |
+| `sendDailyJobDigest` | scheduled | `0 18 * * *` (Toronto) | `notifications.js` | timer | — | `maxInstances: 1` · **also runs the month-end overdue review and `runWaveDaily()`** |
 
 
 `waveUpsertCustomer` also records **`wave.problems`** on the client doc —
 the customer contract's verdict on whether Wave would accept it
 (`wave/customer_contract.js`, added 2026-08-30). Structured
-`[{field, code, detail}]`, naming the CLIENT DOC field an admin edits.
-**Report-only in Phase 1**: nothing is blocked by it, the job is still
-enqueued and `wave.syncState` is untouched. It rides the existing
-mark-pending batch, so it costs no extra write, and it is not a mapped
-field — the hash is unchanged, so `shouldEnqueueClientWrite` stops the
-re-fire and this cannot loop. Replay it over production read-only with
+`[{field, code, severity, detail}]`, naming the CLIENT DOC field an admin
+edits. It rides the existing mark-pending batch, so it costs no extra write,
+and it is not a mapped field — the hash is unchanged, so
+`shouldEnqueueClientWrite` stops the re-fire and this cannot loop.
+
+**ENFORCING since 2026-09-10** (it was report-only through Phase 1). A client
+carrying a `blocking` problem gets `wave.syncState: 'blocked'` — a fourth
+state beside `synced`/`pending`/`error` — and **never becomes a queued job**;
+`cancelCustomerUpsert` also removes one an earlier edit left `queued`. An
+`advisory` problem is recorded and the push proceeds. `upsertCustomer`
+returns `{status: 'blocked'}` rather than throwing `WaveValidationError`,
+because throwing is what dead-letters permanently, and the drain summary
+carries a `blocked` counter beside `created`/`updated`.
+`requeueDeadJobs` drops a dead job whose client the contract now refuses
+instead of requeuing it into the same refusal, so `waveRetryFailedJobs`
+returns **`blocked`** alongside `requeued`/`scanned`/`pushed`/`failed`
+(additive; not a failure).
+The import re-runs the contract over what it writes, because the values it has
+just copied from Wave are not the ones the stored problems describe. It writes
+a NESTED `wave` map: `set(..., {merge: true})` masks a nested object at its
+leaves — so it merges per key and cannot erase a sibling — and does not parse a
+dot as a field path, so a dotted key there would create a literal
+`wave.syncState` field and leave the real one untouched.
+Replay the contract over production read-only with
 `functions/scripts/audit-wave-contract.js`. Design:
-`docs/plans/2026-08-30-wave-validated-contract-design.md`.
+`docs/archive/2026-08-30-wave-validated-contract-design.md`; Phases 2-4 plan:
+`docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`.
 
 **Exactly three Cloud Scheduler jobs, and that is deliberate** — only 3 are free
 per billing account. `sendOverdueJobPrompts` (was `every 15 minutes`) is merged
@@ -441,7 +426,16 @@ of `PASSWORD_ALPHABET` so a mint carries exactly ONE symbol — the admin
 dictates the value aloud — and the set avoids bracket pairs, dash/underscore
 confusion and URL- or shell-significant glyphs. It is drawn **once per call** and handed to whichever
 path runs — new account or re-provision — so the value echoed back is always the
-value Auth was actually set to. The duplicate lookup and the doc write share one
+value Auth was actually set to. The whole call runs under a durable
+`accountOperations/{email_<sha256(email)>}` lock (`withAccountOperation`,
+`account_operation.js`), so a losing duplicate request is refused
+(`aborted / account-operation-in-progress`) BEFORE it can mint Auth and roll
+back an account another request claimed; provisioning and the reset then take a
+second lock keyed by the uid. Lock docs have no TTL on purpose — Auth cannot
+check a fencing token, so a terminated invocation leaves one for an operator to
+delete rather than risk overlapping writers (a failed release is
+`logger.error`-ed). `getUserByEmail` rethrows anything but
+`auth/user-not-found`. The duplicate lookup and the doc write share one
 transaction, so two admins creating the same person can't both win.
 
 **No role is read off the payload** (2026-08-21): the doc is always written
@@ -468,10 +462,11 @@ email-exists` once the person has finished setup, resolving the target **by
 `uid`, not by email** (`users.email` is admin-editable and never synced back to
 Auth, so an email-only check can clear a doc that is not the account Auth hands
 back). The rotation itself is deferred to `resetProvisionedPassword`, which runs
-only after the transaction has claimed the person as still-`invited` — that
-**narrows** the window in which a concurrent setup gets its chosen password
-reverted, but cannot close it, since the Auth call sits outside both
-transactions.
+only after the transaction has claimed the person as still-`invited`. Both
+re-provisioning and setup hold the same durable per-UID operation lock across
+Firestore and Auth calls. Re-provisioning marks `setupRequiresPassword` before
+resetting Auth, preventing an older setup client from activating afterward.
+
 
 If the Firestore write fails after the Auth account was created, the Auth
 account is deleted — but only if *we* just minted it. **A rollback that itself
@@ -509,18 +504,17 @@ removed only because the starting password became a random per-account secret in
 the same change. Don't re-derive it from an old copy of this page, and don't drop
 a comparable check elsewhere on the strength of this precedent alone.
 
-**The caller must have already changed the password.** The server cannot see a
-password, so "you must replace the starting password" is true only because
-`AuthService.completeAccountSetup` calls `User.updatePassword` first and this
-callable is unreachable until that succeeds. Swap the order and an interrupted
-setup leaves an *active* account still on the password the admin read out.
-Nothing server-side verifies the rotation happened — and that is still true
-after 2026-08-21, when the app gained
-`AuthService._refuseIfStillTheStartingPassword`: it reauthenticates with the
-typed password and refuses when that SUCCEEDS (proving it is unchanged), which
-stops an employee retyping what the admin gave them, but it runs on the CLIENT.
-A caller reaching this callable directly still activates an un-rotated account,
-with `enforceAppCheck: true` the only thing in the way.
+**The current app sends `newPassword` to the callable** (optional key, at most
+128 chars). It validates the password (8+ chars with an uppercase, a lowercase
+and a digit, else `invalid-argument / invalid-newPassword`), writes it through Auth while holding `accountOperations/{uid}`, then
+activates the invitation. The app subsequently reauthenticates to renew its
+refresh credential. Passwords are neither persisted in Firestore nor logged.
+The existing client check still refuses reusing the current credential.
+
+Legacy requests without `newPassword` remain accepted for untouched invitations.
+After re-provisioning sets `setupRequiresPassword`, they fail with
+`setup-upgrade-required`. This closes the race with an older app's direct Auth
+password update without making the new payload universally required.
 
 The patch is built by the pure `buildActivationPatch`: it stamps
 `termsAcceptedAt`/`locationConsentAt` **only when the flags are actually sent
@@ -638,6 +632,38 @@ too. Tapping it just opens the calendar (`_handlePushTap` treats a missing
 guarantee**: an employee with no live FCM token learns when their old address
 stops signing them in, so the admin should still tell them directly.
 
+### `resetEmployeePassword` — `employee_accounts.js`
+Admin-only. Resets an ACTIVE employee's password (their email is not a real
+inbox, so Forgot password cannot help). Guard order auth → `assertAdmin` →
+payload (`docId` only, `/` rejected) → durable 20/hr per admin uid → work.
+Refuses the caller's own account (`failed-precondition / self-reset`) and a doc
+that is missing, has no `uid` or is not `active` (`failed-precondition /
+not-active`) — invited accounts keep the pending-row Reset, disabled ones stay
+locked out. Under the `accountOperations/{uid}` lock: a transaction re-checks
+`active` + the same `uid` and writes `passwordResetRequired: true`; THEN
+`auth.updateUser` with a `generateStartingPassword()` value; THEN
+`revokeRefreshTokens` (signed out everywhere at the next token refresh). A
+failure after the flag leaves it set — the worst case is a forced change of a
+password that did not change; a revoke failure after the password changed logs
+`logger.error` and still returns the credentials (the password is already set,
+and `updateUser` with a password already invalidates sessions). Returns `{email, password}` in
+`createEmployeeAccount`'s shape; logs only `shortHash(uid)`, never the password.
+
+### `completePasswordReset` — `employee_accounts.js`
+Self-service. Opens with `assertActiveCall(req, {newPassword})`, then
+`requireString(newPassword, 128)` and the shared `isStrongPassword` (8+, `\p{Lu}`,
+`\p{Ll}`, a digit) BEFORE the durable 5/15 min limiter, so a malformed payload
+burns no slot. Under the `accountOperations/{uid}` lock it requires exactly one
+`active` users doc for the caller with `passwordResetRequired === true`
+(`failed-precondition / not-required` otherwise, which the app treats as
+"already done"), sets the password via `setSetupPassword` (Auth policy refusals
+→ `invalid-argument / invalid-newPassword`), then clears the flag in a
+transaction that re-checks `active` + the same `uid` (a doc disabled mid-change
+keeps its flag and the call is `not-required`). Auth first, flag second: a flag
+clear that fails after the password landed is retried by the person and
+converges. The app refuses the temporary password itself before calling
+(`AuthService._refuseIfStillTheStartingPassword`). Returns `{ok: true}`.
+
 ## Maps / Places proxies
 
 ### `searchClients` — `indexed_search.js`
@@ -645,7 +671,14 @@ Server-side client search, replacing a capped client-side scan. Queries
 `clients.searchTokens` with `array-contains-any` over at most 10 query tokens,
 reads `SEARCH_READ_LIMIT` (**200**, `orderBy("name")`) and warns at the cap,
 re-verifies each hit with `recordMatchesQuery` against the full stored
-document, ranks and returns 25. **Admin-only** via
+document, ranks and returns 25. **Optional filters (2026-09-23):** `archived`
+(boolean), `type` (`residential`/`commercial`/`building`) and `buildingKey`
+are ANDed on as equality `where`s; `type` + `buildingKey` together, a
+non-boolean `archived` or an unknown `type` is `invalid-argument /
+invalid-client-filter`. Adding keys to the allowlist is non-breaking. The
+filtered shapes are served by three of the nine new client composites
+(`archived` [+ `type`|`buildingKey`] + `searchTokens` + `name`), which must be
+READY first. **Admin-only** via
 `assertAdminCall`: clients are PII, and the old scan was already admin-gated by
 the rules it read through. The prefilter/verify split is load-bearing — a prefix
 token matches strictly more than the query does, so returning the raw token hits
@@ -926,6 +959,23 @@ wrong-role or tokenless employee cost a 200-doc query and a full widget-payload
 build/JSON encode every day for a send that returns 0. Both reads land in the
 same per-run cache, so asking costs nothing extra.
 
+### The month-end overdue review — `notification_sweeps.js` (rides `sendDailyJobDigest`)
+**Not its own export** (2026-09-13). `runMonthEndOverdueReview` is rider 3, in
+its own `try/catch` after the TTL prune and BEFORE `runWaveDaily`, because all
+riders share the 540 s timeout. It does nothing unless `isLastDayOfBusinessMonth`
+(business-local calendar-day arithmetic). On that day it reads open jobs with
+`endTime <= now`, `endTime` DESC, capped at `MONTH_END_SCAN_MAX` (5000 raw rows)
+with a warn — served by the existing `(status ASC, endTime DESC)` composite, so
+no new index — and counts `selectMonthEndOverdue` (every age; personal, time off
+and unparseable `endTime` excluded). Zero sends nothing; past
+`MONTH_END_REVIEW_MAX` (1000) the count reads `1000+`, and a scan that hit its
+own cap reads `N+`. The caps are separate because personal blocks and time off
+never close and would otherwise fill the reported number. The push goes to active admins whose users doc carries
+`monthEndReviewPush === true`, filtered from the docs `sendToActiveAdmins`
+already reads, with data `{kind: "overdueReview", count}` and no
+`appointmentId`; it logs `monthEndReview: sent` with the recipient count. No
+ledger. The export count is unchanged.
+
 ### The overdue sweep — `notifications.js` (rides `sendUpcomingJobReminders`)
 **Not its own export.** `sendOverdueJobPrompts` was a standalone `every 15
 minutes` scheduler until 2026-08-13; it is now `runOverduePromptSweep`, called
@@ -975,9 +1025,14 @@ sweep's budget either.
 `users/{id}` write trigger that mirrors each user into `usersByUid/{uid}` so
 security rules can resolve a caller's role from their auth uid alone (rules can
 only `get` by full path, and `users` docs use generated ids). Suppresses the
-bridge for `invited` users (no uid yet) and unknown statuses; handles uid
-rotation (stale delete + new set in one batch). `retry: true` — all writes are
-absolute, so retries converge.
+bridge for `invited` users (no uid yet) and unknown statuses. **Since 2026-09-23
+the bridge is reconciled from the LIVE profile, not the event snapshots**
+(`reconcileBridge`, `bridge_reconcile.js`): one transaction reads `users/{id}`
+plus the `usersByUid` rows for the event's before/after uids and the current
+uid, then sets, deletes or leaves each, so a delayed or reordered event cannot
+resurrect a stale bridge; a row owned by a different profile is never deleted by
+this one, and a live uid owned by another profile throws (retried). `retry:
+true` — all writes are absolute, so retries converge.
 
 It also owns **deactivation enforcement**, all of it strictly after the
 auth-critical bridge write and each step independently idempotent: leaving
@@ -988,7 +1043,11 @@ subcollections (`recursiveDelete`, so >500 rows can't fail partway), and the
 `auth/user-not-found` is swallowed — `deleteAccount` removes the Auth user
 before the Firestore doc, so the trigger's later revoke is a no-op rather than a
 retry loop. Without this the rules' `status == 'active'` gates would still be
-reachable with a stale credential.
+reachable with a stale credential. Auth writes cannot join the transaction, so
+`reconcileAuthAccess` re-reads the profile after each one and repeats (up to 3
+attempts, then throws so the event retries) when `uid` or `status` moved
+meanwhile; it skips an `invited` profile and a uid whose bridge row belongs to
+another profile.
 
 Deactivation used to additionally **rotate the Storage download tokens** on
 every photo of every appointment the person was assigned to
@@ -1003,13 +1062,14 @@ with **no auth and no `storage.rules` evaluation**, so revoking the credential
 did not reach the links already on that person's device. The app no longer mints or stores one, the
 subcollection rules now REJECT the field, and the prod count of legacy rows
 that still carried one came back **zero** (2026-08-22,
-`scripts/count-legacy-image-urls.js`), so there is nothing left for a rotation
+`scripts/count-legacy-image-urls.js`, deleted 2026-09-28), so there is nothing left for a rotation
 to invalidate — photos are fetched through the SDK, where this branch's status
 flip is the gate. Two things that does NOT cover: a URL captured under an older
 build is still live on its object unless someone rotates it by hand, and the
 `pictures[]` arrays themselves are cleared by
-`scripts/clear-appointment-picture-arrays.js`, which is step 4 of the runbook
-in `docs/DEPLOYMENT.md` and is the irreversible one.
+`scripts/clear-appointment-picture-arrays.js` (deleted 2026-09-28; in git
+history), which was step 4 of the runbook in `docs/DEPLOYMENT.md` and the
+irreversible one.
 
 The bridge's pure rules live in `bridge_policy.js` (`shouldHaveBridge`,
 `bridgeBody`, `bridgeMatches`, `classifyBridgeRow`), shared with
@@ -1040,6 +1100,27 @@ wrong, and each was hand-copied (and had drifted) before it was extracted:
 
 ## Client → appointment propagation
 
+### `syncClientBuilding` — `client_buildings.js`
+`clients/{clientId}` write trigger (`retry: true`, no secrets) that maintains
+the building catalog behind the clients list's Building filter:
+`clientBuildingMemberships/{clientId}` (`{key}`) and `clientBuildings/{sha256(key)}`
+(`{key, street, city, clientCount}`). It reconciles from the LIVE client doc and
+the stored membership inside one transaction, never from event deltas, so
+duplicate or out-of-order delivery and a backfill running beside it cannot
+double-count. An archived client belongs to no building; a summary reaching 0 is
+deleted. Each run also stamps the projection the filtered queries need onto the
+client doc — `buildingKey` (`''` when none; mirrors Dart `buildingKeyFor`), a
+boolean `archived`, and a trimmed `type` — because a Firestore equality filter
+excludes docs missing the field. **Early-returns with no transaction** when
+`archived`, the building key and the projection already agree (Wave state or
+`jobCount` edits, and its own projection write re-firing once). Rules:
+`clientBuildings` is admin-read only, clients may not write
+`buildingKey`/`deletionToken`, and the membership collection has no grant (Admin
+SDK only). Needs the nine new `clients` composites READY, and
+`scripts/backfill-client-buildings.js` (rerunnable; `--dry-run` reads only) for
+existing docs. **NOT YET DEPLOYED**; see
+[audit rollout](audits/AUDIT_ROLLOUT_2026-09-23.md).
+
 ### `propagateClientEdits` — `client_propagation.js`
 `clients/{id}` update trigger that propagates a client's edited `clientName` /
 `clientPhone` / `address` to that client's **future** appointments (history is
@@ -1060,16 +1141,36 @@ edit. **Deployed** (verified live 2026-07-10).
 `appointments/{id}` write trigger that maintains the denormalized `jobCount` on
 the client doc. Recomputes with a `count()` aggregate and writes the value
 **absolutely** — never `FieldValue.increment`, because `retry: true` means a
-retried event would double-count. Fires only when `clientId` actually changes
-(create, delete, reassignment), so an ordinary title or time edit costs zero
-reads; personal jobs carry no `clientId` and are skipped. Writes with `update()`
+retried event would double-count. Fires when `clientId` changes (create,
+delete, reassignment) **or when the job's cancelled-ness flips with `clientId`
+unchanged** (2026-09-11) — cancelling leaves `clientId` alone, so without that
+branch a cancellation left the client one job too many until some unrelated
+reassignment. The gate is cancelled-ness, not "status changed", so an ordinary
+`pending → done` or title/time edit still costs zero reads; personal jobs carry
+no `clientId` and are skipped. Writes with `update()`
 rather than `set({merge: true})` so a client removed out-of-band is never
 resurrected as a count-only stub, and swallows Firestore `NOT_FOUND` for the same
-case. The pure `clientsToRecount(before, after)` is exported for jest. Served by the
-`(clientId ASC, dayIndex ASC)` composite — the run subtraction is a second
-`count()` over `dayIndex > 1`, which the automatic single-field index on
-`clientId` cannot serve. That index is deployed and LIVE; do not delete it.
-**Deployed 2026-08-01** (`16332b3`).
+case. The pure `clientsToRecount(before, after)` is exported for jest.
+
+**The count is FOUR `count()` aggregates, run in parallel, owned by the exported
+`countJobsFor(db, clientId)`**: total − run days after the first (`dayIndex > 1`)
+− cancelled + cancelled run days after the first. The fourth term is the
+inclusion-exclusion correction, not a guard — one live and one cancelled 5-day
+run is −3 without it, where the answer is 1. Cancelled is SUBTRACTED rather than
+filtered to a live-status allowlist, so a legacy or status-less doc still
+counts; a console-written `"Cancelled"` still counts too, since a `where` cannot
+lowercase. `scripts/recount-client-jobs.js` (the backfill for clients whose
+count predates the change) imports `countJobsFor`, so the script cannot disagree
+with the trigger. Served by two composites: `(clientId ASC, dayIndex ASC)` for
+the run subtraction and `(clientId ASC, status ASC, dayIndex ASC)` for the
+cancelled run days — the automatic single-field index on `clientId` serves
+neither. Both are LIVE (the second, `CICAgNiZnYEK`, `READY` since 2026-09-12),
+and the second must stay ahead of this function, because `retry: true` turns a
+missing index into a redelivery loop. The equality-only `clientId ==` +
+`status ==` count needs no third composite: merging the single-field indexes
+serves it, proven by the 2026-09-13 prod recount. **Deployed:** the two-term
+version 2026-08-01 (`16332b3`), the cancelled-job change 2026-09-13
+(`38c8225b`).
 
 A booking batch can land up to 16 writes carrying one `clientId` at once (a
 multi-day run's day-documents, a repeat series' occurrences), so those are
@@ -1092,9 +1193,17 @@ Delete button) was retired 2026-08-08, closing the orphaning hole; see
 docs/DEPLOYMENT.md. The callable exists because rules cannot express
 "only when this client has
 no appointments" — there is no cheap way to count a foreign collection there.
-Refuses with `failed-precondition / client-has-history` when a **live `count()`
-aggregate** over `appointments where clientId == …` returns non-zero, and with
-`not-found` when the doc is already gone. The count is deliberately NOT the
+**It takes a barrier first (2026-09-23):** a transaction stamps a random
+`deletionToken` on the client doc (`not-found` if it is gone), which
+`firestore.rules` reads — client updates are refused while it is set, and an
+appointment create or `clientId` change to that client fails `canLinkClient`
+— so no booking can land between the count and the delete. It then refuses with
+`failed-precondition / client-has-history` when a **live `count()` aggregate**
+over `appointments where clientId == …` returns non-zero; otherwise a second
+transaction deletes only if the token is still its own (`aborted /
+client-delete-superseded` if a later attempt took over). Any failure releases
+the barrier (a further transaction, again only if still the owner). Cost: 2–3
+transactions plus the count, up from one get, count and delete. The count is deliberately NOT the
 denormalized `jobCount`: that field is lazily backfilled by `recountClientJobs`,
 so it can be stale, missing, or wrong on a client whose appointments were
 reassigned out-of-band — deleting on a stale zero is exactly the orphaned-history
@@ -1204,15 +1313,14 @@ a higher ceiling than the write callables because this one is called on every
 Settings mount, but it is a limiter like all the rest, so don't "fix the gap"
 by adding a second one.
 
-### `waveSetImportSchedule` — `wave/callables.js`
-Admin-only setter for the automatic-import cadence — writes the `importSchedule`
-field (`off` | `weekly` | `monthly`) on `wave/connection`. Validates the value
-against the shared `SCHEDULE_SET` (the membership form of `SCHEDULE_VALUES`,
-owned beside it in `import_schedule.js`) and requires an already-bootstrapped
-connection. No secret. **Durably rate-limited at 20/hour per admin uid** (added
-2026-08-04) — every other admin write callable is, and the audit flagged this as
-the lone exception. The limiter sits AFTER the payload validation so a burst of
-malformed submissions can't exhaust a legitimate caller's window.
+### `waveSetImportSchedule` — `wave/callables.js` (RETIRED, `#compat-1.61.0`)
+The automatic-import cadence was deleted 2026-09-13 (Wave Phase 4, Task 12).
+This stays deployed only because the 1.61.0 app still calls it from its Settings
+picker: it opens with `assertAdminCall` over the `schedule` key, ignores the
+value, logs `WAVE-SCHED ignored a retired cadence call` and returns
+`{schedule: "off"}` — no read, no write, no rate limit. Removing it is a
+callable deletion under `docs/DEPLOYMENT.md` §4a, due once that log line has
+gone quiet and no build at or below 1.61.0 remains.
 
 ### `waveImportCustomers` — `wave/callables.js`
 Admin **two-way** sync behind Settings › "Sync with Wave" (2026-08-04). The
@@ -1235,12 +1343,15 @@ field of a linked client with Wave's values *and* stamps `wave.lastSyncedHash`
 from them, so a client edit still in the outbox is not just overwritten — it is
 marked synced, and the pending job then hashes the clobbered doc, matches, and
 no-ops. The drain is bounded and its query only takes jobs already due, so a job
-backed off after a transient Wave error survives it. Both this callable and
-`runWaveDaily` therefore pass `importCustomers` a `skipClientIds` set
-from `listOutstandingClientIds` (`wave/worker.js`, covering `queued` and
-`inflight`); skipped clients are counted as `skippedPending`. The set is
-injected rather than read inside `wave/customers_import.js` because `worker.js`
-already requires that module and reaching back would close a cycle.
+backed off after a transient Wave error survives it. So every update to an
+existing client is guarded transactionally (Wave Phase 4, Task 11):
+`commitGuardedUpdates` (`wave/customers_import.js`) reads that client's
+`customerUpsert__<id>` job inside the write's own transaction and skips the
+write while it is `queued`, `inflight` or `dead`, counting it as
+`skippedPending` — as it does a failed transaction, so the watermark is held.
+This callable still passes `skipClientIds` from `listOutstandingClientIds`
+(`wave/outbox_queries.js`, re-exported by `wave/worker.js`), but only as a
+prefilter that saves a transaction per known-pending client.
 
 The push half is **best-effort and bounded** — `SYNC_PUSH_BATCH_LIMIT` (20) and
 `SYNC_PUSH_BUDGET_MS` (20 s), with the `waveUpsertCustomer` trigger having
@@ -1261,7 +1372,7 @@ up to date": `pushedPending` is a `count()` of still-queued jobs taken AFTER the
 drain, `pushedFailed` is `drained.dead` (dead-lettered jobs aren't `queued`, so
 the pending count misses them and they never retry), and `pushIncomplete` flags
 a drain or count that threw. The two success counts come from `drainQueue`'s
-`created`/`updated`, which `tallyUpsert` (`wave/worker.js`) folds from each
+`created`/`updated`, which `tallyUpsert` (`wave/dispatch.js`) folds from each
 `upsertCustomer` status; `linked` counts as an update, not a create, because
 that path patches a customer a crashed earlier attempt had already created.
 
@@ -1315,10 +1426,9 @@ The watermark lives on `wave/connection` (`customerDeltaSince`,
 `lastFullImportAt`) and `importCustomers` (`wave/customers_import.js`) stays
 stateless about it. The whole
 read → decide → import → advance sequence has **one owner**,
-`importWithWatermark` in `wave/sync_run.js`, used by both the interactive sync
-and the daily `runWaveDaily`; the decisions are the pure `resolveImportWindow` /
-`watermarkPatch` in `wave/import_schedule.js`, placed beside `isImportDue`
-because the two cadences interact.
+`importWithWatermark` in `wave/sync_run.js`, used by the interactive sync; the
+decisions are the pure `resolveImportWindow` / `watermarkPatch` in
+`wave/import_schedule.js`.
 
 - **The watermark is the run's START minus `DELTA_OVERLAP_MS` (5 min).** From
   the end, it would drop anything edited mid-run; without the overlap, anything
@@ -1334,8 +1444,7 @@ because the two cadences interact.
 - **A delta-only failure retries once as a full import.** Otherwise a bad
   `modifiedAtAfter` is sticky: the watermark stays put, every interactive sync
   rebuilds the same failing query, and nothing self-heals until the 7-day
-  resync ages the window out — while the scheduled path keeps working, so the
-  breakage is admin-facing only.
+  resync ages the window out.
 - **A failed watermark WRITE is logged, not thrown.** The import already
   committed; failing there would report a successful sync as an error and throw
   away the push counts the notice exists to surface.
@@ -1343,10 +1452,7 @@ because the two cadences interact.
   deletes — the import has never deleted a local client and still doesn't, so a
   customer removed in Wave keeps its doc either way. It is a backstop for
   `modifiedAt` itself: we are trusting Wave to bump it for every field we map
-  and cannot verify that. Note this interval is shorter than both import
-  cadences, so a scheduled run whose last full pass was a cadence ago goes full
-  — in practice the delta mostly benefits the interactive sync, which is
-  accepted.
+  and cannot verify that.
 - **A watermark ahead of now is refused**, not honoured — otherwise a clock or
   data fault makes every subsequent run import nothing, forever.
 
@@ -1380,6 +1486,14 @@ after the enqueue commits. Two properties are load-bearing:
   which re-fires this trigger — but `mappedFieldsHash` is unchanged by that
   write, so `shouldEnqueueClientWrite` returns false at the top and the re-fire
   never reaches the drain.
+- **It clears a stale block on the no-enqueue path** (audit B1, 2026-09-19).
+  Rule 2 skips a write whose mapped fields equal `wave.lastSyncedHash`, which
+  also skipped the one write that should UNBLOCK a client: editing a `blocked`
+  client back to what Wave already holds. `isBlockedRevertToSynced` catches
+  that case and `clearStaleBlock` re-runs the contract and writes the verdict
+  with `syncState: synced`; a revert that still fails the contract writes
+  nothing. The clear's own re-fire exits on both predicates — the hash is
+  unchanged and the doc is no longer `blocked`.
 
 A disconnected install still enqueues (the outbox is durable) but does not
 drain; the connection gate is the cached `readWaveBusinessIdCached`, which is
@@ -1435,7 +1549,7 @@ The general shape to watch for: this callable can only help a job whose failure
 was about the *moment*, never one about the *payload* — anything permanent has
 to be healed at the source or it comes straight back.
 
-Related: `listOutstandingClientIds` (`wave/worker.js`) protects `queued`,
+Related: `listOutstandingClientIds` (`wave/outbox_queries.js`) lists `queued`,
 `inflight` **and `dead`** client ids from being overwritten by an import — a
 dead job's edit is the one *most* at risk, because unlike the other two it will
 not self-heal without this callable.
@@ -1443,11 +1557,11 @@ not self-heal without this callable.
 ### `runWaveDaily` — `wave/triggers.js` (rides `sendDailyJobDigest`)
 **Not its own export.** `waveScheduledImport` was a standalone `every 24 hours`
 scheduler until 2026-08-13; the daily Wave maintenance is now `runWaveDaily`,
-rider 3 on `sendDailyJobDigest` — in its own `try/catch`, strictly after the
+rider 4 on `sendDailyJobDigest` — in its own `try/catch`, strictly after the
 digest has sent, which is the whole safety argument for merging. Same cost
 reasoning as the overdue sweep: it is one of the two merges that took Cloud
 Scheduler from six jobs to three. The host binds `WAVE_FULL_ACCESS_TOKEN` and
-carries the 540 s timeout this work needs on its own.
+carries a 540 s timeout sized for the import this rider no longer runs.
 
 Its `connection` read is inside a try (2026-09-01). That was the one `await`
 here outside one, so the "never throws" contract in its own docstring was not
@@ -1455,27 +1569,14 @@ true on its own terms: a transient `unavailable` there rejected out of a rider
 whose HOST had already finished its real work. The caller's catch is
 belt-and-braces and stays.
 
-It does two things, and the first runs unconditionally.
+It does one thing: **it drains the outbox (app → Wave)**, in its own try/catch.
+This is the safety net under the event-driven push above, and it exists because
+two states cannot produce a client write to ride on: a job that failed and is
+sitting on its `nextAttemptAt` backoff, and a job left `inflight` by an instance
+that died mid-dispatch (reclaimed by `drainQueue`'s lease pass). Bounded to a
+180 s slice.
 
-**1. Drains the outbox (app → Wave), always** — before the cadence check, in its
-own try/catch. This is the safety net under the event-driven push above, and it
-exists because two states cannot produce a client write to ride on: a job that
-failed and is sitting on its `nextAttemptAt` backoff, and a job left `inflight`
-by an instance that died mid-dispatch (reclaimed by `drainQueue`'s lease pass).
-**It runs even when `importSchedule` is `off`** — that setting governs the PULL,
-and `off` is the default, so gating the push on it would mean a default install
-never pushes automatically at all. Bounded to a 180 s slice so the import below
-still has budget.
-
-**2. Pulls (Wave → app), only when the cadence is due** — `isImportDue` in
-`wave/import_schedule.js`, a pure jest-testable helper (`off` or any unknown
-value never runs). Server-triggered, so no App Check / rate limit. A due run
-stamps `lastAutoImportAt`; a failed run leaves it unchanged so the next day
-retries.
-
-The order is also the push-before-pull invariant: an import overwrites every
-mapped field of a linked client AND stamps `wave.lastSyncedHash` from Wave's
-values, so an un-pushed local edit underneath it is not merely overwritten but
-marked *synced* — silently lost. It passes the same `skipClientIds` protect-list
-as `waveImportCustomers`, read AFTER the drain so a job the drain completed is
-not protected for nothing while anything it could not finish still is.
+**It no longer pulls.** The weekly/monthly import it ran when `importSchedule`
+was due was deleted 2026-09-13 (Wave Phase 4, Task 12) together with the
+cadence, which production had `off`. The pull runs only from
+`waveImportCustomers`.

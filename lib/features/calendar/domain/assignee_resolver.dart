@@ -79,25 +79,32 @@ enum AssigneeOfferState {
   /// No clash — an ordinary tappable chip.
   free,
 
-  /// A clash, and they are not on the job: dimmed, not tappable.
+  /// On another job, not this one: tappable; Save asks before double booking.
+  booked,
+
+  /// Off that day, and not on the job: dimmed, not tappable.
   unavailable,
 
   /// A clash, but already assigned and still tappable.
   onTheJob,
 }
 
-/// Returns whether [employeeId] is free, unavailable, or already on this job.
+/// Returns how the picker offers [employeeId], given each assignee's [clashes].
 AssigneeOfferState assigneeOfferState({
   required String employeeId,
-  required Set<String> clashingIds,
+  required Map<String, AppointmentRecord> clashes,
   required Set<String> selectedIds,
   required Set<String> alreadyAssignedIds,
 }) {
-  if (!clashingIds.contains(employeeId)) return AssigneeOfferState.free;
-  return selectedIds.contains(employeeId) ||
-          alreadyAssignedIds.contains(employeeId)
-      ? AssigneeOfferState.onTheJob
-      : AssigneeOfferState.unavailable;
+  final clash = clashes[employeeId];
+  if (clash == null) return AssigneeOfferState.free;
+  if (selectedIds.contains(employeeId) ||
+      alreadyAssignedIds.contains(employeeId)) {
+    return AssigneeOfferState.onTheJob;
+  }
+  return clash.isTimeOff
+      ? AssigneeOfferState.unavailable
+      : AssigneeOfferState.booked;
 }
 
 /// Short display name, disambiguated by last initial when first names repeat.

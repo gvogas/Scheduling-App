@@ -59,7 +59,55 @@ iOS notes (Phase 0 of clean-architecture restructure):
   unchanged — `main()` still awaits the send before `runApp`.
   `ios/Flutter/AppFrameworkInfo.plist` no longer pins `MinimumOSVersion`; the
   18.0 floor lives on the Xcode targets, which is the only place it was ever
-  enforced.
+  enforced. The same method captures the messenger into `FlutterMessengers`
+  and registers `CarPlayBridge` on it, beside the native-config channel — see
+  below.
+- **CarPlay (`ios/Runner/CarPlay/`, Runner target, not a new extension) is a
+  native scene, not a Flutter surface.** `Info.plist`'s
+  `UIApplicationSceneManifest` adds `CPTemplateApplicationSceneSessionRoleApplication`
+  as a SIBLING array inside `UISceneConfigurations`, alongside the existing
+  `UIWindowSceneSessionRoleApplication` entry — that Flutter/`FlutterSceneDelegate`
+  entry is byte-for-byte untouched, and `UIApplicationSupportsMultipleScenes`
+  stays `false` (it governs iPad multi-window, not CarPlay; committed plists
+  from shipping CarPlay apps back this over Apple's own prose, which is
+  ambiguous on whether the one-scene-per-role limit applies across roles).
+  The new array's `UISceneDelegateClassName` MUST carry the
+  `$(PRODUCT_MODULE_NAME).` prefix (`$(PRODUCT_MODULE_NAME).CarPlaySceneDelegate`)
+  — a bare Swift class name doesn't resolve from a plist, and the failure is
+  silent: the scene simply never connects, with nothing logged.
+  - **The entitlement now lives in `Runner.entitlements`, and the two-file
+    gating scheme is RETIRED** (2026-09-10). The capability was enabled on the
+    `net.vogas.scheduling` App ID, Xcode regenerated the profiles, a device
+    build signed against "iOS Team Provisioning Profile: net.vogas.scheduling"
+    carrying the key, and `RunnerCarPlay.entitlements` was deleted.
+    **Under AUTOMATIC signing the documented order is impossible**: Xcode only
+    requests an entitlement it can already see in the entitlements file, so
+    "refresh profiles, then move the key" deadlocks. The order that works is
+    App ID capability → move the key → build to a device with
+    `-allowProvisioningUpdates`. Still unproven: **distribution** signing —
+    the Mac this ran on holds only an Apple Development certificate, so
+    archive once before shipping.
+  - **Simulator CarPlay needs no Apple grant, and you must NOT hand-sign the
+    entitlement in.** `codesign --entitlements` over a built simulator app to
+    add the CarPlay key makes SpringBoard refuse the launch outright
+    (`SBMainWorkspace` denial); it is that one key, with app-groups and
+    get-task-allow launching fine alone. Build against the entitlements file
+    instead. The `Info.plist` scene manifest is what registers the app on the
+    CarPlay dashboard.
+  - **Row anatomy is role-symmetric except the avatar** (2026-09-10). Both
+    roles lead the row text with the 12-hour time; only an ADMIN gets an image
+    (the crew avatar). The technician time tile was deleted — the time moved
+    into the text, so a tile would repeat it. An all-day block shows NO clock
+    time anywhere (its start is midnight): `CarPlayStrings.startedAt` returns
+    `String?` so the Now header cannot say "Started 12:00 AM", and the
+    detail's When row drops any tail that would only name the start time.
+  - **CarPlay reads the App Group `schedule_snapshot`, never the Flutter
+    engine.** It must render with no engine, no Firestore and no network —
+    that absence of a live dependency is what makes it safe to add to a
+    shipping app; the method channel it also holds is a freshness
+    optimisation on top, not a requirement to render. See
+    `.claude/rules/notifications.md` for the shared payload (now schema v4)
+    and `docs/ARCHITECTURE.md` for the two-path design.
 - `Info.plist` already declares `NSCameraUsageDescription`,
   `NSPhotoLibraryUsageDescription`, and `LSApplicationQueriesSchemes`.
 - **`NSLocationAlwaysAndWhenInUseUsageDescription` is declared on purpose even

@@ -127,8 +127,11 @@ and `--force` is banned here.
 
 ## Build & tooling failures
 
-- **A GitHub Actions run failed on push** — CI runs exactly four things:
-  `flutter analyze`, `flutter test`, `npm run lint`, `npx jest`. Reproduce with
+- **A GitHub Actions run failed on push** — CI runs `flutter analyze`,
+  `dart run tool/test.dart --coverage` (the sharded suite), `npm run lint`,
+  `npx jest` and the emulator rules smoke test. A test that fails only in the
+  sharded run is leaning on state another file left behind — see "Shard
+  isolation" in `.claude/rules/testing.md`. Reproduce with
   those locally before reading the log twice. If they are green locally, the
   difference is the workflow file itself — a bootstrap step referencing a
   deleted file, or a pinned `flutter-version` that differs from the local SDK.

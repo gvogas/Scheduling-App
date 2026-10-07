@@ -272,6 +272,46 @@ describe("upsertCustomer no-op", () => {
 // upsertCustomer — patch
 // ---------------------------------------------------------------------------
 
+describe("upsertCustomer contract refusal", () => {
+  test("a refused client is BLOCKED, never sent, and never dead-lettered",
+      async () => {
+        // Last line of defence. The enqueue gate refuses first, but a job
+        // queued before the edit — or claimed `inflight` when the edit landed
+        // — still arrives here holding a client Wave would refuse. Throwing
+        // WaveValidationError would dead-letter it permanently, which is the
+        // outcome this whole project exists to remove.
+        const ref = clientRef({...CLIENT, name: "", firstName: "",
+          lastName: "", type: "business"});
+        const graphql = jest.fn();
+
+        const result = await upsertCustomer("c1", {
+          db: upsertDb(ref), graphql, businessId: "biz-1", now,
+        });
+
+        expect(result.status).toBe("blocked");
+        expect(result.problems).toEqual([
+          {field: "name", code: "EMPTY", severity: "blocking", detail: null},
+        ]);
+        expect(graphql).not.toHaveBeenCalled();
+        expect(ref.updates).toHaveLength(1);
+        expect(ref.updates[0]["wave.syncState"]).toBe("blocked");
+      });
+
+  test("an ADVISORY problem still reaches Wave", async () => {
+    // Wave accepts it; refusing here would strand a client that syncs fine.
+    const ref = clientRef({...CLIENT, phone: "Contact Person"});
+    const graphql = graphqlSeq(createOk("wave-9"));
+
+    const result = await upsertCustomer("c1", {
+      db: upsertDb(ref), graphql, businessId: "biz-1", now,
+    });
+
+    expect(result.status).toBe("created");
+    expect(graphql).toHaveBeenCalled();
+    expect(ref.updates[0]["wave.syncState"]).toBe("synced");
+  });
+});
+
 describe("upsertCustomer patch", () => {
   test("linked + changed field → patch with id, no businessId", async () => {
     const data = {
@@ -868,12 +908,14 @@ function fakeBatch(log) {
  * existing docs, .doc() mints auto-id refs, and batches are recorded.
  * @param {!Array<Object>} existingDocs Pre-existing client docs (with .data /
  *   .ref).
- * @param {Object=} opts Connection options (`businessId`).
+ * @param {Object=} opts `businessId` for the connection, and `jobs` — outbox
+ *   job docs keyed by job id, read by the import's guarded transaction.
  * @return {!Object} `{db, batchLog, newRefs}`.
  */
 function importDb(existingDocs, opts = {}) {
   const batchLog = {sets: [], commits: []};
   const newRefs = [];
+  const jobs = opts.jobs || {};
   let autoId = 0;
   // This mirrors upsertDb — an explicit "" still needs to reach
   // readBusinessId as not-connected, so we only fall back to "biz-1" when
@@ -900,9 +942,17 @@ function importDb(existingDocs, opts = {}) {
         return clientsColl;
       }
       if (name === "wave") return waveColl;
+      if (name === "waveSyncQueue") return {doc: (id) => ({id})};
       throw new Error(`unexpected collection ${name}`);
     },
     batch: () => fakeBatch(batchLog),
+    // A guarded update lands in the same log as a batched one, so every
+    // assertion on `batchLog.sets` reads both write paths.
+    runTransaction: async (fn) => fn({
+      get: async (ref) => snap(jobs[ref.id] === undefined ?
+        null : jobs[ref.id]),
+      set: (ref, data, txOpts) => batchLog.sets.push({ref, data, opts: txOpts}),
+    }),
   };
   return {db, batchLog, newRefs};
 }
@@ -1015,6 +1065,28 @@ describe("importCustomers", () => {
         expect(batchLog.sets).toHaveLength(1);
         expect(batchLog.sets[0].ref).toBe(openRef);
       });
+
+  test("protects an edit queued AFTER the protect-list was read", async () => {
+    // The race a pre-read list cannot close: nothing was outstanding when it
+    // was read, then an edit enqueued mid-import. The write's own transaction
+    // reads that client's job and leaves the client alone.
+    const openRef = {id: "open-doc"};
+    const {db, batchLog} = importDb(
+        [{data: () => ({waveCustomerId: "w1"}), ref: openRef}],
+        {jobs: {"customerUpsert__open-doc": {status: "queued"}}},
+    );
+    const graphql = graphqlSeq(
+        listPage(1, 1, 1, [waveNode("w1", "Stale From Wave")]),
+    );
+
+    const summary = await importCustomers({
+      db, graphql, businessId: "biz-1", now, skipClientIds: new Set(),
+    });
+
+    expect(summary.skippedPending).toBe(1);
+    expect(summary.updated).toBe(0);
+    expect(batchLog.sets).toHaveLength(0);
+  });
 
   test("a delta run asks Wave to filter, and says it was a delta", async () => {
     const {db} = importDb([]);

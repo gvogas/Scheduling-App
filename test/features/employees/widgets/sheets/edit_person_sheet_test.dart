@@ -6,6 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
+import 'package:scheduling/core/notices/app_notice.dart';
+import 'package:scheduling/core/notices/notice_service.dart';
+import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/employees/application/employee_schedule_providers.dart';
@@ -13,6 +16,7 @@ import 'package:scheduling/features/employees/application/employees_providers.da
 import 'package:scheduling/features/employees/domain/employees_repository.dart';
 import 'package:scheduling/features/employees/domain/models/emergency_contact.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
+import 'package:scheduling/features/employees/domain/models/new_account_credentials.dart';
 import 'package:scheduling/features/employees/domain/policies/work_schedule_policy.dart';
 import 'package:scheduling/features/employees/widgets/sheets/edit_person_sheet.dart';
 import 'package:scheduling/l10n/l10n.dart';
@@ -63,10 +67,14 @@ void main() {
     int futureAssignments = 0,
     bool offline = false,
     double textScale = 1,
+    String? signedInUid = 'admin-uid',
+    NoticeService? notices,
   }) => ProviderScope(
     overrides: [
       employeesRepositoryProvider.overrideWithValue(repo),
       isOfflineProvider.overrideWithValue(offline),
+      authUidProvider.overrideWith((ref) => Stream<String?>.value(signedInUid)),
+      if (notices != null) noticeServiceProvider.overrideWithValue(notices),
       futureAssignmentCountProvider(
         employee.id,
       ).overrideWith((_) async => futureAssignments),
@@ -190,6 +198,23 @@ void main() {
 
     expect(find.text('Must be after start time'), findsOneWidget);
     verifyNoSave();
+  });
+
+  testWidgets('the test account switch is saved with the record', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(
+      wrap(const EmployeeRecord(id: 'e1', name: 'Theo', email: 'theo@x.com')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('testAccount')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(capturedSave().isTestAccount, isTrue);
   });
 
   testWidgets('picking a job title does not touch the admin toggle', (
@@ -354,9 +379,9 @@ void main() {
     tester,
   ) async {
     final toggleCompleter = Completer<void>();
-    when(() => repo.deactivateEmployee('e1')).thenAnswer(
-      (_) => toggleCompleter.future,
-    );
+    when(
+      () => repo.deactivateEmployee('e1'),
+    ).thenAnswer((_) => toggleCompleter.future);
 
     useTallViewport(tester);
     await tester.pumpWidget(
@@ -468,5 +493,252 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an admin gets the month-end reminder switch, and it saves', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(
+      wrap(
+        const EmployeeRecord(
+          id: 'e1',
+          firstName: 'Paul',
+          email: 'paul@example.com',
+          role: 'admin',
+          status: 'active',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('monthEndReviewPush')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(capturedSave().monthEndReviewPush, isTrue);
+  });
+
+  testWidgets('a non-admin never sees the month-end reminder switch', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(
+      wrap(
+        const EmployeeRecord(
+          id: 'e2',
+          firstName: 'Theo',
+          email: 'theo@example.com',
+          status: 'active',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('monthEndReviewPush')), findsNothing);
+  });
+
+  group('Reset password', () {
+    const teammate = EmployeeRecord(
+      id: 'e1',
+      name: 'Theo',
+      email: 'theo@x.com',
+      status: 'active',
+      uid: 'emp-uid',
+    );
+    const issued = NewAccountCredentials(
+      email: 'theo@x.com',
+      password: 'Tmp2pass!wd9',
+    );
+    final resetButton = find.byKey(const Key('resetPassword'));
+    Finder confirmButton() => find.descendant(
+      of: find.byType(AlertDialog),
+      matching: find.widgetWithText(FilledButton, 'Reset password'),
+    );
+
+    testWidgets('an active teammate offers Reset password', (tester) async {
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate));
+      await tester.pumpAndSettle();
+
+      expect(resetButton, findsOneWidget);
+    });
+
+    testWidgets('the signed-in admin gets no Reset on their own sheet', (
+      tester,
+    ) async {
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate, signedInUid: 'emp-uid'));
+      await tester.pumpAndSettle();
+
+      expect(resetButton, findsNothing);
+    });
+
+    testWidgets('an unknown signed-in uid hides Reset password', (
+      tester,
+    ) async {
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate, signedInUid: null));
+      await tester.pumpAndSettle();
+
+      expect(resetButton, findsNothing);
+    });
+
+    testWidgets('a person with no uid has no Reset password', (tester) async {
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate.copyWith(uid: '')));
+      await tester.pumpAndSettle();
+
+      expect(resetButton, findsNothing);
+    });
+
+    testWidgets('disabling the person in the sheet hides Reset password', (
+      tester,
+    ) async {
+      when(() => repo.deactivateEmployee('e1')).thenAnswer((_) async {});
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Disable employee'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.widgetWithText(FilledButton, 'Disable employee'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(resetButton, findsNothing);
+    });
+
+    testWidgets('a disabled person has no Reset password', (tester) async {
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate.copyWith(status: 'disabled')));
+      await tester.pumpAndSettle();
+
+      expect(resetButton, findsNothing);
+    });
+
+    testWidgets('an invited person has no Reset password here', (tester) async {
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate.copyWith(status: 'invited')));
+      await tester.pumpAndSettle();
+
+      expect(resetButton, findsNothing);
+    });
+
+    testWidgets('confirming issues and shows the temporary password', (
+      tester,
+    ) async {
+      when(
+        () => repo.resetEmployeePassword('e1'),
+      ).thenAnswer((_) async => issued);
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate));
+      await tester.pumpAndSettle();
+
+      await tester.tap(resetButton);
+      await tester.pumpAndSettle();
+      expect(find.text("Reset Theo's password?"), findsOneWidget);
+      await tester.tap(confirmButton());
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      verify(() => repo.resetEmployeePassword('e1')).called(1);
+      expect(find.text('Password reset'), findsOneWidget);
+      expect(find.text('Tmp2pass!wd9'), findsOneWidget);
+      expect(
+        find.text('New temporary password — the previous one no longer works'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('first time they sign in'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('cancelling the confirmation resets nothing', (tester) async {
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate));
+      await tester.pumpAndSettle();
+
+      await tester.tap(resetButton);
+      await tester.pumpAndSettle();
+      // The sheet header carries its own Cancel, so scope to the dialog.
+      await tester.tap(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.text('Cancel'),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      verifyNever(() => repo.resetEmployeePassword(any()));
+    });
+
+    testWidgets('a failed reset composes the reset-password notice', (
+      tester,
+    ) async {
+      final notices = NoticeService();
+      final seen = <AppNotice>[];
+      notices.stream.listen(seen.add);
+      when(() => repo.resetEmployeePassword('e1')).thenThrow(Exception('boom'));
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate, notices: notices));
+      await tester.pumpAndSettle();
+
+      await tester.tap(resetButton);
+      await tester.pumpAndSettle();
+      await tester.tap(confirmButton());
+      await tester.pumpAndSettle();
+
+      expect(seen.single, isA<NoticeError>());
+      expect(seen.single.message, startsWith("Couldn't reset the password"));
+    });
+
+    testWidgets('offline, the reset fails fast without the server', (
+      tester,
+    ) async {
+      final notices = NoticeService();
+      final seen = <AppNotice>[];
+      notices.stream.listen(seen.add);
+      useTallViewport(tester);
+      await tester.pumpWidget(wrap(teammate, offline: true, notices: notices));
+      await tester.pumpAndSettle();
+
+      await tester.tap(resetButton);
+      await tester.pumpAndSettle();
+      await tester.tap(confirmButton());
+      await tester.pumpAndSettle();
+
+      verifyNever(() => repo.resetEmployeePassword(any()));
+      expect(seen.single, isA<NoticeError>());
+    });
+
+    testWidgets('the footer survives 260 px at 2.0 text scale', (tester) async {
+      tester.view.physicalSize = const Size(260, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(wrap(teammate, textScale: 2));
+      await tester.pumpAndSettle();
+      // Lazy form: its extent grows as rows build, so jump until built.
+      final list = tester.state<ScrollableState>(
+        find
+            .descendant(
+              of: find.byType(ListView),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      for (var i = 0; i < 5 && resetButton.evaluate().isEmpty; i++) {
+        list.position.jumpTo(list.position.maxScrollExtent);
+        await tester.pumpAndSettle();
+      }
+
+      expect(resetButton, findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 }

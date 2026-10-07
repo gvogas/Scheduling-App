@@ -14,13 +14,16 @@ EmployeeRecord _employee(String id) => EmployeeRecord(
   name: 'Person $id',
   email: '$id@example.com',
   status: 'active',
+  locationSharingEnabled: true,
 );
 
-PresenceFix _fix(String id) => PresenceFix(
+final _now = DateTime(2026, 7, 8, 12);
+
+PresenceFix _fix(String id, {Duration age = Duration.zero}) => PresenceFix(
   userDocId: id,
   lat: 45.5,
   lng: -73.6,
-  updatedAt: DateTime(2026, 7, 8, 12),
+  updatedAt: _now.subtract(age),
 );
 
 ProviderContainer _container({
@@ -33,6 +36,11 @@ ProviderContainer _container({
   // as an error instead of respinning forever.
   retry: (retryCount, error) => null,
   overrides: [
+    liveMapClockProvider.overrideWith(
+      (_) =>
+          () => _now,
+    ),
+    liveMapTickProvider.overrideWith((_) => const Stream<int>.empty()),
     allPresenceStreamProvider.overrideWith(
       (_) => fixesError != null
           ? Stream<List<PresenceFix>>.error(fixesError)
@@ -80,6 +88,20 @@ void main() {
 
   test('both sources settled join into staff points', () async {
     final container = _container(fixes: [_fix('e1')], users: [_employee('e1')]);
+    addTearDown(container.dispose);
+    await _settle();
+
+    expect(
+      container.read(liveMapPointsProvider).requireValue.single.userDocId,
+      'e1',
+    );
+  });
+
+  test('a fix older than two hours is still a point on the map', () async {
+    final container = _container(
+      fixes: [_fix('e1', age: const Duration(hours: 3))],
+      users: [_employee('e1')],
+    );
     addTearDown(container.dispose);
     await _settle();
 

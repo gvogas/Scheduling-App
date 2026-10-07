@@ -69,23 +69,15 @@ class AuthService {
     final user = _auth.currentUser;
     if (user == null) throw const AuthFailureSessionExpired();
 
-    await _refuseIfStillTheStartingPassword(user, newPassword.trim());
-
-    try {
-      await user.updatePassword(newPassword.trim());
-    } catch (e, st) {
-      final failure = _mapSetupError(e);
-      _logger.authFailure(
-        'AUTH-SETUP completeAccountSetup: updatePassword failed',
-        failure,
-        e,
-        st,
-      );
-      throw failure;
-    }
+    await _refuseIfStillTheStartingPassword(
+      user,
+      newPassword.trim(),
+      label: 'AUTH-SETUP completeAccountSetup',
+    );
 
     try {
       await _employees.completeEmployeeSetup(
+        newPassword: newPassword.trim(),
         firstName: firstName.trim(),
         lastName: lastName.trim(),
         phone: phone.trim(),
@@ -103,13 +95,59 @@ class AuthService {
       );
       throw failure;
     }
+    await _renewSession(
+      user,
+      newPassword.trim(),
+      label: 'AUTH-SETUP completeAccountSetup: session renewal failed',
+    );
   }
 
-  /// Refuses a setup password that is still the admin-issued credential.
+  /// Replaces an admin-issued temporary password on an active account.
+  Future<void> completePasswordReset(String newPassword) async {
+    final user = _auth.currentUser;
+    if (user == null) throw const AuthFailureSessionExpired();
+    final password = newPassword.trim();
+    await _refuseIfStillTheStartingPassword(
+      user,
+      password,
+      label: 'AUTH-CHANGEPW completePasswordReset',
+    );
+    try {
+      await _employees.completePasswordReset(password);
+    } catch (e, st) {
+      // Logged once, by the screen, through logger.authFailure.
+      Error.throwWithStackTrace(_mapSetupError(e), st);
+    }
+    await _renewSession(
+      user,
+      password,
+      label: 'AUTH-CHANGEPW completePasswordReset: session renewal failed',
+    );
+  }
+
+  /// Admin SDK password changes revoke refresh tokens; best-effort re-sign-in.
+  Future<void> _renewSession(
+    User user,
+    String password, {
+    required String label,
+  }) async {
+    final email = user.email;
+    if (email == null || email.isEmpty) return;
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: password),
+      );
+    } catch (e, st) {
+      _logger.warn(label, e, st);
+    }
+  }
+
+  /// Refuses a new password that is still the admin-issued credential.
   Future<void> _refuseIfStillTheStartingPassword(
     User user,
-    String candidate,
-  ) async {
+    String candidate, {
+    required String label,
+  }) async {
     final email = user.email;
     if (email == null || email.isEmpty) return;
     try {
@@ -120,7 +158,7 @@ class AuthService {
       if (_isWrongPasswordCode(e.code)) return;
       final failure = _mapSetupError(e);
       _logger.authFailure(
-        'AUTH-SETUP completeAccountSetup: starting-password check failed',
+        '$label: starting-password check failed',
         failure,
         e,
         StackTrace.current,
@@ -130,8 +168,7 @@ class AuthService {
     // Reauth SUCCEEDED, so the password is unchanged.
     const failure = AuthFailureStartingPasswordReused();
     _logger.breadcrumb(
-      'AUTH-SETUP completeAccountSetup: refused the starting password '
-      '(${failure.runtimeType})',
+      '$label: refused the starting password (${failure.runtimeType})',
     );
     throw failure;
   }
@@ -141,6 +178,17 @@ class AuthService {
       code == 'wrong-password' ||
       code == 'invalid-credential' ||
       code == 'invalid-login-credentials';
+
+  /// Setup callable refusals, keyed by the message the server throws.
+  static const _setupFailuresByMessage = <String, AuthFailure>{
+    'invalid-newPassword': AuthFailureWeakPassword(),
+    'account-operation-in-progress': AuthFailureTooManyRequests(),
+    'setup-upgrade-required': AuthFailureSetupNotAvailableYet(),
+    'setup-not-pending': AuthFailureSetupAlreadyComplete(),
+    'not-required': AuthFailureSetupAlreadyComplete(),
+    'account-not-found': AuthFailureNoAccountRecord(),
+    'email-not-verified': AuthFailureSetupNotAvailableYet(),
+  };
 
   /// Maps setup-only auth failures before falling back to the shared mapper.
   AuthFailure _mapSetupError(Object e) {
@@ -154,17 +202,8 @@ class AuthService {
       }
     }
     if (e is FirebaseFunctionsException) {
-      // Replayed setup completion is already successful for the user.
-      if (e.message == 'setup-not-pending') {
-        return const AuthFailureSetupAlreadyComplete();
-      }
-      if (e.message == 'account-not-found') {
-        return const AuthFailureNoAccountRecord();
-      }
-      // Old-backend compatibility for the setup availability guard.
-      if (e.message == 'email-not-verified') {
-        return const AuthFailureSetupNotAvailableYet();
-      }
+      final byMessage = _setupFailuresByMessage[e.message];
+      if (byMessage != null) return byMessage;
       if (e.code == 'resource-exhausted') {
         return const AuthFailureTooManyRequests();
       }

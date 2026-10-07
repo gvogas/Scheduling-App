@@ -31,3 +31,11 @@ void markFormToursSeen({Map<String, Object> extra = const {}}) {
     'tour_seen_steps': [for (final id in seen) id.name],
   });
 }
+
+/// Marks every tour step seen, screen tours included, for tests that pump a
+/// tour-hosting screen (Dashboard, Settings) and aren't testing the tour.
+void markAllToursSeen() {
+  SharedPreferences.setMockInitialValues({
+    'tour_seen_steps': [for (final id in TourStepId.values) id.name],
+  });
+}

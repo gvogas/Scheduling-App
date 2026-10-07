@@ -44,11 +44,11 @@ Widget _wrap(AuthService auth, EmployeesRepository repo) {
         home: const Login(),
         onGenerateRoute: (settings) => MaterialPageRoute<void>(
           builder: (_) => Scaffold(
-            body: Text(
-              settings.name == AppRoutes.mainCalendar
-                  ? 'CALENDAR_REACHED'
-                  : 'OTHER_ROUTE',
-            ),
+            body: Text(switch (settings.name) {
+              AppRoutes.mainCalendar => 'CALENDAR_REACHED',
+              AppRoutes.changePassword => 'CHANGE_PASSWORD_REACHED',
+              _ => 'OTHER_ROUTE',
+            }),
           ),
         ),
       ),
@@ -64,6 +64,45 @@ void main() {
     FlutterSecureStorage.setMockInitialValues({});
     auth = _MockAuthService();
     repo = _MockRepo();
+  });
+
+  testWidgets('routes a reset account to Change password, not the calendar', (
+    tester,
+  ) async {
+    final credential = _MockUserCredential();
+    final user = _MockUser();
+    when(() => user.uid).thenReturn('u1');
+    when(() => credential.user).thenReturn(user);
+    when(
+      () => auth.signIn(
+        email: any(named: 'email'),
+        password: any(named: 'password'),
+      ),
+    ).thenAnswer((_) async => credential);
+    when(() => repo.findUserByUid('u1')).thenAnswer(
+      (_) async => const UserUidMatch(
+        id: 'doc1',
+        data: <String, dynamic>{
+          'name': 'Reset User',
+          'email': 'user@test.com',
+          'status': 'active',
+          'role': 'employee',
+          'uid': 'u1',
+          'passwordResetRequired': true,
+        },
+      ),
+    );
+
+    await tester.pumpWidget(_wrap(auth, repo));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).at(0), 'user@test.com');
+    await tester.enterText(find.byType(TextField).at(1), 'Tmp2pass!wd9');
+    await tester.tap(find.byType(FilledButton).first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('CHANGE_PASSWORD_REACHED'), findsOneWidget);
+    verifyNever(() => auth.signOut());
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('renders email and password fields', (tester) async {

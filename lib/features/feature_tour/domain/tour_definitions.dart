@@ -51,7 +51,11 @@ List<TourStepId> _destinationSteps(
     TourStepId.historyRow,
   ],
   HubTab.liveMap => [
-    if (isAdmin) ...[TourStepId.liveMapRoster, TourStepId.liveMapRecenter],
+    if (isAdmin) ...[
+      TourStepId.liveMapRoster,
+      TourStepId.liveMapNotOnMap,
+      TourStepId.liveMapRecenter,
+    ],
   ],
   PushedDestination.settings => [
     TourStepId.settingsAppearance,
@@ -67,6 +71,8 @@ List<TourStepId> _destinationSteps(
     TourStepId.dayRouteStops,
     TourStepId.dayRouteNavigate,
   ],
+  // No walkthrough: the review is one list and one action bar.
+  PushedDestination.overdueReview => const [],
   PushedDestination.dashboard => [
     if (isAdmin) ...[
       TourStepId.dashboardHero,

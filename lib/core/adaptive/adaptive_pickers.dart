@@ -31,12 +31,23 @@ Future<DateTime?> showAdaptiveDatePicker(
 Future<TimeOfDay?> showAdaptiveTimePicker(
   BuildContext context, {
   TimeOfDay? initialTime,
-}) {
+  int minuteInterval = 1,
+}) async {
   if (context.isCupertino) {
-    return showCupertinoTimePicker(context, initialTime: initialTime);
+    return await showCupertinoTimePicker(
+      context,
+      initialTime: initialTime,
+      minuteInterval: minuteInterval,
+    );
   }
-  return showTimePicker(
+  // Material's picker cannot restrict its minutes, so the interval is honoured
+  // on the way OUT instead — the caller asked for a step, not a suggestion.
+  final picked = await showTimePicker(
     context: context,
-    initialTime: initialTime ?? TimeOfDay.now(),
+    initialTime: snapToMinuteInterval(
+      initialTime ?? TimeOfDay.now(),
+      minuteInterval,
+    ),
   );
+  return picked == null ? null : snapToMinuteInterval(picked, minuteInterval);
 }

@@ -292,4 +292,41 @@ void main() {
       expect(restored.createdAt, isNull);
     });
   });
+
+  test('monthEndReviewPush reads absent as off and round-trips', () {
+    expect(EmployeeRecord.fromMap('e1', const {}).monthEndReviewPush, isFalse);
+    final on = EmployeeRecord.fromMap('e1', const {'monthEndReviewPush': true});
+    expect(on.monthEndReviewPush, isTrue);
+    expect(on.toMap()['monthEndReviewPush'], isTrue);
+  });
+
+  group('passwordResetRequired', () {
+    test('an absent flag reads as not required', () {
+      expect(
+        EmployeeRecord.fromMap('e1', const {}).passwordResetRequired,
+        isFalse,
+      );
+    });
+
+    test('only an explicit true requires a change', () {
+      expect(
+        EmployeeRecord.fromMap('e1', const {
+          'passwordResetRequired': true,
+        }).passwordResetRequired,
+        isTrue,
+      );
+      expect(
+        EmployeeRecord.fromMap('e1', const {
+          'passwordResetRequired': 'true',
+        }).passwordResetRequired,
+        isFalse,
+      );
+    });
+
+    test('toMap never emits it — only the Admin SDK may write it', () {
+      const record = EmployeeRecord(id: 'e1', passwordResetRequired: true);
+
+      expect(record.toMap().containsKey('passwordResetRequired'), isFalse);
+    });
+  });
 }

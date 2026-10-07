@@ -127,8 +127,8 @@ judgment call does NOT get applied here — it goes in the report (step 4).
 Write the report using `references/report-template.md`. It covers: what you
 auto-fixed (point at the diff), then severity-ranked **security** and **bug**
 findings, then impact-ranked **areas to improve** (refactor / test-coverage /
-performance opportunities) and optional code-quality suggestions. Save it to
-`docs/audits/CODEBASE_AUDIT.md` (the project keeps audit docs in `docs/audits/`) and give the
+performance opportunities) and optional code-quality suggestions. Save it to the dated
+file named below (the project keeps audit docs in `docs/audits/`) and give the
 user a tight inline summary — counts per severity and the top 3 things to look
 at first. Never paste secrets, tokens, or PII into the report.
 
@@ -167,8 +167,9 @@ audit"**: "do everything in the audit", "start all items, use sub agents",
 
 ### 5. Verify before you claim done
 Re-run `flutter analyze` — the baseline is **`No issues found!`**, so any line
-it prints is yours — and the relevant `flutter test` targets: full suite for a
-broad sweep, the touched test files for a scoped one. For Functions changes,
+it prints is yours — and the relevant tests: the full suite
+(`dart run tool/test.dart`) for a broad sweep, `flutter test <files>` for the
+touched test files in a scoped one. For Functions changes,
 `cd functions && npm run lint && npx jest`. These are the same four commands CI
 runs on push, so a green pass here is also what keeps the push green. If a
 fix broke something, revert that fix and move it to the report rather than

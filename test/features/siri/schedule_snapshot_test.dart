@@ -26,9 +26,7 @@ List<Map<String, dynamic>> _appointmentsOn(
   Map<String, dynamic> snapshot,
   String date,
 ) =>
-    (_days(
-              snapshot,
-            ).firstWhere((d) => d['date'] == date)['appointments']
+    (_days(snapshot).firstWhere((d) => d['date'] == date)['appointments']
             as List)
         .cast<Map<String, dynamic>>();
 
@@ -39,11 +37,15 @@ void main() {
     List<AppointmentRecord> appointments, {
     String role = 'employee',
     String viewerDocId = '',
+    String viewerName = '',
+    Map<String, int> crewColors = const {},
   }) => buildScheduleSnapshot(
     appointments: appointments,
     role: role,
     now: now,
     viewerDocId: viewerDocId,
+    viewerName: viewerName,
+    crewColors: crewColors,
   );
 
   group('buildScheduleSnapshot', () {
@@ -55,37 +57,35 @@ void main() {
       expect(snapshot['role'], 'admin');
     });
 
+    test('the schema is v4 — unshipped, so additions fold into it', () {
+      // The Swift decoder accepts 3 or 4; a bump nobody mirrored breaks Siri.
+      expect(scheduleSnapshotVersion, 4);
+    });
+
     test('emits today plus the 7-day lookahead as ordered day buckets', () {
       final snapshot = build(const []);
 
-      expect(
-        _days(snapshot).map((d) => d['date']).toList(),
-        [
-          '2026-07-19',
-          '2026-07-20',
-          '2026-07-21',
-          '2026-07-22',
-          '2026-07-23',
-          '2026-07-24',
-          '2026-07-25',
-          '2026-07-26',
-        ],
-      );
+      expect(_days(snapshot).map((d) => d['date']).toList(), [
+        '2026-07-19',
+        '2026-07-20',
+        '2026-07-21',
+        '2026-07-22',
+        '2026-07-23',
+        '2026-07-24',
+        '2026-07-25',
+        '2026-07-26',
+      ]);
     });
 
     test('buckets an appointment on its device-local day', () {
-      final snapshot = build([
-        _appt(start: DateTime(2026, 7, 21, 14)),
-      ]);
+      final snapshot = build([_appt(start: DateTime(2026, 7, 21, 14))]);
 
       expect(_appointmentsOn(snapshot, '2026-07-20'), isEmpty);
       expect(_appointmentsOn(snapshot, '2026-07-21'), hasLength(1));
     });
 
     test('keeps a job starting earlier today than now', () {
-      final snapshot = build([
-        _appt(start: DateTime(2026, 7, 19, 8)),
-      ]);
+      final snapshot = build([_appt(start: DateTime(2026, 7, 19, 8))]);
 
       expect(_appointmentsOn(snapshot, '2026-07-19'), hasLength(1));
     });
@@ -96,10 +96,7 @@ void main() {
         _appt(start: DateTime(2026, 7, 27, 9)),
       ]);
 
-      expect(
-        _days(snapshot).expand((d) => d['appointments'] as List),
-        isEmpty,
-      );
+      expect(_days(snapshot).expand((d) => d['appointments'] as List), isEmpty);
     });
 
     test('excludes cancelled visits', () {
@@ -210,7 +207,7 @@ void main() {
     });
 
     test('the schema version is bumped for the new fields', () {
-      expect(scheduleSnapshotVersion, 3);
+      expect(scheduleSnapshotVersion, 4);
     });
 
     test('a multi-day job is bucketed on every day it runs', () {
@@ -278,6 +275,270 @@ void main() {
     });
   });
 
+  group('crew (v4)', () {
+    // An admin's snapshot is business-wide, so without this every CarPlay row
+    // is indistinguishable in the one respect that matters: whose job it is.
+    AppointmentRecord assigned({
+      required List<String> ids,
+      required List<String> names,
+    }) => AppointmentRecord(
+      id: 'a1',
+      startTime: DateTime(2026, 7, 19, 9),
+      endTime: DateTime(2026, 7, 19, 10),
+      clientName: 'Ada',
+      employeeIds: ids,
+      employeeNames: names,
+    );
+
+    List<Map<String, dynamic>> crewOf(Map<String, dynamic> snapshot) =>
+        (_appointmentsOn(snapshot, '2026-07-19').single['crew'] as List)
+            .cast<Map<String, dynamic>>();
+
+    test('an admin snapshot names each assignee and carries the colour', () {
+      final snapshot = build(
+        [
+          assigned(ids: const ['e1'], names: const ['Marc Cloutier']),
+        ],
+        role: 'admin',
+        crewColors: const {'e1': 0xFFB45309},
+      );
+
+      expect(crewOf(snapshot), [
+        {'n': 'Marc Cloutier', 'c': 0xFFB45309},
+      ]);
+    });
+
+    test('an employee snapshot carries no crew at all', () {
+      // Their jobs are all theirs, and the shared container stays readable
+      // while the phone is locked.
+      final snapshot = build([
+        assigned(ids: const ['e1'], names: const ['Marc Cloutier']),
+      ]);
+
+      expect(
+        _appointmentsOn(snapshot, '2026-07-19').single.containsKey('crew'),
+        isFalse,
+      );
+    });
+
+    test('a name is resolved POSITIONALLY against the raw employeeIds', () {
+      // The droppable entry sits AHEAD of the real assignee, so a filtered id
+      // list shifts the two arrays out of step and names the wrong person.
+      final snapshot = build(
+        [
+          assigned(
+            ids: const ['', 'e2'],
+            names: const ['Nobody', 'Marc Cloutier'],
+          ),
+        ],
+        role: 'admin',
+        crewColors: const {'e2': 0xFF0E9B6E},
+      );
+
+      expect(crewOf(snapshot), [
+        {'n': 'Nobody'},
+        {'n': 'Marc Cloutier', 'c': 0xFF0E9B6E},
+      ]);
+    });
+
+    test('the colour is the STORED light-theme ARGB, never a lifted one', () {
+      // `crewColorOf` reads the stored int and the car does its own dark lift.
+      const stored = 0xFF7A3FF2;
+      final snapshot = build(
+        [
+          assigned(ids: const ['e1'], names: const ['Luc Bergeron']),
+        ],
+        role: 'admin',
+        crewColors: const {'e1': stored},
+      );
+
+      expect(crewOf(snapshot).single['c'], stored);
+    });
+
+    test('an assignee the roster does not resolve keeps the name', () {
+      final snapshot = build([
+        assigned(ids: const ['gone'], names: const ['Luc Bergeron']),
+      ], role: 'admin');
+
+      expect(crewOf(snapshot), [
+        {'n': 'Luc Bergeron'},
+      ]);
+    });
+
+    test('a missing denormalized name still holds its slot', () {
+      final snapshot = build([
+        assigned(ids: const ['e1', 'e2'], names: const ['Marc Cloutier']),
+      ], role: 'admin');
+
+      expect(crewOf(snapshot), [
+        {'n': 'Marc Cloutier'},
+        {'n': ''},
+      ]);
+    });
+
+    test(
+      'an admin snapshot names the viewer so the car can ring their jobs',
+      () {
+        final snapshot = build(
+          [
+            assigned(ids: const ['e1'], names: const ['Marc Cloutier']),
+          ],
+          role: 'admin',
+          viewerDocId: 'admin-1',
+          viewerName: 'Sophie Roy',
+        );
+
+        expect(snapshot['viewer'], 'Sophie Roy');
+      },
+    );
+
+    test('an employee snapshot carries no viewer', () {
+      // Every job on it is already theirs, so a ring would mark all of them.
+      final snapshot = build(
+        [
+          assigned(ids: const ['me-1'], names: const ['Sophie Roy']),
+        ],
+        viewerDocId: 'me-1',
+        viewerName: 'Sophie Roy',
+      );
+
+      expect(snapshot.containsKey('viewer'), isFalse);
+    });
+
+    test('a nameless viewer omits the key rather than emitting a blank', () {
+      final snapshot = build(
+        [
+          assigned(ids: const ['e1'], names: const ['Marc Cloutier']),
+        ],
+        role: 'admin',
+        viewerDocId: 'admin-1',
+      );
+
+      expect(snapshot.containsKey('viewer'), isFalse);
+    });
+
+    test('the viewer name matches their own crew entry EXACTLY', () {
+      // The ring is a name match against `crew`, and `crew` carries the name
+      // denormalized at booking — which a later roster rename never rewrites.
+      final snapshot = build(
+        [
+          assigned(
+            ids: const ['e1', 'admin-1'],
+            names: const ['Marc Cloutier', 'Sophie Roy'],
+          ),
+        ],
+        role: 'admin',
+        viewerDocId: 'admin-1',
+        viewerName: 'Sophie Tremblay',
+      );
+
+      expect(snapshot['viewer'], 'Sophie Roy');
+      expect(crewOf(snapshot).map((c) => c['n']), contains(snapshot['viewer']));
+    });
+
+    test('a viewer with no job in the window falls back to the roster', () {
+      final snapshot = build(
+        [
+          assigned(ids: const ['e1'], names: const ['Marc Cloutier']),
+        ],
+        role: 'admin',
+        viewerDocId: 'admin-1',
+        viewerName: 'Sophie Tremblay',
+      );
+
+      expect(snapshot['viewer'], 'Sophie Tremblay');
+    });
+
+    test('a cancelled job never supplies the viewer name', () {
+      // It is dropped at build, so its crew row cannot ring anything.
+      final snapshot = build(
+        [
+          AppointmentRecord(
+            id: 'a1',
+            startTime: DateTime(2026, 7, 19, 9),
+            endTime: DateTime(2026, 7, 19, 10),
+            status: 'cancelled',
+            employeeIds: const ['admin-1'],
+            employeeNames: const ['Sophie Roy'],
+          ),
+        ],
+        role: 'admin',
+        viewerDocId: 'admin-1',
+        viewerName: 'Sophie Tremblay',
+      );
+
+      expect(snapshot['viewer'], 'Sophie Tremblay');
+    });
+  });
+
+  group('personal and day-off flags (v4)', () {
+    // `displayStatusAt` branches on both, so without them the car calls a
+    // personal block past its end "overdue" where the phone says "scheduled".
+    AppointmentRecord block({
+      required bool isPersonal,
+      required bool isDayOff,
+    }) => AppointmentRecord(
+      id: 'p1',
+      startTime: DateTime(2026, 7, 19, 9),
+      endTime: DateTime(2026, 7, 19, 10),
+      title: 'Dentist',
+      isPersonal: isPersonal,
+      isDayOff: isDayOff,
+      employeeIds: const ['me-1'],
+    );
+
+    Map<String, dynamic> only(Map<String, dynamic> snapshot) =>
+        _appointmentsOn(snapshot, '2026-07-19').single;
+
+    test('a personal block carries isPersonal for an employee', () {
+      final snapshot = build([
+        block(isPersonal: true, isDayOff: false),
+      ], viewerDocId: 'me-1');
+
+      expect(only(snapshot)['isPersonal'], isTrue);
+      expect(only(snapshot).containsKey('isDayOff'), isFalse);
+    });
+
+    test('a day off carries both flags for an employee', () {
+      final snapshot = build([
+        block(isPersonal: true, isDayOff: true),
+      ], viewerDocId: 'me-1');
+
+      expect(only(snapshot)['isPersonal'], isTrue);
+      expect(only(snapshot)['isDayOff'], isTrue);
+    });
+
+    test('an admin snapshot carries them too', () {
+      final snapshot = build(
+        [block(isPersonal: true, isDayOff: true)],
+        role: 'admin',
+        viewerDocId: 'admin-1',
+      );
+
+      expect(only(snapshot)['isPersonal'], isTrue);
+      expect(only(snapshot)['isDayOff'], isTrue);
+    });
+
+    test('an ordinary client visit omits both keys', () {
+      final snapshot = build([_appt(start: DateTime(2026, 7, 19, 9))]);
+
+      expect(only(snapshot).containsKey('isPersonal'), isFalse);
+      expect(only(snapshot).containsKey('isDayOff'), isFalse);
+    });
+
+    test('the flags are the ones displayStatusAt reads', () {
+      // Same record, same clock: the car mirrors the ladder off these two.
+      final record = block(isPersonal: true, isDayOff: true);
+      final past = DateTime(2026, 7, 19, 11);
+      final payload = only(build([record], viewerDocId: 'me-1'));
+
+      expect(record.isPersonal && record.isDayOff, isTrue);
+      expect(payload['isPersonal'], record.isPersonal);
+      expect(payload['isDayOff'], record.isDayOff);
+      expect(record.displayStatusAt(past), 'done');
+    });
+  });
+
   group('a personal job address is scoped to its own crew', () {
     // Personal blocks carry a real address as of 2026-08-11, and this payload
     // sits in an App Group that stays readable while the device is LOCKED —
@@ -300,7 +561,9 @@ void main() {
 
     test('withheld when the viewer is not on the crew', () {
       final snapshot = build(
-        [personal(crew: const ['someone-else'])],
+        [
+          personal(crew: const ['someone-else']),
+        ],
         role: 'admin',
         viewerDocId: 'admin-1',
       );
@@ -308,15 +571,17 @@ void main() {
       expect(_appointmentsOn(snapshot, '2026-07-19').single['address'], '');
       // The block itself is still there — only its location is withheld, so
       // Siri can still say the admin's day is not free.
-      expect(_appointmentsOn(snapshot, '2026-07-19').single['title'], 'Dentist');
+      expect(
+        _appointmentsOn(snapshot, '2026-07-19').single['title'],
+        'Dentist',
+      );
     });
 
     test('kept for the viewer own personal block', () {
       // Their data, and directions to it is the point of the field.
-      final snapshot = build(
-        [personal(crew: const ['me-1'])],
-        viewerDocId: 'me-1',
-      );
+      final snapshot = build([
+        personal(crew: const ['me-1']),
+      ], viewerDocId: 'me-1');
 
       expect(
         _appointmentsOn(snapshot, '2026-07-19').single['address'],
@@ -325,7 +590,9 @@ void main() {
     });
 
     test('an unknown viewer withholds, which is the safe direction', () {
-      final snapshot = build([personal(crew: const ['me-1'])]);
+      final snapshot = build([
+        personal(crew: const ['me-1']),
+      ]);
 
       expect(_appointmentsOn(snapshot, '2026-07-19').single['address'], '');
     });

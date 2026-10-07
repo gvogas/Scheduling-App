@@ -121,10 +121,27 @@ void main() {
     expect(find.text('JOBS'), findsNothing);
   });
 
-  // Type and shared-address moved off the row on 2026-09-04 — four signals
-  // competed under one name. Type lives in the filter sheet now, the
-  // shared-address count on the client detail.
-  testWidgets('no longer renders a type chip', (tester) async {
+  // The type badge came BACK on 2026-09-11 with the fresh three-line row —
+  // it has its own corner now rather than competing on one line.
+  testWidgets('renders the type badge for a residential client', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _harness(
+        const ClientRecord(
+          id: 'c1',
+          name: 'Acme',
+          type: ClientType.residential,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Residential'), findsOneWidget);
+    expect(find.byIcon(Icons.home_outlined), findsOneWidget);
+  });
+
+  testWidgets('renders the type badge for a commercial client', (tester) async {
     await tester.pumpWidget(
       _harness(
         const ClientRecord(
@@ -136,11 +153,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Commercial'), findsNothing);
-    expect(find.text('Residential'), findsNothing);
+    expect(find.text('Commercial'), findsOneWidget);
+    expect(find.byIcon(Icons.apartment_outlined), findsOneWidget);
   });
 
-  testWidgets('no longer marks a shared address as a building', (tester) async {
+  testWidgets('renders the type badge for a building client', (tester) async {
     await tester.pumpWidget(
       _harness(
         const ClientRecord(
@@ -153,6 +170,18 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('Building'), findsOneWidget);
+    expect(find.byIcon(Icons.apartment_outlined), findsOneWidget);
+  });
+
+  testWidgets('a client with no type shows no badge', (tester) async {
+    await tester.pumpWidget(
+      _harness(const ClientRecord(id: 'c1', name: 'Acme')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Residential'), findsNothing);
+    expect(find.text('Commercial'), findsNothing);
     expect(find.text('Building'), findsNothing);
   });
 

@@ -9,16 +9,23 @@ import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/features/settings/screens/settings_screen.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
+import '../../support/tour_test_support.dart';
+
 void main() {
-  PackageInfo.setMockInitialValues(
-    appName: 'Scheduling',
-    packageName: 'net.vogas.scheduling',
-    version: '1.0.3',
-    buildNumber: '4',
-    buildSignature: '',
+  setUpAll(
+    () => PackageInfo.setMockInitialValues(
+      appName: 'Scheduling',
+      packageName: 'net.vogas.scheduling',
+      version: '1.0.3',
+      buildNumber: '4',
+      buildSignature: '',
+    ),
   );
 
-  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
+    markAllToursSeen();
+  });
 
   testWidgets('settings screen does not overflow on phone width at 2x text', (
     tester,

@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:io';
+
 // Pins the building grouping — the derived key, and the reduction the clients
 // list's Address filter and its per-row pill both read.
 //
@@ -30,6 +33,21 @@ ClientRecord _client(
 );
 
 void main() {
+  final cases =
+      jsonDecode(
+            File('test/fixtures/client_building_cases.json').readAsStringSync(),
+          )
+          as List;
+  for (final entry in cases.cast<Map<String, dynamic>>()) {
+    test('server identity parity: ${entry['description']}', () {
+      final client = ClientRecord.fromMap(
+        'fixture',
+        (entry['data'] as Map).cast<String, dynamic>(),
+      );
+      expect(buildingKeyFor(client), entry['key']);
+    });
+  }
+
   group('buildingKeyFor', () {
     test('two units of one building share a key', () {
       expect(
@@ -92,66 +110,6 @@ void main() {
         ),
         isNull,
       );
-    });
-  });
-
-  // `buildingsIn` takes the shared key map the repository's scan window
-  // memoizes; these cases care about the grouping, not about where keys
-  // come from.
-  List<ClientBuilding> buildingsOf(List<ClientRecord> clients) =>
-      buildingsIn(clients, keys: buildingKeysIn(clients));
-
-  group('buildingsIn', () {
-    test('an address with only one client is not a building', () {
-      // Otherwise the menu is the client list under another name.
-      final buildings = buildingsOf([
-        _client('a', address: '1 Rue Un'),
-        _client('b', address: '2 Rue Deux'),
-      ]);
-      expect(buildings, isEmpty);
-    });
-
-    test('groups units and counts them', () {
-      final buildings = buildingsOf([
-        _client('a', address: '914-4450 Prom. Paton'),
-        _client('b', address: '1207-4450 Prom. Paton'),
-        _client('c', address: '601-4450 Prom. Paton'),
-      ]);
-      expect(buildings, hasLength(1));
-      expect(buildings.single.street, '4450 Prom. Paton');
-      expect(buildings.single.city, 'Laval');
-      expect(buildings.single.clientCount, 3);
-    });
-
-    test('busiest building first', () {
-      final buildings = buildingsOf([
-        _client('a', address: '1-100 Rue A'),
-        _client('b', address: '2-100 Rue A'),
-        _client('c', address: '1-200 Rue B'),
-        _client('d', address: '2-200 Rue B'),
-        _client('e', address: '3-200 Rue B'),
-      ]);
-      expect(buildings.map((b) => b.street), ['200 Rue B', '100 Rue A']);
-    });
-
-    test('ties order by street so the menu is stable between rebuilds', () {
-      final buildings = buildingsOf([
-        _client('a', address: '1-200 Rue B'),
-        _client('b', address: '2-200 Rue B'),
-        _client('c', address: '1-100 Rue A'),
-        _client('d', address: '2-100 Rue A'),
-      ]);
-      expect(buildings.map((b) => b.street), ['100 Rue A', '200 Rue B']);
-    });
-
-    test('clients with no address are skipped, not grouped together', () {
-      // They all derive a null key; grouping them would invent a building.
-      final buildings = buildingsOf([
-        _client('a'),
-        _client('b'),
-        _client('c'),
-      ]);
-      expect(buildings, isEmpty);
     });
   });
 }

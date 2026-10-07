@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:scheduling/core/data/search_result_cache.dart';
@@ -11,6 +13,14 @@ void main() {
   setUp(() => now = DateTime(2026, 9, 1, 12));
 
   group('TTL', () {
+    test('repeated reads do not extend freshness past the original TTL', () {
+      final c = cache()..write('q', ['a']);
+      now = now.add(const Duration(seconds: 119));
+      expect(c.read('q'), ['a']);
+      now = now.add(const Duration(seconds: 1));
+      expect(c.read('q'), isNull);
+    });
+
     test('a read inside the window returns the stored results', () {
       final c = cache()..write('q', ['a']);
       now = now.add(const Duration(seconds: 119));
@@ -99,5 +109,127 @@ void main() {
 
     expect(c.length, 0);
     expect(c.read('a'), isNull);
+  });
+
+  group('patchAll', () {
+    test('rewrites each entry and evicts where the patch returns null', () {
+      final c = cache()
+        ..write('keep', ['a', 'b'])
+        ..write('drop', ['c'])
+        ..patchAll((key, results) => key == 'drop' ? null : results.sublist(1));
+
+      expect(c.read('keep'), ['b']);
+      expect(c.read('drop'), isNull);
+    });
+
+    test('a patched entry keeps its original TTL', () {
+      final c = cache()..write('q', ['a']);
+      now = now.add(const Duration(seconds: 100));
+      c.patchAll((_, results) => results);
+      now = now.add(const Duration(seconds: 21));
+
+      expect(c.read('q'), isNull);
+    });
+
+    test('a stale entry is dropped without being patched', () {
+      final c = cache()..write('q', ['a']);
+      now = now.add(const Duration(seconds: 121));
+      var patched = 0;
+      c.patchAll((_, results) {
+        patched++;
+        return results;
+      });
+
+      expect(patched, 0);
+      expect(c.length, 0);
+    });
+
+    test('a load started before the patch cannot refill the cache', () async {
+      final c = cache();
+      final pending = Completer<List<String>>();
+      final old = c.getOrLoad('q', () => pending.future);
+      c.patchAll((_, results) => results);
+      pending.complete(['old']);
+      await old;
+
+      expect(c.read('q'), isNull);
+    });
+  });
+
+  group('in-flight loads', () {
+    test('simultaneous identical queries share one load', () async {
+      final c = cache();
+      final pending = Completer<List<String>>();
+      var calls = 0;
+      Future<List<String>> load() {
+        calls++;
+        return pending.future;
+      }
+
+      final first = c.getOrLoad('q', load);
+      final second = c.getOrLoad('q', load);
+      pending.complete(['a']);
+      expect(await Future.wait([first, second]), [
+        ['a'],
+        ['a'],
+      ]);
+      expect(calls, 1);
+    });
+
+    test('clear prevents an old response from refilling the cache', () async {
+      final c = cache();
+      final pending = Completer<List<String>>();
+      final old = c.getOrLoad('q', () => pending.future);
+      c.clear();
+      pending.complete(['old']);
+      await old;
+      expect(c.read('q'), isNull);
+    });
+
+    test('an old response cannot replace a newer cached result', () async {
+      final c = cache();
+      final pending = Completer<List<String>>();
+      final old = c.getOrLoad('q', () => pending.future);
+      c.clear();
+      await c.getOrLoad('q', () async => ['new']);
+      pending.complete(['old']);
+      await old;
+      expect(c.read('q'), ['new']);
+    });
+
+    test('an old completion leaves a newer request shared', () async {
+      final c = cache();
+      final oldResponse = Completer<List<String>>();
+      final newResponse = Completer<List<String>>();
+      final old = c.getOrLoad('q', () => oldResponse.future);
+      c.clear();
+      final current = c.getOrLoad('q', () => newResponse.future);
+      oldResponse.complete(['old']);
+      await old;
+      final joined = c.getOrLoad('q', () async => ['duplicate']);
+      newResponse.complete(['new']);
+      expect(await Future.wait([current, joined]), [
+        ['new'],
+        ['new'],
+      ]);
+    });
+
+    test('a failed load is not cached and can be retried', () async {
+      final c = cache();
+      await expectLater(
+        c.getOrLoad('q', () async => throw StateError('offline')),
+        throwsStateError,
+      );
+      expect(await c.getOrLoad('q', () async => ['retried']), ['retried']);
+    });
+
+    test('a synchronous loader failure can be retried', () async {
+      final c = cache();
+      await expectLater(
+        c.getOrLoad('q', () => throw StateError('offline')),
+        throwsStateError,
+      );
+      expect(await c.getOrLoad('q', () async => ['retried']), ['retried']);
+    });
   });
 }

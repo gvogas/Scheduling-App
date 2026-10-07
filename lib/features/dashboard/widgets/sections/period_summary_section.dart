@@ -114,7 +114,7 @@ class _KpiGrid extends StatelessWidget {
     // Four tiles across two rows on a phone, one row when there is width for
     // it. A GridView would need its own scroll physics inside the dashboard's
     // ListView; a Wrap of fixed-fraction tiles does not.
-    final columns = context.isNarrowWidth ? 2 : 4;
+    final columns = context.isWide ? 4 : 2;
     return LayoutBuilder(
       builder: (context, constraints) {
         const gap = AppSpacing.sp8;

@@ -42,7 +42,7 @@
 <h1>Privacy Policy</h1>
 <p class="meta">
   Application: <strong>ES Pro</strong> · Effective date: July 8, 2026 ·
-  Last updated: August 14, 2026
+  Last updated: September 19, 2026
 </p>
 
 <p>
@@ -219,6 +219,20 @@
     to collect crash reports and limited technical diagnostics (for example,
     device model, operating system version, and the technical state of the App
     at the time of a crash) so that we can identify and fix problems.</li>
+  <li><strong>Usage analytics.</strong> We use Google Analytics for Firebase to
+    understand, in aggregate, how the App’s features are used — for example,
+    which screens are opened, and when an appointment is created, a search is
+    run, or a setting is changed. These records describe only the kind of
+    action and its general shape (such as where in the App it happened,
+    whether a job has photos, or an approximate count); they never include
+    names, email addresses, phone numbers, street addresses, notes, photos, or
+    what you type into a search. Alongside them we record your role in the App
+    (administrator or employee), the App’s language, and standard technical
+    information (an app-instance identifier, device model, operating system
+    and App version, and an approximate region that Google derives from your
+    internet connection). We do not give Google Analytics your account ID, and
+    this information is not used for advertising or to track you across other
+    companies’ apps or websites.</li>
   <li><strong>App integrity signals.</strong> To protect the service, the App
     uses Apple App Attest and Firebase App Check to verify that requests come
     from a genuine, untampered copy of the App. This process uses a
@@ -266,7 +280,8 @@
     appointment (via Google Maps Platform, through our secure backend) so the
     App can send the reminder at the right moment. If you are an employee or
     administrator, administrators can also view your single most recent
-    location on a live staff map in the App while location sharing is active.
+    location on a live staff map in the App while location sharing is active,
+    labelled with how long ago it was recorded, however old that reading is.
     It is <strong>not</strong> used to monitor your movements over time or
     build a location history — only the latest reading is ever available,
     never a trail of where you have been.</li>
@@ -342,6 +357,8 @@
   <li>provide address autocomplete when you enter an address;</li>
   <li>if you enable location access, estimate traffic-aware drive time to your
     next appointment and send you a “time to leave” reminder (Section 2.4);</li>
+  <li>understand, in aggregate, how the App’s features are used so that we can
+    improve them (Section 2.3);</li>
   <li>diagnose crashes, maintain security, and improve reliability; and</li>
   <li>comply with legal obligations and respond to lawful requests.</li>
 </ul>
@@ -370,8 +387,9 @@
     <tr>
       <td>Google (Firebase &amp; Google Cloud)</td>
       <td>Authentication, database (Cloud Firestore), file storage (Cloud
-        Storage), crash reporting (Crashlytics), app-integrity checks
-        (App Check), and push-notification delivery (Cloud Messaging).</td>
+        Storage), crash reporting (Crashlytics), usage analytics (Google
+        Analytics for Firebase), app-integrity checks (App Check), and
+        push-notification delivery (Cloud Messaging).</td>
       <td><a href="https://firebase.google.com/support/privacy">firebase.google.com/support/privacy</a></td>
     </tr>
     <tr>
@@ -389,10 +407,9 @@
         name, phone numbers, email address, and postal address) are sent to the
         business’s Wave account to create or update customers there as clients
         are added or edited in the App; and customer records held in Wave are
-        imported into the App as clients — either when an administrator taps
-        “Sync with Wave” or, if the administrator sets a schedule,
-        automatically each week or month. An administrator can turn the
-        automatic import off, or disconnect the integration, in Settings.</td>
+        imported into the App as clients when an administrator taps
+        “Sync with Wave”. An administrator can disconnect the integration in
+        Settings.</td>
       <td><a href="https://www.waveapps.com/legal/privacy-policy">waveapps.com/legal/privacy-policy</a></td>
     </tr>
     <tr>
@@ -451,6 +468,8 @@
     however old they are.</li>
   <li><strong>Crash diagnostics</strong> are retained by Firebase Crashlytics
     for a limited period in accordance with Google’s policies.</li>
+  <li><strong>Usage analytics</strong> are retained by Google Analytics for
+    Firebase for a limited period in accordance with Google’s policies.</li>
   <li><strong>Push notification tokens</strong> are removed when you sign out on
     that device, when you delete your account, or when an administrator disables
     or deletes your account. Turning notifications off in your device Settings
@@ -464,9 +483,9 @@
     account deleted or disabled by an administrator. Revoking location permission
     stops any further readings being taken, but does not by itself delete the
     reading already stored: until one of the events above occurs, that last
-    reading remains, and administrators can still see it on the live map, shown
-    with how long ago it was recorded. Sign out if you want it removed
-    straight away.</li>
+    reading remains. Administrators can see it on the live map, shown with how
+    long ago it was recorded, for as long as it is stored and location sharing
+    is turned on. Sign out if you want it removed straight away.</li>
 </ul>
 <p>
   We keep personal information only as long as necessary for the purposes
@@ -524,10 +543,11 @@
     device’s Settings; features that rely on a permission will be limited if it
     is revoked. Turning off location access stops the App taking any further
     readings, which ends the “time to leave” reminders; the last reading already
-    stored is not deleted by revoking the permission, and stays visible to
-    administrators on the staff map — labelled with how long ago it was taken —
-    until you sign out, delete your account, or an administrator disables or
-    deletes it (see Section 6). The Lock Screen job card can be turned off in
+    stored is not deleted by revoking the permission: it is kept until you sign
+    out, delete your account, or an administrator disables or deletes it (see
+    Section 6), and administrators can see it on the staff map — labelled with
+    how long ago it was taken — for as long as it is stored and location sharing
+    is turned on. The Lock Screen job card can be turned off in
     Settings → Notifications, and the home-screen widget by removing it from
     your Home Screen.</li>
   <li><strong>If you are a client of a business</strong> that uses the App,
@@ -578,7 +598,7 @@
 
 <footer>
   © 2026 Plombier Eau Secours. ES Pro Privacy Policy — last updated
-  August 14, 2026.
+  September 19, 2026.
 </footer>
 
 </body>

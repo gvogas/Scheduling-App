@@ -191,7 +191,12 @@ class EmployeeDetailsView extends ConsumerWidget {
     final jobs = ref.read(employeeTodayJobsProvider(employeeId));
     for (final job in jobs) {
       if (job.id == appointmentId) {
-        showEventDetails(context, job, analyticsSource: AnalyticsSources.employees, showActions: isCurrentUserAdmin);
+        showEventDetails(
+          context,
+          job,
+          analyticsSource: AnalyticsSources.employees,
+          showActions: isCurrentUserAdmin,
+        );
         return;
       }
     }

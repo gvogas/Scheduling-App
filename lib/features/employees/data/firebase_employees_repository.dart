@@ -163,7 +163,33 @@ class FirebaseEmployeesRepository implements EmployeesRepository {
   }
 
   @override
+  Future<NewAccountCredentials> resetEmployeePassword(String docId) async {
+    final res = await _functions
+        .httpsCallable(
+          'resetEmployeePassword',
+          options: HttpsCallableOptions(timeout: _callableTimeout),
+        )
+        .call<dynamic>({'docId': docId});
+    final data = (res.data as Map?)?.cast<String, dynamic>();
+    if (data == null) throw const EmployeesFailureUnknown();
+    final credentials = NewAccountCredentials.fromMap(data);
+    if (!credentials.isComplete) throw const EmployeesFailureUnknown();
+    return credentials;
+  }
+
+  @override
+  Future<void> completePasswordReset(String newPassword) async {
+    await _functions
+        .httpsCallable(
+          'completePasswordReset',
+          options: HttpsCallableOptions(timeout: _callableTimeout),
+        )
+        .call<dynamic>({'newPassword': newPassword});
+  }
+
+  @override
   Future<void> completeEmployeeSetup({
+    required String newPassword,
     String firstName = '',
     String lastName = '',
     String phone = '',
@@ -175,10 +201,11 @@ class FirebaseEmployeesRepository implements EmployeesRepository {
           'completeEmployeeSetup',
           options: HttpsCallableOptions(timeout: _callableTimeout),
         )
-        // All five keys, always: the server reads the strings leniently (empty
+        // The password is handled under a server lock. Profile strings are lenient (empty
         // == absent) and the flags as `=== true`, so a conditional payload
         // shape would be a second thing to test for no benefit.
         .call<dynamic>({
+          'newPassword': newPassword,
           'firstName': firstName.trim(),
           'lastName': lastName.trim(),
           'phone': phone.trim(),
@@ -240,6 +267,8 @@ class FirebaseEmployeesRepository implements EmployeesRepository {
       'workEndMinutes': employee.workEndMinutes,
       'maxJobsPerDay': employee.maxJobsPerDay,
       'onCall': employee.onCall,
+      'isTestAccount': employee.isTestAccount,
+      'monthEndReviewPush': employee.monthEndReviewPush,
       // Scrub, not write: the emergency pair moved to
       // users/{docId}/private/emergency, and any value left on the parent doc
       // by a pre-move build is still readable by every active peer.

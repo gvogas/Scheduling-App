@@ -19,6 +19,9 @@ const {
   lastWorkDayMs,
   clampedLastWorkDayMs,
   calendarDaysBetween,
+  resolveWindow,
+  expandRunWindows,
+  dailyWindowsOverlap,
 } = require("../day_slice_utils");
 
 // Epoch ms of a Toronto wall-clock instant given its UTC ISO form.
@@ -304,5 +307,123 @@ describe("stored run label", () => {
   test("a count past the cap is ignored", () => {
     const overCap = {...dayThreeOfFive(), dayIndex: 1, dayCount: 40};
     expect(sliceForDay(overCap, aug5).dayCount).toBe(1);
+  });
+});
+
+// The resolved daily window of a Toronto start/end pair given in UTC ISO form.
+const win = (startIso, endIso) =>
+  resolveWindow({startTime: at(startIso), endTime: at(endIso)});
+
+describe("dailyWindowsOverlap", () => {
+  test("a 9-5 week does not clash with a 7pm job inside it", () => {
+    expect(dailyWindowsOverlap(
+        win("2026-08-01T13:00:00.000Z", "2026-08-05T21:00:00.000Z"),
+        win("2026-08-03T23:00:00.000Z", "2026-08-04T00:00:00.000Z"),
+    )).toBe(false);
+  });
+
+  test("the same week DOES clash with a midday job inside it", () => {
+    expect(dailyWindowsOverlap(
+        win("2026-08-01T13:00:00.000Z", "2026-08-05T21:00:00.000Z"),
+        win("2026-08-03T16:00:00.000Z", "2026-08-03T17:00:00.000Z"),
+    )).toBe(true);
+  });
+
+  test("runs that share no day never clash", () => {
+    expect(dailyWindowsOverlap(
+        win("2026-08-01T13:00:00.000Z", "2026-08-02T21:00:00.000Z"),
+        win("2026-08-04T13:00:00.000Z", "2026-08-05T21:00:00.000Z"),
+    )).toBe(false);
+  });
+
+  test("touching windows on a shared day do not clash", () => {
+    expect(dailyWindowsOverlap(
+        win("2026-08-01T13:00:00.000Z", "2026-08-03T16:00:00.000Z"),
+        win("2026-08-02T16:00:00.000Z", "2026-08-02T18:00:00.000Z"),
+    )).toBe(false);
+  });
+
+  test("an overnight shift clashes with a job in its small hours", () => {
+    expect(dailyWindowsOverlap(
+        win("2026-08-02T02:00:00.000Z", "2026-08-03T10:00:00.000Z"),
+        win("2026-08-02T06:00:00.000Z", "2026-08-02T07:00:00.000Z"),
+    )).toBe(true);
+  });
+
+  test("a corrupt window whose end precedes its start never clashes", () => {
+    expect(dailyWindowsOverlap(
+        win("2026-08-10T13:00:00.000Z", "2026-08-01T21:00:00.000Z"),
+        win("2026-08-10T13:00:00.000Z", "2026-08-10T21:00:00.000Z"),
+    )).toBe(false);
+  });
+});
+
+describe("expandRunWindows", () => {
+  test("a one-day window yields one pair unchanged", () => {
+    const windows = expandRunWindows(
+        win("2026-08-03T13:00:00.000Z", "2026-08-03T21:00:00.000Z"));
+    expect(windows).toEqual([{
+      startMs: at("2026-08-03T13:00:00.000Z"),
+      endMs: at("2026-08-03T21:00:00.000Z"),
+    }]);
+  });
+
+  test("a 5-day 9-to-5 window yields five one-day windows", () => {
+    const windows = expandRunWindows(
+        win("2026-08-03T13:00:00.000Z", "2026-08-07T21:00:00.000Z"));
+    expect(windows).toHaveLength(5);
+    expect(windows[0]).toEqual({
+      startMs: at("2026-08-03T13:00:00.000Z"),
+      endMs: at("2026-08-03T21:00:00.000Z"),
+    });
+    expect(windows[4]).toEqual({
+      startMs: at("2026-08-07T13:00:00.000Z"),
+      endMs: at("2026-08-07T21:00:00.000Z"),
+    });
+  });
+
+  test("a night shift yields one window per NIGHT, ending the morning after",
+      () => {
+        const windows = expandRunWindows(
+            win("2026-08-04T02:00:00.000Z", "2026-08-05T10:00:00.000Z"));
+        expect(windows).toEqual([
+          {
+            startMs: at("2026-08-04T02:00:00.000Z"),
+            endMs: at("2026-08-04T10:00:00.000Z"),
+          },
+          {
+            startMs: at("2026-08-05T02:00:00.000Z"),
+            endMs: at("2026-08-05T10:00:00.000Z"),
+          },
+        ]);
+      });
+
+  test("an all-day multi-day block yields a midnight-to-23:59 window a day",
+      () => {
+        const windows = expandRunWindows(
+            win("2026-08-03T04:00:00.000Z", "2026-08-05T03:59:00.000Z"));
+        expect(windows).toEqual([
+          {
+            startMs: at("2026-08-03T04:00:00.000Z"),
+            endMs: at("2026-08-04T03:59:00.000Z"),
+          },
+          {
+            startMs: at("2026-08-04T04:00:00.000Z"),
+            endMs: at("2026-08-05T03:59:00.000Z"),
+          },
+        ]);
+      });
+
+  test("a span past the cap clamps to MAX_APPOINTMENT_SPAN_DAYS", () => {
+    const windows = expandRunWindows(
+        win("2026-08-03T13:00:00.000Z", "2027-03-12T22:00:00.000Z"));
+    expect(windows).toHaveLength(MAX_APPOINTMENT_SPAN_DAYS);
+  });
+
+  test("a corrupt pair whose end precedes its start yields one window", () => {
+    const windows = expandRunWindows(
+        win("2026-08-07T13:00:00.000Z", "2026-08-03T21:00:00.000Z"));
+    expect(windows).toHaveLength(1);
+    expect(windows[0].startMs).toBe(at("2026-08-07T13:00:00.000Z"));
   });
 });

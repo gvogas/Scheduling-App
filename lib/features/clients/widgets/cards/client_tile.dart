@@ -2,10 +2,11 @@ import 'package:flutter/material.dart';
 
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
+import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/widgets/sheets/client_detail_sheet.dart';
 import 'package:scheduling/l10n/l10n.dart';
-import 'package:scheduling/shared/widgets/cards/list_item_tile.dart';
 import 'package:scheduling/shared/widgets/feedback/status_pill.dart';
+import 'package:scheduling/shared/widgets/primitives/app_avatar.dart';
 
 class ClientTile extends StatelessWidget {
   const ClientTile({
@@ -18,6 +19,9 @@ class ClientTile extends StatelessWidget {
   final ClientRecord client;
   final Future<void> Function()? onOpen;
   final bool selected;
+
+  /// Optical nudge between sp12 and sp16, from the approved row mockup.
+  static const double _gutter = 14;
 
   Future<void> _open(BuildContext context) async {
     if (onOpen != null) {
@@ -34,46 +38,126 @@ class ClientTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The address is what identifies a job site at a glance; phone is the
-    // fallback for a client who has no address on file.
-    final subtitle = client.address.trim().isNotEmpty
-        ? client.fullAddress
-        : client.phone;
-    final count = client.jobCount;
-    // Archived clients drop out of the list but stay in search results, so the
-    // row is the only place that can say why one looks "missing". It is the ONE
-    // badge left: type moved to the filter sheet and the shared-address count
-    // to the client detail, because four signals competed under one name.
-    final badges = <Widget>[if (client.archived) const _ArchivedPill()];
-
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     // Resolved once: `displayName` is an uncached getter that runs `stripPhone`
-    // (two regex passes), and this rebuilds per row on the paginated list and
-    // per keystroke in the booking-flow picker.
+    // (two regex passes), and this rebuilds per row on the paginated list.
     final displayName = client.displayName;
+    final address = client.fullAddress.trim();
+    final phone = client.phone.trim();
+    final count = client.jobCount;
 
-    // No explicit label needed — ListItemTile's InkWell already exposes button
-    // semantics and reads out the visible name and subtitle.
-    return ListItemTile(
-      avatarName: displayName,
-      title: displayName,
-      subtitle: subtitle,
-      subtitleExtra: badges.isEmpty
-          ? null
-          : Wrap(
-              spacing: AppSpacing.sp8,
-              runSpacing: AppSpacing.sp4,
-              children: badges,
-            ),
-      selected: selected,
-      onTap: () => _open(context),
-      // Null until the recount trigger has run for this client — an unknown
-      // count renders nothing rather than a misleading zero.
-      trailing: count == null ? null : _JobCount(count: count),
+    return Material(
+      color: selected ? scheme.secondaryContainer : Colors.transparent,
+      child: InkWell(
+        onTap: () => _open(context),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: _gutter,
+            vertical: AppSpacing.sp12,
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AppAvatar(name: displayName),
+              const SizedBox(width: AppSpacing.sp12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            displayName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium,
+                          ),
+                        ),
+                        if (client.type != ClientType.unset) ...[
+                          const SizedBox(width: AppSpacing.sp8),
+                          _TypePill(type: client.type),
+                        ],
+                      ],
+                    ),
+                    if (address.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.sp4),
+                      Text(
+                        address,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                    if (phone.isNotEmpty || count != null) ...[
+                      const SizedBox(height: AppSpacing.sp4),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              phone,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.monoType.data,
+                            ),
+                          ),
+                          // Null until the recount trigger has run for this
+                          // client — unknown renders nothing, never a zero.
+                          if (count != null) _JobCount(count: count),
+                        ],
+                      ),
+                    ],
+                    if (client.archived) ...[
+                      const SizedBox(height: AppSpacing.sp8),
+                      const _ArchivedPill(),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
 
-/// "Archived", as a neutral pill under the address.
+/// The client's type, as a glyph + label pill in the row's top-right corner.
+class _TypePill extends StatelessWidget {
+  const _TypePill({required this.type});
+
+  final ClientType type;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final (IconData icon, Color background, Color foreground) = switch (type) {
+      ClientType.residential || ClientType.unset => (
+        Icons.home_outlined,
+        scheme.surfaceContainerHighest,
+        scheme.onSurfaceVariant,
+      ),
+      ClientType.commercial || ClientType.building => (
+        Icons.apartment_outlined,
+        scheme.primaryContainer,
+        scheme.onPrimaryContainer,
+      ),
+    };
+    return StatusPill(
+      label: clientTypeLabel(context.l10n, type),
+      icon: icon,
+      background: background,
+      foreground: foreground,
+      radius: AppRadius.r8,
+    );
+  }
+}
+
+/// "Archived", as a neutral pill under the row's own lines.
 class _ArchivedPill extends StatelessWidget {
   const _ArchivedPill();
 
@@ -89,7 +173,7 @@ class _ArchivedPill extends StatelessWidget {
   }
 }
 
-/// Right-aligned stacked figure: the count over a mono JOBS micro-label.
+/// Right-aligned mono tally on the phone line.
 class _JobCount extends StatelessWidget {
   const _JobCount({required this.count});
 
@@ -98,13 +182,13 @@ class _JobCount extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Column(
+    return Row(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        Text('$count', style: theme.monoType.metric),
+        Text('$count', style: theme.monoType.micro),
+        const SizedBox(width: AppSpacing.sp4),
         Text(
-          context.l10n.clients_jobsCountLabel,
+          context.l10n.clients_jobsCountLabel(count),
           style: theme.monoType.micro.copyWith(color: theme.palette.textMuted),
         ),
       ],

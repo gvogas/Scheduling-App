@@ -68,6 +68,10 @@ class HubShellState extends ConsumerState<HubShell>
   @override
   bool get isAdmin => _isAdmin;
 
+  /// The live employee doc id, for a push that opens an admin screen.
+  @override
+  String get employeeId => _employeeId;
+
   /// The shell's own route — [goHome]'s pop target. Null only in a bare test
   /// harness with no enclosing route.
   ModalRoute<dynamic>? _shellRoute;

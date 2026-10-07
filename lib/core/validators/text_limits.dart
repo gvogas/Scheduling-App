@@ -30,6 +30,9 @@ abstract final class TextLimits {
   /// records keep [email] (320), matching `isValidClientData`.
   static const int authEmail = 254;
 
+  /// A chosen password's server cap; never applied at sign-in.
+  static const int password = 128;
+
   static const int aptUnit = 32;
   static const int city = 100;
   static const int province = 100;

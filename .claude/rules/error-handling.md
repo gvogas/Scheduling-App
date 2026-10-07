@@ -90,8 +90,8 @@ alwaysApply: true
   - a POSITIONAL first argument to a helper that logs —
     `image_viewer.dart`'s `_runExclusive` (`IMG-SAVE`, `IMG-SHARE`);
   - built by interpolation — `wave_settings_section.dart`'s `'WAVE-$tag'`,
-    where the four suffixes are spelled as bare `tag:` values (`CONNECT`,
-    `SYNC`, `RETRY`, `SCHEDULE`) and the prefix is added at the logging site,
+    where the three suffixes are spelled as bare `tag:` values (`CONNECT`,
+    `SYNC`, `RETRY`) and the prefix is added at the logging site,
     so neither half greps as the whole tag;
   - spelled inside a ternary — `appointment_image_loader.dart` (`IMG-LOAD`,
     twice);
@@ -120,6 +120,7 @@ alwaysApply: true
   | `APPT-OPEN` | `error_introOpenAppointment` |
   | `APPT-STATUS` | `error_introUpdateAppointmentStatus` |
   | `APPT-FIELDNOTE` | `error_introSaveFieldNotes` |
+  | `APPT-REVIEW` | `error_introReviewOverdue` |
   | `CLI-ADD` | `error_introAddClient` |
   | `CLI-SAVE` | `error_introSaveClient` |
   | `CLI-DEL` | `error_introDeleteClient` |
@@ -131,20 +132,25 @@ alwaysApply: true
   | `EMP-CREATE` | `error_introSaveEmployee` |
   | `EMP-STATUS` | `error_introChangeEmployeeStatus` |
   | `EMP-DELETE` | `error_introRemoveAccount` |
+  | `EMP-RESETPW` | `error_introResetPassword` |
   | `ME-SAVE` | `error_introSaveMyDetails` · `error_introSaveAvailability` · `error_introSaveTravelAlerts` · `error_introSaveLocationSharing` |
   | `ME-EMAIL` | `error_introChangeEmail` |
   | `ACCT-DEL` | `error_introDeleteAccount` |
   | `APPLOCK` | `error_introSaveAppLock` |
   | `ACCT-SIGNOUT` | `error_introSignOut` |
 
-  Five of those carry a per-tag caveat. CLI-ARCH covers archive AND un-archive,
+  Six of those carry a per-tag caveat. CLI-ARCH covers archive AND un-archive,
   which share one tag because they are one toggle. CLI-DEL's typed
   `ClientsFailureHasHistory` branch runs FIRST — "archive it instead" is
   actionable where the generic cause notice is not — and the composer is the
   fallback; both live in the shared `ClientActionsHost` mixin, so the list and
   the detail can't drift on either tag. APPT-STATUS = mark-done/cancel;
   `event_details_controller`'s status setters return a sealed
-  `EventDetailsActionOutcome`, so the widget composes the notice. EMP-DELETE =
+  `EventDetailsActionOutcome`, so the widget composes the notice. APPT-REVIEW = the
+  overdue review's bulk Complete / Not done; `OverdueReviewController` logs it
+  and returns a sealed `OverdueReviewOutcome`, so the screen composes the
+  notice, and the screen's load listener and the repository's cap warn log under
+  the same tag. EMP-DELETE =
   removing a pending account, P4c's replacement for the retired EMP-REVOKE; its
   typed `EmployeesFailureAccountNoLongerPending` branch runs FIRST and the
   composer is the fallback. ACCT-SIGNOUT is spelled at TWO layers and only one of them composes a notice: `delete_account_flow.dart` surfaces `error_introSignOut`, while `auth_service.dart`'s two sites are log-only (a sign-out failing during teardown has no screen left to notify). It is listed here rather than below because the intro key exists; don't move it back on the strength of the service's uses alone. **`EMP-SAVE` is GONE** — the employee save path logs
@@ -152,9 +158,10 @@ alwaysApply: true
 
   **Log-only tags** — no notice intro, so no ARB key. Everything else:
 
-  - App shell / lifecycle: `ACCOUNT-EXIT`, `APP-SYNC`, `DEEP-LINK`, `NOTICE`,
-    `SETTINGS`, `SPLASH`, `TOUR`, `ONBOARD-GATE`
-  - Auth / account: `AUTH-SETUP`, `AUTH-SIGNIN`, `AUTH-PREFILL`, `AUTH-RESET`
+  - App shell / lifecycle: `ACCOUNT-EXIT`, `APP-SYNC`, `CARPLAY`, `DEEP-LINK`,
+    `NOTICE`, `SETTINGS`, `SPLASH`, `TOUR`, `ONBOARD-GATE`
+  - Auth / account: `AUTH-SETUP`, `AUTH-SIGNIN`, `AUTH-PREFILL`, `AUTH-RESET`,
+    `AUTH-CHANGEPW`
     (`AUTH-SIGNIN`/`AUTH-PREFILL` added 2026-08-25, replacing six `login.*`
     dotted-lowercase tags that were in no registry at all — the whole sign-in
     path was invisible to a Crashlytics search by tag. That sweep MISSED
@@ -164,10 +171,13 @@ alwaysApply: true
     and — since the same pass — the four `auth_service.dart`
     `completeAccountSetup:` labels, which carried NO tag at all; one of them is
     the breadcrumb for `AuthFailureStartingPasswordReused`, the load-bearing
-    guard.)
+    guard. `AUTH-CHANGEPW` (2026-09-29) is `ChangePasswordScreen`'s submit and
+    sign-out plus `AuthService.completePasswordReset`'s session-renewal label;
+    the route-in after a change logs under `AUTH-SETUP` through the shared
+    `resumeAfterSignUp`.)
   - Appointments: `APPT-BUSY`, `APPT-COUNT`, `APPT-IMG`, `APPT-RANGE`
-  - Clients / history: `CLI-SEARCH`, `CLI-CONTACT-SAVE`, `CLI-CONTACT-SYNC`,
-    `HIST-SEARCH`
+  - Clients / history: `CLI-SEARCH`, `CLI-BUILDINGS`, `CLI-CONTACT-SAVE`,
+    `CLI-CONTACT-SYNC`, `HIST-SEARCH`
   - Employees / self: `EMP-EMERGENCY`, `EMP-LOAD`, `EMP-TODAY`, `MYDET`
   - Presence / map: `LIVEMAP-MARKERS`, `PRESENCE`
   - Images: `IMG-DEL`, `IMG-DISK`, `IMG-LOAD`, `IMG-PICK`, `IMG-SAVE`,
@@ -180,15 +190,15 @@ alwaysApply: true
   - Devices / delivery: `FCM`, `PUSH`, `PUSH-TAP`, `LIVE-ACT`, `WIDGET`,
     `WIDGET-TAP`, `SIRI`
   - OS permissions: `PERM-LOCATION`, `PERM-MEDIA`
-  - Wave: `WAVE-BOOT`, `WAVE-CONN`, `WAVE-CUST`, `WAVE-RETRY`, `WAVE-SCHED`
-    (all `wave_service.dart`), `WAVE-BADGE` (`wave_sync_badge.dart`), plus the
-    four `WaveSettingsSection` composes by interpolation — `WAVE-CONNECT`,
-    `WAVE-SYNC`, `WAVE-RETRY`, `WAVE-SCHEDULE`. Note `WAVE-RETRY` is spelled at
-    two layers and `WAVE-SCHED`/`WAVE-SCHEDULE` are two DIFFERENT tags for the
-    same feature at two layers; a Crashlytics search for one will not find the
-    other. The Settings-layer four are the `WaveNetwork().toLocalizedMessage`
-    carve-out from `composeErrorNotice`, so they surface a message without an
-    `error_intro*` key.
+  - Wave: `WAVE-BOOT`, `WAVE-CONN`, `WAVE-CUST`, `WAVE-RETRY`
+    (all `wave_service.dart`), `WAVE-BADGE` (`wave_sync_badge.dart`),
+    `WAVE-BLOCKED` (`firebase_clients_repository.dart`'s `watchBlockedClients`), plus the
+    three `WaveSettingsSection` composes by interpolation — `WAVE-CONNECT`,
+    `WAVE-SYNC`, `WAVE-RETRY`. Note `WAVE-RETRY` is spelled at two layers.
+    `WAVE-SCHED` and `WAVE-SCHEDULE` are GONE from the app with the import
+    cadence (2026-09-13). The Settings-layer three are the
+    `WaveNetwork().toLocalizedMessage` carve-out from `composeErrorNotice`, so
+    they surface a message without an `error_intro*` key.
 - **A user-visible failure notice is not a substitute for a log.** A `catch` that
   only pushes a notice (or only returns `false`) is invisible in Crashlytics —
   every swallowed failure needs a `warn` beside it. The sanctioned exceptions are
@@ -235,6 +245,15 @@ and did not cover the throw (2026-08-31). Each shape is worth recognising:
   dismissed meanwhile. In a `StatelessWidget` there is no `mounted` — take the
   `BuildContext` from the build that wired the callback and gate on
   `context.mounted` after the await.
+
+- **`setState` after an await needs its own `mounted` check even on the
+  SUCCESS path.** In release, `setState`'s lifecycle check is an assert, so on
+  an unmounted State it falls through to `_element!.markNeedsBuild()` and is
+  filed as a FATAL; `use_build_context_synchronously` cannot see it, because
+  `setState` is not a `BuildContext` use. The time-off clash dialog's `_write`
+  is the worked example: the dialog is barrier-dismissible and every caller
+  calls `setState` on `true`, so it returns `false` when unmounted even though
+  the write committed.
 
 The common tell is an unawaited or discarded future: it has no caller left to
 catch anything, so its `try` is the only thing between a routine failure and a
@@ -329,7 +348,7 @@ re-decide it at a call site.
 - **Every auth catch site logs through `logger.authFailure(label, failure,
   error, st)`** (the `AuthFailureLogging` extension on `AppLogger`, beside
   `isExpected`) — never hand-roll the `if (failure.isExpected)` branch. The
-  sites (`sign_in_controller`, `account_setup_screen`, `forgot_password_screen`,
+  sites (`sign_in_controller`, `account_setup_screen`, `change_password_screen`, `forgot_password_screen`,
   `auth_service`, `my_details_screen`, `delete_account_flow`) previously
   double-filed the same failure from two layers. (This said "the four sites"
   and named `create_account_screen`, which P4c deleted; the delete-account

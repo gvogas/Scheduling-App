@@ -14,6 +14,7 @@ import 'package:scheduling/features/employees/application/employees_providers.da
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/features/employees/widgets/cards/employee_card.dart';
 import 'package:scheduling/features/employees/widgets/cards/pending_invite_tile.dart';
+import 'package:scheduling/features/employees/widgets/sections/test_accounts_section.dart';
 import 'package:scheduling/features/employees/widgets/sheets/edit_person_sheet.dart';
 import 'package:scheduling/features/employees/widgets/sheets/employee_details_sheet.dart';
 import 'package:scheduling/features/employees/widgets/sheets/invite_person_sheet.dart';
@@ -226,27 +227,31 @@ class _AddEmployeePageState extends ConsumerState<AddEmployeePage> {
           );
         }
 
+        // Collapsed, never dropped: it is the only way back to the switch.
+        final team = [
+          for (final e in filtered)
+            if (!e.isTestAccount) e,
+        ];
+        final testAccounts = [
+          for (final e in filtered)
+            if (e.isTestAccount) e,
+        ];
         return ListView.separated(
           padding: const EdgeInsets.only(bottom: AppSpacing.sp16),
-          itemCount: filtered.length,
+          itemCount: team.length + (testAccounts.isEmpty ? 0 : 1),
           separatorBuilder: (context, index) =>
               const Divider(height: 1, indent: 64),
           itemBuilder: (context, index) {
-            final employee = filtered[index];
+            if (index == team.length) {
+              return TestAccountsSection(
+                accounts: testAccounts,
+                rowBuilder: (employee) => _rosterRow(context, employee),
+              );
+            }
             final row = FadeInItem(
-              key: ValueKey(employee.id),
+              key: ValueKey(team[index].id),
               index: index,
-              child: employee.isInvited
-                  ? PendingInviteTile(employee: employee)
-                  : EmployeeCard(
-                      employee: employee,
-                      // Only highlight when the detail pane is actually shown
-                      // (two-pane).
-                      selected:
-                          context.isTwoPane &&
-                          _selectedEmployee?.id == employee.id,
-                      onTap: () => _onEmployeeTap(employee),
-                    ),
+              child: _rosterRow(context, team[index]),
             );
             // The first row only - the step's GlobalKey must stay unique.
             return index == 0
@@ -257,6 +262,16 @@ class _AddEmployeePageState extends ConsumerState<AddEmployeePage> {
       },
     );
   }
+
+  Widget _rosterRow(BuildContext context, EmployeeRecord employee) =>
+      employee.isInvited
+      ? PendingInviteTile(employee: employee)
+      : EmployeeCard(
+          employee: employee,
+          // Only highlight when the detail pane is actually shown (two-pane).
+          selected: context.isTwoPane && _selectedEmployee?.id == employee.id,
+          onTap: () => _onEmployeeTap(employee),
+        );
 
   /// Keeps the selected employee in sync with the live users stream, so an
   /// in-pane enable/disable/edit doesn't leave the detail pane showing a stale
@@ -295,11 +310,13 @@ class _AddEmployeePageState extends ConsumerState<AddEmployeePage> {
     // on every rebuild while the stream stays errored.
     ref.listen(allUsersStreamProvider, (previous, next) {
       if (!isFirstAsyncError(previous, next)) return;
-      ref.read(loggerProvider).warn(
-        'EMP-LOAD allUsersStreamProvider error',
-        next.error,
-        next.stackTrace,
-      );
+      ref
+          .read(loggerProvider)
+          .warn(
+            'EMP-LOAD allUsersStreamProvider error',
+            next.error,
+            next.stackTrace,
+          );
     });
     final usersReady = ref.watch(allUsersStreamProvider).hasValue;
     final selected = _liveSelectedEmployee();

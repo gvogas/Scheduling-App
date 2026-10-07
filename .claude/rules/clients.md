@@ -56,8 +56,16 @@ Root context: `../../CLAUDE.md`.
   `importCustomers` (`functions/wave/customers_import.js`). **The Wave UPDATE
   branch must never write it**, or every scheduled import un-archives
   everything; a test pins that half. Existing docs were backfilled by
-  `functions/scripts/backfill-clients-archived.js` (idempotent, `--dry-run`),
-  which must run against prod BEFORE the filtered query deploys.
+  `functions/scripts/backfill-clients-archived.js` (idempotent, `--dry-run`,
+  and `--verbose` to print the id and name of each doc it would patch), which
+  must run against prod BEFORE the filtered query deploys. **Re-run it when a
+  client goes missing from the list but is still findable in search** — that
+  asymmetry is this field's signature, and `--verbose` exists because such a
+  doc is by definition invisible on the screen where you would notice it. One
+  turned up on 2026-09-10 (see the deploy log); both create paths stamp the
+  field, so a doc without it is an anomaly worth naming, not a legacy
+  straggler to count. Since 2026-09-23 `syncClientBuilding` also stamps a
+  boolean `archived` on any client write that lacks one.
   The filter is server-side **specifically so `fetchClientsPage` keeps returning
   a plain `List`**: the server still fills a whole page, so `items.last` stays
   the true cursor and the list's `pages.last.length < pageSize` end-of-list test
@@ -72,6 +80,17 @@ Root context: `../../CLAUDE.md`.
   "only when this client has no appointments" (no cheap foreign-collection
   count), so the callable is the only place that guarantee can live and
   **nothing deletes a client directly**.
+  **The count and the delete are fenced by a `deletionToken`** (2026-09-23):
+  the callable stamps a fresh token in a transaction, counts, deletes only
+  while it still owns that token, and clears its own token on any failure.
+  `firestore.rules` refuses a booking or `clientId` relink onto a client whose
+  token is set (`canLinkClient`, a `getAfter`) and refuses any client update
+  while it is set — without that, a job booked between the count and the
+  delete was orphaned. A retry after a killed attempt takes a new token and
+  proceeds; never clear another attempt's token. **The token-release cleanup has
+  its own try/catch** (2026-09-28): a release that fails is logged
+  (`logger.error`) and the ORIGINAL error is still rethrown, so the caller sees
+  the real refusal rather than the cleanup's.
   **`allow delete` on `/clients` is now WITHDRAWN** (2026-08-08). It had
   survived as a `#compat-1.37.1` shim entry for that build's ungated Delete
   button, and while it did the hole was real — an admin on the old build could
@@ -84,41 +103,128 @@ Root context: `../../CLAUDE.md`.
   refuse, and treats a null `jobCount` as unknown, which withholds. The Admin
   SDK bypasses rules, so console/support cleanup is unaffected.
   UI: `flutter_slidable` in `ClientsListView`'s item builder — **never inside
-  `ClientTile`**, which the booking-flow client picker reuses and must not gain
-  destructive actions. A full swipe commits **Archive only**; delete is never
+  `ClientTile`**, so a row stays a row and only the list decides it is
+  destructible. **The stated reason used to be that the booking-flow client
+  picker reuses `ClientTile`; it does NOT, and has not since the recents
+  removal** (verified 2026-09-11: `ClientTile` has exactly one caller,
+  `ClientsListView._slidableTile`, and `ClientPicker` builds its own
+  `_DropdownRow` inside an `AttachedDropdown`). The constraint is kept anyway
+  — a tile that cannot delete itself is the safer default for whatever reuses
+  it next — but don't defend it with a caller that isn't there. A full swipe commits **Archive only**; delete is never
   gesture-committed. Both surfaces route through the one `ClientActionsHost`
   mixin (`clients/widgets/views/client_actions_host.dart`) so the notices, the
   CLI-ARCH/CLI-DEL tags and the confirm copy can't drift; its two hooks are
   separate because the detail view must STAY OPEN after archiving (to offer
   Unarchive) and dismiss after deleting.
-- **The clients filter is ONE SHEET, and the Filter button is pinned outside
-  any scroller** (2026-09-04). The five-control 48px horizontal chip row it
-  replaced put something off-screen on arrival at large text scale.
+- **The Filter button lives IN the list header row, and there are no chips**
+  (2026-09-11 PM, owner call, reversing the "chips came BACK" call made
+  earlier the same day). The row is one line: the round Filter button, the
+  count sentence, and the sort control pinned to the end. What the chips were
+  for — saying which filter is on — the SENTENCE already does
+  (`clients_showingType` reads "45 Commercial clients", or "50 of 120 Commercial
+  clients" while it is still paging), so they were a second
+  copy of the sheet's vocabulary that could only ever show a subset of it; and
+  the separate chip row cost a whole line of list. Clearing is a ✕ beside the
+  sentence, rendered only while a filter is on. `ClientsFilterBar` is now just
+  that button — it keeps the name because `TourStepId.clientsFilter` targets
+  it. The half of the 2026-09-04 call that STANDS: the button never scrolls,
+  because it is the only way to the addresses and the full sheet.
+  **The tour is why the header takes `leading` and `sortWrap` rather than
+  being wrapped itself**: `clientsFilter` and `clientsSort` are two steps in
+  one row now, and a showcase nested inside another showcase does not resolve.
+  The screen passes the pre-wrapped button in and a wrapper function for the
+  sort control.
+  **The sort control is BOUNDED, not `Flexible`.** It sat in a `Flexible`
+  beside the sentence's `Expanded` — two flex children with flex 1, so they
+  split the free space 50/50, which truncated the sentence AND left the
+  control floating mid-row instead of pinned to the end. It is a
+  `ConstrainedBox` at 55% of the row now; the cap is what keeps a long label
+  ("Recently added" at 2× text) from taking the whole row.
   `ClientsFilter` stays a sealed one-of, so the sheet is a SINGLE radio group
   across its two labelled sections — picking an address clears a type. That
-  reads as a bug and is not one; it is the constraint the chip row hid.
-  Reopening multi-select means changing the sealed model, how the type and
-  address queries compose, and the `firestore.rules` read clauses.
+  reads as a bug and is not one. Reopening multi-select means changing the
+  sealed model, how the type and address queries compose, and the
+  `firestore.rules` read clauses.
+  Its rows are a ghost `rFull` pill — `scheme.surface` fill, `outlineVariant`
+  border — that fills with `scheme.onSurface` and flips its label to the page
+  colour when picked. **The radio glyph stays**, because fill and label colour
+  alone would make colour the only cue for which of a one-of group is on.
   **`ClientsFilterSheet` is the ONLY watcher of `clientBuildingsProvider`.**
-  `ClientsListView` used to watch it and `clientBuildingKeysProvider` before
-  the filter switch, so opening the tab paid the paged `orderBy('name')` scan
-  (~700 docs) on top of the paginated first 50 — roughly 14x read
-  amplification on first open. Moving the watch onto the sheet takes it off the
-  path everyone walks onto one almost nobody opens; it does NOT remove the
-  scan, which still needs the server-maintained `buildings` aggregate. Don't
-  watch either provider from a list row or from `ClientsListView` again.
-  **`ClientsListView` carries no chrome.** The Filter button, the active chip
-  and the list header live in `clients_screen.dart`, because that view is ALSO
-  the booking flow's client picker — keeping the chrome in the screen is what
-  makes it suppressible for free rather than by a flag. The header's count
-  arrives through `onCountChanged`, the same shape as `onFirstPageSettled`.
-  **The bar renders under BOTH bounded and UNBOUNDED width** — the feature tour
-  wraps it in a showcase that hands its child unbounded constraints, where any
-  non-zero flex throws — so it branches on `constraints.maxWidth.isFinite`.
-  Its Filter button also overrides the app theme's
-  `minimumSize: Size(infinity, 48)`, which is right for a stacked action bar
-  and makes a button in a Row infinitely wide. A widget test for anything in a
-  Row must use `lightTheme()`, not the Material default, or it misses this.
+  It reads the server-maintained `clientBuildings` catalog (below), never the
+  roster, but it is still a read nobody walking onto the tab needs — don't
+  watch it from a list row or from `ClientsListView`.
+- **The count line says what it can actually prove.** The list pages, so
+  `onCountChanged` reports ROWS LOADED — which read "Showing all 500 clients"
+  while 500 was just how far someone had scrolled, and said 50 on arrival. The
+  header now also takes `total`, the roster size from
+  `clientsTotalCountProvider` (a `count()` aggregate, `ClientsRepository.countClients`
+  — not a scan: reading the roster to count it would cost more than the list),
+  and renders `clients_showingSome` ("50 of 717 clients") until the two agree,
+  then `clients_showingAll`. **`total` is passed under EVERY filter** (2026-09-28;
+  it was `ClientsFilterAll` only, so a filtered slice showed no "of M").
+  `clientsTotalCountProvider` is a family keyed on `ClientsFilter`, and
+  `countClients(filter:)` counts through the same `_filteredQuery` the paged
+  list reads, so count and page cannot disagree. The header renders
+  `clients_showingSomeType` / `clients_inThisBuildingSome` until loaded == total,
+  then the plain sentence, and ignores `total` while searching (the count is
+  then matches, not loaded rows). The unfiltered count stays watched under every
+  filter so a round trip re-counts nothing. It is an equality-only `count()`
+  served by the existing composites — no new index.
+  **Page size is 50 under EVERY sort** (owner call — a 250-row first page was
+  tried and rejected the same day).
+- **`ClientsListView` carries no chrome.** The Filter button, the ✕ and the
+  list header live in `clients_screen.dart`. **The reason given here
+  was that the view is ALSO the booking flow's client picker — it is not**
+  (verified 2026-09-11: its only caller in `lib/` is `clients_screen.dart`).
+  Keep the split anyway, because chrome in the screen is what lets the list be
+  dropped into a second host without carrying a filter bar it cannot wire —
+  but that is now a design margin, not a live constraint, so don't cite a
+  second caller to justify contorting the list. A null count still renders
+  nothing rather than a zero.
+- **The list leaves `kFloatingControlsClearance` at the bottom, on all three
+  paths** — the paged list, the grouped card list's tail and the filtered /
+  search results. The screen floats a FAB and a `ScrollToTopButton` over it, so
+  without it the last row rests underneath them and can neither be read nor
+  tapped. The constant moved to `core/layout/floating_controls.dart` from the
+  calendar's `agenda_sliver_list.dart` (where it was
+  `kAgendaFloatingControlsClearance`) when the second feature needed it — one
+  number, not two.
+
+- **Grouping is OPT-IN: `ClientsListView(grouped:)`, default false**
+  (2026-09-11). Grouped, the rows arrive in white cards (`singleGroupOf` in
+  `domain/client_grouping.dart`, rendered by `ClientsSliverList`); ungrouped it is today's flat list, which is what a host
+  that wants rows and no chrome gets without passing anything. Only
+  `clients_screen.dart` passes `grouped: true`.
+  **There are no letter headings any more** (2026-09-23): every list — the
+  paged roster, every filter, every search — is ONE card, and a building
+  filter's card is headed by the street the screen hands down as
+  `buildingLabel`. Letters died with the Dart-sorted filter windows: pages are
+  server-ordered on the STORED name, which for a person IS their bare phone
+  number while a heading would read `displayName`, so letters over server
+  pages split into a card per row (M · A · M…). Re-sorting loaded pages
+  client-side was rejected — rows jump into earlier cards as pages arrive.
+  `letterGroupsOf`/`clientInitialOf`/`sortClients` are deleted; don't restore
+  them without a stored, display-ordered sort key.
+  **The card is a `DecoratedSliver` around a `SliverList`, never a `Container`
+  around a `Column`.** One card can hold every loaded row — the paged list at
+  scroll depth — and a `Column`
+  builds all of them eagerly on every rebuild, keystrokes included.
+  **`DecoratedSliver` paints its decoration BEHIND the sliver and does not clip
+  it**, while a row is a square `Material` + `InkWell` — so the first and last
+  row of every group painted their ink splash, and a selected row's
+  `secondaryContainer` fill, square over the card's rounded corner against the
+  page colour. `ClientsSliverList._clipEndRows` rounds those two rows inside
+  the item builder; per row, because clipping the whole group would mean a box
+  around it and that is the `Column` this design exists to avoid.
+  **The grouped path memoizes through `RowCache`** (below).
+  That is also why the grouped path drives the pager ITSELF instead of using
+  `PagedListView`, which cannot host a sliver: **`PagedSliverPrefetch` +
+  `PagedListFooter` (`widgets/lists/paged_sliver_driver.dart`) own the
+  first-page request, the prefetch trigger and the spinner/retry tail**, shared
+  with `AppointmentHistoryView`, which needed the same three for its sticky
+  month bars and had its own copy. Remember `PagingController.refresh()` only
+  RESETS — without `requestFirstPage` the skeleton shimmers forever with no
+  request in flight.
 - **`ClientsSort.mostJobs` and `.recentlyAdded` order by NULLABLE fields.**
   Firestore's `orderBy` returns only documents that HAVE the ordered field, so
   a client whose `jobCount` the recount trigger never stamped, or a
@@ -133,24 +239,25 @@ Root context: `../../CLAUDE.md`.
   **`fetchClientsPage`'s cursor tuple follows the sort**, and its boundary
   cache is keyed `"<sort>:<docId>"` — a boundary captured under `name` would
   resume a `jobCount` query from a string. Don't collapse it back to one map.
-- **The clients type filter is a SEPARATE bounded read, never a filter over the
-  paginated list.** `fetchClientsByType` scans the same cached 5000-doc window
-  `searchClients` uses, so the filter and its results cost no extra Firestore
-  read inside the 2-minute TTL and need no composite index. `fetchArchivedClients`
-  (the Archived option) is the same shape over the same window, and the options
-  are ONE sealed `ClientsFilter` — "archived AND commercial" is unexpressible,
-  not merely unhandled. The type filter **excludes archived clients** (the
-  Archived option is where they live); `searchClients` deliberately does **not** — archived
-  clients stay findable and bookable, which is why the row badges them.
-  Routing it through `fetchClientsPage` instead would filter a server page in
-  Dart, shortening a page the server actually filled — which is exactly what
-  stops `ClientsListView` paging early and hides every client below the first
-  non-matching one. The window bound is the same one search already lives with:
-  past ~5000 clients the filter sees a prefix, not the whole roster. The chips
-  offer the fixed `ClientType.pickable` set, so there is no vocabulary to
-  discover and no spelling to reconcile — searching *within* an active filter
-  runs in Dart over that same bounded list via `ClientSearchPolicy`, indexed
-  once per result set rather than per keystroke.
+- **Every list filter is a SERVER `where` on the paged query, never a Dart
+  filter over a page** (2026-09-23 — this REVERSED the bounded in-memory window
+  the type/building/Archived filters used to read). `fetchClientsPage(filter:)`
+  builds one query from the sealed `ClientsFilter`: `archived == (filter is
+  Archived)`, plus `type ==` or `buildingKey ==`, then the sort's `orderBy`
+  and the `__name__` tiebreak. A Dart post-query filter would shorten a page
+  the server actually filled and stop the list at the first non-matching
+  client, which is why the where-clause is the only acceptable shape. Each
+  filter × sort needs its composite (`(archived, type|buildingKey, <sort
+  field>, __name__)`), and a SEARCH within a filter sends the same keys to
+  `searchClients` (`archived`/`type`/`buildingKey`, served by
+  `(archived[, type|buildingKey], searchTokens, name)`). The options are ONE
+  sealed `ClientsFilter` — "archived AND commercial" is unexpressible, not
+  merely unhandled. The type and building filters **exclude archived
+  clients** (Archived is where they live); an UNFILTERED search deliberately
+  does **not** — archived clients stay findable and bookable, which is why the
+  row badges them. A legacy doc without a boolean `archived`, or with a padded
+  `type`, is invisible to an equality filter; `syncClientBuilding` normalizes
+  both on its next write and `backfill-client-buildings.js` fixes the rest.
   **A write patches that cached window by MERGING over the stored doc, never
   replacing it** (`_patchWindow`): `ClientRecord.toMap()` emits user-owned
   fields only, so a plain substitution drops the function-owned `jobCount` and
@@ -172,13 +279,21 @@ Root context: `../../CLAUDE.md`.
   If a row ever turns up, map it forward — never re-add the old value to make
   a read pass.
 
-- **Clients are GROUPED BY BUILDING, and the key is DERIVED, never stored**
-  (2026-08-28). `buildingKeyFor` / `buildingsIn` / `buildingCountsIn`
-  (`clients/domain/policies/client_building.dart`) reduce the street line down
-  to the address without its unit — "914-4450 Prom. Paton" and
-  "1207-4450 Prom. Paton" are two units of one building. Same discipline as the
-  display-only `overdue` status: nothing is written, so there is no field to
-  backfill and no field the console can corrupt.
+- **Clients are GROUPED BY BUILDING, and the key is a SERVER-OWNED
+  projection** (2026-09-23; derived-never-stored from 2026-08-28 until then).
+  `buildingKeyFor` (`clients/domain/policies/client_building.dart`) reduces the
+  street line to the address without its unit — "914-4450 Prom. Paton" and
+  "1207-4450 Prom. Paton" are two units of one building — and is hand-mirrored
+  by `buildingFor` in `functions/client_buildings.js`. Both suites read
+  `test/fixtures/client_building_cases.json`; change a case there, never in
+  one suite. `syncClientBuilding` stamps `buildingKey` on the client and keeps
+  `clientBuildings/{sha256(key)}` (key/street/city/`clientCount`) and
+  `clientBuildingMemberships/{clientId}` in step in ONE transaction,
+  reconciling from the LIVE doc and the stored membership rather than the
+  event delta, so a retried or reordered event cannot double-count.
+  `firestore.rules` refuses `buildingKey` and `deletionToken` on every client
+  write. Never derive the catalog in the app again: that was a 5000-doc roster
+  scan on the first filter open.
   **The CITY is part of the key.** Two towns hold the same civic number, and
   without it a Laval client turns up under a Montréal address with nothing on
   screen explaining why.
@@ -201,16 +316,23 @@ Root context: `../../CLAUDE.md`.
   DETAIL; the detail row went too, along with `clientBuildingCountsProvider`
   and the `clients_sharedAddressCount` key. The count answered a question
   nobody was asking on a screen about ONE client — the FILTER SHEET is where
-  "who else is at this address" belongs, and it still has it. The row now
-  carries ONE badge, Archived: it previously showed archived, type, Building
-  and the job count all competing under one name. Grouping itself is
-  untouched — `buildingKeyFor`/`buildingsIn`, `clientBuildingsProvider` and
-  `fetchClientsByBuilding` all still back the sheet's address section.
-  **`fetchClientsByBuilding` / `fetchBuildings` read the SAME bounded cached
-  window as the type filter**, so the whole feature costs no extra Firestore
-  read inside the TTL and needs no index. It inherits that window's bound: past
-  the cap the sheet sees a prefix of the roster. Archived clients are excluded,
-  the same rule the type filter keeps.
+  "who else is at this address" belongs, and it still has it. **The TYPE badge
+  came BACK on 2026-09-11** (owner call, asked and answered), REVERSING the
+  half of the 2026-09-07 call that took it off the row. What made it
+  unsurvivable then was the shape, not the badge: the row was a flat
+  `ListTile` where archived, type, Building and the job count all competed on
+  one line under one name. The fresh row is a three-line card row — name +
+  type badge, address, then phone and job count — so the badge has its own
+  corner instead of a share of the subtitle. The rest of the 2026-09-07 call
+  STANDS: the Building pill and the shared-address count are still gone, and
+  nothing is to re-derive a count per row. The sheet's address section is
+  `clientBuildingsProvider` over the catalog, and picking one pages the list
+  through `buildingKey ==`.
+  **`fetchBuildings` reads `clientBuildings where clientCount >= 2`** (capped
+  at 5000 with a `CLI-BUILDINGS` warn), busiest first with the street as the
+  Dart tiebreak. It is EVENTUALLY consistent — a just-edited address moves
+  groups once the trigger lands, and reopening the sheet reloads it. Archived
+  clients are excluded from the counts, the same rule the filters keep.
 - **The Wave sync badge needs a LIVE doc read, and `ClientDetailView` is the one
   surface that has one** (2026-08-07). Every other client surface is a one-shot
   read — a paginated page, or the repository's cached scan window — and
@@ -257,12 +379,45 @@ Root context: `../../CLAUDE.md`.
 - **`jobCount` is recomputed absolutely, never incremented.** `recountClientJobs`
   (`functions/client_job_count.js`) runs `retry: true`, so a retried event would
   double-count a `FieldValue.increment`; it runs a `count()` aggregate and SETS
-  the value. It fires only when `clientId` actually changes (create, delete,
-  reassignment) — an ordinary title or time edit costs zero reads — and writes
+  the value, and writes
   with `update()`, not `set({merge: true})`, so a client removed out-of-band is
   never resurrected as a count-only stub. Backfill is lazy: a client's count
   self-heals on its next appointment write, and a row renders nothing (never
   `0`) until the field exists.
+  **A CANCELLED visit is not a job** (2026-09-11), and it took both halves —
+  either alone changes nothing. The aggregate is four `count()`s by
+  inclusion–exclusion:
+  `total − laterRunDays(dayIndex > 1) − cancelled + cancelledLaterRunDays`.
+  **The fourth term is the correction, not a guard**: one live 5-day run plus
+  one cancelled 5-day run is `10 − 8 − 5 = −3` without it and the right answer
+  is 1, so clamping at 0 would be wrong too. It SUBTRACTS cancelled rather than
+  filtering to an allowlist of live statuses, which is what keeps a legacy
+  `confirmed` or a status-less doc counted — failing in the safe direction, the
+  trap already documented for `countFutureAssignments`. Accepted limitation: a
+  Firestore `where` cannot lowercase, so a console-written `"Cancelled"` still
+  counts; `isValidAppointmentStatus` holds every CLIENT write to the lowercase
+  set. Needs the `(clientId ASC, status ASC, dayIndex ASC)` composite.
+  **And `clientsToRecount` fires on a cancelled-ness FLIP, not only a
+  `clientId` change** — cancelling leaves `clientId` alone, so the trigger
+  returned `[]` and the corrected aggregate was unreachable on the one write
+  that makes it true. The gate is cancelled-ness and NOT "the status changed",
+  so an ordinary `pending → done` edit keeps its zero-read property; otherwise
+  it still fires only on create, delete and reassignment.
+  **`countJobsFor` is the ONE owner of that arithmetic**, shared with
+  `functions/scripts/recount-client-jobs.js` — a backfill spelling it a second
+  time would disagree with the trigger on whichever clients it touched last,
+  which reads as the trigger being broken. That script is a **release
+  prerequisite, not a follow-up**: the count is lazily maintained, so every
+  client with an existing cancelled visit keeps an inflated one indefinitely,
+  including its position under Most jobs.
+  **`canDeleteClient` and `deleteClient` now disagree reproducibly, and the
+  gate stays as it is** (owner default). `canDeleteClient` is `jobCount == 0`
+  while the callable's gate is a live `count()` with no status filter, so a
+  client whose only visits were cancelled reads 0, the UI offers Delete, and
+  the callable refuses `client-has-history`. The gate asks "do documents point
+  at this client", which is the right question for protecting orphanable
+  history — change the message if this ever becomes a complaint, never the
+  gate.
 - **Stored phone fields are NORMALIZED on the way in, and validated on the
   form** (2026-09-04). `_normalizedMap` runs every `phone`/`mobile` — the
   client's and each additional contact's — through `normalizePhoneForStorage`
@@ -391,10 +546,12 @@ Root context: `../../CLAUDE.md`.
   (504 renamed). The only surviving copy is `clientName` on the client's
   SETTLED appointments — `propagateClientEdits` gates on `hasWorkLeft`, so a
   visit that had already ended still carries the pre-rename name.
-  `restore-client-name-halves.js` writes those back into the halves and
+  `restore-client-name-halves.js` (deleted 2026-09-28; in git history) wrote
+  those back into the halves and
   **never touches `name`**, which is Wave's customer identity; it reports, and
   leaves alone, anything reading as a business.
-  `docs/audits/audit-renamed-client-names.js` is its read-only twin and the two
+  `docs/audits/audit-renamed-client-names.js` (also deleted 2026-09-28) was its
+  read-only twin and the two
   are kept deliberately in step — an operator reading one rule's report and
   running another rule's repair is the failure mode. Both scan the client's
   appointments **ordered `startTime` DESC on the existing
@@ -427,11 +584,10 @@ Root context: `../../CLAUDE.md`.
   (last whitespace token is the surname), hand-mirrored ONCE on the JS side, as
   `splitName` in `functions/scripts/backfill-client-name-with-phone.js` — whose
   `patchFor` carries the halves in the same patch for the same reason.
-  **There are TWO implementations, not three:**
-  `restore-client-name-halves.js` **imports** it
-  (`const {splitName} = require("./backfill-client-name-with-phone");`) and
-  re-exports it, so it is a caller, not a twin. Keep it that way — a second JS
-  copy is what the Dart↔JS pair already costs, and a third would drift silently.
+  **`backfill-client-name-with-phone.js`'s `splitName` is now the ONLY JS copy:**
+  `restore-client-name-halves.js`, which imported it, was deleted 2026-09-28.
+  Keep it that way — a second JS copy is what the Dart↔JS pair already costs,
+  and a third would drift silently.
   Both client sheets compose on save, and **both must pass `type` (and the
   edit sheet the stored `businessName`), or an ordinary save renames a
   business to its phone number on the invoices it appears on.** The edit sheet
@@ -645,7 +801,8 @@ Root context: `../../CLAUDE.md`.
   presence alone proves nothing.
   **A sticky header cannot live inside `PagedListView`, so
   `AppointmentHistoryView` re-owns what ISP used to do** — the prefetch
-  trigger, the new-page spinner/retry footer, and the one that is easy to miss:
+  trigger and the new-page spinner/retry footer, both of which now live in the
+  shared `paged_sliver_driver.dart` above, and the one that is easy to miss:
   **`PagingController.refresh()` only RESETS the state, it does not fetch.**
   `_requestFirstPage` is what notices the reset and asks again; without it both
   pull-to-refresh and the first-page Retry leave the skeleton shimmering
@@ -679,8 +836,10 @@ Root context: `../../CLAUDE.md`.
   already carries the year.
   **Both O(N) passes over the rows — `tallyOf` and `monthSectionsOf` — are
   memoized on the IDENTITY of the row list, so every list handed down must be
-  a STABLE INSTANCE, and that has one owner: `_RowCache` in
-  `appointment_history_view.dart`.** Memoizing at the consumer alone is a
+  a STABLE INSTANCE, and that has one owner: `RowCache`
+  (`clients/widgets/views/row_cache.dart`, shared with `ClientsListView`, whose
+  grouped paged list needs it for exactly the same reason and silently went
+  without it until 2026-09-11).** Memoizing at the consumer alone is a
   no-op here and silently was one: `PagingState.items` re-flattens every
   loaded page on each access, and both filter passes build a new list, so the
   memos compared two freshly-allocated lists and re-ran on every rebuild — per
@@ -702,7 +861,10 @@ Root context: `../../CLAUDE.md`.
 
 - **Client "Job history" section** (`ClientJobHistorySection`, admin-only client
   detail) reads via `fetchClientHistory` (`clientJobHistoryProvider`, an
-  `autoDispose.family` that re-fetches on `onLocalWrite`). It orders
+  `autoDispose.family` that re-fetches on `onRecordWrite`, not `onLocalWrite` —
+  a photo or crew note changes nothing listed). It reads PAST visits only
+  (`fetchClientHistory(pastOnly: true)`, `startTime < clock()`, on the same
+  composite) and orders
   `startTime` DESC on the **server** — `(clientId ASC, startTime DESC)`, added
   2026-08-13 — and the `orderBy` is what makes the `limit` mean anything. It
   filtered on `clientId` alone before that, on the reasoning that the automatic
@@ -716,11 +878,14 @@ Root context: `../../CLAUDE.md`.
   so `getAppointmentById` is now the only read in that repository that can
   reach a legacy or console-written row missing one — which is what
   `_recordFrom`'s breadcrumb is left for.
-  **The SECTION renders at most `_maxRendered` (50) of them**, because it is a
+  **The PROVIDER owns the render bound; the section renders what it is given**
+  (`_maxRendered` is gone, 2026-09-28). It asks for a deliberate window,
+  `limit: kClientJobHistoryScan + 1` / `cap: kClientJobHistoryScan` (60 — 10 docs
+  of headroom for the run days 2+ that Dart drops), and keeps
+  `kClientJobHistoryVisits` (50). It is bounded because it is a
   non-lazy `Column` inside the detail body's own scroll view — there is no
   sliver context to hand a builder, so every row it is given is built eagerly,
-  and each is an `AppointmentCard` (an `IntrinsicHeight` subtree). Adding
-  paging to the repository silently took that from 50 rows to up to 1000. Keep
-  the bound until the surface grows a "show all" affordance or hands off to
+  and each is an `AppointmentCard` (an `IntrinsicHeight` subtree). Keep the
+  bound until the surface grows a "show all" affordance or hands off to
   History filtered by client; a taller list means a builder, not a bigger
   number.

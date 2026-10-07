@@ -10,17 +10,19 @@ final placesRepositoryProvider = Provider<PlacesRepository>(
   (ref) => GooglePlacesRepository(),
 );
 
-/// Family key for [reverseGeocodeProvider]. Rounds coordinates to a ~110m
-/// cell so nearby GPS fixes share one billable lookup, and carries [locale]
-/// so a language switch doesn't serve back a cached address in the wrong language.
+/// Roster rows show only a city, so they key on a ~1.1 km cell.
+const int kCoarseGeocodePrecision = 2;
+
+/// Family key for [reverseGeocodeProvider]: a rounded cell plus the locale.
 @immutable
 class ReverseGeocodeQuery {
   ReverseGeocodeQuery({
     required double lat,
     required double lng,
     required this.locale,
-  }) : lat = double.parse(lat.toStringAsFixed(3)),
-       lng = double.parse(lng.toStringAsFixed(3));
+    int decimals = 3,
+  }) : lat = double.parse(lat.toStringAsFixed(decimals)),
+       lng = double.parse(lng.toStringAsFixed(decimals));
 
   final double lat;
   final double lng;

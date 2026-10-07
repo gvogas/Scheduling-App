@@ -164,6 +164,27 @@ describe("searchClients", () => {
   const req = (data = {}) =>
     ({auth: {uid: UID}, data: {query: "smith", ...data}});
 
+  test("filters constrain the indexed search before its read cap", async () => {
+    const db = dbReturning([]);
+    getFirestore.mockReturnValue(db);
+    await searchClients.run(req({archived: false, buildingKey: "street|city"}));
+    expect(db.calls[0].where).toEqual(expect.arrayContaining([
+      ["archived", "==", false], ["buildingKey", "==", "street|city"],
+    ]));
+    expect(db.calls[0].limit).toBe(200);
+    await searchClients.run(req({archived: false, type: "commercial"}));
+    expect(db.calls[1].where).toContainEqual(["type", "==", "commercial"]);
+  });
+
+  test.each([{archived: "false"}, {type: "unknown"},
+    {type: "commercial", buildingKey: "x"}])(
+      "invalid filter is refused before consuming the limiter: %p",
+      async (filter) => {
+        await expect(searchClients.run(req(filter)))
+            .rejects.toThrow("invalid-client-filter");
+        expect(security.enforceDurableRateLimit).not.toHaveBeenCalled();
+      });
+
   test("a non-admin is refused — clients are PII", async () => {
     security.profile = {role: "employee", docId: "e1"};
     getFirestore.mockReturnValue(dbReturning([]));

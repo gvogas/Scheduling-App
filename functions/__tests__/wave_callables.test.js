@@ -175,14 +175,9 @@ beforeEach(() => {
   getFirestore.mockReturnValue(fakeFirestore(null).db);
 });
 
-// This table lists the admin callables and whether each one consumes a
-// rate-limit slot on the happy path. EVERY entry is now `true`: the two that
-// were `false` were both wrong. `waveGetConnection` gained a limiter once it
-// grew two count() aggregates (it is no longer the single-document read its
-// comment described), and `waveSetImportSchedule` had called
-// `enforceDurableRateLimit` all along — its "not rate limited" case passed
-// vacuously, because the `{}` payload this table drives it with is rejected as
-// `invalid-argument` before the limiter is ever reached.
+// Each admin callable and whether it consumes a rate-limit slot on the happy
+// path. `waveSetImportSchedule` is the one `false`: it is a retired no-op kept
+// for shipped builds (#compat-1.61.0), and it writes nothing to cap.
 const CALLABLES = [
   {
     name: "waveBootstrap",
@@ -199,7 +194,7 @@ const CALLABLES = [
   {
     name: "waveSetImportSchedule",
     fn: () => waveSetImportSchedule,
-    rateLimited: true,
+    rateLimited: false,
     keys: ["schedule"],
   },
   {
@@ -611,7 +606,6 @@ describe("waveGetConnection", () => {
     getFirestore.mockReturnValue(fakeFirestore({
       businessId: "biz-1",
       businessName: "Acme",
-      importSchedule: "weekly",
     }).db);
     waveWorker.countQueuedJobs.mockResolvedValue(3);
     waveWorker.countDeadJobs.mockResolvedValue(1);
@@ -620,7 +614,6 @@ describe("waveGetConnection", () => {
       connected: true,
       businessId: "biz-1",
       businessName: "Acme",
-      importSchedule: "weekly",
       pendingCount: 3,
       failedCount: 1,
     });
@@ -638,14 +631,13 @@ describe("waveGetConnection", () => {
     expect(out.connected).toBe(true);
   });
 
-  test("an absent doc reports disconnected with schedule off", async () => {
+  test("an absent doc reports disconnected", async () => {
     getFirestore.mockReturnValue(fakeFirestore(null).db);
 
     expect(await waveGetConnection.run(req(ADMIN_UID, {}))).toEqual({
       connected: false,
       businessId: "",
       businessName: "",
-      importSchedule: "off",
       pendingCount: null,
       failedCount: null,
     });
@@ -655,64 +647,45 @@ describe("waveGetConnection", () => {
     expect(waveWorker.countDeadJobs).not.toHaveBeenCalled();
   });
 
-  test("an unknown stored schedule normalizes to off", async () => {
+  test("no longer reports a cadence, even one still stored", async () => {
+    // #compat-1.61.0: that build reads an absent `importSchedule` as off.
     getFirestore.mockReturnValue(
-        fakeFirestore({businessId: "b", importSchedule: "hourly"}).db);
+        fakeFirestore({businessId: "b", importSchedule: "weekly"}).db);
 
     const out = await waveGetConnection.run(req(ADMIN_UID, {}));
-    expect(out.importSchedule).toBe("off");
+    expect(out).not.toHaveProperty("importSchedule");
   });
 });
 
-describe("waveSetImportSchedule", () => {
-  test("allows only the `schedule` key", async () => {
-    getFirestore.mockReturnValue(fakeFirestore({businessId: "b"}).db);
-    await waveSetImportSchedule
-        .run(req(ADMIN_UID, {schedule: "weekly"})).catch(() => {});
+describe("waveSetImportSchedule (retired, #compat-1.61.0)", () => {
+  test("still accepts the `schedule` key a shipped build sends", async () => {
+    // Removing it would throw `unexpected-field` at every 1.61.0 admin who
+    // touches the picker still on their Settings screen.
+    await waveSetImportSchedule.run(req(ADMIN_UID, {schedule: "weekly"}));
 
     const allowed = security.assertPayloadShape.mock.calls[0][1];
     expect([...allowed]).toEqual(["schedule"]);
   });
 
-  test("writes an accepted cadence", async () => {
-    const {db, updates} = fakeFirestore({businessId: "b"});
-    getFirestore.mockReturnValue(db);
-
-    expect(await waveSetImportSchedule.run(req(ADMIN_UID, {
-      schedule: "monthly",
-    }))).toEqual({schedule: "monthly"});
-    expect(updates).toEqual([{importSchedule: "monthly"}]);
-  });
-
-  test("rejects a cadence outside the allowlist", async () => {
-    getFirestore.mockReturnValue(fakeFirestore({businessId: "b"}).db);
-
-    const err = await expectThrows(
-        waveSetImportSchedule, req(ADMIN_UID, {schedule: "hourly"}));
-
-    expect(err.code).toBe("invalid-argument");
-    expect(err.message).toBe("wave/invalid-schedule");
-  });
-
-  test("value validation runs before the Firestore read", async () => {
+  test("accepts a cadence and reads and writes nothing", async () => {
     const fake = fakeFirestore({businessId: "b"});
     getFirestore.mockReturnValue(fake.db);
 
-    await expectThrows(
-        waveSetImportSchedule, req(ADMIN_UID, {schedule: 42}));
-
+    expect(await waveSetImportSchedule.run(req(ADMIN_UID, {
+      schedule: "monthly",
+    }))).toEqual({schedule: "off"});
+    expect(fake.updates).toEqual([]);
     expect(fake.ref.get).not.toHaveBeenCalled();
   });
 
-  test("a not-bootstrapped install is rejected without a write", async () => {
-    const fake = fakeFirestore(null);
-    getFirestore.mockReturnValue(fake.db);
+  test("never refuses a value, so an old picker cannot error", async () => {
+    expect(await waveSetImportSchedule.run(
+        req(ADMIN_UID, {schedule: "hourly"}))).toEqual({schedule: "off"});
+  });
 
-    const err = await expectThrows(
-        waveSetImportSchedule, req(ADMIN_UID, {schedule: "weekly"}));
-
-    expect(err.message).toBe("wave/not-bootstrapped");
-    expect(fake.updates).toEqual([]);
+  test("consumes no rate-limit slot", async () => {
+    await waveSetImportSchedule.run(req(ADMIN_UID, {schedule: "weekly"}));
+    expect(security.enforceDurableRateLimit).not.toHaveBeenCalled();
   });
 });
 
@@ -751,8 +724,7 @@ describe("selectBusiness", () => {
 // was deleted; `waveUpsertCustomer` now pushes each edit as it is made and
 // `waveScheduledImport` is the daily safety net. These two describe blocks
 // pin the properties that replaced the poll — a drain on the enqueue path, a
-// drain that cannot fail its trigger, and a sweep that drains even when the
-// import cadence is `off`.
+// drain that cannot fail its trigger, and a daily sweep that drains.
 // ---------------------------------------------------------------------------
 
 /**
@@ -835,7 +807,7 @@ function clientWrite(before, after) {
 }
 
 const CLIENT_DOC = {name: "Acme", phone: "(514) 555-1234", email: "a@b.c"};
-const CONNECTED = {businessId: "biz-1", importSchedule: "off"};
+const CONNECTED = {businessId: "biz-1"};
 
 describe("waveUpsertCustomer pushes without a poll", () => {
   test("drains the outbox right after enqueueing the edit", async () => {
@@ -940,12 +912,11 @@ describe("waveUpsertCustomer pushes without a poll", () => {
 });
 
 describe("runWaveDaily is the drain safety net", () => {
-  test("drains even when the import cadence is off", async () => {
-    // The whole reason this drain is above the due check: `off` is the
-    // DEFAULT, and it governs the pull. Gating the push on it would mean a
-    // job that failed and backed off is never retried on a default install.
+  test("drains the outbox", async () => {
+    // A job on backoff, or left inflight by a dead instance, produces no
+    // client write to ride on; this sweep is what retries it.
     const {triggers, worker, customers, firestore} = freshWaveModules();
-    const {db} = fakeTriggerFirestore({...CONNECTED, importSchedule: "off"});
+    const {db} = fakeTriggerFirestore(CONNECTED);
     firestore.getFirestore.mockReturnValue(db);
 
     await triggers.runWaveDaily();
@@ -956,48 +927,30 @@ describe("runWaveDaily is the drain safety net", () => {
     expect(customers.importCustomers).not.toHaveBeenCalled();
   });
 
-  test("drains BEFORE importing when the cadence is due", async () => {
-    // Push-before-pull: an import overwrites every mapped field of a linked
-    // client AND stamps lastSyncedHash from Wave's values, so an un-pushed
-    // local edit underneath it is marked synced rather than merely lost.
-    const {triggers, worker, customers, firestore} = freshWaveModules();
-    const {db} = fakeTriggerFirestore({
-      businessId: "biz-1", importSchedule: "weekly", lastAutoImportAt: null,
-    });
-    firestore.getFirestore.mockReturnValue(db);
+  test("never imports, even over a connection still carrying a cadence",
+      async () => {
+        // The cadence half was deleted in Wave Phase 4 (Task 12).
+        const {triggers, worker, customers, firestore} = freshWaveModules();
+        const {db} = fakeTriggerFirestore({
+          businessId: "biz-1", importSchedule: "weekly",
+          lastAutoImportAt: null,
+        });
+        firestore.getFirestore.mockReturnValue(db);
 
-    await triggers.runWaveDaily();
+        await triggers.runWaveDaily();
 
-    expect(customers.importCustomers).toHaveBeenCalled();
-    expectCalledBefore(worker.drainQueue, customers.importCustomers);
-  });
+        expect(worker.drainQueue).toHaveBeenCalledTimes(1);
+        expect(customers.importCustomers).not.toHaveBeenCalled();
+        expect(worker.listOutstandingClientIds).not.toHaveBeenCalled();
+      });
 
-  test("the protect-list is read AFTER the drain", async () => {
-    // So a job the drain just completed is not protected for nothing, while
-    // anything it could not finish is still shielded from the import.
+  test("a drain failure resolves quietly", async () => {
     const {triggers, worker, firestore} = freshWaveModules();
-    const {db} = fakeTriggerFirestore({
-      businessId: "biz-1", importSchedule: "weekly", lastAutoImportAt: null,
-    });
-    firestore.getFirestore.mockReturnValue(db);
-
-    await triggers.runWaveDaily();
-
-    expectCalledBefore(worker.drainQueue, worker.listOutstandingClientIds);
-  });
-
-  test("a drain failure still lets the import run", async () => {
-    const {triggers, worker, customers, firestore} = freshWaveModules();
-    const {db} = fakeTriggerFirestore({
-      businessId: "biz-1", importSchedule: "weekly", lastAutoImportAt: null,
-    });
+    const {db} = fakeTriggerFirestore(CONNECTED);
     firestore.getFirestore.mockReturnValue(db);
     worker.drainQueue.mockRejectedValue(new Error("Wave is down"));
 
     await expect(triggers.runWaveDaily()).resolves.toBeUndefined();
-
-    // skipClientIds is what protects the un-pushed edits the drain missed.
-    expect(customers.importCustomers).toHaveBeenCalled();
   });
 
   test("does nothing at all while Wave is not connected", async () => {

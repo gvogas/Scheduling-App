@@ -14,11 +14,11 @@
  * fault, so a failure becomes something an admin can fix rather than a counter
  * in Settings.
  *
- * Pure and synchronous — no Firebase, no network. In PHASE 1 it is additive:
- * `wave/customers.js` still builds its own payload and nothing is blocked. It
- * becomes the only producer in Phase 2.
+ * Pure and synchronous — no Firebase, no network. Since Phase 2 it is the ONLY
+ * producer of a Wave customer payload, and a client it refuses never becomes a
+ * queued job.
  *
- * Design: `docs/plans/2026-08-30-wave-validated-contract-design.md`.
+ * Design: `docs/archive/2026-08-30-wave-validated-contract-design.md`.
  * @module wave/customer_contract
  */
 
@@ -239,6 +239,8 @@ function buildCustomerPayload(clientFields) {
   // ONLY a blocking problem withholds the payload. An advisory one rides along
   // on a perfectly good result — the push proceeds and the problem is still
   // reported, which is the whole reason the severities are split.
+  //
+  // This is the ONE spelling of the blocking test. Everything else asks `ok`.
   if (problems.some((p) => p.severity === "blocking")) {
     return {ok: false, problems};
   }
@@ -246,28 +248,93 @@ function buildCustomerPayload(clientFields) {
 }
 
 /**
- * The Firestore patch recording a client's contract problems.
+ * The Firestore patch recording a client's contract verdict.
  *
- * PHASE 1 IS REPORT-ONLY: this records what the contract WOULD refuse and
- * changes nothing else. The job is still enqueued, the push still runs, and
- * `wave.syncState` is untouched. The point is to learn what the contract
- * flags across every real client before it is able to block one.
+ * Records BOTH severities. An advisory problem does not stop the push, but the
+ * admin still has to be able to see it — a client nobody can ring is worth
+ * showing even though Wave took it happily.
  *
- * Always returns the key, `null` when there is nothing wrong — a client
- * repaired since the last write must not keep stale problems on its doc.
+ * Always returns `wave.problems`, `null` when there is nothing wrong — a
+ * client repaired since the last write must not keep stale problems on its
+ * doc. `syncState` is only touched when the contract REFUSES: a clean client's
+ * state is owned by the push (`pending` → `synced` / `error`), and stamping it
+ * here would fight the worker for it.
  * @param {!Object} clientFields Firestore `clients` document fields.
- * @return {!Object} A patch to merge into a client-doc update.
+ * @param {{clearedState: string}=} opts State to write when nothing blocks;
+ *   omit to leave `syncState` alone.
+ * @return {!Object} A patch of DOTTED keys, safe to merge into a client-doc
+ *   update without replacing sibling `wave` keys.
  */
-function problemsPatch(clientFields) {
-  const {problems} = buildCustomerPayload(clientFields);
-  // Records BOTH severities. An advisory problem does not stop the push, but
-  // the admin still has to be able to see it — a client nobody can ring is
-  // worth showing even though Wave took it happily.
+function statePatch(clientFields, opts) {
+  return verdictPatch(buildCustomerPayload(clientFields), opts);
+}
+
+/**
+ * [statePatch] over a verdict the caller ALREADY built.
+ *
+ * The dispatcher holds one by the time it decides to block, and re-deriving it
+ * meant running the whole contract a second time INSIDE a Firestore
+ * transaction — where a retry runs it again. A verdict and the patch that
+ * records it must describe the same evaluation; taking the verdict as the
+ * argument is what makes that structural rather than remembered.
+ * @param {{ok: boolean, problems: (!Array<WaveProblem>|undefined)}} verdict
+ *   A [buildCustomerPayload] result.
+ * @param {{clearedState: string}=} opts State to write when nothing blocks;
+ *   omit to leave `syncState` alone.
+ * @return {!Object} A patch of DOTTED keys.
+ */
+function verdictPatch(verdict, opts) {
+  const {ok, problems} = verdict;
   const found = Array.isArray(problems) ? problems : [];
-  return {"wave.problems": found.length > 0 ? found : null};
+  const patch = {"wave.problems": found.length > 0 ? found : null};
+  if (!ok) {
+    patch["wave.syncState"] = "blocked";
+    // A refused client never reaches Wave, so any error left from an earlier
+    // push describes a push that will not be retried.
+    patch["wave.syncError"] = null;
+  } else if (opts && opts.clearedState) {
+    patch["wave.syncState"] = opts.clearedState;
+    patch["wave.syncError"] = null;
+  }
+  return patch;
+}
+
+/**
+ * A [statePatch] verdict as the NESTED `wave` map a document CREATE writes.
+ *
+ * A create has no stored `wave` map to preserve, so it may nest — but it must
+ * nest the same verdict the update branch merges, or the two paths disagree
+ * about a client for no reason a reader could predict. Derived from the patch
+ * rather than re-spelled: a key added to [statePatch] reaches both shapes, and
+ * the import's create branch cannot silently omit it.
+ * @param {!Object} patch A patch of dotted `wave.*` keys, from [statePatch].
+ * @return {!Object} The same state as a nested `wave` map.
+ */
+function waveStateFields(patch) {
+  const fields = {syncError: null};
+  // A verdict that neither blocks nor was given a `clearedState` leaves
+  // `syncState` alone — and the admin SDK REFUSES an undefined value, so the
+  // key has to be absent rather than present-and-undefined.
+  if (patch["wave.syncState"] !== undefined) {
+    fields.syncState = patch["wave.syncState"];
+  }
+  if ("wave.problems" in patch) fields.problems = patch["wave.problems"];
+  return fields;
+}
+
+/**
+ * Whether the contract refuses this client outright.
+ * @param {!Object} clientFields Firestore `clients` document fields.
+ * @return {boolean} True when Wave would refuse it.
+ */
+function isBlocked(clientFields) {
+  return buildCustomerPayload(clientFields).ok === false;
 }
 
 module.exports = {
   buildCustomerPayload,
-  problemsPatch,
+  statePatch,
+  verdictPatch,
+  waveStateFields,
+  isBlocked,
 };

@@ -23,6 +23,7 @@ abstract final class AnalyticsEvents {
   static const String appointmentRestored = 'appointment_restored';
   static const String jobStarted = 'job_started';
   static const String jobCompleted = 'job_completed';
+  static const String overdueReviewApplied = 'overdue_review_applied';
 
   // Calendar.
   static const String calendarDateChanged = 'calendar_date_changed';
@@ -50,10 +51,6 @@ abstract final class AnalyticsEvents {
   static const String contactAction = 'contact_action';
   static const String dashboardPeriodChanged = 'dashboard_period_changed';
 
-  /// Generic bucket for a feature with no event of its own. Always carries
-  /// [AnalyticsParams.feature], so the console groups it by that.
-  static const String featureUsed = 'feature_used';
-
   // Auth. `login` is a Firebase RESERVED-but-recommended name, not a custom
   // one — it feeds the console's built-in engagement reports, so it keeps the
   // canonical spelling rather than an `auth_` prefix of ours.
@@ -71,6 +68,7 @@ abstract final class AnalyticsEvents {
     appointmentRestored,
     jobStarted,
     jobCompleted,
+    overdueReviewApplied,
     calendarDateChanged,
     calendarViewChanged,
     clientCreated,
@@ -89,7 +87,6 @@ abstract final class AnalyticsEvents {
     settingsChanged,
     contactAction,
     dashboardPeriodChanged,
-    featureUsed,
     login,
     signOut,
     accountSetupCompleted,
@@ -109,9 +106,6 @@ abstract final class AnalyticsParams {
 
   /// The surface a cross-cutting event fired from (see [AnalyticsSurfaces]).
   static const String surface = 'surface';
-
-  /// The feature name on [AnalyticsEvents.featureUsed].
-  static const String feature = 'feature';
 
   /// Appointment shape — never its content.
   static const String repeat = 'repeat';
@@ -145,10 +139,12 @@ abstract final class AnalyticsParams {
   static const String period = 'period';
   static const String role = 'role';
 
+  /// How many jobs one bulk action touched.
+  static const String count = 'count';
+
   static const Set<String> allParams = {
     source,
     surface,
-    feature,
     repeat,
     assigneeCount,
     hasPhotos,
@@ -171,6 +167,7 @@ abstract final class AnalyticsParams {
     action,
     period,
     role,
+    count,
   };
 }
 
@@ -198,6 +195,7 @@ abstract final class AnalyticsSources {
   static const String dayRoute = 'day_route';
   static const String employees = 'employees';
   static const String notification = 'notification';
+  static const String overdueReview = 'overdue_review';
   /// An in-app notice's action — distinct from a push tap.
   static const String notice = 'notice';
 }
@@ -212,12 +210,56 @@ abstract final class AnalyticsContactActions {
   static const String link = 'link';
 }
 
+/// Canonical `action` values for [AnalyticsEvents.overdueReviewApplied].
+abstract final class AnalyticsOverdueReviewActions {
+  static const String complete = 'complete';
+  static const String notDone = 'not_done';
+}
+
 /// Canonical `surface` values for the cross-cutting events.
 abstract final class AnalyticsSurfaces {
   static const String clients = 'clients';
   static const String history = 'history';
   static const String appointmentForm = 'appointment_form';
   static const String fieldRecord = 'field_record';
+}
+
+/// Canonical `filter_name` values for [AnalyticsEvents.filterUsed].
+abstract final class AnalyticsFilters {
+  static const String none = 'none';
+  static const String type = 'type';
+  static const String building = 'building';
+  static const String archived = 'archived';
+  static const String sort = 'sort';
+  static const String year = 'year';
+  static const String employee = 'employee';
+  static const String status = 'status';
+}
+
+/// Canonical `setting_name` values for [AnalyticsEvents.settingsChanged].
+abstract final class AnalyticsSettings {
+  static const String theme = 'theme';
+  static const String textScale = 'text_scale';
+  static const String language = 'language';
+  static const String appLock = 'app_lock';
+  static const String liveActivity = 'live_activity';
+}
+
+/// Canonical `direction` values for [AnalyticsEvents.calendarDateChanged].
+abstract final class AnalyticsDirections {
+  static const String today = 'today';
+  static const String picked = 'picked';
+  static const String weekStrip = 'week_strip';
+  static const String month = 'month';
+  static const String next = 'next';
+  static const String previous = 'previous';
+  static const String day = 'day';
+}
+
+/// Canonical `action` values for [AnalyticsEvents.clientArchived].
+abstract final class AnalyticsArchiveActions {
+  static const String archive = 'archive';
+  static const String unarchive = 'unarchive';
 }
 
 /// Canonical `scope` values for an edit or delete that can span a series.

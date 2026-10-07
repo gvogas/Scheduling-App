@@ -68,6 +68,11 @@ class SignInNeedsAccountSetup extends SignInOutcome {
   final String lastName;
 }
 
+/// Signed in against an active account an admin has reset; the session is KEPT for Change password.
+class SignInNeedsPasswordChange extends SignInOutcome {
+  const SignInNeedsPasswordChange();
+}
+
 /// The attempt failed; [failure] is already mapped for localized display.
 class SignInError extends SignInOutcome {
   const SignInError(this.failure);
@@ -134,9 +139,7 @@ class SignInController extends Notifier<SignInState> {
 
       // Every account has a doc keyed by uid from the moment the admin
       // creates it — including one that has never been set up.
-      final userDoc = await retryAsync(
-        () => employees.findUserByUid(user.uid),
-      );
+      final userDoc = await retryAsync(() => employees.findUserByUid(user.uid));
 
       if (userDoc == null) {
         // Signed in, but no profile doc — not a provisioned account.
@@ -172,6 +175,15 @@ class SignInController extends Notifier<SignInState> {
         );
         _settle();
         return const SignInAccountDisabled();
+      }
+
+      if (employee.passwordResetRequired) {
+        // A stale identity cache would let a cold start fast-path past the change.
+        await authCache.clear().catchError((Object e, StackTrace st) {
+          logger.warn('AUTH-SIGNIN identity cache clear failed', e, st);
+        });
+        _settle();
+        return const SignInNeedsPasswordChange();
       }
 
       // The identity cache and remembered email are best-effort — neither
@@ -215,9 +227,7 @@ class SignInController extends Notifier<SignInState> {
     final user = auth.currentUser;
     if (user == null) return const SignInNoSession();
     try {
-      final userDoc = await retryAsync(
-        () => employees.findUserByUid(user.uid),
-      );
+      final userDoc = await retryAsync(() => employees.findUserByUid(user.uid));
       if (userDoc == null) return const SignInProfilePending();
       final employee = EmployeeRecord.fromMap(userDoc.id, userDoc.data);
       // Mirror signIn's gate. This runs immediately after activation, so the
@@ -225,7 +235,9 @@ class SignInController extends Notifier<SignInState> {
       // the permission-denied retry served from cache) would otherwise walk an
       // still-`invited` person into the hub, where every rules gate denies them
       // and nothing routes them back to setup.
-      if (!employee.isActive) return const SignInProfilePending();
+      if (!employee.isActive || employee.passwordResetRequired) {
+        return const SignInProfilePending();
+      }
       unawaited(
         authCache.save(employee).catchError((Object e, StackTrace st) {
           logger.warn('AUTH-SETUP resume identity cache save failed', e, st);

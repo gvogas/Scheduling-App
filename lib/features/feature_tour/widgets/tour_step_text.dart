@@ -74,6 +74,10 @@ import 'package:scheduling/l10n/l10n.dart';
     title: l.tour_liveMapRosterTitle,
     description: l.tour_liveMapRosterDesc,
   ),
+  TourStepId.liveMapNotOnMap => (
+    title: l.tour_liveMapNotOnMapTitle,
+    description: l.tour_liveMapNotOnMapDesc,
+  ),
   TourStepId.liveMapRecenter => (
     title: l.tour_liveMapRecenterTitle,
     description: l.tour_liveMapRecenterDesc,

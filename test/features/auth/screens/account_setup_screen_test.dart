@@ -13,6 +13,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
+import 'package:scheduling/core/validators/text_limits.dart';
 import 'package:scheduling/features/auth/application/sign_in_controller.dart';
 import 'package:scheduling/features/auth/domain/auth_failure.dart';
 import 'package:scheduling/features/auth/screens/account_setup_screen.dart';
@@ -448,5 +449,25 @@ void main() {
       );
       expect(button.onPressed, isNotNull);
     });
+  });
+
+  // The callable caps `newPassword` at TextLimits.password; a longer one used
+  // to pass every client check and fail as "weak password".
+  testWidgets('both password fields stop at the server cap', (tester) async {
+    await tester.pumpWidget(_harness(auth: auth));
+    await tester.pumpAndSettle();
+
+    final tooLong = 'Aa1${'x' * (TextLimits.password + 50)}';
+    final fields = find.descendant(
+      of: find.byType(AuthPasswordField),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(fields.at(0), tooLong);
+    await tester.enterText(fields.at(1), tooLong);
+    await tester.pumpAndSettle();
+
+    for (final field in tester.widgetList<TextField>(fields)) {
+      expect(field.controller!.text.length, TextLimits.password);
+    }
   });
 }

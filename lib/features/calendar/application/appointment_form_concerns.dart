@@ -87,10 +87,6 @@ mixin AppointmentFormConcerns<StateT extends AppointmentFormFields>
   /// spending another round trip.
   ClientSearchWindow _clientWindow = ClientSearchWindow.empty;
 
-  /// Which keyboard the picker is showing. The controller owns it so the query
-  /// survives the field losing focus.
-  void setClientQueryMode(ClientQueryMode mode) => _resetSearch(mode);
-
   /// Clear the results and the narrowing window together. Both halves are the
   /// invariant: a reset that bumps the request id without dropping the window
   /// lets a stale in-flight answer be narrowed onto the new query.
@@ -259,11 +255,8 @@ mixin AppointmentFormConcerns<StateT extends AppointmentFormFields>
   /// How many more photos this form will accept. The notice a trimmed pick
   /// raises names THIS, not the total cap — "only 10 more can be added" at the
   /// moment none can is worse than saying nothing.
-  int get remainingImageSlots =>
-      (maxImagesPerAppointment - usedImageCount).clamp(
-        0,
-        maxImagesPerAppointment,
-      );
+  int get remainingImageSlots => (maxImagesPerAppointment - usedImageCount)
+      .clamp(0, maxImagesPerAppointment);
 
   /// Adds what fits and returns how many were DROPPED, so the caller can say
   /// so. Returning nothing made a full job's Add-photos button a silent no-op.

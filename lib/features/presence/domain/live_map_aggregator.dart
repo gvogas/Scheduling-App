@@ -16,7 +16,7 @@ class LiveMapAggregator {
   LiveMapAggregator._();
 
   /// Joins [fixes] with [users] by users-doc id, dropping any fix with no
-  /// matching or inactive user, and sorts the result by name.
+  /// matching, inactive or test user, and sorts the result by name.
   static List<StaffMapPoint> join({
     required List<PresenceFix> fixes,
     required List<EmployeeRecord> users,
@@ -25,7 +25,7 @@ class LiveMapAggregator {
     final points = <StaffMapPoint>[];
     for (final fix in fixes) {
       final user = byId[fix.userDocId];
-      if (user == null || !user.isActive) continue;
+      if (user == null || !_isTeammate(user)) continue;
       points.add(
         StaffMapPoint(
           userDocId: fix.userDocId,
@@ -40,6 +40,46 @@ class LiveMapAggregator {
     points.sort((a, b) => a.name.compareTo(b.name));
     return points;
   }
+
+  /// On the map (sharing on, any age), not seen (no fix yet), or sharing off.
+  static LiveMapTeam groupTeam({
+    required List<PresenceFix> fixes,
+    required List<EmployeeRecord> users,
+  }) {
+    final sharingIds = {
+      for (final u in users)
+        if (u.locationSharingEnabled) u.id,
+    };
+    final onMap = [
+      for (final p in join(fixes: fixes, users: users))
+        if (sharingIds.contains(p.userDocId)) p,
+    ];
+    final onMapIds = {for (final p in onMap) p.userDocId};
+    final notSeen = <StaffAbsence>[];
+    final sharingOff = <StaffAbsence>[];
+    for (final user in users) {
+      if (!_isTeammate(user) || onMapIds.contains(user.id)) continue;
+      final absence = StaffAbsence(
+        userDocId: user.id,
+        name: user.displayName,
+        color: user.color,
+      );
+      if (user.locationSharingEnabled) {
+        notSeen.add(absence);
+      } else {
+        sharingOff.add(absence);
+      }
+    }
+    int byName(StaffAbsence a, StaffAbsence b) => a.name.compareTo(b.name);
+    return LiveMapTeam(
+      onMap: onMap,
+      notSeen: notSeen..sort(byName),
+      sharingOff: sharingOff..sort(byName),
+    );
+  }
+
+  static bool _isTeammate(EmployeeRecord user) =>
+      user.isActive && !user.isTestAccount;
 
   /// True only once [updatedAt] is older than [presenceStaleAfter]. A null
   /// value — a pending own-write's server timestamp — reads as fresh.
@@ -171,6 +211,36 @@ class StaffMapPoint {
   final double lat;
   final double lng;
   final DateTime? updatedAt;
+}
+
+/// A teammate with no pin on the map.
+class StaffAbsence {
+  const StaffAbsence({
+    required this.userDocId,
+    required this.name,
+    required this.color,
+  });
+
+  final String userDocId;
+  final String name;
+  final Color color;
+}
+
+/// The admin map's three team sections.
+class LiveMapTeam {
+  const LiveMapTeam({
+    required this.onMap,
+    required this.notSeen,
+    required this.sharingOff,
+  });
+
+  static const empty = LiveMapTeam(onMap: [], notSeen: [], sharingOff: []);
+
+  final List<StaffMapPoint> onMap;
+  final List<StaffAbsence> notSeen;
+  final List<StaffAbsence> sharingOff;
+
+  int get offMapCount => notSeen.length + sharingOff.length;
 }
 
 /// How long ago a fix was reported, bucketed for display.

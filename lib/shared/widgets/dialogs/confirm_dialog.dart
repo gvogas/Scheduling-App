@@ -15,6 +15,7 @@ Future<bool> showConfirmDialog(
   String? message,
   Widget? content,
   bool destructive = true,
+  String? cancelLabel,
 }) async {
   assert(message != null || content != null, 'message or content is required');
   final bool? result;
@@ -30,7 +31,7 @@ Future<bool> showConfirmDialog(
             // button — that's the platform convention.
             isDefaultAction: destructive,
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(ctx.l10n.common_cancel),
+            child: Text(cancelLabel ?? ctx.l10n.common_cancel),
           ),
           CupertinoDialogAction(
             isDestructiveAction: destructive,
@@ -52,7 +53,7 @@ Future<bool> showConfirmDialog(
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: Text(ctx.l10n.common_cancel),
+              child: Text(cancelLabel ?? ctx.l10n.common_cancel),
             ),
             FilledButton(
               style: destructive

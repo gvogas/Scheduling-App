@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
+import 'package:scheduling/core/utils/month_sections.dart';
 import 'package:scheduling/features/calendar/domain/appointment_crew.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/domain/month_grid.dart';
@@ -70,9 +71,9 @@ class _HistorySliverListState extends State<HistorySliverList> {
   /// emission. Memoized on the identity of the rows list — the same discipline
   /// `_filterOptionsPages` and the search index use in the host view.
   List<AppointmentRecord>? _sectionedRows;
-  List<HistoryMonthSection> _sections = const [];
+  List<MonthSection> _sections = const [];
 
-  List<HistoryMonthSection> _sectionsFor(List<AppointmentRecord> rows) {
+  List<MonthSection> _sectionsFor(List<AppointmentRecord> rows) {
     if (!identical(rows, _sectionedRows)) {
       _sectionedRows = rows;
       _sections = monthSectionsOf(rows);
@@ -176,8 +177,12 @@ class _HistorySliverListState extends State<HistorySliverList> {
               // Carries the caller's role rather than a hardcoded false: an
               // admin needs to reach a finished job's Edit button from here,
               // which is where finished jobs actually live.
-              onTap: () =>
-                  showEventDetails(context, app, analyticsSource: AnalyticsSources.history, showActions: widget.isAdmin),
+              onTap: () => showEventDetails(
+                context,
+                app,
+                analyticsSource: AnalyticsSources.history,
+                showActions: widget.isAdmin,
+              ),
             ),
           ),
         ],

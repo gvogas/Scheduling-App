@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart' show TimeOfDay;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import 'package:scheduling/core/utils/date_utils_helper.dart';
 import 'package:scheduling/features/calendar/application/assignee_availability_provider.dart';
-import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
 import 'package:scheduling/features/calendar/domain/assignee_availability.dart';
 import 'package:scheduling/features/calendar/domain/policies/appointment_form_validator.dart';
 
@@ -16,8 +14,8 @@ import 'package:scheduling/features/calendar/domain/policies/appointment_form_va
 /// worse than one showing none.
 ///
 /// **An undetermined span answers nothing.** A date with no times could still
-/// become an 8 pm job, so dimming whoever is booked that morning would be a
-/// guess presented as a fact; the picker offers everyone until the span is
+/// become an 8 pm job, so dimming anyone on it would be a guess presented as a
+/// fact; the picker offers everyone until the span is
 /// real. That covers the "no date picked yet" state too.
 ///
 /// **A PERSONAL block dims nobody, and that is not a nicety.** Dimming means
@@ -68,22 +66,5 @@ AssigneeAvailability watchAssigneeAvailability(
   return AssigneeAvailability(
     clashes: clashes,
     alreadyAssignedIds: alreadyAssignedIds,
-    whenLabel: _whenLabel(start: start, end: end, isAllDay: isAllDay),
   );
-}
-
-/// `26 – 28 Aug` for an absence-shaped span, `26 Aug, 8:00 AM – 12:00 PM`
-/// otherwise — the fragment the nobody-free sentence names.
-String _whenLabel({
-  required DateTime start,
-  required DateTime end,
-  required bool isAllDay,
-}) {
-  final days = DateUtilsHelper.formatDayRange(
-    start,
-    lastWorkDayOfWindow(start, end),
-  );
-  if (isAllDay) return days;
-  return '$days, ${DateUtilsHelper.formatTime(start)} – '
-      '${DateUtilsHelper.formatTime(end)}';
 }

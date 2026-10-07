@@ -29,13 +29,14 @@ const _monthRangeKeepAlive = Duration(minutes: 3);
 /// coming straight back — drilling into a job from the Attention list and
 /// pressing back is precisely that — tore down and re-issued up to ~2000
 /// document reads, while the live stream cost nothing.
-void keepWarmWithGrace(Ref ref) => _keepWarmWithGrace(ref);
+void keepWarmWithGrace(Ref ref, {Duration grace = _monthRangeKeepAlive}) =>
+    _keepWarmWithGrace(ref, grace: grace);
 
-void _keepWarmWithGrace(Ref ref) {
+void _keepWarmWithGrace(Ref ref, {Duration grace = _monthRangeKeepAlive}) {
   final link = ref.keepAlive();
   Timer? evictTimer;
   ref
-    ..onCancel(() => evictTimer = Timer(_monthRangeKeepAlive, link.close))
+    ..onCancel(() => evictTimer = Timer(grace, link.close))
     ..onResume(() => evictTimer?.cancel())
     ..onDispose(() => evictTimer?.cancel());
 }

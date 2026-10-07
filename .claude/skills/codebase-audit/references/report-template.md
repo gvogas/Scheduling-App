@@ -1,6 +1,8 @@
 # Audit report format
 
-Save the full report to `docs/audits/CODEBASE_AUDIT.md`. Give the user a tight inline
+Save the full report to a DATED file, `docs/audits/CODEBASE_AUDIT_<YYYY-MM-DD>.md`.
+There is no rolling `CODEBASE_AUDIT.md` any more — overwriting one in place is how
+two snapshots were lost. Give the user a tight inline
 summary too (counts per severity + the top 3 things to look at first). Order
 findings by severity, highest first. Every finding needs a concrete location and
 a suggested fix the user can act on. Never include secrets, tokens, or PII —

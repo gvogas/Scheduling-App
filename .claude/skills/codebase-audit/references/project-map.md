@@ -20,7 +20,7 @@
 flutter analyze 2>&1 | grep -E "error -|warning -"   # filter to real issues
 dart fix --dry-run                                    # preview safe auto-fixes
 dart fix --apply                                      # apply them
-flutter test                                          # full suite
+dart run tool/test.dart                               # full suite, sharded (~3 min)
 flutter test test/<path>.dart                         # one file
 cd functions && npm run lint                          # Functions ESLint
 cd functions && npx eslint . --fix                    # Functions auto-fix

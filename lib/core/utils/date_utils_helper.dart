@@ -5,8 +5,10 @@ abstract final class DateUtilsHelper {
   static final Map<String, DateFormat> _timeFormats = {};
   static final Map<String, DateFormat> _dateFormats = {};
   static final Map<String, DateFormat> _dayHeaderFormats = {};
+  static final Map<String, DateFormat> _dayHeaderShortFormats = {};
   static final Map<String, DateFormat> _whenLineFormats = {};
   static final Map<String, DateFormat> _dayMonthFormats = {};
+  static final Map<String, DateFormat> _monthDayFormats = {};
 
   static String get _locale => Intl.defaultLocale ?? 'en_CA';
 
@@ -26,6 +28,15 @@ abstract final class DateUtilsHelper {
     return format.format(date);
   }
 
+  /// "Jul 22" — a date inside a list that spans days.
+  static String formatMonthDay(DateTime date) {
+    final format = _monthDayFormats.putIfAbsent(
+      _locale,
+      () => DateFormat.MMMd(_locale),
+    );
+    return format.format(date);
+  }
+
   /// "Tuesday, June 23" day header — the history day groups, the calendar
   /// agenda, the dashboard hero and the day route all render it.
   ///
@@ -36,6 +47,17 @@ abstract final class DateUtilsHelper {
     final format = _dayHeaderFormats.putIfAbsent(
       _locale,
       () => DateFormat.MMMMEEEEd(_locale),
+    );
+    return format.format(date);
+  }
+
+  /// The same day, abbreviated — `Fri, Sep 11`. For a header that has to fit
+  /// the date beside other controls; a skeleton again, so the word order stays
+  /// the locale's.
+  static String formatDayHeaderShort(DateTime date) {
+    final format = _dayHeaderShortFormats.putIfAbsent(
+      _locale,
+      () => DateFormat.MMMEd(_locale),
     );
     return format.format(date);
   }
@@ -96,15 +118,7 @@ extension DateOnly on DateTime {
   DateTime get dateOnly => DateTime(year, month, day);
 }
 
-/// Calendar days from [from] to [to]. Normalized through UTC so the two
-/// DST-shift days can't make a whole-day difference come back as 23 or 25
-/// hours and round to the wrong integer.
-///
-/// Deliberately has no regression test: this suite runs in UTC, where a
-/// naive local-time subtraction passes the exact same cases the UTC
-/// normalization is meant to fix, so a "missing" test here would be a false
-/// green, not real coverage — don't add one on a UTC runner and call it
-/// pinned.
+/// Calendar days from [from] to [to], normalized through UTC for DST days.
 int calendarDaysBetween(DateTime from, DateTime to) => DateTime.utc(
   to.year,
   to.month,

@@ -191,12 +191,44 @@ STAYS in the root `CLAUDE.md`, because those are reachable from
   sink: a cancelled visit is as done with as a completed one.
   A closed job then renders in the **collapsed** treatment —
   `AppointmentCard(collapseWhenClosed: true)`, opt-in and passed ONLY by
-  `AgendaSliverList`: the success tint for `done`, a one-line body putting the
-  time beside the client, and no avatar stack (the crew bar still carries
-  colour, so *who* survives the collapse). **`_kClosedMinHeight` (48) is
-  load-bearing, not belt-and-braces** — the collapsed row lands near 56px, close
-  enough that a small text scale drops it under Material's minimum, and the row
-  is still a full `InkWell` opening the same sheet. The **multi-day counter
+  `AgendaSliverList`: the success tint for `done`, the crew avatars, and the
+  time on its own line above them. **`_kClosedMinHeight` (48) is
+  load-bearing, not belt-and-braces** — the row is still a full `InkWell`
+  opening the same sheet, so it must clear Material's minimum; it is a
+  `minHeight`, so content raises the row naturally and the constant needs no
+  edit. **Don't lower it.**
+  **This REVERSES part of the 2026-08-08 collapse design** (owner call,
+  2026-09-11, option B). The row used to drop the avatar stack and put the time
+  in a `Row` beside the client, landing near 64px against a full card's ~110 —
+  and the whole row then read as *shrunken* rather than as finished, which is
+  what got reported. It now lands near 90: still visibly shorter, so the
+  collapse keeps doing its job, but no longer half-height. Rejected: dropping
+  `collapseWhenClosed` altogether (true parity, but finished work takes full
+  height again, which is the thing the collapse prevents) and raising the
+  padding alone (the row stays visibly shorter, so it likely would not resolve
+  the complaint).
+  **Splitting the time onto its own line also fixed a real squeeze**, which is
+  why it is not cosmetic: the old `Row` gave `Flexible(time)` and
+  `Expanded(label)` equal flex, so `RenderFlex` split the width evenly and the
+  time was capped at HALF the row even when the client name was short — so a
+  multi-day run's `"9:00 AM – 5:00 PM · Day 3 of 5"` was ellipsised on exactly
+  the rows this file says must keep the `Day N of M` counter.
+  **CANCELLED rows take the restoration too** (same owner call): only the
+  *tint* is gated on `isDone`, so the avatars and the time line apply to every
+  closed row. The alternative — gating on `isDone` — makes cancelled the odd
+  row out, visibly shorter than its neighbours inside one block.
+  **A light-mode contrast defect on this row is KNOWN and deliberately
+  unfixed**: `successContainer` is both the collapsed-Done card tint and
+  `StatusChip`'s "Complete" fill, and in light theme both resolve to
+  `AppColors.greenFill` — contrast 1.00, so the pill's capsule disappears and
+  only its text remains. Dark double-composites at 16% alpha, so the capsule
+  stays faintly visible, which is why this is light-only and was never caught.
+  (Second collision on the same constant: light `secondaryContainer` is ALSO
+  `greenFill`, so a selected card and a collapsed Done card are the same
+  colour.) If it is ever taken, the fix is to tint the CARD with something that
+  is not the chip's own fill — never to touch `StatusPill`, which is shared by
+  the detail header, the day-off strip, History's filter chips and
+  `UserStatusChip`. The **multi-day counter
   stays** on a collapsed row (deviating from the approved mockup, deliberately):
   a closed job renders on every day of its run, so without "Day 3 of 5" those
   rows are indistinguishable. `AgendaSliverList` emits one `_ClosedRule`

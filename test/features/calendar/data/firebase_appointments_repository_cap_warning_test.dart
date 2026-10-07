@@ -93,6 +93,9 @@ void main() {
       () => query.where('startTime', isLessThan: any(named: 'isLessThan')),
     ).thenReturn(query);
     when(
+      () => query.where('endTime', isLessThan: any(named: 'isLessThan')),
+    ).thenReturn(query);
+    when(
       () => query.orderBy(any(), descending: any(named: 'descending')),
     ).thenReturn(query);
     when(() => query.orderBy(any())).thenReturn(query);
@@ -307,5 +310,87 @@ void main() {
     expect(logger.warnings, hasLength(1));
     expect(logger.warnings.single, startsWith('APPT-LOAD'));
     expect(logger.warnings.single, contains('1000'));
+  });
+
+  group('the overdue review scans past blocks that never close', () {
+    Map<String, dynamic> past(int hoursAgo, {bool isPersonal = false}) => {
+      'startTime': Timestamp.fromDate(
+        now.subtract(Duration(hours: hoursAgo + 1)),
+      ),
+      'endTime': Timestamp.fromDate(now.subtract(Duration(hours: hoursAgo))),
+      'status': 'pending',
+      'isPersonal': isPersonal,
+    };
+
+    /// Serves [newestFirst] the way the `endTime DESC` query would, cut at the
+    /// limit the repository asked for.
+    void withWindow(List<_FakeDoc> newestFirst) {
+      var limit = 0;
+      when(() => query.limit(any())).thenAnswer((call) {
+        limit = call.positionalArguments.single as int;
+        return query;
+      });
+      when(query.snapshots).thenAnswer((_) {
+        when(() => snapshot.docs).thenReturn(newestFirst.take(limit).toList());
+        return Stream.value(snapshot);
+      });
+    }
+
+    test(
+      '600 newer personal blocks do not hide an older overdue job',
+      () async {
+        withWindow([
+          for (var i = 0; i < 600; i++)
+            _FakeDoc('block$i', past(i + 1, isPersonal: true)),
+          _FakeDoc('job', past(24 * 30)),
+        ]);
+
+        final jobs = await repo().watchOverdueOpen(now).first;
+
+        expect(jobs.map((j) => j.id), ['job']);
+        expect(logger.warnings, isEmpty);
+      },
+    );
+
+    test(
+      'more overdue jobs than the list holds warns once, oldest kept',
+      () async {
+        withWindow([
+          for (var i = 0; i < 1001; i++) _FakeDoc('job$i', past(i + 1)),
+        ]);
+
+        final jobs = await repo().watchOverdueOpen(now).first;
+
+        expect(jobs, hasLength(1000));
+        expect(jobs.first.id, 'job1000');
+        expect(logger.warnings, hasLength(1));
+        expect(logger.warnings.single, startsWith('APPT-REVIEW 1001'));
+      },
+    );
+
+    test('a scan window filled by personal blocks warns', () async {
+      withWindow([
+        for (var i = 0; i < 5001; i++)
+          _FakeDoc('block$i', past(i + 1, isPersonal: true)),
+      ]);
+
+      final jobs = await repo().watchOverdueOpen(now).first;
+
+      expect(jobs, isEmpty);
+      expect(logger.warnings, hasLength(1));
+      expect(logger.warnings.single, startsWith('APPT-REVIEW'));
+      expect(logger.warnings.single, contains('5000'));
+    });
+
+    test('exactly the scan cap of rows is silent', () async {
+      withWindow([
+        for (var i = 0; i < 5000; i++)
+          _FakeDoc('block$i', past(i + 1, isPersonal: true)),
+      ]);
+
+      await repo().watchOverdueOpen(now).first;
+
+      expect(logger.warnings, isEmpty);
+    });
   });
 }

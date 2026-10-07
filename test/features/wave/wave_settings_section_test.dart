@@ -13,14 +13,17 @@ import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
+import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/settings/screens/settings_screen.dart';
 import 'package:scheduling/features/wave/application/wave_providers.dart';
 import 'package:scheduling/features/wave/data/wave_service.dart';
 import 'package:scheduling/features/wave/domain/models/wave_connection.dart';
-import 'package:scheduling/features/wave/domain/models/wave_import_schedule.dart';
+import 'package:scheduling/features/wave/domain/models/wave_problem.dart';
 import 'package:scheduling/features/wave/domain/wave_failure.dart';
 import 'package:scheduling/features/wave/widgets/wave_settings_section.dart';
 import 'package:scheduling/l10n/l10n.dart';
+
+import '../../support/tour_test_support.dart';
 
 // ---------------------------------------------------------------------------
 // Mock
@@ -42,12 +45,17 @@ _MockWaveService _mockService() {
 Widget _wrapSection(
   WaveService service, {
   NoticeService? noticeService,
+  List<ClientRecord>? blocked,
 }) {
   final notices = noticeService ?? NoticeService();
   return ProviderScope(
     overrides: [
       waveServiceProvider.overrideWithValue(service),
       noticeServiceProvider.overrideWithValue(notices),
+      if (blocked != null)
+        waveBlockedClientsProvider.overrideWith(
+          (ref) => Stream<List<ClientRecord>>.value(blocked),
+        ),
     ],
     child: ThemeNotifier(
       themeMode: ThemeMode.light,
@@ -109,7 +117,6 @@ Widget _wrapSettings({
 
 void main() {
   setUpAll(() {
-    registerFallbackValue(WaveImportSchedule.off);
     PackageInfo.setMockInitialValues(
       appName: 'Scheduling',
       packageName: 'net.vogas.scheduling',
@@ -119,7 +126,10 @@ void main() {
     );
   });
 
-  setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+  setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
+    markAllToursSeen();
+  });
 
   // ── WaveSettingsSection widget ────────────────────────────────────────────
 
@@ -178,6 +188,105 @@ void main() {
       // A dead-lettered job never retries on its own, so the recovery has to be
       // offered right beside the count.
       expect(find.text('Retry failed'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('lists the clients the contract refused', (tester) async {
+      // A count gives you a number; a list gives you an action. Before this,
+      // a refused client left no trace an admin could read.
+      final service = _mockService();
+      when(service.getConnection).thenAnswer(
+        (_) async => const WaveConnection(
+          businessId: 'biz-1',
+          businessName: 'Persisted Co',
+        ),
+      );
+
+      await tester.pumpWidget(
+        _wrapSection(
+          service,
+          blocked: const [
+            ClientRecord(
+              id: 'c1',
+              name: 'Blocked Co',
+              waveSyncState: 'blocked',
+              waveProblems: [
+                WaveProblem(
+                  field: 'name',
+                  code: WaveProblemCode.tooLong,
+                  isBlocking: true,
+                  length: 218,
+                  cap: 200,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Blocked Co'), findsOneWidget);
+      expect(find.text('Name is too long (218 / 200)'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('renders no blocked section when nothing is blocked', (
+      tester,
+    ) async {
+      // Omitted at zero, the same rule the outbox rows already follow.
+      final service = _mockService();
+      when(service.getConnection).thenAnswer(
+        (_) async => const WaveConnection(
+          businessId: 'biz-1',
+          businessName: 'Persisted Co',
+        ),
+      );
+
+      await tester.pumpWidget(
+        _wrapSection(service, blocked: const <ClientRecord>[]),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text("Can't sync to Wave"), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a blocked row opens the client detail sheet', (tester) async {
+      final service = _mockService();
+      when(service.getConnection).thenAnswer(
+        (_) async => const WaveConnection(
+          businessId: 'biz-1',
+          businessName: 'Persisted Co',
+        ),
+      );
+
+      await tester.pumpWidget(
+        _wrapSection(
+          service,
+          blocked: const [
+            ClientRecord(
+              id: 'c1',
+              name: 'Blocked Co',
+              waveSyncState: 'blocked',
+              waveProblems: [
+                WaveProblem(
+                  field: 'name',
+                  code: WaveProblemCode.empty,
+                  isBlocking: true,
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Blocked Co'));
+      await tester.pumpAndSettle();
+
+      // The sheet renders the client's own detail view, so its edit affordance
+      // is what makes the problem fixable.
+      expect(find.text('Blocked Co'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
 
@@ -553,40 +662,6 @@ void main() {
       // tweak breaks one test instead of two.
       expect(emitted.last, contains('added to Wave'));
       expect(emitted.last, contains('added to the app'));
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('picking a cadence calls setImportSchedule and notices', (
-      tester,
-    ) async {
-      final service = _mockService();
-      final notices = NoticeService();
-      final emitted = <String>[];
-      notices.stream.listen((n) => emitted.add(n.message));
-
-      when(service.getConnection).thenAnswer(
-        (_) async => const WaveConnection(
-          businessId: 'biz-1',
-          businessName: 'Test Biz',
-        ),
-      );
-      when(() => service.setImportSchedule(any())).thenAnswer((_) async {});
-
-      await tester.pumpWidget(_wrapSection(service, noticeService: notices));
-      await tester.pumpAndSettle();
-
-      // Open the cadence picker (row shows the current 'Off' value).
-      await tester.tap(find.text('Automatic import'));
-      await tester.pumpAndSettle();
-
-      // Choose Weekly from the sheet.
-      await tester.tap(find.text('Weekly').last);
-      await tester.pumpAndSettle();
-
-      verify(
-        () => service.setImportSchedule(WaveImportSchedule.weekly),
-      ).called(1);
-      expect(emitted.last, contains('Automatic import updated'));
       expect(tester.takeException(), isNull);
     });
 

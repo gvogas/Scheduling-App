@@ -130,7 +130,6 @@ module.exports = {
   releaseRecount,
   debounceRecount,
   isAlreadyExists,
-  claimBody,
   CLAIM_STALE_MS,
   CLAIM_TTL_MS,
   ALREADY_EXISTS,

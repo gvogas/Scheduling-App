@@ -2,7 +2,10 @@
 
 Completed plans/specs and superseded audit snapshots — kept for history, not
 maintained against the current code. Started 2026-07-10; last updated
-**2026-09-06**, when the docs sweep moved in fourteen documents whose work had
+**2026-09-13**, when the docs sweep moved in four finished plans (listed under
+their own heading below). Before that the 2026-09-12 sweep indexed seven files
+already on disk, the 2026-09-09 sweep moved in six plans plus the redesign
+program, and on **2026-09-06** the docs sweep moved in fourteen documents whose work had
 shipped (the simplified-auth pair, the four August calendar/day-off designs, the
 per-day appointments pair, client-building grouping, the calendar holidays, the
 superseded clients address filter, the feature-tour 1.57 pair and the 2026-09-03
@@ -16,8 +19,14 @@ documents in: six plans whose work had shipped (the multi-day trio, the
 closed-jobs agenda, the photo cue, the History restyle), six superseded audit
 snapshots, and the pre-redesign `WORKFLOW.md`.
 
-**Overwriting the rolling `docs/audits/CODEBASE_AUDIT.md` with the next sweep is
-how a snapshot goes missing.** Copy the outgoing one here first.
+**There is no rolling `docs/audits/CODEBASE_AUDIT.md` any more** (confirmed
+2026-09-12: `docs/audits/` holds dated snapshots — `CODEBASE_AUDIT_2026-09-07.md`
+— plus `AUDIT_FOLLOWUPS.md`, `SECURITY_ASSESSMENT_2026-08-04.md` and the two
+repair scripts). Dated filenames are what removed the hazard this paragraph was
+written for: overwriting the rolling file was how a snapshot went missing, twice.
+If a rolling file ever comes back, copy the outgoing one here before overwriting
+it. Note `.claude/skills/codebase-audit/` still tells a new audit to write the
+rolling path — that is a skill to fix, not a doc.
 
 **Do not treat these as accurate references.** For current state see
 `docs/ARCHITECTURE.md`, `docs/CLOUD_FUNCTIONS.md`, and the active plans in
@@ -115,7 +124,7 @@ this one".
   `firestore.rules` span bound) was **closed and built 2026-08-11**
   (`isValidAppointmentSpan`). **One open item was carried out of §10 rather than
   archived with it** — what a Live Activity for a multi-day job should look like
-  — and now lives in `docs/plans/README.md` §5; the containment (skip multi-day
+  — and now lives in `docs/plans/README.md` §8; the containment (skip multi-day
   jobs outright) is built. The rules bound and the skip are **not deployed**.
   Both Swift halves are Xcode/device-unverified. Every invariant is in
   `CLAUDE.md`; the unticked checkboxes in both plans are an artifact of how they
@@ -136,6 +145,63 @@ this one".
   `clients/domain/history_grouping.dart`. Its build record is P7 phase D in
   `docs/plans/redesign-subdocs/2026-08-11-p7-dashboard-history.md`, which stays
   active-adjacent with the rest of the redesign sub-docs.
+
+### Added by the 2026-10-01 sweep
+
+Two plans whose work had shipped and deployed, each with its leftover items
+already carried by a live plan — plus two moved on 2026-09-19 that were never
+indexed here.
+
+- `2026-09-12-add-appointment-sheet-structure.md` — Option C of the Add
+  Appointment sheet: the TEMPLATES section deleted and its chips moved under
+  the `Service / Title` field, the `apptTemplates` tour step retargeted without
+  a storage-key change, and the client/address attached dropdowns rebuilt onto
+  one shared row. Shipped in 1.61.0+90 (`dd8c4863`). Its three open items — the
+  split container vocabulary, the street/city address split, and device
+  verification of both dropdowns — live in `docs/plans/2026-09-12-open-followups.md`.
+- `2026-08-30-wave-validated-contract-design.md` — the Wave customer contract
+  design, all four phases deployed: Phase 1 report-only (`fe9edc51`, 2026-08-30),
+  Phase 2 enforcement (`38c8225b`, 2026-09-13, shipped in 1.61.0+90), Phase 3's
+  backfill run live 2026-09-13, Phase 4's `worker.js` split and cadence removal
+  (`608b817a`, 2026-09-19). The remaining tail — the legal republish, the app
+  build without the cadence picker, the later `waveSetImportSchedule` deletion —
+  is in `docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`.
+- `2026-09-04-carplay-driving-task.md` — **moved 2026-09-19, indexed 2026-10-01.**
+  The CarPlay driving task; shipped in 1.61.0+90, behavioural checks (the four
+  actions, the technician view, App Lock) confirmed all clear by the owner
+  2026-09-19.
+- `2026-09-11-fresh-header-redesign.md` — **moved 2026-09-19, indexed 2026-10-01.**
+  The `AppTopBar` header redesign, all four phases; shipped in 1.61.0+90, Phase
+  3's device pass done 2026-09-19.
+
+### Added by the 2026-09-13 sweep
+
+Four plans whose work had shipped and deployed. Three were already marked
+complete with nothing outstanding; the fourth carries one unrecorded in-app
+check, which moved to `docs/plans/README.md` §3 rather than keeping the plan
+live.
+
+- `2026-08-28-address-street-locality-split.md` — `clients.address` narrowed to
+  the street line, with the locality in its own fields, plus the
+  `backfill-client-address-street.js` cleanup. App, backend and script shipped
+  and deployed 2026-08-28. The live backfill was **withdrawn, not skipped**: the
+  2026-09-09 prod dry run read 724 scanned, 0 reduced (the 2026-08-28 count of
+  114 predated the segment-removal guard). Don't run it.
+- `2026-08-30-wave-validated-contract-implementation.md` — Phase 1's task list:
+  `functions/wave/customer_contract.js` in report-only mode, deployed 2026-08-30
+  (`fe9edc51`), prod replay 2026-09-09 (724 clients, 0 blocking, 1 advisory).
+  The design doc and the phases-2-4 plan stay in `docs/plans/` for Phase 4.
+- `2026-09-11-four-bug-fixes.md` — one search bar in the Add Appointment client
+  picker, cancelled jobs excluded from `clients.jobCount`, the agenda's
+  collapsed Done row restored, and the Clients filter path honouring the sort.
+  Shipped in 1.61.0+90; Issue 2's index `CICAgNiZnYEK` deployed 2026-09-12, its
+  function 2026-09-13 (`38c8225b`), and `recount-client-jobs.js` ran live
+  2026-09-13 (726 scanned, 9 patched).
+- `2026-09-11-wave-validated-contract-phase-3.md` — the `backfill-wave-blocked.js`
+  verdict backfill, run live 2026-09-13 after the enforcement deploy: 726
+  scanned, 1 patched, 0 blocked, 1 advisory; idempotence re-run 0. **Step 4.5
+  (confirm the advisory on the client's own page in the app) was unrecorded at
+  archive time.**
 
 ### Added by the 2026-09-09 sweep
 
@@ -164,9 +230,7 @@ this one".
   passed on the broken versions too** — check installed versions directly after
   any dependency change there).
 
-### Added by the 2026-09-09 sweep
-
-All six shipped **and** deployed; the deploy gate each banner still cited was
+**Also added by the 2026-09-09 sweep — six plans.** All six shipped **and** deployed; the deploy gate each banner still cited was
 closed by the 2026-09-06/09-07 backend deploys (25 -> 29 functions, all 19
 composites `READY`, both prod backfills run, the crew-notes rules grant live).
 
@@ -222,9 +286,9 @@ composites `READY`, both prod backfills run, the crew-notes rules grant live).
 - `2026-08-28-client-building-grouping.md` — grouping clients by building, made
   the case by the address backfill's prod dry run (32 clients across 7 Prom.
   Paton buildings). Shipped; `client_building.dart` and the filter sheet. Its
-  dependency, `2026-08-28-address-street-locality-split.md`, is **still in
-  `docs/plans/`** — that doc's live prod backfill has never been run — so the
-  bare-filename link in here does not resolve inside this folder.
+  dependency, `2026-08-28-address-street-locality-split.md`, joined it here on
+  2026-09-13 (its backfill turned out to have nothing to do), so the
+  bare-filename link in here now resolves inside this folder.
 - `2026-08-29-calendar-holidays.md` — display-only Québec statutory, Greek
   Orthodox and CCQ construction holiday markers, computed in Dart with no I/O.
   Built 2026-08-29, shipped 1.54.0+83; `calendar/domain/holidays.dart`.
@@ -273,15 +337,58 @@ row; each is the companion design or task-list half of a document listed above.
   and as the record of what the redesign was answering. Current sources of
   truth: `CLAUDE.md`, `docs/ARCHITECTURE.md`.
 
+### Added by the 2026-09-12 sweep
+
+Six implementation plans and one audit snapshot were on disk but had never been
+listed. Every one is a twin of something already indexed — the earlier sweeps
+picked up the design half and left the implementation half — so nothing here is
+a new verdict, only a missing row. A file moved but not indexed is lost.
+
+- `2026-08-21-simplified-auth-implementation.md` — the task list for
+  `2026-08-21-simplified-auth-design.md` (already indexed). SHIPPED and
+  deployed 2026-08-21 (`1c89892a`, `229b6e24`), released 1.48.0+77. Its
+  unticked boxes are the execution record, not outstanding work.
+- `2026-08-27-per-day-appointments-plan.md` — the task list for
+  `2026-08-27-per-day-appointments.md` (already indexed). SHIPPED 2026-08-27,
+  released 1.53.0+82, rules deployed 2026-08-29 (`77c6a66f`).
+- `2026-09-04-clients-page-search-first-implementation.md` — SHIPPED 2026-09-05
+  (`767ec99e`, `b2adc705`), released 1.58.0+87; both new `clients` composite
+  indexes are READY and the deploy gate its banner carried is closed.
+- `2026-09-04-feature-tour-1-57-update-implementation.md` — SHIPPED 2026-09-05
+  (`4c82eb60` -> `4ab95819`), released 1.58.0+87. App-side only, nothing to
+  deploy. This is the change that took the tour to 52 steps across 12 scopes
+  with per-STEP seen flags (`tour_seen_steps`).
+- `2026-09-05-add-job-client-picker-implementation.md` — SHIPPED 2026-09-05,
+  released 1.58.0+87 (`101d0c0a`), boxes ticked in `394d67af`; the
+  `searchClients` backend behind it went live 2026-09-06 at 29 functions.
+- `2026-09-06-crew-record-and-role-gates-implementation.md` — the task list for
+  the crew record and role gates. Note its provenance header: the untracked
+  original was deleted mid-run by an agent cleanup on 2026-09-07 and the file
+  was reconstructed from the executing session's own reads, then committed.
+
 ## Superseded audit snapshots
 Point-in-time whole-repo audits; each run's findings were implemented at the
-time. Superseded by later audits. The active
-`docs/audits/CODEBASE_AUDIT.md` file is now a cleaned current action list, not a
-full historical snapshot. `docs/audits/` also keeps
-`SECURITY_ASSESSMENT_2026-08-04.md` and `AUDIT_FOLLOWUPS.md` (the owner-only
-Maps budget cap), plus two read-only repair-audit scripts for the client-rename
-damage (`audit-renamed-client-names.js` and the earlier
-`audit-client-phone-backfill-damage.js`).
+time. Superseded by later audits. `docs/audits/` now holds
+DATED snapshots rather than one rolling action list — the newest is
+`CODEBASE_AUDIT_2026-09-28.md` — and also keeps
+`SECURITY_ASSESSMENT_2026-08-04.md`, `AUDIT_FOLLOWUPS.md` (the owner-only
+Maps budget cap), `AUDIT_ROLLOUT_2026-09-23.md`, `IPHONE_PERFORMANCE_2026-09-23.md`
+and one read-only repair-audit script, `audit-client-phone-backfill-damage.js`
+(its sibling `audit-renamed-client-names.js` was deleted 2026-09-28 with the
+closed-migration scripts; it is in git history).
+- `CODEBASE_AUDIT_2026-09-19.md` — **added 2026-10-01.** The audit at
+  `608b817a`: 20 done, 3 kept, 1 not a defect, 1 by design; its backend half
+  deployed at `bec23b85` (2026-09-19). Two owner items outlived it and moved to
+  `docs/plans/README.md` §6: removing the stale `.claude/worktrees/` agent
+  directories, and I12, which needs a real bad record to reproduce.
+- `CODEBASE_AUDIT_2026-09-07.md` — **added 2026-10-01.** The audit at
+  `051a6b6d`: 36 of 41 worked, its rules half (B5) deployed at `462a1907`. I25
+  is open by design (fix only if observed). Its four carried-over owner items —
+  the Maps billing cap, the Crashlytics re-check, the Wave "Retry failed" press
+  and the Xcode `InfoPlist.strings` check — moved to `docs/plans/README.md` §6.
+- `CODEBASE_AUDIT_2026-09-05.md` — the whole-repo audit run against `394d67af`
+  on branch `redesgin`, superseded by later passes. Indexed by the 2026-09-12
+  sweep, which found it unlisted.
 - `CODEBASE_AUDIT_2026-09-03-rolling.md` — the outgoing rolling file, copied
   here 2026-09-05 before the 2026-09-05 audit overwrote it. Its still-open
   items (the Maps billing cap, the Crashlytics re-check needing a shipped
@@ -327,9 +434,9 @@ damage (`audit-renamed-client-names.js` and the earlier
   reported findings were closed, with the index lesson later corrected in the
   2026-09-01 deploy log.
 - `CODEBASE_AUDIT_2026-09-01.md` — the full audit snapshot that produced the
-  current rolling action list. Most findings were closed in-tree; the remaining
-  owner-only, product and refactor work is tracked in
-  `docs/audits/CODEBASE_AUDIT.md`.
+  rolling action list that `docs/audits/` used to carry. Most findings were
+  closed in-tree; the remaining owner-only, product and refactor work moved into
+  the dated snapshots and `AUDIT_FOLLOWUPS.md` when the rolling file went away.
 - `MOBILE_AUDIT_2026-07-13.md` — a mobile-optimization-lens pass (perf, memory,
   battery, network, mobile UX) rather than a general audit. Nothing mechanical
   to fix; its verdict was that the hot paths already implement the mitigations

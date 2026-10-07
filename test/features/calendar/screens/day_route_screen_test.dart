@@ -14,6 +14,8 @@ import 'package:scheduling/features/employees/domain/models/employee_record.dart
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/app_empty_state.dart';
 
+import '../../../support/tour_test_support.dart';
+
 const _jane = EmployeeRecord(
   id: 'e1',
   name: 'Jane Doe',
@@ -150,6 +152,8 @@ FilledButton _routeButton(WidgetTester tester) => tester.widget<FilledButton>(
 );
 
 void main() {
+  setUp(markAllToursSeen);
+
   testWidgets('renders jobs sorted by start time regardless of input order', (
     tester,
   ) async {

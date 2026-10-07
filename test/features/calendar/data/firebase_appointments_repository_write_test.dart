@@ -26,16 +26,14 @@ class _MockDocSnap extends Mock
 class _FakeDoc extends Fake
     implements DocumentReference<Map<String, dynamic>> {}
 
-AppointmentRecord _record({
-  String? id = 'a1',
-  String status = 'confirmed',
-}) => AppointmentRecord(
-  id: id,
-  title: 'Leak',
-  startTime: DateTime(2026, 6, 24, 9),
-  endTime: DateTime(2026, 6, 24, 10),
-  status: status,
-);
+AppointmentRecord _record({String? id = 'a1', String status = 'confirmed'}) =>
+    AppointmentRecord(
+      id: id,
+      title: 'Leak',
+      startTime: DateTime(2026, 6, 24, 9),
+      endTime: DateTime(2026, 6, 24, 10),
+      status: status,
+    );
 
 // Declared as a top-level function (not a closure) so its runtime type exactly
 // matches mocktail's `any()` for the repo's transaction handler.
@@ -180,10 +178,7 @@ void main() {
           await handler(txn);
         });
 
-        await repo().updateAppointments([
-          _record(),
-          _record(id: 'a2'),
-        ]);
+        await repo().updateAppointments([_record(), _record(id: 'a2')]);
 
         verify(() => txn.update(refA, any())).called(1);
         verifyNever(() => txn.update(refB, any()));
@@ -271,6 +266,35 @@ void main() {
           .toList();
       expect(ids, hasLength(2));
       expect(ids.first, isNot(ids.last));
+    });
+
+    test('a bulk status write stamps one shared op id, done included', () async {
+      // The server reads a fresh op id as an admin write and skips the completion push.
+      final batch = _MockBatch();
+      when(() => collection.doc(any())).thenReturn(_MockDoc());
+      when(() => firestore.batch()).thenReturn(batch);
+      when(
+        () => batch.update(
+          any<DocumentReference<Map<String, dynamic>>>(),
+          any<Map<String, dynamic>>(),
+        ),
+      ).thenReturn(null);
+      when(batch.commit).thenAnswer((_) async {});
+
+      await repo().updateAppointmentStatuses(
+        ids: const ['a1', 'a2'],
+        status: 'done',
+      );
+
+      final ids = verify(
+        () => batch.update(
+          any<DocumentReference<Map<String, dynamic>>>(),
+          captureAny<Map<String, dynamic>>(),
+        ),
+      ).captured.map((m) => (m as Map).cast<String, dynamic>()['seriesOpId']);
+      expect(ids, hasLength(2));
+      expect(ids.toSet(), hasLength(1));
+      expect(ids.first, isNotNull);
     });
   });
 }
