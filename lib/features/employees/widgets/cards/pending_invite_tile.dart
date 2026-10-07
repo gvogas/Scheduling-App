@@ -251,18 +251,12 @@ class _PendingInviteTileState extends ConsumerState<PendingInviteTile> {
                     ],
                     if (compact) ...[
                       const SizedBox(height: AppSpacing.sp8),
-                      const Align(
-                        alignment: Alignment.centerLeft,
-                        child: chip,
-                      ),
+                      const Align(alignment: Alignment.centerLeft, child: chip),
                     ],
                   ],
                 ),
               ),
-              if (!compact) ...[
-                const SizedBox(width: AppSpacing.sp8),
-                chip,
-              ],
+              if (!compact) ...[const SizedBox(width: AppSpacing.sp8), chip],
               const SizedBox(width: AppSpacing.sp8),
               AnimatedRotation(
                 turns: _expanded ? 0.5 : 0,

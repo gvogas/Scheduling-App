@@ -96,12 +96,8 @@ class AvailabilityPanel extends StatelessWidget {
           onTap: () => _pickTime(
             context,
             initial: workStartMinutes,
-            onPicked: (minutes) => onChanged(
-              workingDays,
-              minutes,
-              workEndMinutes,
-              onCall: onCall,
-            ),
+            onPicked: (minutes) =>
+                onChanged(workingDays, minutes, workEndMinutes, onCall: onCall),
           ),
         ),
         SheetFieldRow(

@@ -157,20 +157,18 @@ final _employeeSearchIndexProvider = Provider<List<_EmployeeSearchEntry>>((
 });
 
 final filteredEmployeesProvider = Provider.autoDispose
-    .family<List<EmployeeRecord>, String>(
-      (ref, query) {
-        final index = ref.watch(_employeeSearchIndexProvider);
-        // Accent-folded + digits-only matching (mirrors client search).
-        final q = ClientSearchPolicy.normalize(query);
-        final qDigits = ClientSearchPolicy.digitsOnly(query);
-        if (q.isEmpty && qDigits.isEmpty) {
-          return [for (final entry in index) entry.employee];
-        }
-        return [
-          for (final entry in index)
-            if ((q.isNotEmpty && entry.text.contains(q)) ||
-                (qDigits.isNotEmpty && entry.phoneDigits.contains(qDigits)))
-              entry.employee,
-        ];
-      },
-    );
+    .family<List<EmployeeRecord>, String>((ref, query) {
+      final index = ref.watch(_employeeSearchIndexProvider);
+      // Accent-folded + digits-only matching (mirrors client search).
+      final q = ClientSearchPolicy.normalize(query);
+      final qDigits = ClientSearchPolicy.digitsOnly(query);
+      if (q.isEmpty && qDigits.isEmpty) {
+        return [for (final entry in index) entry.employee];
+      }
+      return [
+        for (final entry in index)
+          if ((q.isNotEmpty && entry.text.contains(q)) ||
+              (qDigits.isNotEmpty && entry.phoneDigits.contains(qDigits)))
+            entry.employee,
+      ];
+    });
