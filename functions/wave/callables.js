@@ -3,6 +3,7 @@ const {defineSecret} = require("firebase-functions/params");
 const logger = require("firebase-functions/logger");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 
+const {assertFeatureEnabled} = require("../feature_flags");
 const {WAVE_FULL_ACCESS_TOKEN} = require("./auth");
 const {whoami, listBusinesses} = require("./client");
 const {
@@ -98,6 +99,7 @@ const waveBootstrap = onCall(
     },
     async (req) => {
       const uid = await assertAdminCall(req, new Set());
+      await assertFeatureEnabled("feature_wave_sync", "waveBootstrap");
 
       // Already-connected doc gets returned unchanged, so this call is safe
       // to make more than once.
@@ -235,6 +237,7 @@ const waveRetryFailedJobs = onCall(
     {enforceAppCheck: true, secrets: [WAVE_FULL_ACCESS_TOKEN]},
     async (req) => {
       const uid = await assertAdminCall(req, new Set());
+      await assertFeatureEnabled("feature_wave_sync", "waveRetryFailedJobs");
       await enforceDurableRateLimit(
           "wave-retry", uid,
           WAVE_RETRY_RATE_MAX, WAVE_RETRY_RATE_WINDOW_MS);
@@ -320,6 +323,7 @@ const waveImportCustomers = onCall(
     },
     async (req) => {
       const uid = await assertAdminCall(req, new Set());
+      await assertFeatureEnabled("feature_wave_sync", "waveImportCustomers");
       await enforceDurableRateLimit(
           "wave-import",
           uid,
