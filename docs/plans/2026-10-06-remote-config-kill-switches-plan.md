@@ -20,7 +20,7 @@
 
 ## Prerequisite (owner input)
 
-- [ ] **Step 0: Get the numeric Apple ID** from App Store Connect → the app → App Information → "Apple ID" (a 9-10 digit number). Task 15 needs it for `kAppStoreUrl`. Nothing in the repo records it today.
+- [x] **Step 0: Numeric Apple ID** is `6788556855` (owner, 2026-10-06). Task 15 uses it for `kAppStoreUrl`.
 
 ## File map
 
@@ -1865,14 +1865,13 @@ Expected: FAIL, the files under test do not exist.
 
 - [ ] **Step 3: Implement the constant and the analytics value**
 
-`lib/core/constants/app_store.dart`, using the Apple ID from Step 0:
+`lib/core/constants/app_store.dart`, with the Apple ID from Step 0:
 
 ```dart
 /// The app's App Store page, opened by the forced-update screen.
-const kAppStoreUrl = 'https://apps.apple.com/app/id1234567890';
+const kAppStoreUrl = 'https://apps.apple.com/app/id6788556855';
 ```
 
-Replace `1234567890` with the real Apple ID from Step 0 before committing. Then check: `grep -n "id1234567890" lib/core/constants/app_store.dart` must print nothing.
 
 In `AnalyticsContactActions` add:
 
