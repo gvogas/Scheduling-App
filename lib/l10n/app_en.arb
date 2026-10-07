@@ -1354,6 +1354,22 @@
   "@common_offlineBanner": {
     "description": "Persistent app-wide banner shown while the device has no network connection."
   },
+  "common_featurePaused": "This feature is temporarily unavailable.",
+  "@common_featurePaused": {
+    "description": "Shown in place of a feature the business has temporarily switched off remotely."
+  },
+  "common_updateRequiredTitle": "Update required",
+  "@common_updateRequiredTitle": {
+    "description": "Title of the blocking screen shown when this app build is too old to keep using."
+  },
+  "common_updateRequiredBody": "This version of the app is no longer supported. Update from the App Store to keep going.",
+  "@common_updateRequiredBody": {
+    "description": "Body of the blocking update screen."
+  },
+  "common_updateRequiredButton": "Open App Store",
+  "@common_updateRequiredButton": {
+    "description": "Button on the blocking update screen that opens the app's App Store page."
+  },
   "auth_checkYourInbox": "Check your inbox",
   "@auth_checkYourInbox": {
     "description": "Check your inbox"
@@ -1693,6 +1709,10 @@
         "type": "String"
       }
     }
+  },
+  "settings_wavePaused": "Wave sync is temporarily paused. Client changes are queued and will sync when it resumes.",
+  "@settings_wavePaused": {
+    "description": "Banner in Settings > Wave while Wave sync is switched off remotely."
   },
   "employees_disableEmployee": "Disable employee",
   "@employees_disableEmployee": {
