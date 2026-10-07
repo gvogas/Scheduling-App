@@ -44,21 +44,6 @@ class LiveMapTeamSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final l10n = context.l10n;
-    final ordered = LiveMapAggregator.sortedByProximity(
-      team.onMap,
-      selfDocId: selfDocId,
-    );
-    final self = ordered.where((p) => p.userDocId == selfDocId).firstOrNull;
-    double? distanceTo(StaffMapPoint p) =>
-        self == null || p.userDocId == self.userDocId
-        ? null
-        : LiveMapAggregator.distanceMeters(self.lat, self.lng, p.lat, p.lng);
-    final focus = selected;
-    final others = [
-      for (final p in ordered)
-        if (p.userDocId != focus?.userDocId) p,
-    ];
     final header = _TeamHeader(
       onMapCount: team.onMap.length,
       offMapCount: team.offMapCount,
@@ -81,59 +66,77 @@ class LiveMapTeamSheet extends StatelessWidget {
             padding: EdgeInsets.only(
               bottom: MediaQuery.paddingOf(context).bottom + AppSpacing.sp16,
             ),
-            children: [
-              header,
-              if (focus != null) ...[
-                StaffFocusPanel(
-                  point: focus,
-                  now: now,
-                  distanceMeters: distanceTo(focus),
-                  onClose: onCloseSelection,
-                ),
-                if (others.isNotEmpty)
-                  _SectionLabel(l10n.liveMap_sectionAlsoNearby, others.length),
-              ] else if (others.isNotEmpty)
-                _SectionLabel(l10n.liveMap_sectionOnMap, others.length),
-              for (final (i, point) in others.indexed) ...[
-                if (i > 0) const _RowDivider(),
-                _OnMapRow(
-                  point: point,
-                  now: now,
-                  isSelf: point.userDocId == selfDocId,
-                  distanceMeters: distanceTo(point),
-                  onTap: () => onSelect(point),
-                ),
-              ],
-              ..._absenceSection(
-                l10n.liveMap_sectionNotSeen,
-                team.notSeen,
-                l10n.liveMap_noFixYet,
-              ),
-              ..._absenceSection(
-                l10n.liveMap_sectionSharingOff,
-                team.sharingOff,
-                l10n.liveMap_sharingOffRow,
-              ),
-              if (team.sharingOff.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.sp16,
-                    AppSpacing.sp12,
-                    AppSpacing.sp16,
-                    0,
-                  ),
-                  child: Text(
-                    l10n.liveMap_sharingOffFooter,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.palette.textTertiary,
-                    ),
-                  ),
-                ),
-            ],
+            children: [header, ..._buildRows(context, theme)],
           ),
         ),
       ),
     );
+  }
+
+  List<Widget> _buildRows(BuildContext context, ThemeData theme) {
+    final l10n = context.l10n;
+    final ordered = LiveMapAggregator.sortedByProximity(
+      team.onMap,
+      selfDocId: selfDocId,
+    );
+    final self = ordered.where((p) => p.userDocId == selfDocId).firstOrNull;
+    double? distanceTo(StaffMapPoint p) =>
+        self == null || p.userDocId == self.userDocId
+        ? null
+        : LiveMapAggregator.distanceMeters(self.lat, self.lng, p.lat, p.lng);
+    final focus = selected;
+    final others = [
+      for (final p in ordered)
+        if (p.userDocId != focus?.userDocId) p,
+    ];
+    return [
+      if (focus != null) ...[
+        StaffFocusPanel(
+          point: focus,
+          now: now,
+          distanceMeters: distanceTo(focus),
+          onClose: onCloseSelection,
+        ),
+        if (others.isNotEmpty)
+          _SectionLabel(l10n.liveMap_sectionAlsoNearby, others.length),
+      ] else if (others.isNotEmpty)
+        _SectionLabel(l10n.liveMap_sectionOnMap, others.length),
+      for (final (i, point) in others.indexed) ...[
+        if (i > 0) const _RowDivider(),
+        _OnMapRow(
+          point: point,
+          now: now,
+          isSelf: point.userDocId == selfDocId,
+          distanceMeters: distanceTo(point),
+          onTap: () => onSelect(point),
+        ),
+      ],
+      ..._absenceSection(
+        l10n.liveMap_sectionNotSeen,
+        team.notSeen,
+        l10n.liveMap_noFixYet,
+      ),
+      ..._absenceSection(
+        l10n.liveMap_sectionSharingOff,
+        team.sharingOff,
+        l10n.liveMap_sharingOffRow,
+      ),
+      if (team.sharingOff.isNotEmpty)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.sp16,
+            AppSpacing.sp12,
+            AppSpacing.sp16,
+            0,
+          ),
+          child: Text(
+            l10n.liveMap_sharingOffFooter,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.palette.textTertiary,
+            ),
+          ),
+        ),
+    ];
   }
 
   List<Widget> _absenceSection(

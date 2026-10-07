@@ -362,6 +362,42 @@ class _PaulAppState extends ConsumerState<PaulApp> {
     unawaited(ref.read(liveActivityRegistrationControllerProvider).sync());
   }
 
+  Widget _buildAppShell(BuildContext context, Widget? child) {
+    final media = MediaQuery.of(context);
+    // Compose in-app text scale with the OS scale, capped app-wide.
+    final systemFactor = media.textScaler.scale(14) / 14;
+    final effectiveScale = math.min(
+      _textScale * systemFactor,
+      Breakpoints.maxTextScale,
+    );
+    // iOS "Bold Text". Flutter exposes the flag and applies it to
+    // nothing, so the weight bump is ours to make — here, where the
+    // RESOLVED theme is in scope, so it composes with light/dark and
+    // with the high-contrast pair above.
+    final theme = media.boldText
+        ? boldTextTheme(Theme.of(context))
+        : Theme.of(context);
+    return MediaQuery(
+      data: media.copyWith(textScaler: TextScaler.linear(effectiveScale)),
+      child: Theme(
+        data: theme,
+        child: UpdateGate(
+          child: AppLock(
+            child: NoticeListener(
+              navigatorKey: _navigatorKey,
+              child: Column(
+                children: [
+                  Expanded(child: child ?? const SizedBox.shrink()),
+                  const OfflineBanner(),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     AccountExitListeners(
@@ -408,43 +444,7 @@ class _PaulAppState extends ConsumerState<PaulApp> {
             scrollBehavior: const AppScrollBehavior(),
             home: const OnboardingGate(),
             onGenerateRoute: AppRoutes.onGenerateRoute,
-            builder: (context, child) {
-              final media = MediaQuery.of(context);
-              // Compose in-app text scale with the OS scale, capped app-wide.
-              final systemFactor = media.textScaler.scale(14) / 14;
-              final effectiveScale = math.min(
-                _textScale * systemFactor,
-                Breakpoints.maxTextScale,
-              );
-              // iOS "Bold Text". Flutter exposes the flag and applies it to
-              // nothing, so the weight bump is ours to make — here, where the
-              // RESOLVED theme is in scope, so it composes with light/dark and
-              // with the high-contrast pair above.
-              final theme = media.boldText
-                  ? boldTextTheme(Theme.of(context))
-                  : Theme.of(context);
-              return MediaQuery(
-                data: media.copyWith(
-                  textScaler: TextScaler.linear(effectiveScale),
-                ),
-                child: Theme(
-                  data: theme,
-                  child: UpdateGate(
-                    child: AppLock(
-                      child: NoticeListener(
-                        navigatorKey: _navigatorKey,
-                        child: Column(
-                          children: [
-                            Expanded(child: child ?? const SizedBox.shrink()),
-                            const OfflineBanner(),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
+            builder: _buildAppShell,
           );
         },
       ),

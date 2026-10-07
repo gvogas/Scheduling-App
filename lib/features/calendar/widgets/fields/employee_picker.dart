@@ -49,6 +49,67 @@ class EmployeePicker extends StatelessWidget {
   /// Re-runs the roster read. Only reachable from the failed state.
   final VoidCallback? onRetryRoster;
 
+  Widget _buildEmptyState(BuildContext context, TextStyle mutedLabel) {
+    return switch (rosterStatus) {
+      // Only ever reached while the list is empty: once a roster has
+      // arrived the chips are the answer, and a background refresh must
+      // not replace them with a spinner.
+      AssigneeRosterStatus.loading => Row(
+        children: [
+          const SizedBox(
+            width: 14,
+            height: 14,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          const SizedBox(width: AppSpacing.sp8),
+          Text(context.l10n.common_loadingEmployees, style: mutedLabel),
+        ],
+      ),
+      AssigneeRosterStatus.failed => Row(
+        children: [
+          Flexible(
+            child: Text(
+              context.l10n.error_errorLoadingEmployees,
+              style: mutedLabel,
+            ),
+          ),
+          if (onRetryRoster != null)
+            TextButton(
+              onPressed: onRetryRoster,
+              child: Text(context.l10n.common_retry),
+            ),
+        ],
+      ),
+      AssigneeRosterStatus.ready => Text(
+        selectable
+            ? context.l10n.common_noEmployeesFound
+            : context.l10n.calendar_noEmployeesAssigned,
+        style: mutedLabel,
+      ),
+    };
+  }
+
+  Widget _withError(BuildContext context, Widget content, ColorScheme scheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        content,
+        Padding(
+          padding: const EdgeInsets.only(
+            top: AppSpacing.sp4,
+            left: AppSpacing.sp4,
+          ),
+          child: Text(
+            errorText!,
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: scheme.error),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -80,43 +141,7 @@ class EmployeePicker extends StatelessWidget {
 
     final mutedLabel = TextStyle(fontSize: 13, color: scheme.onSurfaceVariant);
     final content = displayEmployees.isEmpty
-        ? switch (rosterStatus) {
-            // Only ever reached while the list is empty: once a roster has
-            // arrived the chips are the answer, and a background refresh must
-            // not replace them with a spinner.
-            AssigneeRosterStatus.loading => Row(
-              children: [
-                const SizedBox(
-                  width: 14,
-                  height: 14,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-                const SizedBox(width: AppSpacing.sp8),
-                Text(context.l10n.common_loadingEmployees, style: mutedLabel),
-              ],
-            ),
-            AssigneeRosterStatus.failed => Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    context.l10n.error_errorLoadingEmployees,
-                    style: mutedLabel,
-                  ),
-                ),
-                if (onRetryRoster != null)
-                  TextButton(
-                    onPressed: onRetryRoster,
-                    child: Text(context.l10n.common_retry),
-                  ),
-              ],
-            ),
-            AssigneeRosterStatus.ready => Text(
-              selectable
-                  ? context.l10n.common_noEmployeesFound
-                  : context.l10n.calendar_noEmployeesAssigned,
-              style: mutedLabel,
-            ),
-          }
+        ? _buildEmptyState(context, mutedLabel)
         : Wrap(
             spacing: AppSpacing.sp8,
             runSpacing: AppSpacing.sp8,
@@ -140,24 +165,7 @@ class EmployeePicker extends StatelessWidget {
           );
 
     if (errorText == null) return content;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        content,
-        Padding(
-          padding: const EdgeInsets.only(
-            top: AppSpacing.sp4,
-            left: AppSpacing.sp4,
-          ),
-          child: Text(
-            errorText!,
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: scheme.error),
-          ),
-        ),
-      ],
-    );
+    return _withError(context, content, scheme);
   }
 }
 

@@ -65,28 +65,12 @@ class DetailsViewBody extends ConsumerWidget {
   Widget _tour(TourStepId id, Widget child) =>
       tourWrap?.call(id, child) ?? child;
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final provider = eventDetailsControllerProvider(
-      EventDetailsKey(appointment),
-    );
-    final client = ref.watch(provider.select((s) => s.client));
-    final isSaving = ref.watch(provider.select((s) => s.isSaving));
-    final notifier = ref.read(provider.notifier);
-
-    final data = _DetailsViewData.from(appointment, client);
-    final compactHeader = context.isCompact;
-    final displayAddress = data.displayAddress;
-    final onCall = data.phone.isNotEmpty
-        ? () => launchPhoneCall(context, ref, data.phone)
-        : null;
-    final onDirections = appointment.address.isNotEmpty
-        ? () => AddressMapLauncher.showMapChoices(
-            context,
-            ref,
-            address: appointment.address,
-          )
-        : null;
+  Widget _buildClientSection(
+    BuildContext context,
+    WidgetRef ref,
+    _DetailsViewData data,
+    EventDetailsController notifier,
+  ) {
     final pushBackOptions = pushBackOptionsFor(appointment.startTime);
     final onPushBack =
         offersPushBack(
@@ -97,21 +81,115 @@ class DetailsViewBody extends ConsumerWidget {
         )
         ? () => _onPushBack(context, ref, notifier, pushBackOptions)
         : null;
+    return _ClientSection(
+      isPersonal: appointment.isPersonal,
+      clientName: data.clientName,
+      phone: data.phone,
+      displayAddress: data.displayAddress,
+      notes: data.notes,
+      onCall: data.phone.isNotEmpty
+          ? () => launchPhoneCall(context, ref, data.phone)
+          : null,
+      onDirections: appointment.address.isNotEmpty
+          ? () => AddressMapLauncher.showMapChoices(
+              context,
+              ref,
+              address: appointment.address,
+            )
+          : null,
+      onPushBack: onPushBack,
+      tourWrap: tourWrap,
+    );
+  }
+
+  VoidCallback? _bookAgainCallback(ClientRecord? client) =>
+      offersBookAgain(
+        appointment,
+        showActions: showActions,
+        hasHandler: onBookAgain != null,
+      )
+      ? () => onBookAgain!(
+          AppointmentPrefill.bookAgain(
+            appointment,
+            client: client ?? placeholderClient(appointment),
+          ),
+        )
+      : null;
+
+  List<Widget> _buildHeaderBlock(
+    BuildContext context,
+    _DetailsViewData data,
+    EventDetailsController notifier,
+  ) {
+    final compactHeader = context.isCompact;
+    return [
+      // Cancelled visits still show the edit affordance — `showActions` is
+      // the only thing that gates it.
+      if (showActions && !data.isDone)
+        Align(
+          alignment: compactHeader
+              ? Alignment.centerLeft
+              : Alignment.centerRight,
+          child: DetailsEditChip(onTap: notifier.enterEditing),
+        ),
+      DetailsHeader(
+        appointment: appointment,
+        status: data.displayStatus,
+        compact: compactHeader,
+      ),
+      // The time record outlives the job; a cancelled one has no work to
+      // time.
+      if (data.hasTimeRecord && !data.isCancelled)
+        DetailsTimeRecordRow(
+          startedAt: appointment.startedAt,
+          completedAt: appointment.completedAt,
+        ),
+      const SizedBox(height: AppSpacing.sp16),
+      const Divider(height: 1),
+      const SizedBox(height: AppSpacing.sp16),
+    ];
+  }
+
+  Widget _buildActionBar(
+    BuildContext context,
+    WidgetRef ref,
+    _DetailsViewData data,
+    EventDetailsController notifier, {
+    required bool isSaving,
+    required bool canRecordFieldWork,
+    required ClientRecord? client,
+  }) {
+    return DetailsActionBar(
+      isDone: data.isDone,
+      isCancelled: data.isCancelled,
+      isInProgress: data.isInProgress,
+      isSaving: isSaving,
+      showCancel: showActions,
+      onEdit: showActions ? notifier.enterEditing : null,
+      // Anyone who may close the job may start it; a personal block has no
+      // arrival to record.
+      onStart: (showActions || canRecordFieldWork) && !appointment.isPersonal
+          ? () => _onStart(context, ref, notifier)
+          : null,
+      onMarkDone: () => _onMarkDone(context, ref, notifier),
+      onCancel: () => _onCancel(context, ref, notifier),
+      onBookAgain: _bookAgainCallback(client),
+      tourWrap: tourWrap,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final provider = eventDetailsControllerProvider(
+      EventDetailsKey(appointment),
+    );
+    final client = ref.watch(provider.select((s) => s.client));
+    final isSaving = ref.watch(provider.select((s) => s.isSaving));
+    final notifier = ref.read(provider.notifier);
+
+    final data = _DetailsViewData.from(appointment, client);
     // Resolved once: it gates the field record below AND the Start button.
     final canRecordFieldWork = _canRecordFieldWork(ref, appointment);
-    final bookAgain =
-        offersBookAgain(
-          appointment,
-          showActions: showActions,
-          hasHandler: onBookAgain != null,
-        )
-        ? () => onBookAgain!(
-            AppointmentPrefill.bookAgain(
-              appointment,
-              client: client ?? placeholderClient(appointment),
-            ),
-          )
-        : null;
 
     // TIME OFF is its own body: it has no client, no address, no materials and
     // no photos, and no lifecycle to act on — so it renders who it is for,
@@ -128,41 +206,8 @@ class DetailsViewBody extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Cancelled visits still show the edit affordance — `showActions` is
-        // the only thing that gates it.
-        if (showActions && !data.isDone)
-          Align(
-            alignment: compactHeader
-                ? Alignment.centerLeft
-                : Alignment.centerRight,
-            child: DetailsEditChip(onTap: notifier.enterEditing),
-          ),
-        DetailsHeader(
-          appointment: appointment,
-          status: data.displayStatus,
-          compact: compactHeader,
-        ),
-        // The time record outlives the job; a cancelled one has no work to
-        // time.
-        if (data.hasTimeRecord && !data.isCancelled)
-          DetailsTimeRecordRow(
-            startedAt: appointment.startedAt,
-            completedAt: appointment.completedAt,
-          ),
-        const SizedBox(height: AppSpacing.sp16),
-        const Divider(height: 1),
-        const SizedBox(height: AppSpacing.sp16),
-        _ClientSection(
-          isPersonal: appointment.isPersonal,
-          clientName: data.clientName,
-          phone: data.phone,
-          displayAddress: displayAddress,
-          notes: data.notes,
-          onCall: onCall,
-          onDirections: onDirections,
-          onPushBack: onPushBack,
-          tourWrap: tourWrap,
-        ),
+        ..._buildHeaderBlock(context, data, notifier),
+        _buildClientSection(context, ref, data, notifier),
         ClientContactsCards(contacts: data.extraContacts, collapsible: true),
         if (data.materials.isNotEmpty) ...[
           const SizedBox(height: AppSpacing.sp16),
@@ -188,23 +233,14 @@ class DetailsViewBody extends ConsumerWidget {
             TourStepId.jobFieldRecord,
             DetailsFieldRecordView(appointment: appointment),
           ),
-        DetailsActionBar(
-          isDone: data.isDone,
-          isCancelled: data.isCancelled,
-          isInProgress: data.isInProgress,
+        _buildActionBar(
+          context,
+          ref,
+          data,
+          notifier,
           isSaving: isSaving,
-          showCancel: showActions,
-          onEdit: showActions ? notifier.enterEditing : null,
-          // Anyone who may close the job may start it; a personal block has no
-          // arrival to record.
-          onStart:
-              (showActions || canRecordFieldWork) && !appointment.isPersonal
-              ? () => _onStart(context, ref, notifier)
-              : null,
-          onMarkDone: () => _onMarkDone(context, ref, notifier),
-          onCancel: () => _onCancel(context, ref, notifier),
-          onBookAgain: bookAgain,
-          tourWrap: tourWrap,
+          canRecordFieldWork: canRecordFieldWork,
+          client: client,
         ),
       ],
     );
@@ -220,8 +256,7 @@ class DetailsViewBody extends ConsumerWidget {
     required bool showActions,
     required bool isClosed,
     required bool hasOptions,
-  }) =>
-      showActions && !isClosed && !appointment.isAllDay && hasOptions;
+  }) => showActions && !isClosed && !appointment.isAllDay && hasOptions;
 
   /// Whether Book again is offered.
   ///
@@ -368,9 +403,9 @@ class DetailsViewBody extends ConsumerWidget {
     if (outcome == null || !context.mounted) return;
     switch (outcome) {
       case EventDetailsSaved():
-        ref.read(analyticsServiceProvider).logAppointmentDelayed(
-          minutes: minutes,
-        );
+        ref
+            .read(analyticsServiceProvider)
+            .logAppointmentDelayed(minutes: minutes);
         notices.success(l10n.calendar_pushedBack(minutes));
         onClose();
       case EventDetailsFailed(:final error):
