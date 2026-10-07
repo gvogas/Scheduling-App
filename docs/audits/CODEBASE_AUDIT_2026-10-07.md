@@ -230,7 +230,7 @@ None. Zero `TODO(pre-ship)` markers (zero TODO/FIXME/HACK of any form in
   (Leave `details_action_bar.dart:129,177`, which carry real overrides.)
 
 ### I3 — `employee_accounts.js` grew to 808 lines · low · high
-- **Status (2026-10-07):** **OPEN by design — split on next touch** (a refactor of a deployed module with no defect).
+- **Status (2026-10-07):** **DONE** (`2641c3e5`). Pure move into `employee_accounts_admin.js` (create/delete/reset) and `employee_accounts_self.js` (setup/complete-reset/email change); same 32 exports, 2237/2237 jest, gate mocks proved non-vacuous. **Not deployed:** the next functions deploy runs `allowlist_diff.js` against a base that still has `employee_accounts.js`, so it prints six "renamed or deleted? Check it by hand" lines and exits 0 — the six allowlists were hand-checked identical (no key removed); the check is per-file again once that deploy moves the base sha.
 - **Opportunity:** the natural seam is admin create/reset/delete vs
   self-service setup/complete-reset/email. Other functions modules over 600
   lines: `notification_utils.js` 712, `wave/customers.js` 639,
@@ -239,7 +239,7 @@ None. Zero `TODO(pre-ship)` markers (zero TODO/FIXME/HACK of any form in
   `*_policy.js` / module line; the export set must not change.
 
 ### I4 — long `build()`s and god files (split on touch) · low · high
-- **Status (2026-10-07):** **OPEN by design — split on touch.**
+- **Status (2026-10-07):** **PARTLY DONE** (`228b0782`): the six named `build()`s split via private builder methods (clients_screen 137→49, details_view_body 143→66, notice_listener 124→41, employee_picker 109→56, live_map_team_sheet 93→30, main 87→51). The other ~57 long builds and the god files stay split-on-touch.
 - 63 of 383 `build()`s exceed ~60 lines. Changed this window:
   `clients_screen.dart:139` (137 lines; seams: header row :189-215, list stack
   :220-260, FAB), `live_map_team_sheet.dart:45` (93), `main.dart:366` (87,
@@ -251,7 +251,7 @@ None. Zero `TODO(pre-ship)` markers (zero TODO/FIXME/HACK of any form in
   `edit_person_sheet.dart` 720 (+81).
 
 ### I5 — multi-line comment backlog against the one-line rule · low · high
-- **Status (2026-10-07):** **OPEN by design — trim on touch;** overlaps the not-started rules-docs cut-down plan.
+- **Status (2026-10-07):** **PARTLY DONE** (`6f947913`): the six named files trimmed, comment-only diff; 12 unrecorded reasons moved first into `employees.md`, `notifications.md`, `images.md`, `appointments.md` and root `CLAUDE.md`. The rest of the backlog stays trim-on-touch; overlaps the not-started rules-docs cut-down plan.
 - About 6,000 lines sit in consecutive `//`/`///` blocks of 2+ lines across
   `lib/`. Worst among files changed this window:
   `employee_form_controller.dart` (87 lines; blocks at 118 and 202),
