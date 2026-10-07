@@ -197,9 +197,19 @@ reverting the cap.
 
 ## Flip a kill switch
 
-Remote Config is the single source of truth; the app and `functions/` both read
-it and both FAIL OPEN (a failed fetch, an empty template or a missing key means
-every feature on and `min_supported_build` 0).
+Firebase Remote Config has SEPARATE **Client** and **Server** templates. The app
+reads the Client template; `functions/feature_flags.js` uses `getServerTemplate()`,
+which reads ONLY the Server template. A switch must be flipped in BOTH where it
+applies. Both sides FAIL OPEN (a failed fetch, an empty template or a missing
+key means every feature on and `min_supported_build` 0).
+
+| Key | Client template (app) | Server template (functions) |
+|---|---|---|
+| `feature_address_autocomplete` | yes | yes |
+| `feature_presence` | yes | no |
+| `feature_live_activities` | yes | yes |
+| `feature_wave_sync` | yes | yes |
+| `min_supported_build` | yes | no |
 
 | Key | Default | Off means |
 |---|---|---|
@@ -209,16 +219,18 @@ every feature on and `min_supported_build` 0).
 | `feature_wave_sync` | `true` | Wave settings show "paused"; outbox keeps queuing, drain stops sending |
 | `min_supported_build` | `0` | Builds with a lower build number see a blocking update screen |
 
-- **Flip:** Firebase console -> Remote Config -> edit the parameter -> Publish.
+- **Flip:** Firebase console -> Remote Config -> pick the Client or Server tab -> edit the parameter -> Publish.
   Open apps react within seconds (real-time listener); functions within 60 s.
-- **Rollback:** Remote Config -> the template's version history -> roll back.
-- **Values:** booleans must be exactly `true`/`false` (any other string reads as
-  OFF on both sides); `min_supported_build` is an integer. Never publish a key
-  with an empty value.
-- **One-time IAM test:** publish `feature_wave_sync = false`, press Wave -> Sync,
+- **Rollback:** Remote Config -> the template's version history -> roll back (per template).
+- **After re-enabling,** functions can lag up to 60 s (per-instance cache), so Places/Wave may refuse briefly; the Wave backlog drains on the next client edit, a Sync press, or the daily sweep, not instantly.
+- **Values:** `1/true/t/yes/y/on` (case-insensitive) read ON on both sides and
+  anything else, including empty, reads OFF; publish exactly `true`/`false`.
+  `min_supported_build` is an integer.
+- **One-time IAM test:** publish `feature_wave_sync = false` in the **Server** template, press Wave -> Sync,
   look for `FLAGS blocked a call {"key":"feature_wave_sync"}` in
-  `firebase functions:log`, then publish it back to `true`. No line means the
-  functions runtime service account lacks `roles/cloudconfig.viewer`; grant it.
+  `firebase functions:log`, then publish it back to `true`. No line: first confirm it was the Server tab, THEN
+  check that the functions runtime service account has `roles/cloudconfig.viewer`; grant it if absent.
+- **Older builds (no kill-switch code):** Places and Wave actions show a generic "something went wrong" error while paused; presence is NOT paused on them (app-only switch); their Live Activity cards freeze until iOS removes them as stale. `min_supported_build` is the lever for those.
 - Presence pause also DELETES each person's last location pin once (retried if refused).
 - Live Activities pause ends cards on devices running this build; a job ending while paused still removes that card's token row (normal lifecycle).
 - Wave pause queues edits and drains them after re-enable; nothing dead-letters; `functions/scripts/drain-wave-queue.js` stops with a message while paused.

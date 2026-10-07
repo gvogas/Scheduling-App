@@ -14,8 +14,7 @@ final appBuildNumberProvider = FutureProvider<int?>((ref) async {
 bool isUpdateRequired({required int build, required int minSupported}) =>
     build < minSupported;
 
-/// Swaps the whole app for [UpdateRequiredScreen] while this build is below
-/// `min_supported_build` — at cold start and mid-session alike.
+/// Swaps the app for [UpdateRequiredScreen] while this build is below `min_supported_build`.
 class UpdateGate extends ConsumerWidget {
   const UpdateGate({required this.child, super.key});
 

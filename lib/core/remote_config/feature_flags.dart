@@ -1,8 +1,7 @@
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/foundation.dart';
 
-/// Remote Config kill switches. Keys and defaults mirror
-/// `functions/feature_flags_policy.js`.
+/// Kill switches; keys and defaults mirror `functions/feature_flags_policy.js`.
 @immutable
 class FeatureFlags {
   const FeatureFlags({
@@ -13,8 +12,7 @@ class FeatureFlags {
     required this.minSupportedBuild,
   });
 
-  /// A static value means no remote value AND no installed default, so the
-  /// code default wins — `asBool()` would read it as false (fail closed).
+  /// A static value (no remote, no default) takes the code default, not false.
   factory FeatureFlags.fromValues(Map<String, RemoteConfigValue> values) {
     bool readBool(String key, {required bool fallback}) {
       final v = values[key];

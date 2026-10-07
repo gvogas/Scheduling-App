@@ -364,7 +364,8 @@ fourth scheduled function starts costing money.
 
 `feature_flags_policy.js` (pure: keys, defaults, parsing, the 60 s fail-open
 cache) and `feature_flags.js` (lazy `firebase-admin/remote-config` loader,
-`getFeatureFlags()`, `assertFeatureEnabled()`). Not exports. Runbook:
+`getFeatureFlags()`, `assertFeatureEnabled()`). Not exports. Reads the Remote
+Config SERVER template only (the app reads the Client one; flip both). Runbook:
 `docs/DEPLOYMENT.md` "Flip a kill switch".
 
 ## Auth & accounts

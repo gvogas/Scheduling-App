@@ -5,8 +5,7 @@ import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/remote_config/feature_flags.dart';
 
-/// Wraps [FirebaseRemoteConfig]: cached values first, then a background
-/// fetch, then every real-time update. Every failure keeps the last values.
+/// Wraps [FirebaseRemoteConfig]: cache, fetch, then live updates; failures keep the last values.
 class RemoteConfigService {
   RemoteConfigService({FirebaseRemoteConfig? remoteConfig, AppLogger? logger})
     : _remoteConfig = remoteConfig ?? FirebaseRemoteConfig.instance,
