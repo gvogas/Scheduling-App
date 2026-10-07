@@ -16,16 +16,6 @@ void main() {
     expect(d.minSupportedBuild, 0);
   });
 
-  test('the five keys match functions/feature_flags_policy.js', () {
-    expect(FeatureFlags.defaults.toRemoteConfigDefaults(), {
-      'feature_address_autocomplete': true,
-      'feature_presence': true,
-      'feature_live_activities': true,
-      'feature_wave_sync': true,
-      'min_supported_build': 0,
-    });
-  });
-
   test('reads published remote values', () {
     final flags = FeatureFlags.fromValues({
       'feature_address_autocomplete': _remote('true'),

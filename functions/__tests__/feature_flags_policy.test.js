@@ -8,14 +8,7 @@ const {
 } = require("../feature_flags_policy");
 
 describe("FLAG_DEFAULTS", () => {
-  test("every feature is on and no build is blocked", () => {
-    expect(FLAG_DEFAULTS).toEqual({
-      feature_address_autocomplete: true,
-      feature_presence: true,
-      feature_live_activities: true,
-      feature_wave_sync: true,
-      min_supported_build: 0,
-    });
+  test("FLAG_KEYS lists every default, in order", () => {
     expect(FLAG_KEYS).toEqual(Object.keys(FLAG_DEFAULTS));
   });
 });

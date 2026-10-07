@@ -1,0 +1,9 @@
+{
+  "defaults": {
+    "feature_address_autocomplete": true,
+    "feature_presence": true,
+    "feature_live_activities": true,
+    "feature_wave_sync": true,
+    "min_supported_build": 0
+  }
+}
