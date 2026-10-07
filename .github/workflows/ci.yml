@@ -5,6 +5,13 @@ on:
     # Verify the long-lived development branch as well as main.
     branches: [main, dev]
   pull_request:
+  workflow_call:
+    inputs:
+      ref:
+        description: Ref to verify (the deploy workflow passes its own).
+        type: string
+        required: false
+        default: ""
 
 jobs:
   flutter:
@@ -12,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
 
       - uses: subosito/flutter-action@v2
         with:
@@ -70,6 +79,8 @@ jobs:
         working-directory: functions
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
 
       - uses: actions/setup-node@v7
         with:
