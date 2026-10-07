@@ -1,0 +1,208 @@
+"use strict";
+
+// Fails a deploy that would narrow any callable's payload allowlist.
+
+const {execFileSync} = require("child_process");
+const {readFileSync} = require("fs");
+
+const CALL = /\b(assertAdminCall|assertActiveCall|assertPayloadShape)\s*\(/g;
+const ARGS = new RegExp(
+    /\s*req(?:\.data)?\s*,\s*new Set\(\s*/.source +
+    /(?:\[([^\]]*)\]\s*)?\)\s*,?\s*\)/.source, "y");
+const OWNER = /(?:function\s+(\w+)\s*\(|const\s+(\w+)\s*=\s*onCall\()/g;
+const EXCLUDED_DIR = /^(?:node_modules|__tests__|scripts|coverage)\//;
+const EXCLUDED_FILE = /^(?:security|jest\.config|\.eslintrc)\.js$/;
+
+/**
+ * Whether a call match is a real guard call and not a definition or prose.
+ * @param {string} source The module source.
+ * @param {number} index Offset of the matched name.
+ * @return {boolean} True when it is an invocation in code.
+ */
+function isInvocation(source, index) {
+  const lineStart = source.lastIndexOf("\n", index - 1) + 1;
+  const before = source.slice(lineStart, index);
+  if (/^\s*(?:\/\/|\/?\*)/.test(before)) return false;
+  return !/function\s*\*?\s*$/.test(before);
+}
+
+/**
+ * The string keys of an inline array body, or null when it holds anything
+ * else (a variable, a spread, a call).
+ * @param {string} body Text between the brackets.
+ * @return {?Array<string>} Keys in order.
+ */
+function parseKeys(body) {
+  const stripped = body.replace(/\/\/[^\n]*/g, "")
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+  const keys = [];
+  const rest = stripped.replace(/"([^"\\]+)"|'([^'\\]+)'/g, (_, a, b) => {
+    keys.push(a || b);
+    return "";
+  });
+  return /^[\s,]*$/.test(rest) ? keys : null;
+}
+
+/**
+ * Inline allowlists in one source file, keyed by the owning handler.
+ * Throws on any guard call whose allowlist is not an inline literal, so an
+ * unreadable shape fails the deploy check instead of being skipped.
+ * @param {string} source A functions module.
+ * @return {!Map<string, !Set<string>>} Owner name to its allowed keys.
+ */
+function extractAllowlists(source) {
+  const owners = [...source.matchAll(OWNER)]
+      .map((m) => ({index: m.index, name: m[1] || m[2]}));
+  const result = new Map();
+  for (const match of source.matchAll(CALL)) {
+    if (!isInvocation(source, match.index)) continue;
+    ARGS.lastIndex = match.index + match[0].length;
+    const args = ARGS.exec(source);
+    const keys = args ? parseKeys(args[1] || "") : null;
+    if (keys === null) {
+      const line = source.slice(0, match.index).split("\n").length;
+      throw new Error(
+          `cannot read the allowlist of ${match[1]}( at line ${line}: ` +
+          "it must be an inline `new Set([\"key\", ...])` literal " +
+          "(extend scripts/deploy/allowlist_diff.js before using another " +
+          "shape).");
+    }
+    const owner = owners.filter((o) => o.index < match.index).pop();
+    const name = owner ? owner.name : "(module)";
+    const set = result.get(name) || new Set();
+    keys.forEach((key) => set.add(key));
+    result.set(name, set);
+  }
+  return result;
+}
+
+/**
+ * Keys present at the base and gone at HEAD.
+ * @param {!Map<string, !Set<string>>} base Allowlists at the deployed sha.
+ * @param {!Map<string, !Set<string>>} head Allowlists in the working tree.
+ * @return {{removed: !Array<{owner: string, key: string}>,
+ *     missingOwners: !Array<string>}} What narrowed, and owners not found.
+ */
+function removedKeys(base, head) {
+  const removed = [];
+  const missingOwners = [];
+  for (const [owner, keys] of base) {
+    const now = head.get(owner);
+    if (!now) {
+      missingOwners.push(owner);
+      continue;
+    }
+    for (const key of keys) {
+      if (!now.has(key)) removed.push({owner, key});
+    }
+  }
+  return {removed, missingOwners};
+}
+
+/**
+ * Compares every source file at the base against HEAD.
+ * @param {{list: function(): !Array<string>,
+ *     read: function(string): ?string}} base Files at the deployed sha.
+ * @param {{list: function(): !Array<string>,
+ *     read: function(string): ?string}} head Files in the working tree.
+ * @return {{removed: !Array<{file: string, owner: string, key: string}>,
+ *     missingOwners: !Array<{file: string, owner: string}>}} Findings.
+ */
+function compareTrees(base, head) {
+  const files = new Set([...base.list(), ...head.list()]);
+  const removed = [];
+  const missingOwners = [];
+  for (const file of [...files].sort()) {
+    if (!file.endsWith(".js")) continue;
+    if (EXCLUDED_DIR.test(file) || EXCLUDED_FILE.test(file)) continue;
+    const baseSource = base.read(file);
+    if (baseSource === null) continue;
+    const headSource = head.read(file);
+    let result;
+    try {
+      result = removedKeys(
+          extractAllowlists(baseSource),
+          extractAllowlists(headSource === null ? "" : headSource));
+    } catch (err) {
+      throw new Error(`${file}: ${err.message}`);
+    }
+    result.removed.forEach((r) => removed.push({file, ...r}));
+    result.missingOwners.forEach((owner) => missingOwners.push({file, owner}));
+  }
+  return {removed, missingOwners};
+}
+
+/**
+ * The real file sources: `git` at the base sha, the working tree at HEAD.
+ * @param {string} baseSha The last deployed sha.
+ * @return {{base: !Object, head: !Object}} Arguments for `compareTrees`.
+ */
+function gitTrees(baseSha) {
+  const git = (args) => execFileSync("git", args,
+      {encoding: "utf8", stdio: ["ignore", "pipe", "pipe"]});
+  git(["rev-parse", "--verify", `${baseSha}^{commit}`]);
+  const lines = (out) => out.split("\n").filter(Boolean);
+  return {
+    base: {
+      list: () => lines(git(["ls-tree", "-r", "--name-only", baseSha])),
+      read: (file) => {
+        try {
+          return git(["show", `${baseSha}:./${file}`]);
+        } catch (err) {
+          return null;
+        }
+      },
+    },
+    head: {
+      list: () => lines(git(["ls-files", "*.js"])),
+      read: (file) => {
+        try {
+          return readFileSync(file, "utf8");
+        } catch (err) {
+          return null;
+        }
+      },
+    },
+  };
+}
+
+/**
+ * CLI: run from `functions/`, `node scripts/deploy/allowlist_diff.js <sha>`.
+ * @param {!Array<string>} argv Arguments after node + script.
+ * @return {number} Exit code.
+ */
+function main(argv) {
+  const [baseSha] = argv;
+  if (!baseSha) {
+    console.error("::error::usage: allowlist_diff.js <last-deployed-sha>");
+    return 1;
+  }
+  let found;
+  try {
+    const trees = gitTrees(baseSha);
+    found = compareTrees(trees.base, trees.head);
+  } catch (err) {
+    console.error(`::error::allowlist check could not run: ${err.message}`);
+    return 1;
+  }
+  for (const {file, owner, key} of found.removed) {
+    console.error(
+        `::error file=functions/${file}::${owner} no longer accepts ` +
+        `"${key}". A shipped build that still sends it gets ` +
+        "unexpected-field. Keep it accepted-and-ignored with a " +
+        "#compat-<version> tag (.claude/rules/security.md).");
+  }
+  for (const {file, owner} of found.missingOwners) {
+    console.log(
+        `::warning file=functions/${file}::${owner} had an allowlist at ` +
+        `${baseSha} and is not found now — renamed or deleted? Check it ` +
+        "by hand.");
+  }
+  return found.removed.length > 0 ? 1 : 0;
+}
+
+if (require.main === module) {
+  process.exitCode = main(process.argv.slice(2));
+}
+
+module.exports = {extractAllowlists, removedKeys, compareTrees, main};
