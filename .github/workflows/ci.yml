@@ -57,6 +57,9 @@ jobs:
       - name: Analyze
         run: flutter analyze
 
+      - name: Check rules
+        run: dart run tool/check_rules.dart
+
       # `--coverage` so an untested unit is visible in the run's artifacts
       # rather than only discoverable by a manual audit. No threshold is
       # enforced: a hard gate on a repo with device-only paths (image picker,
