@@ -17,5 +17,15 @@
     {"input": "Éric Tremblay", "expect": "eric tremblay"},
     {"input": "Ångström", "expect": "angstrom"},
     {"input": "Šarko", "expect": "arko"}
-  ]
+  ],
+  "historySeam": {
+    "record": {"clientName": "Marie Tremblay", "clientPhone": "5145554321", "employeeNames": ["Marc Dubois"]},
+    "cases": [
+      {"name": "does not match across the client/employee seam", "query": "tremblay marc", "expect": false},
+      {"name": "matches within the client field", "query": "marie tremblay", "expect": true},
+      {"name": "matches within the crew field", "query": "marc dubois", "expect": true},
+      {"name": "matches the client phone by digits", "query": "555-4321", "expect": true},
+      {"name": "a blank query matches nothing", "query": "  ", "expect": false}
+    ]
+  }
 }
