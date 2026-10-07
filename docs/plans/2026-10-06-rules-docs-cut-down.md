@@ -116,12 +116,12 @@ Every rewrite task runs these exact steps on its file `$F`, with short name `$N`
   diff <(awk '/^---$/{c++; print; if(c==2) exit; next} c==1' build/rules_audit/$N.old.md) <(awk '/^---$/{c++; print; if(c==2) exit; next} c==1' $F) && echo FRONTMATTER-OK
   ```
   Expected: `FRONTMATTER-OK`. For files with no frontmatter, both sides are empty and it still prints `FRONTMATTER-OK`.
-- **R6. Verify no invariant was lost.** Walk `build/rules_audit/$N.inventory.txt` line by line. For each line, note where it now lives (`$F:<line>`, `ADR-NNNN`, `check_rules:<ban>`, or `dup:<file>`) in `build/rules_audit/$N.mapping.txt`, one line per inventory line. Then run:
+- **R6. Verify no invariant was lost.** Walk `build/rules_audit/$N.inventory.txt` line by line. For each line, note where it now lives (`$F:<line>`, `ADR-NNNN`, `check_rules:<ban>`, or `dup:<file>`) in `build/rules_audit/$N.mapping.txt`, one `old:<line> -> <where>` line per inventory line (the budget header from R1 sits above them). Then run:
   ```bash
-  wc -l build/rules_audit/$N.inventory.txt build/rules_audit/$N.mapping.txt
+  wc -l < build/rules_audit/$N.inventory.txt; grep -c "^old:" build/rules_audit/$N.mapping.txt
   grep -c "UNMAPPED" build/rules_audit/$N.mapping.txt
   ```
-  Expected: the two line counts are equal and `UNMAPPED` is `0`. Any line you cannot place is a lost invariant. Put it back in `$F`.
+  Expected: the two counts are equal and `UNMAPPED` is `0`. Any line you cannot place is a lost invariant. Put it back in `$F`.
 
   Then the mechanical symbol check: every backticked symbol in the old file must survive in the new file or in one of the ADRs it cites.
   ```bash
