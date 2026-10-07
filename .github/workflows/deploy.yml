@@ -76,12 +76,12 @@ jobs:
         working-directory: functions
         run: npm ci
 
-      - uses: google-github-actions/auth@v2
+      - uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2.1.13
         with:
           workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
           service_account: ${{ vars.GCP_DEPLOY_SA }}
 
-      - uses: google-github-actions/setup-gcloud@v2
+      - uses: google-github-actions/setup-gcloud@e427ad8a34f8676edf47cf7d7925499adf3eb74f # v2.2.1
 
       - name: Plan
         id: plan
@@ -247,7 +247,7 @@ jobs:
             "--date=$(date -u +%Y-%m-%d)" "--sha=$SHA" "--targets=$TARGETS" \
             "--count=$COUNT" "--run-url=$RUN_URL"
 
-      - uses: peter-evans/create-pull-request@v7
+      - uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
         with:
           base: dev
           branch: deploy-log/${{ github.run_id }}
