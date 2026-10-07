@@ -3,7 +3,7 @@
 **Status (verified 2026-10-01):** every finding marked "needs functions deploy"
 below is DEPLOYED — it went live with `306ed848` on 2026-09-29 (`docs/DEPLOYMENT.md`
 log). The app-side fixes ride 1.63.0+93, which has not shipped. S4 was approved and
-built 2026-10-07 (needs functions deploy).
+built 2026-10-07 and DEPLOYED the same day (`8739e48c`).
 
 Scope: whole repo (`lib/`, `functions/`, `firestore.rules`, `storage.rules`,
 `firestore.indexes.json`, `test/`). Baseline: `dev` @ `cee76f45`, clean tree.
@@ -93,7 +93,7 @@ None. Zero `TODO(pre-ship)` markers in the tree.
   (low priority, can ride the next functions deploy).
 
 ### S4 — resetting a demoted account's password leaves it disabled · low · high (NEW, from the S1 fix)
-- **Status:** **DONE 2026-10-07 — needs functions deploy.** Owner approved the fix as written; `resetProvisionedPassword` now sends `disabled: false`, pinned in `employee_accounts.test.js`.
+- **Status:** **DONE and DEPLOYED 2026-10-07 (`8739e48c`).** Owner approved the fix as written; `resetProvisionedPassword` now sends `disabled: false`, pinned in `employee_accounts.test.js`.
 - **Where:** `functions/employee_accounts.js` `resetProvisionedPassword` (sets only `password`/`displayName`).
 - **Risk:** after S1, an account an admin demotes active→invited in the console has its credential disabled; a later Reset password hands over a password for a still-disabled account, so first sign-in fails.
 - **Fix:** add `disabled: false` to the reset's `updateUser` (the admin's reset IS the intent to hand over a working credential). Needs deploy.
