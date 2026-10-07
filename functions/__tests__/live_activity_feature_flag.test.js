@@ -16,6 +16,7 @@ const registry = require("../live_activity_registry");
 const {
   startLiveActivity,
   updateLiveActivity,
+  endLiveActivity,
 } = require("../live_activity_dispatch");
 
 const AUTH = {authKey: "-----KEY-----", keyId: "K1", teamId: "T1"};
@@ -68,6 +69,24 @@ test("paused: update sends nothing and deletes nothing", async () => {
   expect(sendLiveActivityPush).not.toHaveBeenCalled();
   expect(registry.deleteActivityToken).not.toHaveBeenCalled();
   expect(registry.setCardStart).not.toHaveBeenCalled();
+});
+
+test("paused: end sends nothing and keeps the token and marker", async () => {
+  const ended = await endLiveActivity(deps(false), {
+    appointmentId: "appt1", employeeDocId: "emp1", ctx: CTX, nowDate: NOW,
+  });
+  expect(ended).toBe(0);
+  expect(sendLiveActivityPush).not.toHaveBeenCalled();
+  expect(registry.deleteActivityToken).not.toHaveBeenCalled();
+  expect(registry.clearCardMarker).not.toHaveBeenCalled();
+});
+
+test("on: end sends and drops the token", async () => {
+  await endLiveActivity(deps(true), {
+    appointmentId: "appt1", employeeDocId: "emp1", ctx: CTX, nowDate: NOW,
+  });
+  expect(sendLiveActivityPush).toHaveBeenCalledTimes(1);
+  expect(registry.deleteActivityToken).toHaveBeenCalled();
 });
 
 test("on: a push is sent as before", async () => {

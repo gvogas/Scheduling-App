@@ -1,8 +1,11 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scheduling/core/adaptive/adaptive.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/analytics/analytics_screens.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
+import 'package:scheduling/core/errors/failure.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/theme/button_styles.dart';
@@ -24,6 +27,7 @@ import 'package:scheduling/features/employees/widgets/fields/availability_panel.
 import 'package:scheduling/features/employees/widgets/fields/employee_color_grid.dart';
 import 'package:scheduling/features/employees/widgets/fields/job_title_chips.dart';
 import 'package:scheduling/features/employees/widgets/fields/work_schedule_pickers.dart';
+import 'package:scheduling/features/settings/widgets/dialogs/delete_account_dialog.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/dialogs/confirm_dialog.dart';
 import 'package:scheduling/shared/widgets/feedback/user_status_chip.dart';
@@ -363,21 +367,46 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
   Future<void> _confirmResetPassword() async {
     final l10n = context.l10n;
     final name = widget.employee.displayName;
-    final confirmed = await showConfirmDialog(
-      context,
+    // One dialog is both the confirm and the admin's own re-auth.
+    final dialog = DeleteAccountReauthDialog(
       title: l10n.employees_resetPasswordConfirmTitle(name),
-      message: l10n.employees_resetPasswordConfirmBody,
+      message:
+          '${l10n.employees_resetPasswordConfirmBody}\n\n'
+          '${l10n.employees_resetPasswordEnterYourPassword}',
       confirmLabel: l10n.employees_resetPassword,
+      destructive: false,
     );
-    if (!mounted || !confirmed) return;
+    final password = context.isCupertino
+        ? await showCupertinoDialog<String>(
+            context: context,
+            builder: (_) => dialog,
+          )
+        : await showDialog<String>(context: context, builder: (_) => dialog);
+    if (!mounted || password == null || password.isEmpty) return;
     if (guardedOffline(context, ref, intro: l10n.error_introResetPassword)) {
       return;
     }
 
+    // Drag-dismiss pops the route directly (PopScope can't veto it), so the
+    // issued password must outlive the sheet: show it via the root navigator.
+    final navigator = Navigator.of(context, rootNavigator: true);
     final outcome = await ref
         .read(employeeFormControllerProvider.notifier)
-        .resetPassword(widget.employee.id);
-    if (!mounted) return;
+        .resetPassword(widget.employee.id, password: password);
+    if (!mounted) {
+      if (outcome case PasswordResetIssued(:final credentials)) {
+        await showNewAccountDialog(
+          // The root navigator outlives this sheet, so its context is safe.
+          // ignore: use_build_context_synchronously
+          navigator.context,
+          name: name,
+          credentials: credentials,
+          title: l10n.employees_passwordReset,
+          caption: l10n.employees_newPasswordIssued,
+        );
+      }
+      return;
+    }
 
     switch (outcome) {
       case PasswordResetBusy():
@@ -394,11 +423,13 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
         ref
             .read(noticeServiceProvider)
             .error(
-              composeErrorNotice(
-                context,
-                intro: l10n.error_introResetPassword,
-                error: error,
-              ),
+              error is Failure
+                  ? error.toLocalizedMessage(context)
+                  : composeErrorNotice(
+                      context,
+                      intro: l10n.error_introResetPassword,
+                      error: error,
+                    ),
             );
     }
   }
@@ -415,8 +446,10 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
         activity.isResettingPassword;
     final signedInUid = ref.watch(authUidProvider).value;
     // Fail closed: hidden until the signed-in uid is known and is not theirs.
+    // The server refuses an admin target, so the action is never offered.
     final canResetPassword =
         widget.employee.isActive &&
+        !widget.employee.isAdmin &&
         !_isDisabled &&
         widget.employee.uid.isNotEmpty &&
         signedInUid != null &&
@@ -677,9 +710,6 @@ class _StatusFooter extends ConsumerWidget {
         if (onResetPassword case final onReset?) ...[
           OutlinedButton.icon(
             key: const Key('resetPassword'),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(double.infinity, 48),
-            ),
             onPressed: isBusy ? null : onReset,
             icon: const Icon(Icons.lock_reset_outlined, size: 18),
             label: Text(l10n.employees_resetPassword),
@@ -687,10 +717,7 @@ class _StatusFooter extends ConsumerWidget {
           const SizedBox(height: AppSpacing.sp8),
         ],
         OutlinedButton.icon(
-          style: destructiveOutlinedButtonStyle(
-            context,
-            minimumSize: const Size(double.infinity, 48),
-          ),
+          style: destructiveOutlinedButtonStyle(context),
           onPressed: isBusy ? null : onToggle,
           icon: Icon(
             isDisabled ? Icons.lock_open_outlined : Icons.block_outlined,

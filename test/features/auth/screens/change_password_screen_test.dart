@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/analytics/analytics_providers.dart';
+import 'package:scheduling/core/analytics/analytics_service.dart';
 import 'package:scheduling/core/animations/animated_loading_button.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
@@ -34,6 +36,16 @@ class _MockPresence extends Mock implements PresenceSyncController {}
 
 class _MockLiveActivity extends Mock
     implements LiveActivityRegistrationController {}
+
+class _RecordingAnalytics extends AnalyticsService {
+  final List<String> calls = [];
+
+  @override
+  void logSignOut() => calls.add('logSignOut');
+
+  @override
+  void setUserRole(String? role) => calls.add('setUserRole($role)');
+}
 
 class _StubSignInController extends SignInController {
   _StubSignInController(this._resumeOutcome);
@@ -92,9 +104,12 @@ Widget _harness({
   bool offline = false,
   SignInOutcome resumeOutcome = const SignInSuccess(_employee),
   double textScale = 1,
+  AnalyticsService? analytics,
 }) {
   return ProviderScope(
     overrides: [
+      if (analytics != null)
+        analyticsServiceProvider.overrideWithValue(analytics),
       isOfflineProvider.overrideWithValue(offline),
       ..._deviceOverrides(calls ?? <String>[]),
       signInControllerProvider.overrideWith(
@@ -318,7 +333,10 @@ void main() {
   testWidgets('Log out tears the device down, then signs out to login', (
     tester,
   ) async {
-    await tester.pumpWidget(_harness(auth: auth, calls: calls));
+    final analytics = _RecordingAnalytics();
+    await tester.pumpWidget(
+      _harness(auth: auth, calls: calls, analytics: analytics),
+    );
     await tester.pumpAndSettle();
     final logOut = find.text('Log out');
     await tester.ensureVisible(logOut);
@@ -328,6 +346,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(calls, _teardownThenSignOut);
+    expect(analytics.calls, ['logSignOut', 'setUserRole(null)']);
     expect(find.text('login screen'), findsOneWidget);
   });
 

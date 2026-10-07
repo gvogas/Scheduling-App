@@ -17,20 +17,43 @@ const FLAG_DEFAULTS = Object.freeze({
 const FLAG_KEYS = Object.keys(FLAG_DEFAULTS);
 
 /**
+ * Only `true`/`false` (any case, trimmed) count; anything else fails OPEN.
+ * @param {string} raw The published string value.
+ * @param {boolean} fallback The code default.
+ * @return {boolean}
+ */
+function parseFlagBool(raw, fallback) {
+  const v = String(raw).trim().toLowerCase();
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return fallback;
+}
+
+/**
+ * Only a plain (optionally signed) integer counts; anything else falls back.
+ * @param {string} raw The published string value.
+ * @param {number} fallback The code default.
+ * @return {number}
+ */
+function parseFlagInt(raw, fallback) {
+  const v = String(raw).trim();
+  if (!/^[+-]?\d+$/.test(v)) return fallback;
+  const n = Number(v);
+  return Number.isSafeInteger(n) ? n : fallback;
+}
+
+/**
  * Reads every flag from an evaluated server config.
- * @param {{getBoolean: function(string): boolean,
- *   getNumber: function(string): number}} config
+ * @param {{getString: function(string): string}} config
  * @return {!Object}
  */
 function readFlags(config) {
   const flags = {};
   for (const key of FLAG_KEYS) {
-    if (typeof FLAG_DEFAULTS[key] === "boolean") {
-      flags[key] = config.getBoolean(key);
-    } else {
-      const n = config.getNumber(key);
-      flags[key] = Number.isFinite(n) ? n : FLAG_DEFAULTS[key];
-    }
+    const raw = config.getString(key);
+    flags[key] = typeof FLAG_DEFAULTS[key] === "boolean" ?
+      parseFlagBool(raw, FLAG_DEFAULTS[key]) :
+      parseFlagInt(raw, FLAG_DEFAULTS[key]);
   }
   return flags;
 }
@@ -75,4 +98,11 @@ function createFlagCache({loader, now, ttlMs, logger}) {
   };
 }
 
-module.exports = {FLAG_DEFAULTS, FLAG_KEYS, readFlags, createFlagCache};
+module.exports = {
+  FLAG_DEFAULTS,
+  FLAG_KEYS,
+  parseFlagBool,
+  parseFlagInt,
+  readFlags,
+  createFlagCache,
+};

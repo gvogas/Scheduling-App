@@ -3691,6 +3691,18 @@
   "@employees_resetPasswordConfirmBody": {
     "description": "Confirm-dialog body explaining what an admin password reset does"
   },
+  "employees_resetPasswordEnterYourPassword": "Enter your own password to continue.",
+  "@employees_resetPasswordEnterYourPassword": {
+    "description": "Second line of the reset-password dialog asking the admin to re-enter their OWN password before a reset"
+  },
+  "employees_resetPasswordAdminRefused": "An admin's password can't be reset from here.",
+  "@employees_resetPasswordAdminRefused": {
+    "description": "Error when the server refuses to reset the password of an account with admin access"
+  },
+  "employees_resetPasswordReauthExpired": "Your password confirmation expired. Try the reset again.",
+  "@employees_resetPasswordReauthExpired": {
+    "description": "Error when the admin's own password re-entry is too old for the server to accept a reset"
+  },
   "wave_outboxPending": "{count, plural, =1{1 client waiting to sync} other{{count} clients waiting to sync}}",
   "@wave_outboxPending": {
     "description": "Settings > Wave: how many client edits are queued for Wave.",

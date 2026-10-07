@@ -166,7 +166,10 @@ async function verifySafety(project, firestore, auth, admin) {
       name: {stringValue: "Plain"},
     }), 200);
     const reset = await resetEmployeePassword.run({
-      auth: {uid: admin.uid}, data: {docId: person.id},
+      auth: {
+        uid: admin.uid, token: {auth_time: Math.floor(Date.now() / 1000)},
+      },
+      data: {docId: person.id},
     });
     assert.equal((await person.ref.get()).data().passwordResetRequired, true);
     assert.equal(await write(`users/${person.id}`, {

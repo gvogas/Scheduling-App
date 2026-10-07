@@ -92,14 +92,14 @@ gcloud iam workload-identity-pools providers create-oidc scheduling-app \
   --display-name "Scheduling-App repo" \
   --issuer-uri "https://token.actions.githubusercontent.com" \
   --attribute-mapping "google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.environment=assertion.environment" \
-  --attribute-condition "assertion.repository=='${REPO}' && assertion.environment=='production'"
+  --attribute-condition "assertion.repository=='${REPO}' && assertion.environment=='production' && assertion.ref=='refs/heads/main' && assertion.event_name=='workflow_dispatch' && assertion.workflow_ref.startsWith('${REPO}/.github/workflows/deploy.yml@')"
 
 gcloud iam service-accounts add-iam-policy-binding "$SA" \
   --project "$PROJECT_ID" --role roles/iam.workloadIdentityUser \
   --member "principalSet://iam.googleapis.com/projects/${PROJECT_NUMBER}/locations/global/workloadIdentityPools/github/attribute.repository/${REPO}"
 ```
 
-The attribute condition means only a job in the `production` environment of this repo can mint a token, so the `verify` and `record` jobs cannot reach GCP even by mistake.
+The attribute condition means only a `workflow_dispatch` run of `deploy.yml` on `main`, in a job using the `production` environment of this repo, can mint a token, so the `verify` and `record` jobs cannot reach GCP even by mistake, and the in-workflow `gate` job is not the only branch check.
 
 - [ ] **Step 2: Grant the deploy roles**
 
@@ -132,7 +132,7 @@ echo "GCP_DEPLOY_SA=${SA}"
 
 - [ ] **Step 4: GitHub settings (UI)**
 
-1. Settings → Environments → New environment `production` → **Required reviewers**: the owner. Leave "Prevent self-review" OFF (one-person team).
+1. Settings → Environments → New environment `production` → **Required reviewers**: the owner. Leave "Prevent self-review" OFF (one-person team). **Deployment branches and tags**: Selected branches, `main` only.
 2. Settings → Secrets and variables → Actions → **Variables** tab → add `GCP_WIF_PROVIDER` and `GCP_DEPLOY_SA` with the Step 3 values. (Variables, not secrets — neither is sensitive, and the provider is useless outside the attribute condition.)
 3. Settings → Actions → General → Workflow permissions → tick **Allow GitHub Actions to create and approve pull requests** (the `record` job needs it).
 

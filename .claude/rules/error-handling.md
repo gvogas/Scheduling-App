@@ -158,7 +158,7 @@ alwaysApply: true
 
   **Log-only tags** — no notice intro, so no ARB key. Everything else:
 
-  - App shell / lifecycle: `ACCOUNT-EXIT`, `APP-SYNC`, `CARPLAY`, `DEEP-LINK`,
+  - App shell / lifecycle: `ACCOUNT-EXIT`, `ANALYTICS`, `APP-SYNC`, `CARPLAY`, `DEEP-LINK`,
     `FLAGS`, `NOTICE`, `SETTINGS`, `SPLASH`, `TOUR`, `ONBOARD-GATE`
   - Auth / account: `AUTH-SETUP`, `AUTH-SIGNIN`, `AUTH-PREFILL`, `AUTH-RESET`,
     `AUTH-CHANGEPW`

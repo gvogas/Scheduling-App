@@ -429,6 +429,51 @@ void main() {
       expect(credentials.password, 'Tmp2pass!wd9');
     });
 
+    test('maps target-is-admin to its typed failure', () async {
+      stubFailingCallable(
+        'resetEmployeePassword',
+        FirebaseFunctionsException(
+          code: 'failed-precondition',
+          message: 'target-is-admin',
+        ),
+      );
+
+      await expectLater(
+        repo().resetEmployeePassword('doc-1'),
+        throwsA(isA<EmployeesFailureTargetIsAdmin>()),
+      );
+    });
+
+    test('maps stale-auth to its typed failure', () async {
+      stubFailingCallable(
+        'resetEmployeePassword',
+        FirebaseFunctionsException(
+          code: 'unauthenticated',
+          message: 'stale-auth',
+        ),
+      );
+
+      await expectLater(
+        repo().resetEmployeePassword('doc-1'),
+        throwsA(isA<EmployeesFailureReauthRequired>()),
+      );
+    });
+
+    test('rethrows any other server refusal untouched', () async {
+      stubFailingCallable(
+        'resetEmployeePassword',
+        FirebaseFunctionsException(
+          code: 'failed-precondition',
+          message: 'not-active',
+        ),
+      );
+
+      await expectLater(
+        repo().resetEmployeePassword('doc-1'),
+        throwsA(isA<FirebaseFunctionsException>()),
+      );
+    });
+
     test('rejects a half-blank credential payload', () async {
       stubCallable(
         'resetEmployeePassword',

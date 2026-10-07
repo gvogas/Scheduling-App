@@ -31,8 +31,23 @@ class DeleteAccountWarningContent extends StatelessWidget {
   }
 }
 
+/// Password re-entry before a sensitive action; resolves to the typed password.
+///
+/// Defaults to the account-deletion copy. The admin password reset reuses it
+/// with its own [title], [message] and non-destructive [confirmLabel].
 class DeleteAccountReauthDialog extends StatefulWidget {
-  const DeleteAccountReauthDialog({super.key});
+  const DeleteAccountReauthDialog({
+    super.key,
+    this.title,
+    this.message,
+    this.confirmLabel,
+    this.destructive = true,
+  });
+
+  final String? title;
+  final String? message;
+  final String? confirmLabel;
+  final bool destructive;
 
   @override
   State<DeleteAccountReauthDialog> createState() =>
@@ -62,14 +77,23 @@ class _DeleteAccountReauthDialogState extends State<DeleteAccountReauthDialog> {
     return _buildMaterial(context);
   }
 
+  String _title(BuildContext context) =>
+      widget.title ?? context.l10n.settings_confirmYourPassword;
+
+  String _message(BuildContext context) =>
+      widget.message ?? context.l10n.settings_confirmYourPasswordToDelete;
+
+  String _confirmLabel(BuildContext context) =>
+      widget.confirmLabel ?? context.l10n.settings_deletePermanently;
+
   Widget _buildCupertino(BuildContext context) {
     return CupertinoAlertDialog(
-      title: Text(context.l10n.settings_confirmYourPassword),
+      title: Text(_title(context)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(context.l10n.settings_confirmYourPasswordToDelete),
+          Text(_message(context)),
           const SizedBox(height: AppSpacing.sp12),
           CupertinoTextField(
             controller: _controller,
@@ -108,9 +132,9 @@ class _DeleteAccountReauthDialogState extends State<DeleteAccountReauthDialog> {
           child: Text(context.l10n.common_cancel),
         ),
         CupertinoDialogAction(
-          isDestructiveAction: true,
+          isDestructiveAction: widget.destructive,
           onPressed: _hasPassword ? _submit : null,
-          child: Text(context.l10n.settings_deletePermanently),
+          child: Text(_confirmLabel(context)),
         ),
       ],
     );
@@ -119,12 +143,12 @@ class _DeleteAccountReauthDialogState extends State<DeleteAccountReauthDialog> {
   Widget _buildMaterial(BuildContext context) {
     final theme = Theme.of(context);
     return AlertDialog(
-      title: Text(context.l10n.settings_confirmYourPassword),
+      title: Text(_title(context)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(context.l10n.settings_confirmYourPasswordToDelete),
+          Text(_message(context)),
           const SizedBox(height: AppSpacing.sp12),
           TextField(
             controller: _controller,
@@ -157,15 +181,15 @@ class _DeleteAccountReauthDialogState extends State<DeleteAccountReauthDialog> {
           child: Text(context.l10n.common_cancel),
         ),
         FilledButton(
-          style: FilledButton.styleFrom(
-            // dangerFill, never scheme.error — that slot is the LIFTED
-            // foreground red, so in dark this rendered pale pink on near-black
-            // and the app's most destructive action read as a light button.
-            backgroundColor: theme.palette.dangerFill,
-            foregroundColor: theme.palette.onDangerFill,
-          ),
+          // dangerFill, never scheme.error: that slot is the lifted foreground red.
+          style: widget.destructive
+              ? FilledButton.styleFrom(
+                  backgroundColor: theme.palette.dangerFill,
+                  foregroundColor: theme.palette.onDangerFill,
+                )
+              : null,
           onPressed: _hasPassword ? _submit : null,
-          child: Text(context.l10n.settings_deletePermanently),
+          child: Text(_confirmLabel(context)),
         ),
       ],
     );

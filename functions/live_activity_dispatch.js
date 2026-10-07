@@ -325,6 +325,8 @@ async function endLiveActivity(deps, args) {
   const {appointmentId, employeeDocId, ctx, nowDate} = args;
   if (!_authOf(deps)) return 0;
   try {
+    const flags = await (deps.featureFlags || getFeatureFlags)();
+    if (flags.feature_live_activities === false) return 0;
     const {rows} = await _liveRowsFor(deps, {appointmentId, employeeDocId});
     if (rows.length === 0) return 0;
     let ended = 0;

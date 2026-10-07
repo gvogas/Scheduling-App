@@ -90,6 +90,8 @@ const SETUP_RATE_WINDOW_MS = 15 * 60 * 1000;
 const EMAIL_CHANGE_RATE_MAX = 5;
 const EMAIL_CHANGE_RATE_WINDOW_MS = 60 * 60 * 1000;
 const EMAIL_CHANGE_REAUTH_MAX_AGE_SECONDS = 5 * 60;
+// A reset hands the admin a live credential, so it demands the same freshness.
+const PASSWORD_RESET_REAUTH_MAX_AGE_SECONDS = 5 * 60;
 
 // Mirrors JobTitle.raw (lib/features/employees/domain/models/job_title.dart)
 // and the rules' isValidJobTitle allowlist.
@@ -707,6 +709,10 @@ async function markPasswordResetRequired(db, docId, uid) {
     if (data.status !== "active" || data.uid !== uid) {
       throw new HttpsError("failed-precondition", "not-active");
     }
+    // Re-checked here so a promotion committing first cannot slip through.
+    if (data.role === "admin") {
+      throw new HttpsError("failed-precondition", "target-is-admin");
+    }
     tx.update(ref, {
       passwordResetRequired: true,
       updatedAt: FieldValue.serverTimestamp(),
@@ -717,6 +723,8 @@ async function markPasswordResetRequired(db, docId, uid) {
 const resetEmployeePassword = onCall(APP_CHECK, async (req) => {
   const callerUid = await assertAdminCall(req, new Set(["docId"]));
   const docId = requireDocId(req.data, "docId");
+  assertFreshReauth(
+      req.auth, "resetEmployeePassword", PASSWORD_RESET_REAUTH_MAX_AGE_SECONDS);
   await enforceDurableRateLimit(
       "resetEmployeePassword", callerUid, CREATE_RATE_MAX,
       CREATE_RATE_WINDOW_MS);
@@ -730,6 +738,9 @@ const resetEmployeePassword = onCall(APP_CHECK, async (req) => {
   }
   if (uid === "" || data.status !== "active") {
     throw new HttpsError("failed-precondition", "not-active");
+  }
+  if (data.role === "admin") {
+    throw new HttpsError("failed-precondition", "target-is-admin");
   }
 
   const auth = getAuth();

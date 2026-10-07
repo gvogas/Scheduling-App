@@ -889,8 +889,7 @@ describe("handleAppointmentWrite", () => {
     );
     expect(res).toEqual({events: 1, sent: 2});
     expect(messaging.sent).toHaveLength(2);
-    // Delivery hints are always set.
-    expect(messaging.sent[0].android.priority).toBe("high");
+    expect(messaging.sent[0].android).toBeUndefined();
     expect(messaging.sent[0].apns.payload.aps.sound).toBe("default");
     expect(messaging.sent[0].data.appointmentId).toBe("appt1");
     expect(messaging.sent[0].data.kind).toBe("assigned");

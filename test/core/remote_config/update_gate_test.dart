@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -129,5 +130,73 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
+  });
+
+  group('Update button', () {
+    const channel = MethodChannel('plugins.flutter.io/url_launcher');
+
+    tearDown(() {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    void mockLaunch({required bool result}) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+            if (call.method == 'canLaunch') return true;
+            return call.method == 'launch' ? result : null;
+          });
+    }
+
+    Future<void> pumpScreen(WidgetTester tester) async {
+      await tester.pumpWidget(
+        const ProviderScope(
+          child: MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: UpdateRequiredScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a failed launch shows the error on the screen', (
+      tester,
+    ) async {
+      mockLaunch(result: false);
+      await pumpScreen(tester);
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(UpdateRequiredScreen)),
+      );
+      expect(
+        find.text(l10n.error_somethingWentWrongPleaseTryAgain),
+        findsNothing,
+      );
+
+      await tester.tap(find.byType(FilledButton));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(l10n.error_somethingWentWrongPleaseTryAgain),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a successful launch shows no error', (tester) async {
+      mockLaunch(result: true);
+      await pumpScreen(tester);
+      final l10n = AppLocalizations.of(
+        tester.element(find.byType(UpdateRequiredScreen)),
+      );
+
+      await tester.tap(find.byType(FilledButton));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(l10n.error_somethingWentWrongPleaseTryAgain),
+        findsNothing,
+      );
+    });
   });
 }

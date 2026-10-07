@@ -112,7 +112,9 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
     // `onChanged` — so the lift below has to be run by hand here.
     liftPhoneFromNameField(name: _nameController, phone: _phoneController);
     // A sheet route has no name, so the observer skips it.
-    ref.read(analyticsServiceProvider).logScreenView(AnalyticsScreens.addClient);
+    ref
+        .read(analyticsServiceProvider)
+        .logScreenView(AnalyticsScreens.addClient);
   }
 
   @override
@@ -420,9 +422,6 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
     ),
     const SizedBox(height: AppSpacing.sp16),
     OutlinedButton(
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(double.infinity, 48),
-      ),
       onPressed: isSaving ? null : () => _save(next: AddClientNext.bookJob),
       child: Text(l10n.clients_addAndBookAJob),
     ),

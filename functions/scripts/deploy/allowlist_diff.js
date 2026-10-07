@@ -133,25 +133,37 @@ function compareTrees(base, head) {
 }
 
 /**
+ * Runs git and returns its stdout.
+ * @param {!Array<string>} args Git arguments.
+ * @return {string} Stdout.
+ */
+function runGit(args) {
+  return execFileSync("git", args,
+      {encoding: "utf8", stdio: ["ignore", "pipe", "pipe"]});
+}
+
+/**
  * The real file sources: `git` at the base sha, the working tree at HEAD.
  * @param {string} baseSha The last deployed sha.
+ * @param {function(!Array<string>): string} git Runs git, returning stdout.
  * @return {{base: !Object, head: !Object}} Arguments for `compareTrees`.
  */
-function gitTrees(baseSha) {
-  const git = (args) => execFileSync("git", args,
-      {encoding: "utf8", stdio: ["ignore", "pipe", "pipe"]});
+function gitTrees(baseSha, git = runGit) {
   git(["rev-parse", "--verify", `${baseSha}^{commit}`]);
   const lines = (out) => out.split("\n").filter(Boolean);
+  let listed;
+  const baseList = () => {
+    if (!listed) {
+      listed = lines(git(["ls-tree", "-r", "--name-only", baseSha]));
+    }
+    return listed;
+  };
   return {
     base: {
-      list: () => lines(git(["ls-tree", "-r", "--name-only", baseSha])),
-      read: (file) => {
-        try {
-          return git(["show", `${baseSha}:./${file}`]);
-        } catch (err) {
-          return null;
-        }
-      },
+      list: baseList,
+      // Absent at the base is null; a listed file git cannot show throws.
+      read: (file) => baseList().includes(file) ?
+        git(["show", `${baseSha}:./${file}`]) : null,
     },
     head: {
       list: () => lines(git(["ls-files", "*.js"])),
@@ -169,9 +181,10 @@ function gitTrees(baseSha) {
 /**
  * CLI: run from `functions/`, `node scripts/deploy/allowlist_diff.js <sha>`.
  * @param {!Array<string>} argv Arguments after node + script.
+ * @param {function(!Array<string>): string} git Runs git, returning stdout.
  * @return {number} Exit code.
  */
-function main(argv) {
+function main(argv, git = runGit) {
   const [baseSha] = argv;
   if (!baseSha) {
     console.error("::error::usage: allowlist_diff.js <last-deployed-sha>");
@@ -179,7 +192,7 @@ function main(argv) {
   }
   let found;
   try {
-    const trees = gitTrees(baseSha);
+    const trees = gitTrees(baseSha, git);
     found = compareTrees(trees.base, trees.head);
   } catch (err) {
     console.error(`::error::allowlist check could not run: ${err.message}`);
@@ -205,4 +218,6 @@ if (require.main === module) {
   process.exitCode = main(process.argv.slice(2));
 }
 
-module.exports = {extractAllowlists, removedKeys, compareTrees, main};
+module.exports = {
+  extractAllowlists, removedKeys, compareTrees, gitTrees, main,
+};

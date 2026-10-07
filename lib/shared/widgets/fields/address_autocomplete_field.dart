@@ -94,16 +94,7 @@ class _AddressAutocompleteFieldState
     }
 
     if (!ref.read(featureFlagsProvider).addressAutocomplete) {
-      _debounce.cancel();
-      _requestId++;
-      _lastFetched = '';
-      if (_suggestions.isNotEmpty || _isLoading || _serviceError != null) {
-        setState(() {
-          _suggestions = [];
-          _isLoading = false;
-          _serviceError = null;
-        });
-      }
+      _onAutocompletePaused();
       return;
     }
 
@@ -196,7 +187,32 @@ class _AddressAutocompleteFieldState
     });
   }
 
+  /// Drops the list and any pending lookup when the kill switch pauses.
+  void _onAutocompletePaused() {
+    _debounce.cancel();
+    _requestId++;
+    _lastFetched = '';
+    if (_suggestions.isEmpty && !_isLoading && _serviceError == null) return;
+    setState(() {
+      _suggestions = [];
+      _isLoading = false;
+      _serviceError = null;
+    });
+  }
+
   Future<void> _selectSuggestion(AddressSuggestion s) async {
+    if (!ref.read(featureFlagsProvider).addressAutocomplete) {
+      // Paused: Places would refuse the details call, so keep the shown text.
+      widget.controller.text = AddressParser.formatForDisplay(
+        s.description,
+        _lastTypedApt,
+      );
+      _sessionToken = null;
+      _lastTypedApt = '';
+      _onAutocompletePaused();
+      widget.onAddressSelected?.call(widget.controller.text);
+      return;
+    }
     // Resolved BEFORE the await for the same reason as _fetch above — this is
     // fired from onTap, so the sheet being dismissed before Places responds is
     // routine, and `ref.read` on an unmounted consumer throws.
@@ -247,6 +263,12 @@ class _AddressAutocompleteFieldState
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    ref.listen(featureFlagsProvider.select((f) => f.addressAutocomplete), (
+      _,
+      enabled,
+    ) {
+      if (!enabled) _onAutocompletePaused();
+    });
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

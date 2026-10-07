@@ -24,8 +24,10 @@ beforeEach(() => {
 
 test("loadFromRemoteConfig evaluates the server template", async () => {
   mockEvaluate.mockReturnValue({
-    getBoolean: (k) => k !== "feature_presence",
-    getNumber: () => 90,
+    getString: (k) => ({
+      feature_presence: "false",
+      min_supported_build: "90",
+    })[k] ?? "true",
   });
   await expect(loadFromRemoteConfig()).resolves.toMatchObject({
     feature_presence: false,
@@ -35,7 +37,7 @@ test("loadFromRemoteConfig evaluates the server template", async () => {
 });
 
 test("assertFeatureEnabled passes while the feature is on", async () => {
-  mockEvaluate.mockReturnValue({getBoolean: () => true, getNumber: () => 0});
+  mockEvaluate.mockReturnValue({getString: () => "true"});
   await expect(assertFeatureEnabled("feature_wave_sync", "waveBootstrap"))
       .resolves.toBeUndefined();
 });
@@ -43,8 +45,7 @@ test("assertFeatureEnabled passes while the feature is on", async () => {
 test("assertFeatureEnabled refuses with failed-precondition when off",
     async () => {
       mockEvaluate.mockReturnValue({
-        getBoolean: (k) => k !== "feature_wave_sync",
-        getNumber: () => 0,
+        getString: (k) => k === "feature_wave_sync" ? "false" : "",
       });
       const call = assertFeatureEnabled("feature_wave_sync", "waveBootstrap");
       await expect(call).rejects.toBeInstanceOf(HttpsError);

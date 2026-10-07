@@ -8,11 +8,32 @@ import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
 /// Blocking screen for a build below `min_supported_build`. No way past it.
-class UpdateRequiredScreen extends ConsumerWidget {
+class UpdateRequiredScreen extends ConsumerStatefulWidget {
   const UpdateRequiredScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<UpdateRequiredScreen> createState() =>
+      _UpdateRequiredScreenState();
+}
+
+class _UpdateRequiredScreenState extends ConsumerState<UpdateRequiredScreen> {
+  bool _launchFailed = false;
+
+  // The gate replaces NoticeListener, so the launcher's notice has no overlay.
+  Future<void> _openStore() async {
+    final opened = await launchExternalUri(
+      context,
+      ref,
+      Uri.parse(kAppStoreUrl),
+      tag: 'LAUNCH-URL',
+      errorMessage: context.l10n.error_somethingWentWrongPleaseTryAgain,
+      analyticsAction: AnalyticsContactActions.appStore,
+    );
+    if (mounted) setState(() => _launchFailed = !opened);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = context.l10n;
     final textTheme = Theme.of(context).textTheme;
     return Scaffold(
@@ -36,15 +57,18 @@ class UpdateRequiredScreen extends ConsumerWidget {
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: AppSpacing.sp24),
-                FilledButton(
-                  onPressed: () => launchExternalUri(
-                    context,
-                    ref,
-                    Uri.parse(kAppStoreUrl),
-                    tag: 'LAUNCH-URL',
-                    errorMessage: l10n.error_somethingWentWrongPleaseTryAgain,
-                    analyticsAction: AnalyticsContactActions.appStore,
+                if (_launchFailed) ...[
+                  Text(
+                    l10n.error_somethingWentWrongPleaseTryAgain,
+                    textAlign: TextAlign.center,
+                    style: textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
+                  const SizedBox(height: AppSpacing.sp12),
+                ],
+                FilledButton(
+                  onPressed: _openStore,
                   child: Text(l10n.common_updateRequiredButton),
                 ),
               ],

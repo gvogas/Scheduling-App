@@ -17,13 +17,13 @@ class FeatureFlags {
     bool readBool(String key, {required bool fallback}) {
       final v = values[key];
       if (v == null || v.source == ValueSource.valueStatic) return fallback;
-      return v.asBool();
+      return parseBool(v.asString(), fallback: fallback);
     }
 
     int readInt(String key, int fallback) {
       final v = values[key];
       if (v == null || v.source == ValueSource.valueStatic) return fallback;
-      return v.asInt();
+      return parseInt(v.asString(), fallback: fallback);
     }
 
     return FeatureFlags(
@@ -43,6 +43,24 @@ class FeatureFlags {
       ),
     );
   }
+
+  /// Only `true`/`false` (any case, trimmed) count; anything else fails OPEN to [fallback].
+  static bool parseBool(String raw, {required bool fallback}) =>
+      switch (raw.trim().toLowerCase()) {
+        'true' => true,
+        'false' => false,
+        _ => fallback,
+      };
+
+  /// Only a plain (optionally signed) integer counts; anything else takes [fallback].
+  static int parseInt(String raw, {required int fallback}) {
+    final trimmed = raw.trim();
+    return _integer.hasMatch(trimmed)
+        ? int.tryParse(trimmed) ?? fallback
+        : fallback;
+  }
+
+  static final _integer = RegExp(r'^[+-]?\d+$');
 
   static const defaults = FeatureFlags(
     addressAutocomplete: true,

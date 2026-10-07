@@ -163,9 +163,6 @@ async function sendToEmployee(deps, employeeDocId, data, buildMsg, roles,
       token: doc.id,
       notification: {title, body},
       data: msgData,
-      // Without these Android delivery can be doze-deferred and iOS alerts
-      // arrive silent.
-      android: {priority: "high"},
       apns: {payload: {aps}},
     };
   });

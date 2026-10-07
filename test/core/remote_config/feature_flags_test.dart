@@ -36,6 +36,17 @@ void main() {
     expect(flags, FeatureFlags.defaults);
   });
 
+  test('a malformed remote value fails OPEN, not closed', () {
+    final flags = FeatureFlags.fromValues({
+      'feature_address_autocomplete': _remote('yes'),
+      'feature_presence': _remote(''),
+      'feature_live_activities': _remote('0'),
+      'feature_wave_sync': _remote('off'),
+      'min_supported_build': _remote('1.5'),
+    });
+    expect(flags, FeatureFlags.defaults);
+  });
+
   test('a missing key fails open', () {
     expect(FeatureFlags.fromValues(const {}), FeatureFlags.defaults);
   });

@@ -17,6 +17,8 @@ analyzer:
     # Build outputs.
     - "build/**"
     - ".dart_tool/**"
+    # npm installs (tools/deploy ships firebase-tools' Dart templates).
+    - "**/node_modules/**"
     - android/**
     - ios/**
     - web/**

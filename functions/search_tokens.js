@@ -216,7 +216,6 @@ module.exports = {
   TOKEN_QUERY_LIMIT,
   appointmentHistoryScopes,
   clientSearchTokens,
-  digitsOnly,
   normalize,
   recordMatchesQuery,
   searchIndexTokens,

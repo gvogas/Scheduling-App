@@ -551,10 +551,7 @@ class _DeleteButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => OutlinedButton(
-    style: destructiveOutlinedButtonStyle(
-      context,
-      minimumSize: const Size(double.infinity, 48),
-    ),
+    style: destructiveOutlinedButtonStyle(context),
     onPressed: isSaving ? null : onDelete,
     child: Text(context.l10n.calendar_deleteAppointment),
   );

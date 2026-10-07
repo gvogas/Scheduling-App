@@ -256,9 +256,10 @@ key means every feature on and `min_supported_build` 0).
   Open apps react within seconds (real-time listener); functions within 60 s.
 - **Rollback:** Remote Config -> the template's version history -> roll back (per template).
 - **After re-enabling,** functions can lag up to 60 s (per-instance cache), so Places/Wave may refuse briefly; the Wave backlog drains on the next client edit, a Sync press, or the daily sweep, not instantly.
-- **Values:** `1/true/t/yes/y/on` (case-insensitive) read ON on both sides and
-  anything else, including empty, reads OFF; publish exactly `true`/`false`.
-  `min_supported_build` is an integer.
+- **Values:** only `true`/`false` (case-insensitive, trimmed) are read; anything
+  else, including empty, `1`/`0` and `yes`/`on`, takes the code default (ON) on
+  both sides, so a malformed publish fails open.
+  `min_supported_build` is a plain integer; anything else reads as `0`.
 - **One-time IAM test:** publish `feature_wave_sync = false` in the **Server** template, press Wave -> Sync,
   look for `FLAGS blocked a call {"key":"feature_wave_sync"}` in
   `firebase functions:log`, then publish it back to `true`. No line: first confirm it was the Server tab, THEN
@@ -269,6 +270,7 @@ key means every feature on and `min_supported_build` 0).
 - Wave pause queues edits and drains them after re-enable; nothing dead-letters; `functions/scripts/drain-wave-queue.js` stops with a message while paused.
 - Forced update: lifting it mid-session restarts the app at splash (navigation state is lost). While the update screen shows, a remote account exit (disabled/deleted/demoted) does not sign the device out until the gate lifts; server-side deactivation (`syncUsersByUid`) still revokes access immediately.
 - `min_supported_build` only affects builds that contain the gate: the first build after 1.63.0+93.
+- The update screen blocks the UI only: background sync (presence uploads, push and Live Activity registration, the widget and Siri mirrors) keeps running behind it, so it is not a fence against a backend-incompatible build.
 
 ---
 
