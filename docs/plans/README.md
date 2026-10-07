@@ -46,7 +46,7 @@ at the top of each file, not its boxes.
 
 | Doc | State |
 |---|---|
-| `2026-09-28-admin-password-reset.md` | **BUILT 2026-09-29, backend DEPLOYED 2026-09-29, app NOT SHIPPED.** Admin resets an ACTIVE employee's password (emails aren't real inboxes, so Forgot password can't work): server-owned `passwordResetRequired` flag, temp password, sign-out everywhere, forced Change password screen. Both callables (30 → 32) and the rules denylist field went live at `306ed848`, the review fixes at `cc38be5d`; the app half rides 1.63.0+93. Open: **S4** of the 2026-09-28 audit (a demoted account's reset leaves it disabled) — an owner decision. Plan: `2026-09-28-admin-password-reset-plan.md`. |
+| `2026-09-28-admin-password-reset.md` | **BUILT 2026-09-29, backend DEPLOYED 2026-09-29, app NOT SHIPPED.** Admin resets an ACTIVE employee's password (emails aren't real inboxes, so Forgot password can't work): server-owned `passwordResetRequired` flag, temp password, sign-out everywhere, forced Change password screen. Both callables (30 → 32) and the rules denylist field went live at `306ed848`, the review fixes at `cc38be5d`; the app half rides 1.63.0+93. **S4** of the 2026-09-28 audit (a demoted account's reset leaves it disabled) was approved and built 2026-10-07; it needs a functions deploy. Plan: `2026-09-28-admin-password-reset-plan.md`. |
 | `2026-09-28-admin-password-reset-plan.md` | **EXECUTED 2026-09-29.** Task-by-task TDD plan for the design above; its "Deviations from the spec" section records where the real code forced a different shape. Archive both once 1.63.0+93 ships and S4 is decided. |
 | `2026-09-12-month-end-overdue-review.md` | **BUILT (`ed59a6a5`), functions DEPLOYED 2026-09-19 (`608b817a`), NOT SHIPPED** — rides the next app build (1.63.0+93 is cut; nothing has shipped since 1.61.0+90). Owner steps after it ships: turn the month-end switch on for Paul, register the `count` GA dimension. The plan's banner lists the seven deviations from the design. |
 | `2026-09-12-dashboard-redesign.md` | **DESIGN PICKED 2026-09-12 (Option B), NOT STARTED** (re-verified 2026-10-01: no Today/Trends switch in `dashboard_screen.dart`). A Today / Trends switch under the title. Today: on site now with progress through each job, needs-attention chips, compact next up, crew tiles against `maxJobsPerDay`. Trends: every period number and chart. Unassigned count and banner removed (owner: a job is never unassigned). App-only, no new reads, tour ids unchanged but their copy must be rewritten. Three open questions for the build. No implementation plan yet; waits on the owner's go-ahead. |
@@ -222,8 +222,6 @@ and the post-release `build_env` and Events-page checks.
   bad record to reproduce. (Its other item, the three stale `.claude/worktrees/`
   agent directories, was DONE 2026-10-01: each held only uncommitted snapshots of
   work that is on `dev` in a later form, and they were removed.)
-- **S4 of the 2026-09-28 audit** — resetting a demoted account's password
-  leaves it disabled. Needs an owner decision (`docs/audits/CODEBASE_AUDIT_2026-09-28.md`).
 
 ### 7. Prod scripts — what must never be re-run, and what is closed
 

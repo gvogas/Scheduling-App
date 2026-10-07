@@ -27,10 +27,11 @@ self-service settings. Root context: `../../CLAUDE.md`.
   "revoke", so this path never re-enables an invited account and an
   active-to-invited demotion revokes the credential again. Setup is unaffected
   because it is only called when `authAccessChange(before, after)` is non-null,
-  so a newly created invited doc is never disabled. **Open, owner decision:**
-  resetting the password of an account an admin demoted active-to-invited in the
-  console does not re-enable the disabled credential (`resetProvisionedPassword`
-  sets only password/displayName).
+  so a newly created invited doc is never disabled. **A re-provision reset RE-ENABLES the
+  credential** (S4, owner call 2026-10-07): `resetProvisionedPassword` sends
+  `disabled: false` with the password, because an account demoted
+  active-to-invited in the console was disabled by the revoke above, and a
+  reset that left it disabled handed over a password nobody could sign in with.
 
 - **Admin password reset for an ACTIVE account** (2026-09-29). Employee emails are not
   real inboxes, so Forgot password can never reach anyone. Reset password in the
@@ -83,8 +84,8 @@ self-service settings. Root context: `../../CLAUDE.md`.
   not read the flag: a device that signed in with the temporary password on a
   pre-1.63 build and then upgrades keeps its cache and skips Change password until
   it signs out — accepted, consistent with old builds ignoring the flag.
-  **S4 (an invited-account re-provision reset does not set `disabled: false`, noted above) is still OPEN** — this flow does
-  not touch it. Tags: `EMP-RESETPW` (notice), `AUTH-CHANGEPW` (log-only).
+  S4 (the invited-account re-provision reset, noted above) is a separate path
+  and this flow does not touch it. Tags: `EMP-RESETPW` (notice), `AUTH-CHANGEPW` (log-only).
 - **Employee accounts: the admin invites, the employee sets up** (P4c,
   2026-08-02 — this REPLACED the one-time signup-code flow entirely). The
   admin's person sheet calls `createEmployeeAccount`, which mints a **Firebase

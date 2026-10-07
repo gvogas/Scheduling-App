@@ -131,7 +131,8 @@ async function provisionAuthAccount(auth, email, displayName, password) {
  * @return {!Promise<void>}
  */
 async function resetProvisionedPassword(auth, uid, displayName, password) {
-  await auth.updateUser(uid, {password, displayName});
+  // A demoted account was disabled by syncUsersByUid; a reset must work.
+  await auth.updateUser(uid, {password, displayName, disabled: false});
 }
 
 /**

@@ -253,7 +253,21 @@ describe("provisionAuthAccount", () => {
         expect(auth.updateUser).toHaveBeenCalledWith("uid-existing", {
           password: PW,
           displayName: "New Employee",
+          disabled: false,
         });
+      });
+
+  test("resetProvisionedPassword re-enables a credential a demotion disabled",
+      async () => {
+        // An admin demoting active -> invited in the console makes
+        // syncUsersByUid disable the Auth account; a reset that left it
+        // disabled handed over a password nobody could sign in with.
+        const auth = {updateUser: jest.fn(async () => ({}))};
+
+        await resetProvisionedPassword(
+            auth, "uid-demoted", "Demoted Employee", PW);
+
+        expect(auth.updateUser.mock.calls[0][1].disabled).toBe(false);
       });
 
   test("rethrows any error that is not email-already-exists", async () => {
