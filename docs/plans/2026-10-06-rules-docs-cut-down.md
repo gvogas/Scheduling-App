@@ -2,20 +2,22 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Cut the rules corpus (`CLAUDE.md`, `.claude/rules/*.md`, nested `CLAUDE.md` files) from ~600 KB to ~170 KB of terse invariants, without losing a single rule, by moving history into dated ADRs and moving mechanically checkable bans into a CI script.
+> **Status: PLAN, not started. Revised 2026-10-07 after review** (see "Review changes" at the end): stronger no-loss checks, a one-clause reason kept inline, load-frequency order with a pilot, per-file size budgets, `check_rules.dart` heuristic fixes, re-measured sizes. Decision 3 still needs owner sign-off.
 
-**Architecture:** Every rules file keeps its frontmatter and becomes a list of one-to-three-line imperative invariants. The "why / it used to be / retired on" prose moves to short ADRs under `docs/decisions/`, and each invariant links to its ADR by number. Five bans move into `tool/check_rules.dart`, which runs in CI after `flutter analyze`, and their prose shrinks to one line naming the check.
+**Goal:** Cut the rules corpus (`CLAUDE.md`, `.claude/rules/*.md`, nested `CLAUDE.md` files) from ~608 KB to ~200 KB of terse invariants, without losing a single rule, by moving history into dated ADRs and moving mechanically checkable bans into a CI script.
+
+**Architecture:** Every rules file keeps its frontmatter and becomes a list of one-to-three-line imperative invariants. Each invariant keeps a one-clause reason inline when the obvious "fix" would be wrong. Dates, incidents, "it used to be / retired on" prose and "this paragraph previously said" corrections move to short ADRs under `docs/decisions/`, and each invariant links to its ADR by number. Five bans move into `tool/check_rules.dart`, which runs in CI after `flutter analyze`, and their prose shrinks to one line naming the check.
 
 **Tech Stack:** Markdown, Dart (`dart:io` script plus a `flutter_test` unit test), GitHub Actions.
 
 ## Decisions (owner may veto any of these before Task 1)
 
-1. **Targets.** Each rules file is at most **10 KB**. Root `CLAUDE.md` is at most **12 KB**.
-2. **History moves to ADRs.** Any "used to be X, retired on date Y, don't restore Z" text moves to `docs/decisions/NNNN-<slug>.md` (Context / Decision / Consequences, each a few lines). The invariant that remains ends with `(ADR-NNNN)`.
-3. **CONVENTION CHANGE: needs owner sign-off.** `.claude/rules/code-quality.md` currently says that a block explaining WHY a guard has its shape "belongs in these rules files" (owner call, 2026-09-03). Task 2 changes this so rationale lives in `docs/decisions/` ADRs linked from the rules. This is the only convention this plan changes. **Do not start Task 3 until the owner has signed off.**
-4. **No invariant may be lost.** Every rewrite task inventories each never / always / must / don't / only sentence in the old file (`git show HEAD:<file>`). Each one must be accounted for in the new file, in an ADR, or in `tool/check_rules.dart`.
+1. **Targets are per-file budgets, not one flat cap.** Budget = (invariant count from R1) × 130 bytes + 1 KB for headings, rounded up to the next KB. 10 KB is the GOAL for every file; the budget is the GATE in R7. A file over its budget means bullets that are still prose, not a reason to merge or drop rules. Root `CLAUDE.md` goal is 12 KB.
+2. **History moves to ADRs; the reason that stops a regression stays.** Dates, incidents, "used to be X, retired on date Y", "this paragraph previously claimed" corrections and worked post-mortems move to `docs/decisions/NNNN-<slug>.md` (Context / Decision / Consequences, each a few lines). The invariant that remains ends with `(ADR-NNNN)`. **An invariant whose obvious "fix" is wrong keeps ONE inline clause saying why** (e.g. "check `isInvited` BEFORE the active gate — signing them out makes setup unreachable"). That clause is what a new session reads without opening an ADR, which is the reason the 2026-09-03 convention exists; it is capped at one clause, never a paragraph.
+3. **CONVENTION CHANGE: needs owner sign-off.** `.claude/rules/code-quality.md` currently says that a block explaining WHY a guard has its shape "belongs in these rules files" (owner call, 2026-09-03). Task 2 changes this to: the rules state the invariant plus at most a one-clause reason; dates, incidents and longer rationale live in `docs/decisions/` ADRs cited from the rule. This is the only convention this plan changes. **Do not start Task 3 until the owner has signed off.**
+4. **No invariant may be lost, and the check is not self-graded.** Each rewrite task inventories the old file two ways (R1): imperative sentences by a widened keyword grep, and every backticked symbol. Every inventory line must be mapped (R6), every old symbol must appear in the new file or one of its ADRs (R6, mechanical), and an independent reviewer who did not write the rewrite diffs old against new before the commit (R6b).
 5. **Frontmatter is untouched.** `paths:` and `alwaysApply:` blocks stay byte-for-byte the same.
-6. **Mechanical bans move to CI.** `tool/check_rules.dart` enforces five bans with a baseline of ZERO hits. Each one was measured on `0c57505e`:
+6. **Mechanical bans move to CI.** `tool/check_rules.dart` enforces five bans with a baseline of ZERO hits. Re-verified on `edd2e6ef` (2026-10-07): all five are zero.
 
    | Ban | Allowlist | Baseline |
    |---|---|---|
@@ -23,36 +25,45 @@
    | `FirebaseFirestore.instance` | `lib/core/providers/firebase_providers.dart`, `lib/main.dart`, `lib/features/auth/services/auth_service.dart` | 0 |
    | `as Map<String, dynamic>?` | none | 0 |
    | `Timer(` / `Timer.periodic(` under any `/widgets/` or `/screens/` dir | none (debounce goes through `Debouncer`) | 0 |
-   | `ref.read(` inside a `catch` block (brace-depth heuristic) | none | 0 |
+   | `ref.read(` inside a `catch` block or a `.catchError(` callback (brace-depth heuristic, scanning from the opening `{`, so a one-line `} catch (e) { ref.read(...) }` is caught) | none | 0 |
 
    The script scans `lib/` only and skips `lib/l10n/.gen/`, `*.g.dart` and `*.freezed.dart`.
-7. **Order is largest first, one commit per file.** That order is appointments.md, employees.md, clients.md, notifications.md, CLAUDE.md, frontend.md, images.md, then the rest.
+7. **Order is by load frequency, with a pilot first. One commit per file.**
+   1. **Pilot: `images.md`** (Task 9). Mid-size and `paths:`-scoped, so a mistake reaches few sessions. **Stop after it for owner review** of the result and the procedure before any other file.
+   2. **Always-loaded next:** root `CLAUDE.md` + `search.md` (Task 7), `error-handling.md` (Task 13), `security.md` (Task 16). Together ~88 KB loaded in EVERY session — the biggest saving, and where a lost rule costs most, which is why they come after the pilot proves the procedure.
+   3. **Then the scoped files, largest first:** appointments, employees, clients, notifications, frontend, functions/CLAUDE.md, wave, calendar/CLAUDE.md, analytics, ios, feature_tour.
+8. **Tasks run sequentially, and ADR numbers come from one counter.** Two rewrites in parallel would both read the same "next number" in R3. If they must run in parallel, reserve blocks up front (e.g. images 0001–0019, root 0020–0059, …) in `docs/decisions/README.md` before starting.
+9. **A section title is a reference target.** Skills, agents, commands, `docs/` and other rules files cite sections by title ("Shard isolation" in `testing.md`, "Flip a kill switch" in `DEPLOYMENT.md`). R7 greps every old `##`/`###` title across the repo; a renamed or removed one that is cited elsewhere gets its references updated in the same commit.
 
-## Sizes (bytes, measured on `0c57505e`)
+## Sizes (bytes, re-measured on `edd2e6ef`, 2026-10-07)
 
-| File | Before | Target |
-|---|---:|---:|
-| `.claude/rules/appointments.md` | 83 428 | ≤ 10 000 |
-| `.claude/rules/employees.md` | 68 289 | ≤ 10 000 |
-| `.claude/rules/clients.md` | 65 093 | ≤ 10 000 |
-| `.claude/rules/notifications.md` | 53 775 | ≤ 10 000 |
-| `CLAUDE.md` | 48 955 | ≤ 12 000 |
-| `.claude/rules/search.md` (**new**, split out of `CLAUDE.md`) | — | ≤ 10 000 |
-| `.claude/rules/frontend.md` | 47 927 | ≤ 10 000 |
-| `.claude/rules/images.md` | 38 879 | ≤ 10 000 |
-| `functions/CLAUDE.md` | 35 250 | ≤ 10 000 |
-| `.claude/rules/wave.md` | 35 172 | ≤ 10 000 |
-| `lib/features/calendar/CLAUDE.md` | 31 554 | ≤ 10 000 |
-| `.claude/rules/error-handling.md` | 25 721 | ≤ 10 000 |
-| `.claude/rules/analytics.md` | 12 061 | ≤ 10 000 |
-| `ios/CLAUDE.md` | 11 425 | ≤ 10 000 |
-| `.claude/rules/security.md` | 10 780 | ≤ 10 000 |
-| `lib/features/feature_tour/CLAUDE.md` | 10 639 | ≤ 10 000 |
-| `.claude/rules/testing.md` | 9 092 | unchanged |
-| `.claude/rules/firestore-indexes.md` | 5 640 | unchanged |
-| `lib/core/navigation/CLAUDE.md` | 4 008 | unchanged |
-| `.claude/rules/code-quality.md` | 2 901 | ~3 000 (Task 2 edit only) |
-| **Total** | **600 589** | **≤ ~178 000** |
+"Load" says when the file enters a session: **always** (every session) or **scoped** (only when a matching path is touched). The always-loaded rows are the biggest per-session win. "Goal" is the 10 KB aim; the gating budget is computed in R1 from the file's own invariant count (Decision 1).
+
+| File | Load | Before | Goal |
+|---|---|---:|---:|
+| `.claude/rules/appointments.md` | scoped | 83 815 | 10 000 |
+| `.claude/rules/employees.md` | scoped | 71 076 | 10 000 |
+| `.claude/rules/clients.md` | scoped | 65 093 | 10 000 |
+| `.claude/rules/notifications.md` | scoped | 54 036 | 10 000 |
+| `CLAUDE.md` | **always** | 50 942 | 12 000 |
+| `.claude/rules/search.md` (**new**, split out of `CLAUDE.md`) | scoped | — | 10 000 |
+| `.claude/rules/frontend.md` | scoped | 47 927 | 10 000 |
+| `.claude/rules/images.md` | scoped | 39 177 | 10 000 |
+| `functions/CLAUDE.md` | scoped | 36 225 | 10 000 |
+| `.claude/rules/wave.md` | scoped | 35 172 | 10 000 |
+| `lib/features/calendar/CLAUDE.md` | scoped | 31 554 | 10 000 |
+| `.claude/rules/error-handling.md` | **always** | 25 741 | 10 000 |
+| `.claude/rules/analytics.md` | scoped | 12 061 | 10 000 |
+| `ios/CLAUDE.md` | scoped | 11 425 | 10 000 |
+| `.claude/rules/security.md` | **always** | 10 848 | 10 000 |
+| `lib/features/feature_tour/CLAUDE.md` | scoped | 10 639 | 10 000 |
+| `.claude/rules/testing.md` | scoped | 9 712 | unchanged |
+| `.claude/rules/firestore-indexes.md` | scoped | 5 640 | unchanged |
+| `lib/core/navigation/CLAUDE.md` | scoped | 4 008 | unchanged |
+| `.claude/rules/code-quality.md` | **always** | 2 901 | ~3 000 (Task 2 edit only) |
+| **Total** | | **607 992** | **~200 000** (sum of budgets) |
+
+Out of scope but loaded every session too: the auto-memory index `MEMORY.md` (~13 KB). Trim it separately.
 
 `docs/ARCHITECTURE.md`'s Test Strategy section mirrors `testing.md`. `testing.md` isn't rewritten, so the mirror is unaffected.
 
@@ -73,12 +84,13 @@ Every rewrite task runs these exact steps on its file `$F`, with short name `$N`
   ```bash
   mkdir -p build/rules_audit
   git show HEAD:$F > build/rules_audit/$N.old.md
-  grep -niE "\b(never|always|must|don't|do not|only|exactly|one owner)\b" build/rules_audit/$N.old.md > build/rules_audit/$N.inventory.txt
-  wc -l build/rules_audit/$N.inventory.txt
+  grep -niE "\b(never|always|must|don't|do not|only|exactly|one owner|keep|stays?|first|before|after|load-bearing|deliberate(ly)?|server-owned|on purpose|required|refuse[sd]?)\b" build/rules_audit/$N.old.md > build/rules_audit/$N.inventory.txt
+  grep -oE '`[A-Za-z_][A-Za-z0-9_.]*(\(\))?`' build/rules_audit/$N.old.md | sort -u > build/rules_audit/$N.symbols.txt
+  wc -l build/rules_audit/$N.inventory.txt build/rules_audit/$N.symbols.txt
   ```
-  `build/` is gitignored, so the audit files never get committed.
+  `build/` is gitignored, so the audit files never get committed. Compute the gating budget now (Decision 1): `budget = inventory_lines × 130 + 1024`, rounded up to the next KB; write it at the top of `$N.mapping.txt`.
 - **R2. Classify every bold-led bullet** (`grep -nE "^- \*\*" build/rules_audit/$N.old.md`) as exactly one of:
-  - **INVARIANT** (a rule a future change could break): keep it as one to three imperative lines.
+  - **INVARIANT** (a rule a future change could break): keep it as one to three imperative lines. If its obvious "fix" is wrong, keep ONE clause of why inline (Decision 2).
   - **RATIONALE / HISTORY** (dates, "used to", "was", "retired", "this said", worked incidents): move it to an ADR.
   - **ENFORCED** (one of the five Decision-6 bans): replace it with `Enforced by \`tool/check_rules.dart\` (<ban name>).`
   - **DUPLICATE** (restated in another rules file): keep the copy in the file whose `paths:` covers the code, and replace this one with `See \`.claude/rules/<file>.md\`.`
@@ -110,14 +122,27 @@ Every rewrite task runs these exact steps on its file `$F`, with short name `$N`
   grep -c "UNMAPPED" build/rules_audit/$N.mapping.txt
   ```
   Expected: the two line counts are equal and `UNMAPPED` is `0`. Any line you cannot place is a lost invariant. Put it back in `$F`.
+
+  Then the mechanical symbol check: every backticked symbol in the old file must survive in the new file or in one of the ADRs it cites.
+  ```bash
+  adrs=$(grep -oE "ADR-[0-9]{4}" $F | sort -u | sed 's/ADR-//' | while read n; do ls docs/decisions/$n-*.md; done)
+  cat $F $adrs .claude/rules/*.md > build/rules_audit/$N.new_corpus.md
+  while read sym; do grep -qF -- "$sym" build/rules_audit/$N.new_corpus.md || echo "LOST $sym"; done < build/rules_audit/$N.symbols.txt
+  ```
+  Expected: no `LOST` lines. A symbol may be dropped only when it no longer exists in the code (`git grep -qF` on the bare name finds nothing); record each such drop in `$N.mapping.txt` as `GONE <symbol>`.
+- **R6b. Independent review before commit.** A reviewer that did NOT write the rewrite (a fresh subagent, e.g. `doc-reviewer`) gets `build/rules_audit/$N.old.md`, the new `$F` and its ADRs, and answers one question: "Name every rule, constraint or ordering requirement in the old file that the new file and its ADRs no longer state." Each item it names goes back in, or is recorded in `$N.mapping.txt` with why it was dropped. Do not commit until every item is answered.
 - **R7. Check the size and the links, then commit.**
   ```bash
   wc -c $F
   grep -oE "ADR-[0-9]{4}" $F | sort -u | while read a; do ls docs/decisions/${a#ADR-}-*.md >/dev/null 2>&1 || echo "MISSING $a"; done
+  grep -E "^#{2,3} " build/rules_audit/$N.old.md | sed -E 's/^#+ //' | while read -r t; do
+    grep -qF -- "$t" $F && continue
+    git grep -lF -- "$t" -- . ":!$F" ':!docs/archive' ':!docs/audits' | sed "s|^|CITED-TITLE '$t' in |"
+  done
   git add $F docs/decisions/
   git commit -m "Cut $N rules to invariants; history to ADRs"
   ```
-  Expected: the size is at most the target, there are no `MISSING` lines, and the commit succeeds. End the commit message with the session's attribution lines.
+  Expected: the size is at most the file's budget from R1 (10 KB is the goal), there are no `MISSING` lines, every `CITED-TITLE` reference has been updated in this same commit, and the commit succeeds. End the commit message with the session's attribution lines.
 
 ---
 
@@ -126,7 +151,7 @@ Every rewrite task runs these exact steps on its file `$F`, with short name `$N`
 **Files:**
 - Create: `tool/check_rules.dart`
 - Create: `test/tool/check_rules_test.dart`
-- Modify: `.github/workflows/ci.yml` (after the `Analyze` step, around line 44)
+- Modify: `.github/workflows/ci.yml` (after the `Analyze` step, `ci.yml:57` on `edd2e6ef`)
 
 - [ ] **Step 1: Write the failing test**
 
@@ -193,6 +218,28 @@ void f() {
       expect(v.single.line, 6);
     });
 
+    test('ref.read on the same line as the catch is flagged', () {
+      final v = scanRules({
+        'lib/a.dart':
+            "void f() {\n  try { g(); } catch (e) { ref.read(loggerProvider).warn('X', e); }\n}",
+      });
+      expect(v.map((e) => e.rule), ['ref-read-in-catch']);
+      expect(v.single.line, 2);
+    });
+
+    test('ref.read in a catchError callback is flagged, its receiver is not', () {
+      final v = scanRules({
+        'lib/a.dart': '''
+Future<void> f() async {
+  await ref.read(readyProvider.future).catchError((Object e) {
+    ref.read(loggerProvider).warn('X', e);
+  });
+}''',
+      });
+      expect(v.map((e) => e.rule), ['ref-read-in-catch']);
+      expect(v.single.line, 3);
+    });
+
     test('generated files are skipped', () {
       expect(
         scanRules({
@@ -257,7 +304,8 @@ List<RuleViolation> scanRules(Map<String, String> files) {
         hit('widget-timer');
       }
       var scanFrom = 0;
-      final catchMatch = RegExp(r'\bcatch\s*\(').firstMatch(text);
+      final catchMatch =
+          RegExp(r'\bcatch\s*\(|\.catchError\(').firstMatch(text);
       if (!inCatch && catchMatch != null) {
         inCatch = true;
         catchDepth = 0;
@@ -265,11 +313,12 @@ List<RuleViolation> scanRules(Map<String, String> files) {
         scanFrom = catchMatch.start;
       }
       if (inCatch) {
-        if (text.substring(scanFrom).contains('ref.read(') &&
-            catchMatch == null) {
+        final rest = text.substring(scanFrom);
+        final bodyStart = catchOpened ? 0 : rest.indexOf('{');
+        if (bodyStart >= 0 && rest.substring(bodyStart).contains('ref.read(')) {
           hit('ref-read-in-catch');
         }
-        for (final ch in text.substring(scanFrom).split('')) {
+        for (final ch in rest.split('')) {
           if (ch == '{') {
             catchDepth++;
             catchOpened = true;
@@ -302,7 +351,7 @@ void main() {
 - [ ] **Step 4: Run the test and check it passes**
 
 Run: `flutter test test/tool/check_rules_test.dart`
-Expected: PASS (7 tests).
+Expected: PASS (9 tests). Known limit, by design: an arrow-bodied `.catchError((e) => ref.read(...))` has no braces and is not caught; none exists in `lib/` today.
 
 - [ ] **Step 5: Check the real tree's baseline is zero**
 
@@ -350,7 +399,7 @@ behind it, and what not to "fix". Number sequentially; never renumber.
 
   with:
 
-  `a comment block explaining WHY a guard has its shape belongs in an ADR under \`docs/decisions/\`, cited from the rule as \`(ADR-NNNN)\`; the rules files state the invariant only.`
+  `a comment block explaining WHY a guard has its shape belongs in the rules files as the invariant plus at most ONE inline clause of reason (kept wherever the obvious "fix" is wrong); dates, incidents and longer rationale go in an ADR under \`docs/decisions/\`, cited from the rule as \`(ADR-NNNN)\`.`
 
   Also replace `check whether the fact is recorded here first, and add it here if it is not.` with `check whether the fact is recorded in the rules or an ADR first, and add an ADR if it is not.`
 
@@ -603,3 +652,14 @@ Expected: `No issues found!`, `0 rule violation(s).`, and all tests passing.
 git add CLAUDE.md
 git commit -m "Record search.md in the rules-file index"
 ```
+
+## Review changes (2026-10-07)
+
+Reviewed against `edd2e6ef` before any task started. What changed and why:
+
+1. **No-loss check hardened (Decision 4, R1, R6, R6b).** The keyword grep missed rules phrased without `never`/`must` ("keep `_ensureMigrated` first", "server-owned", "the ORDER is load-bearing"), and R6 was graded by the agent that wrote the rewrite. Added: a widened keyword list, a backticked-symbol inventory with a mechanical `LOST` check, and an independent reviewer before each commit.
+2. **One inline reason kept (Decision 2, 3, Task 2).** An `(ADR-NNNN)` link only helps when a session opens it; the 2026-09-03 convention exists because sessions read the rules files. Invariants whose obvious fix is wrong keep one clause of why; only dates, incidents and corrections move.
+3. **Order by load frequency, pilot first (Decision 7).** ~88 KB loads in every session (root `CLAUDE.md`, `error-handling.md`, `security.md`, `code-quality.md`); `appointments.md` loads only when its paths are touched. `images.md` pilots the procedure, with an owner review stop, before the always-loaded files.
+4. **Per-file budgets (Decision 1).** A flat 10 KB cap could not hold `appointments.md`'s ~125 inventoried rules at ~120 bytes each without merging or dropping rules. The gate is now invariant count × 130 B + 1 KB; 10 KB stays the goal.
+5. **`check_rules.dart` heuristic fixed (Decision 6, Task 1).** It skipped a `ref.read` on the same line as `catch (`, and did not look inside `.catchError(` callbacks. It now scans from the body's `{`; two tests added (9 total). Verified 2026-10-07 from a scratch copy: 9/9 pass, `0 rule violation(s).` on `lib/`. CI step location corrected to `ci.yml:57`.
+6. **Logistics (Decisions 8, 9; sizes).** Sizes re-measured (607 992 bytes; `employees.md` grew with the I5 trim). ADR numbers come from one counter or pre-reserved blocks. R7 now reports any removed section title that something else cites. `MEMORY.md` (~13 KB, always loaded) noted as a separate trim.
