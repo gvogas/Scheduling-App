@@ -1,0 +1,30 @@
+{
+  "cases": [
+    {"name": "keys on storagePath, which renders and deletes the photo",
+     "storagePath": "appointments/aBc123XyZ/images/1754835600000_image_picker_A1.jpg",
+     "url": "https://firebasestorage.googleapis.com/v0/b/schedulingapp-88727.firebasestorage.app/o/appointments%2FaBc123XyZ%2Fimages%2F1754835600000_image_picker_A1.jpg?alt=media&token=8f3e1c2a-4b5d-6e7f-8a9b-0c1d2e3f4a5b",
+     "expect": "img_appointments_aBc123XyZ_images_1754835600000_image_picker_A1.jpg"},
+    {"name": "storagePath alone gives the same id",
+     "storagePath": "appointments/aBc123XyZ/images/1754835600000_image_picker_A1.jpg", "url": "",
+     "expect": "img_appointments_aBc123XyZ_images_1754835600000_image_picker_A1.jpg"},
+    {"name": "a second photo on the same appointment gets its own id",
+     "storagePath": "appointments/aBc123XyZ/images/1754835600001_image_picker_A2.jpg", "url": "",
+     "expect": "img_appointments_aBc123XyZ_images_1754835600001_image_picker_A2.jpg"},
+    {"name": "falls back to url when storagePath is empty",
+     "storagePath": "",
+     "url": "https://firebasestorage.googleapis.com/v0/b/schedulingapp-88727.firebasestorage.app/o/appointments%2FaBc123XyZ%2Fimages%2F1754835600000_image_picker_A1.jpg?alt=media&token=8f3e1c2a-4b5d-6e7f-8a9b-0c1d2e3f4a5b",
+     "expect": "img_https___firebasestorage.googleapis.com_v0_b_schedulingapp-88727.firebasestorage.app_o_appointments_2FaBc123XyZ_2Fimages_2F1754835600000_image_picker_A1.jpg_alt_media_token_8f3e1c2a-4b5d-6e7f-8a9b-0c1d2e3f4a5b"},
+    {"name": "a second legacy photo with a different url gets its own id",
+     "storagePath": "",
+     "url": "https://firebasestorage.googleapis.com/v0/b/schedulingapp-88727.firebasestorage.app/o/appointments%2FaBc123XyZ%2Fimages%2F1754835600000_image_picker_A1.jpg?alt=media&token=9a4f2d3b-4b5d-6e7f-8a9b-0c1d2e3f4a5b",
+     "expect": "img_https___firebasestorage.googleapis.com_v0_b_schedulingapp-88727.firebasestorage.app_o_appointments_2FaBc123XyZ_2Fimages_2F1754835600000_image_picker_A1.jpg_alt_media_token_9a4f2d3b-4b5d-6e7f-8a9b-0c1d2e3f4a5b"},
+    {"name": "a whitespace-only storagePath still falls back",
+     "storagePath": "   ",
+     "url": "https://firebasestorage.googleapis.com/v0/b/schedulingapp-88727.firebasestorage.app/o/appointments%2FaBc123XyZ%2Fimages%2F1754835600000_image_picker_A1.jpg?alt=media&token=8f3e1c2a-4b5d-6e7f-8a9b-0c1d2e3f4a5b",
+     "expect": "img_https___firebasestorage.googleapis.com_v0_b_schedulingapp-88727.firebasestorage.app_o_appointments_2FaBc123XyZ_2Fimages_2F1754835600000_image_picker_A1.jpg_alt_media_token_8f3e1c2a-4b5d-6e7f-8a9b-0c1d2e3f4a5b"},
+    {"name": "the img_ prefix keeps the reserved __.*__ shape unreachable", "storagePath": "/_x_/", "url": "", "expect": "img___x__"},
+    {"name": "is never '.'", "storagePath": ".", "url": "", "expect": "img_."},
+    {"name": "is never '..'", "storagePath": "..", "url": "", "expect": "img_.."},
+    {"name": "an image with no identity at all yields an empty id", "storagePath": "", "url": "", "expect": ""}
+  ]
+}
