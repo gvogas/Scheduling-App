@@ -18,6 +18,10 @@ on:
           - firestore:indexes
           - storage
           - all
+      notes:
+        description: Deploy-log Notes cell (what changed, prompts, what still stands); blank keeps a placeholder
+        required: false
+        default: ""
 
 # Two deploys must never overlap, and a running one is never cancelled.
 concurrency:
@@ -275,12 +279,13 @@ jobs:
           SHA: ${{ needs.gate.outputs.sha }}
           COUNT: ${{ needs.deploy.outputs.count || 'unchanged' }}
           TARGETS: ${{ inputs.targets }}
+          NOTES: ${{ inputs.notes }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           node tools-src/functions/scripts/deploy/deploy_log.js append \
             dev-checkout/docs/DEPLOYMENT.md \
             "--date=$(date -u +%Y-%m-%d)" "--sha=$SHA" "--targets=$TARGETS" \
-            "--count=$COUNT" "--run-url=$RUN_URL"
+            "--count=$COUNT" "--run-url=$RUN_URL" "--notes=$NOTES"
 
       - uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
         with:

@@ -82,6 +82,24 @@ describe("formatRow", () => {
   });
 });
 
+describe("formatRow notes", () => {
+  const entry = {
+    date: "2026-10-07", sha: "abcdef1234", targets: "functions",
+    count: "32", runUrl: "https://x/1",
+  };
+
+  test("a notes value replaces the placeholder and is kept to one cell", () => {
+    const row = formatRow({...entry, notes: "No-op | redeploy\nall green"});
+    expect(row).toBe(
+        "| 2026-10-07 | `abcdef12` | functions | 32 | Deploy workflow " +
+        "[run](https://x/1). No-op / redeploy all green |");
+  });
+
+  test("blank notes fall back to the placeholder", () => {
+    expect(formatRow({...entry, notes: "  "})).toContain("Notes: what changed");
+  });
+});
+
 describe("main", () => {
   const fs = require("fs");
   const os = require("os");
