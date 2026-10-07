@@ -1,8 +1,10 @@
-// Mirrored value-for-value by functions/__tests__/day_slice_utils.test.js.
+// dailyWindowsOverlap / expandRunWindows examples are shared with jest: test/fixtures/shared/day_slice.json.
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
+
+import '../../../fixtures/shared/shared_fixture.dart';
 
 AppointmentRecord _record({
   required DateTime start,
@@ -23,7 +25,12 @@ AppointmentRecord _record({
   isDayOff: isDayOff,
 );
 
+/// A fixture instant as the LOCAL wall-clock time it names (offset dropped).
+DateTime _wall(Object? value) => DateTime.parse((value! as String).substring(0, 19));
+
 void main() {
+  final fixture = loadSharedFixture('day_slice.json');
+
   group('countsAsWork', () {
     AppointmentRecord at({
       String status = 'pending',
@@ -399,80 +406,21 @@ void main() {
   });
 
   group('dailyWindowsOverlap', () {
-    // The two stored instants are a DAILY window, so the raw instant test
-    // (aStart < bEnd && aEnd > bStart) reports phantom clashes across a run.
-    test('a 9-5 week does not clash with a 7pm job inside it', () {
-      expect(
-        dailyWindowsOverlap(
-          aStart: DateTime(2026, 8, 1, 9),
-          aEnd: DateTime(2026, 8, 5, 17),
-          bStart: DateTime(2026, 8, 3, 19),
-          bEnd: DateTime(2026, 8, 3, 20),
-        ),
-        isFalse,
-      );
-    });
-
-    test('the same week DOES clash with a midday job inside it', () {
-      expect(
-        dailyWindowsOverlap(
-          aStart: DateTime(2026, 8, 1, 9),
-          aEnd: DateTime(2026, 8, 5, 17),
-          bStart: DateTime(2026, 8, 3, 12),
-          bEnd: DateTime(2026, 8, 3, 13),
-        ),
-        isTrue,
-      );
-    });
-
-    test('runs that share no day never clash', () {
-      expect(
-        dailyWindowsOverlap(
-          aStart: DateTime(2026, 8, 1, 9),
-          aEnd: DateTime(2026, 8, 2, 17),
-          bStart: DateTime(2026, 8, 4, 9),
-          bEnd: DateTime(2026, 8, 5, 17),
-        ),
-        isFalse,
-      );
-    });
-
-    test('touching windows on a shared day do not clash', () {
-      expect(
-        dailyWindowsOverlap(
-          aStart: DateTime(2026, 8, 1, 9),
-          aEnd: DateTime(2026, 8, 3, 12),
-          bStart: DateTime(2026, 8, 2, 12),
-          bEnd: DateTime(2026, 8, 2, 14),
-        ),
-        isFalse,
-      );
-    });
-
-    test('an overnight shift clashes with a job in its small hours', () {
-      // 22:00-06:00 crosses midnight, so day 1 runs into Aug 2 morning.
-      expect(
-        dailyWindowsOverlap(
-          aStart: DateTime(2026, 8, 1, 22),
-          aEnd: DateTime(2026, 8, 3, 6),
-          bStart: DateTime(2026, 8, 2, 2),
-          bEnd: DateTime(2026, 8, 2, 3),
-        ),
-        isTrue,
-      );
-    });
-
-    test('a corrupt window whose end precedes its start never clashes', () {
-      expect(
-        dailyWindowsOverlap(
-          aStart: DateTime(2026, 8, 10, 9),
-          aEnd: DateTime(2026, 8, 1, 17),
-          bStart: DateTime(2026, 8, 10, 9),
-          bEnd: DateTime(2026, 8, 10, 17),
-        ),
-        isFalse,
-      );
-    });
+    for (final c in sharedCases(fixture, 'dailyWindowsOverlap')) {
+      test(c['name'] as String, () {
+        final a = c['a'] as List;
+        final b = c['b'] as List;
+        expect(
+          dailyWindowsOverlap(
+            aStart: _wall(a[0]),
+            aEnd: _wall(a[1]),
+            bStart: _wall(b[0]),
+            bEnd: _wall(b[1]),
+          ),
+          c['expect'],
+        );
+      });
+    }
   });
 
   group('the maxAppointmentSpanDays clamp', () {
@@ -669,69 +617,27 @@ void main() {
   });
 
   group('expandRunWindows', () {
-    test('a one-day window yields one pair unchanged', () {
-      final windows = expandRunWindows(
-        DateTime(2026, 8, 3, 9),
-        DateTime(2026, 8, 3, 17),
-      );
-      expect(windows, hasLength(1));
-      expect(windows.single.start, DateTime(2026, 8, 3, 9));
-      expect(windows.single.end, DateTime(2026, 8, 3, 17));
-    });
-
-    test('a 5-day 9-to-5 window yields five one-day windows', () {
-      final windows = expandRunWindows(
-        DateTime(2026, 8, 3, 9),
-        DateTime(2026, 8, 7, 17),
-      );
-      expect(windows, hasLength(5));
-      expect(windows.first.start, DateTime(2026, 8, 3, 9));
-      expect(windows.first.end, DateTime(2026, 8, 3, 17));
-      expect(windows.last.start, DateTime(2026, 8, 7, 9));
-      expect(windows.last.end, DateTime(2026, 8, 7, 17));
-    });
-
-    test('a night shift yields one window per NIGHT, ending the morning after', () {
-      // 22:00 Aug 3 -> 06:00 Aug 5 is two nights: the end date names the last
-      // day the crew STARTS work, so the run is Aug 3 and Aug 4.
-      final windows = expandRunWindows(
-        DateTime(2026, 8, 3, 22),
-        DateTime(2026, 8, 5, 6),
-      );
-      expect(windows, hasLength(2));
-      expect(windows.first.start, DateTime(2026, 8, 3, 22));
-      expect(windows.first.end, DateTime(2026, 8, 4, 6));
-      expect(windows.last.start, DateTime(2026, 8, 4, 22));
-      expect(windows.last.end, DateTime(2026, 8, 5, 6));
-    });
-
-    test('an all-day multi-day block yields a midnight-to-23:59 window a day', () {
-      final windows = expandRunWindows(
-        DateTime(2026, 8, 3),
-        DateTime(2026, 8, 4, 23, 59),
-      );
-      expect(windows, hasLength(2));
-      expect(windows.first.start, DateTime(2026, 8, 3));
-      expect(windows.first.end, DateTime(2026, 8, 3, 23, 59));
-      expect(windows.last.start, DateTime(2026, 8, 4));
-      expect(windows.last.end, DateTime(2026, 8, 4, 23, 59));
-    });
-
-    test('a span past the cap clamps to maxAppointmentSpanDays', () {
-      final windows = expandRunWindows(
-        DateTime(2026, 8, 3, 9),
-        DateTime(2027, 3, 12, 17),
-      );
-      expect(windows, hasLength(maxAppointmentSpanDays));
-    });
-
-    test('a corrupt pair whose end precedes its start yields one window', () {
-      final windows = expandRunWindows(
-        DateTime(2026, 8, 7, 9),
-        DateTime(2026, 8, 3, 17),
-      );
-      expect(windows, hasLength(1));
-      expect(windows.single.start, DateTime(2026, 8, 7, 9));
-    });
+    for (final c in sharedCases(fixture, 'expandRunWindows')) {
+      test(c['name'] as String, () {
+        expectAsserts(c, const ['expectWindows', 'expectLength']);
+        final run = c['run'] as List;
+        final windows = expandRunWindows(_wall(run[0]), _wall(run[1]));
+        if (c.containsKey('expectWindows')) {
+          expect(
+            [for (final w in windows) [w.start, w.end]],
+            [
+              for (final pair in (c['expectWindows'] as List).cast<List<dynamic>>())
+                [_wall(pair[0]), _wall(pair[1])],
+            ],
+          );
+        }
+        if (c.containsKey('expectLength')) {
+          expect(windows, hasLength(c['expectLength']));
+        }
+        if (c.containsKey('expectFirstStart')) {
+          expect(windows.first.start, _wall(c['expectFirstStart']));
+        }
+      });
+    }
   });
 }
