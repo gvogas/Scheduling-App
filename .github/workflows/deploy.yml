@@ -252,9 +252,18 @@ jobs:
       contents: write
       pull-requests: write
     steps:
+      # dev only supplies the file being edited; no dev script runs here.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: dev
+          path: dev-checkout
+          persist-credentials: false
+
+      # The reviewed, gated commit supplies the script that edits it.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          path: tools-src
           persist-credentials: false
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -268,12 +277,15 @@ jobs:
           TARGETS: ${{ inputs.targets }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          node functions/scripts/deploy/deploy_log.js append docs/DEPLOYMENT.md \
+          node tools-src/functions/scripts/deploy/deploy_log.js append \
+            dev-checkout/docs/DEPLOYMENT.md \
             "--date=$(date -u +%Y-%m-%d)" "--sha=$SHA" "--targets=$TARGETS" \
             "--count=$COUNT" "--run-url=$RUN_URL"
 
       - uses: peter-evans/create-pull-request@22a9089034f40e5a961c8808d113e2c98fb63676 # v7.0.11
         with:
+          path: dev-checkout
+          add-paths: docs/DEPLOYMENT.md
           base: dev
           branch: deploy-log/${{ github.run_id }}
           title: "Record the ${{ inputs.targets }} deploy of ${{ needs.gate.outputs.sha }}"
