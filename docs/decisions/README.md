@@ -44,3 +44,9 @@ not to "fix". Number sequentially from one counter; never renumber.
 | 0035 | Auth-propagation retry: one predicate, one delay ladder | `.claude/rules/error-handling.md` |
 | 0036 | Sealed action outcomes; a reentrancy skip is `Busy`, never an exception | `.claude/rules/error-handling.md` |
 | 0037 | Crashlytics severity is classified in two places | `.claude/rules/error-handling.md` |
+| 0038 | A payload allowlist stays a superset of the deployed one; `#compat-<version>` carve-outs | `.claude/rules/security.md` |
+| 0039 | Every rate limit is the durable Firestore one | `.claude/rules/security.md` |
+| 0040 | Callables open with a composed guard: `assertAdminCall` / `assertActiveCall` | `.claude/rules/security.md` |
+| 0041 | A guard fails closed on missing input | `.claude/rules/security.md` |
+| 0042 | Credential fields disable IME personalized learning explicitly | `.claude/rules/security.md` |
+| 0043 | Every callable enforces App Check through the shared `APP_CHECK` | `.claude/rules/security.md` |
