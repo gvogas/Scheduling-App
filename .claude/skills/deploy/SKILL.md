@@ -15,6 +15,17 @@ Project `schedulingapp-88727`, region `us-central1`. Functions live in
 `functions/` and are all re-exported from `functions/index.js` — that export
 list (**32 exports**) is the source of truth for what should exist in prod.
 
+## 0a. Default: the workflow
+
+Deploy through the **`Deploy backend`** GitHub Actions workflow
+(`workflow_dispatch`; `docs/DEPLOYMENT.md` §5). **Only `main` deploys** — merge
+`dev` into `main` first, then dispatch from `main`. The `production` approval
+is a human tap in GitHub: **never approve it yourself**. Dispatch with the
+`targets` that match the ordering below (`all` covers steps 1 and 3 in order;
+backfills run through `node functions/scripts/run.js <name> [--live]`; the app
+build is last), report the run URL, and tell the user to fill in the log PR's
+Notes. The sections below are the ordering rules and the FALLBACK.
+
 ## 0. Establish the ordering before touching anything
 
 A deploy here is one step of a four-step release, and the steps are ordered
@@ -44,7 +55,10 @@ cd functions && npx jest       # all suites must pass
 
 Fix failures before deploying — a broken deploy leaves prod half-updated.
 
-## 2. Deploy
+## 2. Fallback: deploy from a local shell
+
+Use only when the workflow is unavailable, a function must be deleted, or a
+new `retry: true` function must be created (the workflow refuses both).
 
 Clear the AI-agent env vars first, or the CLI stamps `agent-name/claude_code`
 into the Cloud Audit Log (see `docs/DEPLOYMENT.md` §5 — the entry is immutable
@@ -122,6 +136,8 @@ again. Confirm with `$env:AI_AGENT` (PowerShell) before deploying.
 
 ## 4. Verify
 
+- The workflow's `Verify by name` step does the name diff; still read the
+  function logs yourself. For a local deploy:
 - List deployed functions (Firebase MCP `functions_list_functions`, or
   `firebase functions:list`) and diff against the exports in
   `functions/index.js` — all 32 deployed, no orphans. **An unchanged count is

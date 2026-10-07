@@ -59,13 +59,17 @@ function appendRow(markdown, row) {
 /**
  * One Deploy log row for a workflow run.
  * @param {{date: string, sha: string, targets: string, count: string,
- *     runUrl: string}} entry What was deployed.
+ *     runUrl: string, notes: (string|undefined)}} entry What was deployed;
+ *     a non-blank `notes` replaces the placeholder text.
  * @return {string} The row.
  */
-function formatRow({date, sha, targets, count, runUrl}) {
+function formatRow({date, sha, targets, count, runUrl, notes}) {
+  const text = String(notes || "").replace(/\s+/g, " ").replace(/\|/g, "/")
+      .trim();
   return `| ${date} | \`${sha.slice(0, 8)}\` | ${targets} | ${count} | ` +
-    `Deploy workflow [run](${runUrl}). Notes: what changed, prompts seen, ` +
-    "and what still stands. |";
+    `Deploy workflow [run](${runUrl}). ` +
+    (text || "Notes: what changed, prompts seen, and what still stands.") +
+    " |";
 }
 
 /**
@@ -76,7 +80,7 @@ function formatRow({date, sha, targets, count, runUrl}) {
 function options(argv) {
   const out = {};
   for (const arg of argv) {
-    const match = arg.match(/^--([a-z-]+)=(.*)$/);
+    const match = arg.match(/^--([a-z-]+)=([\s\S]*)$/);
     if (match) out[match[1]] = match[2];
   }
   return out;
@@ -98,7 +102,7 @@ function main(argv) {
     const o = options(rest);
     writeFileSync(file, appendRow(readFileSync(file, "utf8"), formatRow({
       date: o.date, sha: o.sha, targets: o.targets, count: o.count,
-      runUrl: o["run-url"],
+      runUrl: o["run-url"], notes: o.notes,
     })));
     return 0;
   }

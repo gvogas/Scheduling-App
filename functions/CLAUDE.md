@@ -409,7 +409,7 @@ editing that JSON at the repo root never loaded `functions/CLAUDE.md`.
 Release runbook (ordering, old-build compatibility, rollback, deploy log):
 `docs/DEPLOYMENT.md`.
 
-Deploy: `firebase deploy --only functions,firestore:rules,firestore:indexes,storage`
+Deploy: the `Deploy backend` workflow (`.github/workflows/deploy.yml`, dispatched from `main`; runbook `docs/DEPLOYMENT.md` §5). Local fallback: `firebase deploy --only functions,firestore:rules,firestore:indexes,storage`
 (clear `AI_AGENT`/`CLAUDECODE`/`CLAUDE_CODE` in the shell first, or the CLI
 stamps `agent-name/claude_code` into the audit log — see `docs/DEPLOYMENT.md` §5.)
 (drop `firestore:indexes` only when `firestore.indexes.json` is unchanged — a
