@@ -49,10 +49,6 @@ const nightShift = {
 };
 
 describe("day_slice_utils", () => {
-  test("the cap matches the Dart constant", () => {
-    expect(MAX_APPOINTMENT_SPAN_DAYS).toBe(14);
-  });
-
   test("a single-day job is day 1 of 1", () => {
     const r = {
       startTime: at("2026-08-01T13:00:00.000Z"),

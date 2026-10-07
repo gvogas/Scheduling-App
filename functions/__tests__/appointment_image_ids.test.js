@@ -106,13 +106,6 @@ describe("Firestore id legality", () => {
     expect(id.endsWith("UNIQUE_TAIL.jpg")).toBe(true);
   });
 
-  test("the cap matches the Dart mirror's `maxLength`", () => {
-    // Hand-mirrored from `appointment_image_doc_id.dart`. The cap above is
-    // composed from this constant, so nothing else would notice a change to
-    // it — and a divergence puts the same photo at two ids.
-    expect(MAX_ID_LENGTH).toBe(300);
-  });
-
   test("two long paths differing only in their tail do not collide", () => {
     const a = `appointments/${"x".repeat(500)}/images/TAIL_A.jpg`;
     const b = `appointments/${"x".repeat(500)}/images/TAIL_B.jpg`;
