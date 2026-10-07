@@ -6,10 +6,12 @@ import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/presence/application/presence_sync_controller.dart';
 import 'package:scheduling/features/settings/application/my_details_providers.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/feature_paused_notice.dart';
 
 class LocationSharingView extends ConsumerStatefulWidget {
   const LocationSharingView({super.key, this.onApplied});
@@ -91,6 +93,7 @@ class _LocationSharingViewState extends ConsumerState<LocationSharingView> {
     final scheme = theme.colorScheme;
     final record = ref.watch(myEmployeeRecordProvider);
     final enabled = _pendingValue ?? record?.locationSharingEnabled ?? false;
+    final paused = !ref.watch(featureFlagsProvider.select((f) => f.presence));
     final isBusy = _pendingValue != null || record == null;
     final fix = ref.watch(myPresenceFixProvider);
     final lastUploaded = fix.when(
@@ -102,6 +105,8 @@ class _LocationSharingViewState extends ConsumerState<LocationSharingView> {
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.sp16),
       children: [
+        if (paused)
+          FeaturePausedNotice(message: context.l10n.common_featurePaused),
         _Panel(
           child: Column(
             children: [
@@ -114,7 +119,7 @@ class _LocationSharingViewState extends ConsumerState<LocationSharingView> {
                 trailing: Switch.adaptive(
                   key: const Key('locationSharingPrivacySwitch'),
                   value: enabled,
-                  onChanged: isBusy
+                  onChanged: isBusy || paused
                       ? null
                       : (value) => _setLocationSharing(value: value),
                   activeTrackColor: scheme.primary,

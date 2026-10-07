@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/navigation/app_destination.dart';
 import 'package:scheduling/core/navigation/hub_shell_scope.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
 import 'package:scheduling/features/auth/application/is_active_admin_provider.dart';
@@ -51,7 +52,10 @@ class AppNavDrawer extends ConsumerWidget {
     // Firestore too. Fails CLOSED while the user doc is unsettled, and is
     // resolved ONCE so the rows, the header and the counts agree.
     final isLiveAdmin = isAdmin && ref.watch(isActiveAdminProvider);
-    final groups = drawerGroups(isAdmin: isLiveAdmin);
+    final groups = drawerGroups(
+      isAdmin: isLiveAdmin,
+      liveMapEnabled: ref.watch(featureFlagsProvider.select((f) => f.presence)),
+    );
 
     // The shadow wraps the drawer from OUTSIDE. A BoxShadow is painted from the
     // edges of its own box and its blur reaches inward as well as outward, so a
