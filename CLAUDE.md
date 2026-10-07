@@ -127,6 +127,11 @@ Secret-Manager `GOOGLE_MAP_API_KEY`, which must never ship in the app.
   `completeEmployeeSetup` activates its doc), NOT a deletion. Never simplify back to
   `doc.isEmpty` alone, or invited employees get wrongly kicked out mid-activation
   (cold-start already-deleted accounts are caught earlier by `SplashScreen`).
+- **Kill switches FAIL OPEN** (`lib/core/remote_config/`,
+  `functions/feature_flags*.js`): a failed fetch, empty template or static value
+  means every feature on and `min_supported_build` 0. Keys and defaults are
+  mirrored and both sides' tests pin them; a paused feature reuses its existing
+  opt-out path. Runbook: `docs/DEPLOYMENT.md` "Flip a kill switch".
 - **Employee visibility:** Employees see only appointments where their doc id is
   in `employeeIds`. Apply this filter on any new appointment view.
 - **Photo and image-upload rules live in `.claude/rules/images.md`** (moved

@@ -219,7 +219,7 @@ new pure rules to the policy module and re-export, rather than growing the
 orchestration file back), the Live Activity stack (`apns_client.js`,
 `live_activity_utils.js`, `live_activity_registry.js`,
 `live_activity_dispatch.js` — see the Live Activities bullet below), and
-`indexed_search.js` (the three server-side search callables added 2026-09-04 —
+`feature_flags_policy.js` (pure) / `feature_flags.js` (lazy `firebase-admin/remote-config`) — the Remote Config kill switches, fail-open, 60 s per-instance cache; a Live Activity `skipped` push never prunes a token — and `indexed_search.js` (the three server-side search callables added 2026-09-04 —
 `searchClients`, `searchHistory` and `findAppointmentConflicts`; the token hit
 is a PREFILTER and `recordMatchesQuery` re-verifies, `mayReadHistoryDoc`
 re-verifies a non-admin against `employeeIds` rather than trusting the

@@ -195,6 +195,38 @@ reverting the cap.
 
 ---
 
+## Flip a kill switch
+
+Remote Config is the single source of truth; the app and `functions/` both read
+it and both FAIL OPEN (a failed fetch, an empty template or a missing key means
+every feature on and `min_supported_build` 0).
+
+| Key | Default | Off means |
+|---|---|---|
+| `feature_address_autocomplete` | `true` | Address field is plain text; `places*` callables refuse |
+| `feature_presence` | `true` | Location sharing stops; live map destination hidden |
+| `feature_live_activities` | `true` | No new activities; active ones ended; APNs pushes skipped |
+| `feature_wave_sync` | `true` | Wave settings show "paused"; outbox keeps queuing, drain stops sending |
+| `min_supported_build` | `0` | Builds with a lower build number see a blocking update screen |
+
+- **Flip:** Firebase console -> Remote Config -> edit the parameter -> Publish.
+  Open apps react within seconds (real-time listener); functions within 60 s.
+- **Rollback:** Remote Config -> the template's version history -> roll back.
+- **Values:** booleans must be exactly `true`/`false` (any other string reads as
+  OFF on both sides); `min_supported_build` is an integer. Never publish a key
+  with an empty value.
+- **One-time IAM test:** publish `feature_wave_sync = false`, press Wave -> Sync,
+  look for `FLAGS blocked a call {"key":"feature_wave_sync"}` in
+  `firebase functions:log`, then publish it back to `true`. No line means the
+  functions runtime service account lacks `roles/cloudconfig.viewer`; grant it.
+- Presence pause also DELETES each person's last location pin once (retried if refused).
+- Live Activities pause ends cards on devices running this build; a job ending while paused still removes that card's token row (normal lifecycle).
+- Wave pause queues edits and drains them after re-enable; nothing dead-letters; `functions/scripts/drain-wave-queue.js` stops with a message while paused.
+- Forced update: lifting it mid-session restarts the app at splash (navigation state is lost). While the update screen shows, a remote account exit (disabled/deleted/demoted) does not sign the device out until the gate lifts; server-side deactivation (`syncUsersByUid`) still revokes access immediately.
+- `min_supported_build` only affects builds that contain the gate: the first build after 1.63.0+93.
+
+---
+
 ## Repo-specific traps
 
 - **TTL policies live in `firestore.indexes.json`** as `fieldOverrides` with
