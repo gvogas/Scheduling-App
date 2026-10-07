@@ -14,4 +14,5 @@ keeps the fail-closed half: a doc whose stored times don't parse clashes uncondi
 
 ## Consequences
 Change the Dart original and the JS twin in one commit. More conflict-check rules (the non-admin
-`employeeIds` narrowing, the old client cap) are in `.claude/rules/appointments.md`.
+`employeeIds` refusal, the clash owner) are in `.claude/rules/appointments.md`; the old client cap is in
+ADR-0053.

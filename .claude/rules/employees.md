@@ -542,7 +542,7 @@ self-service settings. Root context: `../../CLAUDE.md`.
   retain check, so a dispatcher already stored on a job must still read as
   ACTIVE there or removing them is undone on every save. Still not an access
   flag — a dispatcher's own visibility is unchanged, and the edit picker still
-  offers one already on a job (see `offerableAssignees`, root `CLAUDE.md`).
+  offers one already on a job (see `offerableAssignees`, `.claude/rules/appointments.md`).
   **The exclusion is ABSOLUTE — there is no personal-block or day-off
   carve-out** (owner call, 2026-08-24, asked and answered when a review raised
   it). A dispatcher is not offered on a personal block either, so a day off

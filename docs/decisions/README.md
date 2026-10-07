@@ -50,3 +50,20 @@ not to "fix". Number sequentially from one counter; never renumber.
 | 0041 | A guard fails closed on missing input | `.claude/rules/security.md` |
 | 0042 | Credential fields disable IME personalized learning explicitly | `.claude/rules/security.md` |
 | 0043 | Every callable enforces App Check through the shared `APP_CHECK` | `.claude/rules/security.md` |
+| 0044 | Appointment status: four stored values, one display ladder, one terminal set | `.claude/rules/appointments.md` |
+| 0045 | Mark-complete has no clock gate, a pinned `updatedAt`, and an Undo callable | `.claude/rules/appointments.md` |
+| 0046 | Admin actions: explicit `showActions`, done-job edit slot, live `isActiveAdminProvider` | `.claude/rules/appointments.md` |
+| 0047 | Personal jobs and time off | `.claude/rules/appointments.md` |
+| 0048 | All-day blocks store real instants and reach every mirror | `.claude/rules/appointments.md` |
+| 0049 | Multi-day span: a 14-day daily window with one day-slice owner | `.claude/rules/appointments.md` |
+| 0050 | A multi-day job is one document per day | `.claude/rules/appointments.md` |
+| 0051 | "Work left" gates on the end; every repository query has a ceiling | `.claude/rules/appointments.md` |
+| 0052 | The time-off clash alert is advisory, after the save, and replaces the busy prompt | `.claude/rules/appointments.md` |
+| 0053 | One owner of "what stands in the way" | `.claude/rules/appointments.md` |
+| 0054 | An assignee may record crew notes and photos | `.claude/rules/appointments.md` |
+| 0055 | The server owns the job time record | `.claude/rules/appointments.md` |
+| 0056 | Assignee-retaining edit merge, the offer list and the picker's dimming | `.claude/rules/appointments.md` |
+| 0057 | Job templates, Book again and the custom-address owner | `.claude/rules/appointments.md` |
+| 0058 | The overdue review is the one bulk close | `.claude/rules/appointments.md` |
+| 0059 | The dashboard window is one live listener plus one `.get()` | `.claude/rules/appointments.md` |
+| 0060 | History scoping by `employeeIds`; the UI is admin-only | `.claude/rules/appointments.md` |
