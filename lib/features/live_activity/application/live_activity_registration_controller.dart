@@ -9,6 +9,7 @@ import 'package:scheduling/core/app/device_deregistration.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/platform/ios_platform.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/utils/app_language.dart';
 import 'package:scheduling/core/utils/reentrant_sync.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
@@ -122,7 +123,8 @@ class LiveActivityRegistrationController with ReentrantSync {
     // defaults to true, which would re-register a device that opted out.
     await _ref.read(liveActivityEnabledProvider.notifier).ready;
     if (isSyncStale(generation)) return;
-    if (!_ref.read(liveActivityEnabledProvider)) {
+    if (!_ref.read(liveActivityEnabledProvider) ||
+        !_ref.read(featureFlagsProvider).liveActivities) {
       // A stored opt-out is authoritative, so reconcile by actively removing
       // any stale server rows left behind by an interrupted previous opt-out
       // rather than only stopping local streams. Straight to `_teardown` -
