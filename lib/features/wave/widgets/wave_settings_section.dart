@@ -6,6 +6,7 @@ import 'package:scheduling/core/animations/animated_loading_button.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
+import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/wave/application/wave_providers.dart';
 import 'package:scheduling/features/wave/domain/models/wave_connection.dart';
@@ -13,6 +14,7 @@ import 'package:scheduling/features/wave/domain/wave_failure.dart';
 import 'package:scheduling/features/wave/domain/wave_sync_notice.dart';
 import 'package:scheduling/features/wave/widgets/wave_blocked_list.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/feature_paused_notice.dart';
 
 /// Admin-only Wave controls in Settings; failures surface via notices.
 class WaveSettingsSection extends ConsumerStatefulWidget {
@@ -136,6 +138,8 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
 
   @override
   Widget build(BuildContext context) {
+    final paused = !ref.watch(featureFlagsProvider.select((f) => f.waveSync));
+    final blocked = _busy || paused;
     final connectionAsync = ref.watch(waveConnectionProvider);
     // A this-session Connect wins; otherwise fall back to the cached persisted status.
     final connection = _connection ?? connectionAsync.value;
@@ -154,25 +158,27 @@ class _WaveSettingsSectionState extends ConsumerState<WaveSettingsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        if (paused)
+          FeaturePausedNotice(message: context.l10n.settings_wavePaused),
         if (connected)
           _ConnectedStatus(
             connection: connection,
             retryBusy: _retryBusy,
-            onRetryFailed: _busy ? null : _retryFailed,
+            onRetryFailed: blocked ? null : _retryFailed,
           ),
         // Connect is first-time setup only — the status row replaces it once connected.
         if (!connected)
           AnimatedLoadingButton(
             label: context.l10n.wave_connectToWave,
             isLoading: _connectBusy,
-            onPressed: _busy ? null : _connect,
+            onPressed: blocked ? null : _connect,
           )
         else
           // Syncing only makes sense once connected.
           AnimatedLoadingButton(
             label: context.l10n.wave_syncButton,
             isLoading: _syncBusy,
-            onPressed: _busy ? null : _sync,
+            onPressed: blocked ? null : _sync,
             variant: AnimatedLoadingButtonVariant.outlined,
           ),
       ],
