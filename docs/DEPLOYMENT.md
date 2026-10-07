@@ -30,6 +30,8 @@ have that.
 
 ## 1. Pre-flight
 
+The workflow does this (`verify` job: CI's lint + tests on the deployed commit).
+
 ```bash
 flutter analyze                       # 0 issues is the baseline
 dart run tool/test.dart               # full suite, sharded (~3 min)
@@ -47,6 +49,8 @@ ignoring.
 
 ## 2. Find out what is ACTUALLY live
 
+The workflow does this (`Export diff` step, by name).
+
 Do not trust this repo's docs for this — they have been wrong. On 2026-08-02
 `docs/CLOUD_FUNCTIONS.md` claimed 21 deployed and `recountClientJobs` missing;
 production actually had 22 and `recountClientJobs` was live.
@@ -62,6 +66,8 @@ source of truth for what *should* exist.
 
 ## 3. Diff the backend since the last deploy
 
+The workflow reads the last-deploy sha from the Deploy log below for its allowlist step.
+
 Find the last deployed commit in the **Deploy log** at the bottom of this file,
 then:
 
@@ -70,6 +76,8 @@ git --no-pager diff --stat <last-deploy-commit> -- functions/ firestore.rules fi
 ```
 
 ## 4. Compatibility check — the step people skip
+
+Automated for REMOVED keys by the workflow's allowlist step; (b) and (c) are still by hand.
 
 For **every callable whose payload handling changed**, answer two questions.
 
@@ -116,7 +124,30 @@ the user as an unexplained "Something went wrong".
 
 ## 5. Deploy
 
-**Clear the three AI-agent env vars first, in whatever shell you deploy from.**
+**Use the `Deploy backend` workflow** (Actions → Deploy backend → Run workflow;
+pick `targets`, optionally fill `notes`). **Only `main` deploys**: merge `dev`
+into `main` first, then dispatch from `main` with `ref` = `main` or a commit
+already merged into it (the `gate` job refuses anything else). The
+`production` approval is a human tap in GitHub — an agent never approves it.
+The run lints and tests the commit, refuses `--force`, blocks a deploy that
+would DELETE a function or narrow a callable allowlist, deploys
+`firestore:indexes` first and waits for `READY` when indexes are in scope,
+verifies the live function set by name, and opens the Deploy log PR against
+`dev`. Auth is keyless: the Workload Identity provider accepts only
+`deploy.yml` + `workflow_dispatch` + `main` + environment `production`.
+`.github/workflows/deploy.yml` is the source of truth for the steps.
+
+Two things still need an owner shell, by design:
+- **Deleting a function** — the workflow refuses; run
+  `firebase functions:delete <names> --region us-central1` after confirming
+  each name, then re-run the workflow.
+- **Creating a new `retry: true` function** — a non-interactive deploy aborts
+  on its failure policy; deploy that one function alone with
+  `--only functions:<name> --force` (no firestore target in scope, so `--force`
+  cannot reach an index or TTL policy), then re-run the workflow.
+
+**Local CLI is the FALLBACK** (the workflow is down, or one of the two cases
+above); record the Deploy log row by hand. **Clear the three AI-agent env vars first, in whatever shell you deploy from.**
 `firebase-tools` builds its User-Agent in `lib/apiv2.js` from `detectAIAgent()`
 (`lib/env.js`), which reads `AI_AGENT`, then `CLAUDECODE`/`CLAUDE_CODE`. A
 terminal opened inside an agent harness has them set, so every call goes up as
@@ -166,6 +197,8 @@ firebase deploy --only functions,firestore:rules
 - Single function: `--only functions:<name>`.
 
 ## 6. Verify
+
+The workflow does the name diff (`Verify by name` step); reading the logs is still yours.
 
 1. `functions_list_functions` — count matches `functions/index.js` exports, no
    orphans.
@@ -320,8 +353,8 @@ nothing rather than one that errors.
    before the app**: an app writing `searchTokens` against rules that don't
    allow it gets `permission-denied` on every client save.
 3. **`functions`** — the four new callables.
-4. **`node functions/scripts/backfill-search-tokens.js --dry-run`, then for
-   real.** Every client and every terminal-status appointment written before
+4. **`node functions/scripts/run.js backfill-search-tokens`, then
+   `... --live`.** Every client and every terminal-status appointment written before
    this release carries no tokens, and a document with no tokens is invisible to
    the search that replaced the scan. **This is a prerequisite, not a
    follow-up** — the app build must not ship before it completes.
@@ -763,11 +796,11 @@ Copy this into the release PR / notes:
 [ ] no rules cap is tighter than a shipped client OR callable write path
 [ ] indexes: unchanged → omit target · changed → include it
 [ ] if any export was REMOVED: deletion prompt lists exactly those, nothing else
-[ ] deployed backend  (no --force)
-[ ] verified function count + logs
+[ ] Deploy backend workflow green (refuses --force, verifies by name, opens the log PR)
+[ ] read the function logs for unexpected-field / startup errors
 [ ] smoke-tested with the OLD build
 [ ] THEN cut the app build
-[ ] appended a row to the Deploy log below
+[ ] log PR Notes filled in and merged
 ```
 
 ---
@@ -775,7 +808,8 @@ Copy this into the release PR / notes:
 ## Deploy log
 
 Keep this current — step 3 depends on it, and it is the only reliable record of
-what production is running.
+what production is running. Rows are appended by the deploy workflow as a PR
+against `dev`; fill in Notes before merging.
 
 | Date | Commit | Targets | Fns live | Notes |
 |---|---|---|---|---|

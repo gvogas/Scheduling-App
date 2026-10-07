@@ -657,13 +657,16 @@ It exists for the same reason the admin one does — a guard nobody has looked a
 is the one that silently loses a clause, and this one was already written twice,
 having drifted on its logging in the first week.
 
-Deploy: `firebase deploy --only functions,firestore:rules,firestore:indexes,storage`
-(clear `AI_AGENT`/`CLAUDECODE`/`CLAUDE_CODE` in the shell first, or the CLI
-stamps `agent-name/claude_code` into the audit log — see `docs/DEPLOYMENT.md` §5.)
+Deploy: the `Deploy backend` GitHub Actions workflow (`workflow_dispatch` from
+`main` only, `production` approval is a human tap — an agent never approves it).
+Local `firebase deploy --only functions,firestore:rules,firestore:indexes,storage`
+is the FALLBACK — clear `AI_AGENT`/`CLAUDECODE`/`CLAUDE_CODE` first, or the CLI
+stamps `agent-name/claude_code` into the audit log (`docs/DEPLOYMENT.md` §5).
 (`storage:rules` is **not** a valid deploy target — use `storage`.)
 **Never pass `--force`** — it deletes any prod Firestore TTL policy missing from
 `firestore.indexes.json` (this removed all 5 live policies once, 2026-07-21).
 Always run `cd functions && npm run lint` before deploying.
+One-off prod scripts run through `node functions/scripts/run.js <name> [--live]`.
 
 `GOOGLE_MAP_API_KEY` lives in Secret Manager only — it is **not** in `dev/.env`.
 

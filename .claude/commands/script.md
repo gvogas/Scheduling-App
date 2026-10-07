@@ -28,13 +28,13 @@ Say in one line what the script will change and roughly how many documents.
 
 ## 2. Dry run
 
-**The absence of `--dry-run` means LIVE.** That is the default, so the dry run
-is never optional for a writing script.
+`run.js` is dry-run by default; `--live` is the only way to write, and it
+re-runs the dry run first.
 
 Give one copy-pasteable PowerShell line, run from the repo root:
 
 ```powershell
-node functions/scripts/<name>.js --dry-run
+node functions/scripts/run.js <name>
 ```
 
 Tell the user to check the banner line the script prints **before** anything
@@ -63,8 +63,11 @@ The user will paste the dry-run output. Interpret it concretely:
 ## 4. Live run — only after the user says go
 
 ```powershell
-node functions/scripts/<name>.js
+node functions/scripts/run.js <name> --live
 ```
+
+`--live` re-runs the dry run and asks for its count typed back; a count from
+an earlier run is refused, by design.
 
 Never run this on the user's behalf without an explicit go-ahead on the numbers
 they just reviewed.
