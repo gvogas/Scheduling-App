@@ -16,940 +16,118 @@ paths:
 Loaded when working on employee records, account provisioning, or
 self-service settings. Root context: `../../CLAUDE.md`.
 
-- **Authorization uses the live user document, not a trigger snapshot.**
-  `bridge_reconcile.js` transactionally reads the current profile and bridge
-  rows before changing authorization. Firestore events may arrive out of order;
-  an old activation must not restore a disabled or deleted account. Preserve
-  bridge ownership checks when removing stale uids. Auth writes are separate,
-  so re-check the live profile after applying access and retry reconciliation
-  when it changes. Invited accounts must remain able to complete setup.
-  **`reconcileAuthAccess` no longer short-circuits on a live `invited` doc**
-  (2026-09-28): only a uid mismatch returns early, and an invited doc computes
-  "revoke", so this path never re-enables an invited account and an
-  active-to-invited demotion revokes the credential again. Setup is unaffected
-  because it is only called when `authAccessChange(before, after)` is non-null,
-  so a newly created invited doc is never disabled. **A re-provision reset RE-ENABLES the
-  credential** (S4, owner call 2026-10-07): `resetProvisionedPassword` sends
-  `disabled: false` with the password, because an account demoted
-  active-to-invited in the console was disabled by the revoke above, and a
-  reset that left it disabled handed over a password nobody could sign in with.
+## Authorization and removal
 
-- **Admin password reset for an ACTIVE account** (2026-09-29). Employee emails are not
-  real inboxes, so Forgot password can never reach anyone. Reset password in the
-  account footer of `edit_person_sheet.dart` (shown only for an `active`,
-  non-admin doc with a `uid` that is NOT the signed-in admin; hidden while that
-  uid is unknown) goes through `EmployeeFormController.resetPassword` (sealed
-  `PasswordResetIssued` / `Failed` / `Busy`) to `resetEmployeePassword`.
-  **The admin re-enters their OWN password first** (S1, owner call 2026-10-07):
-  the confirm is a `PasswordReauthDialog` (`showPasswordReauthDialog`) with reset copy, the controller
-  re-authenticates through `AccountDeletionService.reauthenticateWithPassword`
-  BEFORE the callable, and the server restates it with `assertFreshReauth`
-  (`stale-auth` → `EmployeesFailureReauthRequired`). The server refuses self,
-  non-active and **any admin target** (`target-is-admin` →
-  `EmployeesFailureTargetIsAdmin`, re-checked in the transaction so a concurrent
-  promotion cannot slip through). It then under `accountOperations/{uid}` (`password-reset`) re-checks `active` + the
-  same `uid` in a transaction and writes the server-owned
-  **`passwordResetRequired: true`** FIRST, then sets a
-  `generateStartingPassword()` value, then `revokeRefreshTokens`. The order is
-  fail-safe: an Auth failure leaves the flag set, so the worst case is being asked
-  to change a password that did not change; a revoke failure after the password
-  changed logs `logger.error` with `uidHash` and still RETURNS the credentials
-  (2026-09-29) — the password is already set, so rethrowing locked the person out
-  behind a password nobody had seen, and `updateUser` with a password already
-  invalidates their sessions. The response carries
-  the email off the Auth record `updateUser` returns, never the Firestore copy,
-  which can disagree with Auth on older docs (and may be empty). The admin reads the
-  result off `NewAccountDialog` (title `employees_passwordReset`, caption
-  `employees_newPasswordIssued`). Both gates
-  (`splash_controller.dart`, `sign_in_controller.dart`) route
-  `active && passwordResetRequired` to `AppRoutes.changePassword` AFTER the
-  unchanged `invited` and `!isActive` checks (so an inactive flagged account is
-  still signed out) and KEEP the session; sign-in also **clears the identity
-  cache** on that branch, because a stale `AuthCache` hit lets a cold start
-  fast-path past the screen. `ChangePasswordScreen` (`auth/screens/`) calls
-  `completePasswordReset` (`assertActiveCall`; the SAME `isStrongPassword` as
-  setup; the `setSetupPassword` policy-code mapping to `invalid-newPassword`; Auth
-  first, then the flag clear in a TRANSACTION that re-checks `active` + `uid`, so
-  a doc disabled mid-change keeps its flag; `not-required` reads as already done),
-  reauthenticates best-effort (`_renewSession`) and routes in through
-  `resumeAfterSignUp`, which now also refuses a still-flagged doc. It surfaces
-  offline through its own banner, and logs ONCE through `logger.authFailure`
-  (`AUTH-CHANGEPW`; the service does not double-file). **Log out on that screen
-  deregisters the device (`deregisterThisDevice`) BEFORE `signOut()` and restores
-  it if the sign-out fails**, the same order as account exit, because the account
-  is active and holds push, presence and Live Activity registrations. The flag is
-  in BOTH `/users` rules denylists and neither `EmployeeRecord.toMap()` nor
-  `updateEmployee` emits it — never add it to a client write path. Status never
-  moves, so `syncUsersByUid` and the Auth-access reconcile have nothing to do and
-  S1's active-to-invited revoke never fires. Builds <= 1.62.x ignore the flag and
-  simply keep the temporary password. **`completePasswordReset` in `AuthService`
-  REFUSES the temporary password** through the same
-  `_refuseIfStillTheStartingPassword` reauth probe as setup (owner call,
-  2026-09-29, reversing the earlier "the admin can just reset again" note):
-  otherwise the forced change completes on a password the admin read off
-  `NewAccountDialog`. `ChangePasswordScreen` shows it as a password-field error,
-  never a banner. The splash cached-identity fast path does
-  not read the flag: a device that signed in with the temporary password on a
-  pre-1.63 build and then upgrades keeps its cache and skips Change password until
-  it signs out — accepted, consistent with old builds ignoring the flag.
-  S4 (the invited-account re-provision reset, noted above) is a separate path
-  and this flow does not touch it. Tags: `EMP-RESETPW` (notice), `AUTH-CHANGEPW` (log-only).
-- **Employee accounts: the admin invites, the employee sets up** (P4c,
-  2026-08-02 — this REPLACED the one-time signup-code flow entirely). The
-  admin's person sheet calls `createEmployeeAccount`, which mints a **Firebase
-  Auth account** on a **random per-account starting password** —
-  `generateStartingPassword()` in `functions/employee_accounts_admin.js`, drawn once
-  per call, handed to both the create and the re-provision path, returned in the
-  response and **never persisted anywhere** (2026-08-21; until then it was the
-  shared constant `Welcome123!`) — plus a `users` doc that is `invited` but
-  **already carries the real `uid`**, and returns the email + password for the
-  admin to hand over out-of-band (the `NewAccountDialog` right after creation,
-  or the expanded roster row while that echo is still in memory).
-  **The doc is always written `role: "employee"`** (2026-08-21): the callable
-  hard-codes it in `performCreateAccount` and never reads a role off the
-  payload. **`isAdmin` was accepted-and-ignored in the
-  `assertPayloadShape` allowlist as `#compat-1.47.0`, and was RETIRED
-  2026-08-29** once the fleet reached 1.53 — it is now refused as
-  `unexpected-field`. Keep the reasoning, because it is the shape of every
-  future carve-out: `assertPayloadShape` throws on the first key it does not
-  recognise, and every admin build at or below 1.47.0 sent `isAdmin`
-  unconditionally on BOTH create and Reset password, so dropping the key
-  early would have failed both actions on every device that had not updated
-  (`docs/DEPLOYMENT.md` §4a, the superset contract). The removal was safe
-  only because the current client sends no such key AND no older build
-  remained. Don't re-add it.
-  Promotion is a separate, later edit on `edit_person_sheet.dart` once the
-  person has finished setup — you make an admin by creating them normally and
-  then flipping that toggle. The employee then
-  signs in normally; both gates see `invited` and route to
-  `AccountSetupScreen`, where they **choose their own password** and fill in
-  name/phone/consent → `completeEmployeeSetup` flips the doc to `active`.
-  **Password writes and activation now share a server lock** (2026-09-23,
-  local audit changes). The app sends `newPassword` to `completeEmployeeSetup`;
-  the callable holds `accountOperations/{uid}` across the Auth password update
-  and activation transaction. Admin re-provisioning holds the same lock across
-  its invitation re-check and starting-password reset. Duplicate creates also
-  take an email-hash lock before minting Auth. The app then reauthenticates with
-  the chosen password to replace its revoked refresh credential, BEST-EFFORT
-  (`_renewSession(label:)`): the account is already active, so a failed
-  renewal logs and completes — reporting it as a setup failure sent a retry to
-  `not-pending` on an account still holding the FIRST password.
-  The server's letter classes are Unicode (`\p{Lu}`/`\p{Ll}`) to match
-  `PasswordRequirement`; an ASCII class refused `Éric2024` behind a green
-  checklist. **The Admin SDK bypasses the console password policy**, so that
-  server check (8+, an uppercase and a lowercase Unicode letter, a digit) must stay at least as strict as
-  the console policy, which is binding config living nowhere in the repo;
-  `completeEmployeeSetup` maps Auth's `auth/password-does-not-meet-requirements`
-  and `auth/invalid-password` to `invalid-argument` `invalid-newPassword`
-  (`AuthFailureWeakPassword`) instead of an internal error.
-  `TextLimits.password` (128) matches the callable's `newPassword` cap and is
-  bound only on the two `AccountSetupScreen` fields — sign-in stays uncapped
-  deliberately; pinned by `text_limits_test.dart`.
-  `newPassword` remains optional for older builds. Re-provisioning stamps the
-  server-owned `setupRequiresPassword` flag BEFORE rotating Auth; legacy setup
-  may activate only invitations without that flag. Once flagged, it gets
-  `setup-upgrade-required` and must use the new app. Never clear the flag in a
-  client write or silently fall back to the uncoordinated password path.
-  The different-from-current-password check remains client-side. Auth and
-  Firestore are still separate stores: partial failures can leave an invited
-  account using the chosen password. Locks have no TTL or automatic takeover;
-  recovery instructions are in `docs/audits/AUDIT_ROLLOUT_2026-09-23.md`.
-  **Three `AccountSetupScreen` guards that look redundant and are not.**
-  Consent is re-checked inside `_submit`, not only by the disabled CTA — the
-  confirm-password field's keyboard submit reaches `_submit` without consulting
-  the button. An `already active` failure WALKS THEM IN rather than reporting
-  it: the password change that precedes activation landed, so the person is
-  finished, not stuck. And abandoning setup is a PLAIN `signOut`, deliberately
-  not `AccountExitController`'s teardown — an `invited` account has no push,
-  presence or Live Activity registration to remove (the rules deny it every
-  collection those write), so nothing needs the credential first. **If any
-  registration ever starts before activation, this must route through the
-  shared exit path instead.**
-  **The password itself is validated TRIMMED** — `completeAccountSetup` stores
-  `newPassword.trim()`, so checking the raw text let `"Aa1!bcd "` pass the
-  8-character rule and set a 7-character password. The strength meter and the
-  requirements checklist read the same trimmed value.
-  **The "must differ from the starting password" rule STILL EXISTS, but it is
-  no longer a string comparison.** It used to reject `kDefaultStartingPassword`
-  by name in `account_setup_screen.dart`. That constant went on 2026-08-21 with
-  the shared password, and the check was deleted with it on the reasoning that
-  "a random password leaves no constant to *accidentally* re-choose". **That
-  reasoning covered only the accidental case and left a real hole**, closed the
-  same day: the employee is reading the starting password off a message while
-  they fill this form, and retyping it is the path of least resistance. Every
-  generated password satisfies `AuthValidators.newPassword` BY CONSTRUCTION —
-  12 characters with an uppercase, a lowercase and a digit is exactly
-  `PasswordRequirement.allMetBy` now that `symbol` is gone — and
-  `updatePassword` accepts a no-op, so setup would complete and leave the
-  account `active` on a credential the admin still holds, while
-  `auth_setUpYourAccountBody` promised them "the temporary one stops working
-  once you finish".
-  **The replacement is `AuthService._refuseIfStillTheStartingPassword`**, which
-  reauthenticates with the typed value BEFORE the setup callable: reauth succeeds
-  only while that value is still the account's current credential, so success
-  means they retyped what they were given →
-  `AuthFailureStartingPasswordReused`, surfaced as a FIELD error on the
-  password. The client never sees the generated password, so it cannot compare
-  strings — it tests instead. Three things about it are load-bearing:
-  it lives in the SERVICE, not the screen, because there are two routes into
-  setup (`login_screen.dart`, which holds the typed password, and a cold start
-  through `SplashScreen`, which does not) and a screen-level check would cover
-  only the first; a wrong-password refusal is the PASS case and must accept all
-  three codes (`wrong-password`, `invalid-credential`,
-  `invalid-login-credentials`) or setup dead-ends; and any OTHER reauth error
-  must be rethrown, never treated as "looks different", or a network blip waves
-  through the exact case this exists for. It checks the TRIMMED value, since
-  that is what gets stored. Don't re-add a name-based comparison (there is no
-  constant), and don't reintroduce a shared default.
-  (`PasswordRequirement.symbol` went the same day; the policy is 8+ characters
-  with an uppercase, a lowercase and a digit.)
-  A failure *after* the password change deliberately does **not** revert
-  it: the new password is the one the person just chose and typed twice, so
-  leaving them `invited` with a working password beats resetting them to the
-  starting password (the next sign-in routes back to setup, which never assumes
-  the current password is the starting one). Re-running create on a still-`invited`
-  person **resets their password** — that IS the "never signed in / lost it"
-  path — but it refuses with `email-exists` once someone has set up. **That
-  refusal resolves the target by `uid`, not by email, and the password rotation
-  happens AFTER the doc-level transaction claims the person as still-`invited`
-  (`resetProvisionedPassword`, split out of `provisionAuthAccount` for exactly
-  this).** Both halves are load-bearing and both were bugs: `users.email` is
-  admin-editable, and the two stores can still disagree on any doc edited
-  before `changeEmployeeEmail` existed (nothing back-fills those), so an
-  email-only check can clear a doc that is NOT the account Auth hands back —
-  which reset a live employee's password and minted a second `users` doc
-  carrying their uid, and `syncUsersByUid` then DELETED their `usersByUid`
-  bridge, locking them out of everything. The transaction therefore also
-  refuses when the uid already belongs to another doc (the rules' `allow create`
-  uid denylist restated for the one path that bypasses rules). And resetting
-  before the claim meant a setup committing in that window left the person
-  active on a password nobody told them had been reverted.
-  The former post-transaction reset race is closed by `withAccountOperation`
-  and the legacy setup barrier described above. Keep the lock held through the
-  Auth call; releasing at the Firestore commit would reopen that race.
-  `deleteEmployeeAccount` likewise
-  only works while `invited` (transactional, so a setup that commits first makes
-  the delete refuse); after that the no-delete invariant applies and disable is
-  the only removal. Provisioning **rolls back**: if the Firestore write fails
-  after the Auth account is created, that Auth account is deleted — but only if
-  *we* just minted it — since an Auth account with no `users` doc is a sign-in
-  `SplashScreen` can't resolve and no admin surface can see.
-  **The security posture is weaker than the codes it replaced, deliberately and
-  with the owner's sign-off — and this assessment has been re-priced twice, so
-  read the date on it.** While the starting password was the shared constant
-  `Welcome123!` it was known to everyone forever, so between creation and first
-  sign-in anyone who merely knew an employee's email address could sign in as
-  them; what stopped the race winner going further was `completeEmployeeSetup`'s
-  `email_verified` guard (added 2026-08-08), which demanded control of the
-  MAILBOX and not just knowledge of the address. **The shared constant and that
-  guard were removed TOGETHER on 2026-08-21** — the random password is what pays
-  for dropping the guard, so never bring back a shared default without
-  reinstating a mailbox check, and never cite this note as precedent for
-  deleting one elsewhere. The address alone now buys nothing, because the
-  password is a real secret.
-  **The residual risk is NOT zero and must not be written up as closed: whoever
-  holds the address AND the generated password can still activate the account
-  before the intended employee does.** What improved is that this is now a
-  secret rather than a value printed in the source and rendered on every pending
-  roster row — the race itself is still there. Two things bound it. The worst
-  case shrank, because a pre-empted account is always a plain `employee` now
-  (it could previously be provisioned `isAdmin: true`, and an admin reads the
-  whole `/clients` PII collection); and an `invited` user is granted **nothing**
-  by `firestore.rules` — no clients, no appointments, no peers — so reaching the
-  setup screen is all a race winner holds until the callable lands. The rest is
-  operational, not technical, and belongs in the onboarding instructions:
-  **create the account at the moment you hand the credentials over, not weeks
-  ahead.** Client side there is no mailbox step left to look for —
-  `verify_email_panel.dart`, `AuthService.sendVerificationEmail` /
-  `refreshEmailVerified` / `isEmailVerified` and `AuthFailureEmailNotVerified`
-  were all deleted on 2026-08-21. One deliberate remnant: `_mapSetupError`
-  still maps the callable's `email-not-verified` message onto
-  `AuthFailureSetupNotAvailableYet`, purely so a ROLLED-BACK backend under a
-  shipped build degrades to an `isExpected` failure with a sentence the
-  person can act on, rather than `AuthFailureUnknown` and a non-fatal per
-  retry. It is named for what it means to the user, not for the retired
-  guard, because this build has no verification UI left to satisfy. `create_account_screen.dart`, both `accept_invite_*` screens,
-  `CodeEntryBoxes`, `signup_code_dialog`, `InvitePreview` and the
-  `revokeInvite`/`previewInvite` callables are all **deleted** — there is
-  nothing left to "accept" in THIS build, which is why sign-in's bottom prompt
-  went with them. **The backend half is gone too, as of 2026-08-08**: once every
-  device was on 1.40+, the whole `#compat-1.37.1` shim was retired —
-  `invites.js`, `signup_code_utils.js`, the `createEmployeeInvite`/
-  `redeemSignupCode` callables, the `signupCodes` collection's rules block and
-  TTL entry, and the two `allow delete` grants. There is no code-based invite
-  anywhere in the stack and none should be reintroduced. Design:
-  `docs/archive/redesign-subdocs/2026-08-02-p4c-HANDOFF.md`.
-- **An employee's email is their SIGN-IN identity, so an edit to it moves BOTH
-  stores or neither** (2026-08-04, which re-enabled a field that had been
-  read-only since P4c). The joining callable is `changeEmployeeEmail`
-  (`functions/employee_accounts_self.js`), and `FirebaseEmployeesRepository
-  .updateEmployee` is its ONLY caller: it reads the stored doc first and, when
-  the email actually changed **and** the doc carries a `uid`, runs the callable
-  **before** its own Firestore write, which then merely re-states what the
-  server committed. The order is the whole fix — a Firestore-only change left
-  the person signing in at the old address while every admin surface showed the
-  new one, and desynced the two stores `createEmployeeAccount` joins on (see the
-  uid-not-email refusal above). Keep the call **inside** `updateEmployee` rather
-  than exposing it on `EmployeesRepository`: "an email edit always moves Auth
-  too" is then a property of the one save path, not a second method a call site
-  can forget to pair with it.
-  **Server-side the order is Auth FIRST, Firestore second, with a revert.**
-  Auth is the store that owns sign-in and the only one that can genuinely refuse
-  a duplicate, so it must never be the one left behind; if the doc write then
-  fails, the Auth email is put back and a failed revert `logger.error`s the
-  uid + docId (never the addresses — emails are PII). `performChangeEmail`'s
-  transaction re-checks BOTH the previous email and the uniqueness the
-  pre-flight checked, and raises `email-changed` on a concurrent edit, which the
-  client surfaces as the same "try again" its own transaction guard does.
-  A doc with **no** `uid` still takes the direct client write — there is no Auth
-  account to join, and that is the one path allowed to write `email` alone.
-  **The employee is pushed a `kind:"emailChanged"` notice naming the new
-  address**, after the commit and best-effort (`notifyEmailChanged`, through the
-  shared `sendToEmployee`). It is a courtesy, **not** a guarantee — no live FCM
-  token, no notice — so the admin still has to tell them; don't write it up as
-  if the person is reliably informed.
-- **A displayed starting password is a CREDENTIAL — state-only, never logged,
-  never persisted.** It lives in widget/controller state and dies with the
-  surface, keyed to the account it belongs to (`_credentialsFor`, so a recycled
-  `State` can't show one person's password on another person's row). It is never
-  passed to `logger.*` (auth catch sites log through `logger.authFailure`, whose
-  breadcrumb carries only the label and `failure.runtimeType`), never
-  interpolated into a notice or an error message, and never written to
-  SharedPreferences or secure storage. The **"Copy both"** clipboard action on
-  the new-account dialog and on the roster row is the ONE sanctioned egress — it
-  is the feature. Both go through `copyCredentialsToClipboard`
-  (`employees/widgets/fields/credential_line.dart`), which is the single owner
-  of that payload format — never re-inline `'$email\n$password'` at a call
-  site, or the two surfaces can put different things on the clipboard. The
-  `CredentialLine`, `CopyCredentialsButton`, `kMaskedCredential` and
-  `credentialPanelDecoration` beside it are shared for the same reason — the
-  whole surface, not just the payload. **The "is there a password" fact is
-  ONE nullable `String?`, threaded end to end** (2026-08-21): the same value
-  picks the clipboard payload, the button's label (Copy both / Copy email)
-  and whether the line renders `kMaskedCredential`. It was briefly a
-  `hasPassword` bool defaulting to `true` alongside the nullable, which is
-  the shape to avoid — the two could disagree, so a button could say "Copy
-  both" over an email-only clipboard, and a new surface holding no password
-  inherited the wrong label with no compile error. Both params are REQUIRED
-  for that reason; don't re-add a default. They were separate copies and had already drifted twice: the two
-  confirmed-state icons disagreed, and the dialog tinted its panel
-  `surfaceContainerHighest`/`r8` against the roster row's `sheetRow`/`r12`, so
-  the same credential pair rendered on two different fills in the two places an
-  admin reads it. Add a new credential surface by calling these, never by
-  re-deriving the control or the tint.
-- **`EmployeeFormActivity` tracks busy state as SETS OF DOC IDS, not booleans**
-  (`savingIds`, `deletingAccountIds`). The notifier is app-wide but its surfaces
-  are not: the roster can show several expanded `PendingInviteTile`s at once,
-  each with its own Reset and Remove. A single flag made every row claim to be
-  busy when any one was, and — worse — made `_save`'s reentrancy guard refuse a
-  *different* employee's action, which `EmployeeSaveBusy` then dropped with no
-  spinner and no notice. **So `_save` takes a `docId` and guards per key:** the
-  same person twice is a double-tap and must be refused; a different person is a
-  real action and must proceed. `isSaving` survives as an `isNotEmpty` getter
-  for the two person sheets (modal, one at a time). Its sibling
-  `isDeletingAccount` has **no** in-app caller — the sheets have no
-  delete-account affordance, only `PendingInviteTile` does, and it correctly
-  asks the id-keyed form — so it is an aggregate read for tests alone; don't
-  wire a surface to it without re-checking that the surface really is modal. A row
-  asks `isSavingId(id)`/`isDeletingAccountId(id)` through a Riverpod `select`,
-  so it rebuilds only when its OWN state flips. A brand-new person keys on `''`
-  — correct, not a gap, since the invite sheet is modal. Never collapse this
-  back to booleans, and never "fix" a busy-state bug by adding a flag at a call
-  site instead.
-  `updateEmployee`'s `emergency` write (`users/{id}/private/emergency`) runs
-  INSIDE the same `_save` as the users-doc write, so the one Save button keeps
-  one in-flight flag and a failure on either write surfaces once.
-  `deleteAccount` reports a server refusal (the person finished setup
-  meanwhile) as `AccountDeleteFailed`, never as success — the live stream has
-  flipped the row to Active by the time the notice lands.
-- **The deep-link dispatcher is the single `app_links` consumer, and it MUST
-  skip any URI carrying the `homeWidget` query param.** `classifyDeepLink`
-  (`core/deep_links/deep_link_target.dart`) returns `IgnoredLink` for it, with
-  or without a value. That skip is load-bearing, not tidy: once `app_links` is
-  listening, BOTH plugins observe the same `openURL`, so without it every
-  widget, Live-Activity and Siri tap opens the appointment sheet **twice**. The
-  param and the `home_widget` tap channel retire **together, later** (see
-  `ios/CLAUDE.md`) — dropping either one alone re-breaks widget taps. On iOS,
-  `FlutterDeepLinkingEnabled` stays **false**: that is the correct setting *for*
-  `app_links`, since Flutter's own handler would otherwise consume the URL
-  first. P4c reduced the dispatcher to the **appointment branch alone**: an old
-  `esproschedule://invite?code=…` link now falls through to `IgnoredLink`, which
-  is deliberate — those links can still be sitting in someone's messages and
-  must not reach a screen that no longer exists. `awaitLoginRoute` and the whole
-  invite-branch route race went with it. **`TopRouteObserver` is still
-  registered on `MaterialApp.navigatorObservers`, and it now DOES override
-  `didRemove` (B4, 2026-08-19) — the guard is `identical` on the `Route`
-  object, NEVER the route name.** That distinction is the whole fix:
-  `pushNamedAndRemoveUntil` (the account-disabled path) pushes *before* it
-  removes, so a name-based guard lets a removed older route that happens to
-  share the just-pushed route's name (two `/login` entries) overwrite the top
-  with whatever sat beneath the removed one — the observer then reports a route
-  no longer on the stack. The override earns its place because `hub_shell.dart`
-  calls `nav.removeRoute(this)` on its `HubTabRedirectRoute` shim *while that
-  shim is the top route* (post-frame, after handing off to the live shell);
-  without handling that, the observer stays stuck on a route that no longer
-  exists. Tracking the `Route` object rather than just its name is what makes
-  the identity test possible — `currentRouteName` is derived from it. Pinned by
-  `test/core/navigation/top_route_observer_test.dart` ("removing the current
-  top route falls back to the route beneath", "removing a lower route does not
-  overwrite the current top route", and "pushNamedAndRemoveUntil keeps the
-  just-pushed name even when a removed route shares it"). Leave it and this
-  note in place.
-- **`termsAcceptedAt` / `locationConsentAt` are function-owned `users`
-  fields.** They are on the `/users` update **denylist** in `firestore.rules`
-  beside `uid` — **three fields**, since P4c deleted `codeExpiresAt` everywhere
-  (same posture as `jobCount`/`wave` on clients), so a compromised admin session
-  can't forge a consent record; `EmployeeRecord.toMap()` must never emit them, or a future
-  whole-record `set()` becomes an opaque `permission-denied`. **`toMap()` omits
-  `uid` and `status` for the same reason** — `uid` is on that denylist and
-  `status` belongs to deactivate/reactivate; the repository's field-scoped
-  allowlist in `updateEmployee` is the real write path, and `toMap()` exists
-  only to round-trip the editable fields. **`email` is omitted too** (2026-08-15)
-  for a sharper reason: it is a SIGN-IN identity and moves through
-  `changeEmployeeEmail`, which owns Auth and Firestore together, or not at all
-  — a whole-record write carrying it would rewrite the doc while Auth kept the
-  old address, and it is the very key `updateEmployee`'s uniqueness query reads.
-  It was emitted un-normalized, which was latent only because nothing in
-  production calls `toMap()`. **The denylist is on `allow create`
-  as well as `allow update`**: without it the same admin session that cannot
-  edit `uid` could simply create a doc carrying a forged one, and a second doc
-  claiming an existing employee's uid repoints the `usersByUid` bridge every
-  rules gate resolves through.
-  `completeEmployeeSetup` writes the consent stamps **only when the payload
-  flags are actually `true`** — stamping unconditionally would mint a
-  legally-flavoured consent record for someone who never saw the checkbox.
-- **The consent sentence LINKS to the terms, and the link is what makes the
-  stamp mean anything** (2026-08-05, restored 2026-08-08 after a revert dropped
-  it). Ticking the box stamps `termsAcceptedAt`, so the person must be able to
-  read what they are accepting; the setup screen used to demand acceptance of
-  terms that were published nowhere and tappable nowhere. `_ConsentRow`
-  (`account_setup_screen.dart`) builds the sentence by locating
-  `auth_termsOfServiceLink` **verbatim inside**
-  `auth_termsAndLocationConsent` and turning that run into the link, so the two
-  keys must stay consistent **in every locale** — a translation that rewords the
-  phrase silently renders a plain sentence with no link (`indexOf < 0` falls
-  back to one plain span on purpose: a missing link beats half a sentence or a
-  `-1` substring crash). It is a `StatefulWidget` solely to own and dispose the
-  `TapGestureRecognizer`; one built in `build` leaks on every rebuild. A tap on
-  that run is claimed by the recognizer, so it opens the terms instead of
-  toggling the checkbox; the rest of the tile still toggles.
-  **The per-locale half is pinned by `test/l10n/new_success_strings_test.dart`**,
-  which asserts the substring holds in every `supportedLocales` entry — the
-  widget test in `account_setup_screen_test.dart` only ever exercises the
-  default locale, so a French re-translation would otherwise drop the link with
-  nothing failing.
-  **Settings › Legal is the DURABLE route** — setup is shown once, only to a new
-  employee, and never again, so `LegalSettingsCard` carries a Terms of Service
-  row beside Privacy Policy. Both point at `AppUrls`
-  (`privacyPolicy`, `termsOfService`); the sources are
-  `docs/legal/privacy-policy.html` / `terms-of-service.html`, published to the
-  `es-pro-legal` GitHub Pages repo, where **the privacy policy is the index** —
-  which is why the terms page links to it by absolute URL rather than a relative
-  `privacy-policy.html` that would 404. Neither page is bundled: if the Pages
-  repo drifts from `docs/legal/`, the consent record points at the wrong text.
-- **Account re-provisioning REFRESHES the pending doc's editable fields, so
-  `createAccount` takes the whole `EmployeeRecord` — never loose scalars.**
-  `performCreateAccount`'s existing-doc branch *updates*
-  `name`/`firstName`/`lastName`/`phone`/`colorValue`/`jobTitle`/`role` with
-  whatever it is handed, so a call site that omits one silently wipes the
-  pending person's phone or job title. `EmployeeFormController.createAccount`
-  therefore takes a record and destructures it in ONE place (the repository
-  method below it is the only place that speaks named strings — a new field in
-  the server's re-provision update set must still be added to that hand-written
-  destructuring, with no compile error if it is missed), and
-  `PendingInviteTile` passes `widget.employee` whole — the omission is
-  unexpressible rather than merely documented. Don't "flatten" the controller
-  signature back to named strings: that shape was a trap that bit the old Show
-  code and Resend equally, and a new pending-user field had to be threaded
-  through four layers with no compile error if you missed one.
-  Unlike the retired code flow, **expanding the row is NOT a re-issue** — it
-  makes no server round-trip and rotates nothing. As of 2026-08-21 there is also
-  nothing left for it to render: the starting password is random per account and
-  deliberately **not persisted** (a live plaintext credential must not sit in
-  Firestore, where every admin session, backup and export can read it), so a row
-  holding no server echo renders the password masked with a hint that **Reset
-  password** issues a new one, and its Copy pill copies the **email alone**.
-  Only Reset password re-provisions, and only that rotates what the person was
-  given — immediately after a create or a reset the row still holds the echoed
-  pair and shows and copies both, which is the moment that actually matters.
-- **`watchEmployees()`** now filters `status == 'active'` — it no longer returns invited or
-  disabled users. Use `watchAllUsers()` (admin-only) if all statuses are needed.
-  All three `users` streams are bounded by the shared `_userStreamLimit`
-  (**1000** as of 2026-08-19, raised from 500) and WARN at the cap, so a
-  runaway collection can't stream an unbounded snapshot to every client —
-  add the bound AND the warn to any new one. **The appointment range streams
-  are bounded too** (`_rangeStreamLimit`, **3000**) and WARN when a snapshot
-  comes back at the cap — past it the calendar is showing a prefix of the
-  range, which the grid dots and agenda would otherwise misreport in silence.
-  These ceilings were **removed** by the 2026-08-19 cleanup commits and
-  restored the same day at higher numbers: the paging that replaced them fixed
-  the silent truncation correctly, but an unbounded live `snapshots()` — held
-  open at once by the calendar, the day route, the drawer badge, the roster
-  reducer and the dashboard, and re-established per month page — is a
-  different risk class from an unbounded one-shot `.get()`, and every warn had
-  gone with them. **Bounded-and-loud, never unbounded, and never bounded-and-silent.**
-  `watchEmployees` deliberately has **no
-  `orderBy`**: an `orderBy('name')` makes Firestore exclude docs
-  missing `name`, which would drop an unnamed active employee out of the
-  picker (and silently change who can see a visit). `watchAllUsers` no longer
-  orders either, for the same reason — all three sort in Dart through
-  `_toSortedEmployeeRecords`, which is also where the cap warn lives. That
-  asymmetry is also why it isn't derived from `allUsersStreamProvider`. **`employeesStreamProvider`
-  is `autoDispose`** (2026-08-08): its consumers are the two transient
-  appointment sheets plus the Dashboard, so without it opening the
-  add-appointment sheet ONCE pinned a second live `users` listener for the rest
-  of the session, alongside the always-on `watchAllUsers()`.
-- **`users.name` is composed, never abandoned.** P4 added `firstName`/`lastName`,
-  but `watchAllUsers()` orders by `name` and Firestore **excludes docs missing
-  the orderBy field**, so a user whose `name` went empty vanishes from the admin
-  roster. Every write path builds it through `composeEmployeeName`
-  (`employees/domain/policies/employee_name_policy.dart`), which falls back to
-  the stored name and then to `'—'` (`kUnnamedEmployee`) — it can never return
-  `''`. That fallback is an EM DASH, and the en dash joining an employee's
-  working hours is an EN dash; a 2026-08-19 cleanup flattened both to a plain
-  hyphen and rewrote the tests to match, so the tests pinned the regression
-  rather than catching it. Both are restored and re-pinned — treat a
-  mechanical non-ASCII sweep over `lib/` as a change to shipped strings, not
-  to comments.
-  **Rendering side: read `EmployeeRecord.displayName`**, the getter that
-  delegates to `displayEmployeeName` (mirroring `ClientRecord.displayName` →
-  `ClientNamePolicy.displayFor`) — the four-argument unpack was spelled at four
-  render sites. The free function stays public for the one caller holding a raw
-  map rather than a record (`account_status_provider.dart`). The edit sheet
-  seeds First from the whole stored `name` when both halves are empty, so a
-  legacy single-name doc round-trips unchanged. **`EmployeeFormValidator` takes
-  the two halves separately, never the composed name** — `composeEmployeeName`
-  falls back and so can never return empty, meaning a composed value cannot
-  express "the last name is missing". Its `requireLastName` flag is the one real
-  difference between the two person sheets: the invite demands both halves, the
-  edit leaves the last name optional so a legacy single-name doc still saves.
-- **`jobTitle` is not `role`.** `role` stays the ACCESS flag
-  (`admin`/`employee`) and is what `firestore.rules` gates on; `jobTitle`
-  (Lead tech · Technician · Apprentice · Dispatcher) is what someone does on
-  site and gates nothing. `JobTitleChips` therefore has no side effect on the
-  ACCESS toggle — conflating them would make picking "Dispatcher" silently
-  grant or revoke admin.
-  **One title DOES gate something, and only this: `JobTitle.isAssignable`
-  (2026-08-24) is false for `dispatcher`**, who schedules the work rather than
-  going out on it. `EmployeeRecord.isAssignable` forwards it and
-  `assignableEmployeesProvider` (`employees_providers.dart`) applies it to a
-  set — the assignee pickers and the dashboard's per-person job numbers read
-  THAT provider, never the raw `employeesStreamProvider`, or a dispatcher sits
-  at a permanent zero on the workload list AND adds their `maxJobsPerDay` to
-  every daily-capacity bar. It is deliberately DERIVED rather than filtered
-  inside `employeesStreamProvider` or the repository: `_resolveActiveEmployees`
-  (`event_details_controller.dart`) reads `watchEmployees()` straight for the
-  retain check, so a dispatcher already stored on a job must still read as
-  ACTIVE there or removing them is undone on every save. Still not an access
-  flag — a dispatcher's own visibility is unchanged, and the edit picker still
-  offers one already on a job (see `offerableAssignees`, `.claude/rules/appointments.md`).
-  **The exclusion is ABSOLUTE — there is no personal-block or day-off
-  carve-out** (owner call, 2026-08-24, asked and answered when a review raised
-  it). A dispatcher is not offered on a personal block either, so a day off
-  cannot be booked FOR one; the exclusion is about the person, not about the
-  kind of entry. Consequence to keep in mind rather than "fix": assignees are
-  required on every appointment and an employee sees only appointments whose
-  `employeeIds` contain them, so a dispatcher has nothing on their own
-  calendar. That is the accepted shape.
-- **`workingDays` is Sunday-indexed** (`[0]` = Sunday), matching
-  `weekStartForLocale` and `weekdayLabelsForLocale`, which both read intl's
-  Sunday-indexed `NARROWWEEKDAYS`. Storing Monday-first would put a `% 7`
-  conversion at every read and write, and one missed conversion shifts a whole
-  roster by a day. **That conversion therefore has ONE owner,
-  `sundayIndexOf(day)` in `calendar/domain/month_grid.dart`** — it was private
-  there and had grown three more hand-spellings (the dashboard's capacity
-  reducer, `availabilityConflictPolicy`, the daily-load chart's bar labels),
-  each with its own restatement of the "DateTime.sunday is 7" comment. Never
-  write `day.weekday % 7` at a call site. Display order comes from
-  `orderedWorkingDays`, whose cells carry their own `storedIndex` — a widget
-  must write back through that, never through the visual position.
-  `formatWorkingDays` (the detail page's DAYS row) takes its `labels`
-  **Sunday-indexed and unrotated** (`weekdayAbbreviationsForLocale`), because it
-  indexes them by `storedIndex`; passing a display-ordered list silently
-  mislabels every day. **Naming a SET of stored day numbers as prose is
-  `joinWeekdayNames(context, days)`** (beside `formatWorkingDays`), which
-  resolves the labels itself precisely so that unrotated rule can't be got wrong
-  at a call site — the dashboard's Attention list and My details both report
-  availability conflicts and each carried an identical private copy.
-  **The daily-cap picker is shared too: `showMaxJobsPicker` + `kMaxJobsOptions`
-  + `maxJobsLabel`**, same file. The admin Team sheet and My details offer the
-  same `maxJobsPerDay` field, and a hand-mirrored option list plus `noCap` label
-  rule is exactly the drift the `AvailabilityPanel` extraction had just ended
-  one row over. This bullet claimed all three were extracted together while
-  only the option list actually was; `maxJobsLabel` was added 2026-08-15 to make
-  it true, and the ternary it replaced had been re-spelled at three sites.
-  **The read-only detail view deliberately renders NO row for an uncapped
-  person** rather than "No cap" — a read-only body omits empty sections instead
-  of showing a placeholder — so it does not call the helper.
-- **A user-doc rules cap must not be tighter than the widest value a shipped
-  write path can produce.** `createEmployeeAccount` accepts `phone` up to 40
-  chars while `TextLimits.phone` is 24, so `isValidUserData` caps phone at
-  **40** — a tighter cap would make every server-created doc with a longer phone
-  permanently un-updatable, including by `deactivateEmployee`. Rules caps mirror
-  the *server* limit; the client caps with `TextLimits`. **Retiring a callable
-  does NOT license tightening a cap it set**: the docs it created outlive it, so
-  the 40 survives `createEmployeeInvite` (deleted 2026-08-08) on the strength of
-  the rows still in the collection. Same reasoning for the
-  P4b `emergencyPhone`: rules cap **40**, client caps `TextLimits.phone`.
-  **The converse also holds: a client cap must not be LOOSER than the callable's,
-  or the field silently accepts a value the callable rejects as
-  `invalid-argument`** — which reaches the user as an unexplained "Something went
-  wrong" they cannot fix by editing. That is why the `users` name halves use
-  `TextLimits.employeeNameHalf` (**100**), matching `createEmployeeAccount` and
-  `completeEmployeeSetup` exactly, rather than the 200-char `TextLimits.firstName`
-  used for clients. `name` is the JOIN of those halves, so it legitimately
-  reaches 201 — its server and rules caps are **250**, sized to the composed
-  value and never to a half. Same reason for **`TextLimits.authEmail` (254)**:
-  an employee's email is a sign-in identity and passes through
-  `createEmployeeAccount`/`changeEmployeeEmail`, which both
-  `requireString(..., 254)`, so the two employee sheets bind to it rather than
-  to the 320-char `TextLimits.email` the client records use.
-  **`test/core/validators/text_limits_test.dart` now reads `firestore.rules`
-  (and both `employee_accounts_*.js` modules) back and fails the build if a client cap ever
-  exceeds its rules or callable cap.** Dart, CEL and JS cannot share a constant,
-  so that test is the only mechanism turning this rule into something enforced
-  rather than merely written down — four appointment pairs are currently
-  EXACTLY equal, so a one-character bump on either side breaks every long save
-  with an opaque `permission-denied`.
-  **It reads `functions/wave/mappers.js` back too, for `IMPORT_FIELD_CAPS`** —
-  a THIRD hand-mirror of `isValidClientData`, and the one where the failure is
-  quietest. The Wave import writes with the Admin SDK, which BYPASSES the
-  rules, so a cap above the rules cap does not fail the import: it writes a
-  client doc the APP can never update again, every later save landing as
-  `permission-denied` on a field nobody typed. Add a new capped import field to
-  that map and the test picks it up automatically.
-- **Phone numbers are stored FORMATTED, not as raw digits** (owner call,
-  2026-08-02). `PhoneInputFormatter` (`core/validators/phone_format.dart`) masks
-  every phone field as it is typed, so `phone`, `emergencyPhone` and each
-  contact phone persist as `(514) 555-1234`. Two deliberate pass-throughs, both
-  load-bearing: anything containing `+` is returned untouched (an international
-  number has no fixed 10-digit shape, and bracketing its first three digits as
-  an area code would be wrong), and digits past the tenth are appended verbatim
-  rather than truncated, so an extension survives. Consequences to keep in
-  sync — **`launchPhoneCall` strips back to digits** (keeping a leading `+`)
-  before building the `tel:` URI, because `Uri` percent-encodes the brackets and
-  space into a path some dialers reject; and `ClientSearchPolicy.digitsOnly`
-  already normalized on both sides, so phone search is unaffected.
-  **Legacy and Wave-imported docs were NOT formatted**, which stayed invisible
-  until a person's `name` became their phone number verbatim and Wave's
-  customer list started mixing "(514) 234-0818" with "4506220931".
-  `functions/scripts/backfill-client-phone-formatting.js` is the cleanup
-  (idempotent, `--dry-run`). It formats **only** a NANP number — ten digits
-  with no `+`, or eleven beginning with 1, whose leading digit is the `+1`
-  country code and is dropped. Deliberately narrower than `formatPhoneNumber`,
-  whose progressive mask renders the eleven-digit form as "(151) 455-5123 4"
-  (reading the country code as the area code) and would rewrite a half-entered
-  number into a shape claiming to be complete. The `+` bar on the ten-digit
-  branch is load-bearing: "+49 30 123456" is also ten digits.
-  **`TextLimits.phone` is 24, and it must stay above the widest string
-  `formatPhoneNumber` can emit** — `LabeledTextField` appends the
-  `LengthLimitingTextInputFormatter` **after** `PhoneInputFormatter`, so the
-  mask runs first and the cap truncates its output. At the old 15 the two
-  pass-throughs above were unreachable: a NANP number typed with its leading 1
-  formats to 16 chars, so the 11th digit could never be entered, and every
-  further keystroke re-truncated to the same 15 with no error shown. Never size
-  this cap to the 14-char happy path.
-- **The emergency contact lives in `users/{docId}/private/emergency`, NOT on the
-  users doc, and it is the one piece of person data gated to the admin AND the
-  person themselves** (owner call, 2026-08-02). Firestore rules are
-  document-level — there is no way to hide a field from someone allowed to read
-  the document — and `/users` read clause 2 deliberately lets every active
-  employee read every active peer (the crew pickers, names and colours need it).
-  On the parent doc this pair therefore shipped a **third party's** name and
-  phone to every employee's device; that person is not an app user and never
-  consented. A subcollection is the only place rules can express the grant:
-  `allow read, write: if isAdmin() || (isActiveUser() && myDocId() == userId)`.
-  **Never move these back onto the users doc, and never widen a `/users` read
-  clause to reach them.** Consequences to keep in sync:
-  `EmployeeRecord` does **not** carry them (`EmergencyContact` does, read via
-  `emergencyContactProvider`); `isAvailabilityOnlyChange()` no longer lists
-  them, because P5's self-service clause governs the users doc and these are
-  not on it; and a read
-  failure on this path means "not entitled", so a surface must render it as
-  *not shown*, never as *none on file*.
-  **The rules now make a value on the parent doc unreachable, with NO migration
-  (owner call 2026-08-04: nobody had entered one, so there was no data to move,
-  and the feature is treated as clean-slate).** `allow create` bans both keys
-  outright; `allow update` routes them through **`emergencyFieldNotSet(f)`**,
-  which permits a write that leaves the field ABSENT and refuses one that
-  leaves a value. That asymmetry is the whole design and must not be
-  "simplified" into a plain denylist entry beside `uid`: the denylist form
-  rejects any write that touches the key at all, which would reject the
-  `FieldValue.delete()` scrub `updateEmployee` still sends on every save AND
-  leave any doc that somehow carried the pair permanently un-updatable —
-  including by `deactivateEmployee`, since a partial update presents every
-  untouched field in `request.resource.data`. As written, an untouched legacy
-  value simply passes through (so the doc stays updatable) and the client scrub
-  heals it on the next save. The length caps in `isValidUserData` stay for that
-  pass-through case — they are not dead. The scrub lives in `updateEmployee`
-  and NOT in `saveEmergencyContact`, because self-service settings also call
-  the latter and their `hasOnly` allowlist would reject the extra delete keys.
-  `functions/scripts/backfill-emergency.js`
-  is **deleted**; it has nothing to do. Pinned by
-  `test/core/security/emergency_contact_rules_test.dart`, which reads
-  `firestore.rules` back (rules can't be unit-tested without the emulator).
-- **`MyDetailsScreen` (Settings › My details) is the ONLY surface where a person
-  edits their own record** — the employee detail and edit sheets are admin-only.
-  It exists to exercise the two grants a person holds over their own data, and
-  is scoped to **exactly** those: the `private/emergency` subcollection (admin
-  OR owner) and P5's self-service clause. Everything else about a person is
-  admin-owned, so a general profile editor here would fail with
-  `permission-denied`. (It was emergency-contact-only until P5, 2026-08-10.)
-  **It carries TWO save behaviours on purpose** (owner call, 2026-08-10), and
-  they must not be unified in either direction. The **identity** fields (phone,
-  emergency contact, emergency phone) sit behind a Save/Discard bar that appears
-  only once the form is dirty — they are free-text, a half-typed phone number
-  auto-committing is a bad write with no undo, and dirtiness is recomputed
-  against the stored values rather than latched, so typing a change and typing
-  it back reads as pristine again. **Availability** (days, hours, on-call)
-  applies immediately, optimistically, rolling back and surfacing a notice on
-  failure — a switch that needs confirming reads as broken. **The consequence to
-  keep: an availability write must send the STORED phone, never the identity
-  controller's text**, or toggling a day silently commits the half-typed number
-  the bar exists to prevent. Pinned by a test.
-  The admin-only SCHEDULING section is `maxJobsPerDay` and nothing else, written
-  through the ordinary admin `updateEmployee` path because that field is not on
-  the self allowlist — and it is **hidden** for a technician rather than
-  disabled, since there is no path there that could ever succeed. Role, job
-  title and crew colour deliberately stay on the Team sheet: an admin editing
-  their own role from a self-service screen is a privilege-escalation shape with
-  no product reason to exist.
-- **`EditPersonSheet` seeds the emergency pair ASYNCHRONOUSLY, and three flags
-  guard it.** The fields start blank and fill from `emergencyContactProvider`.
-  `_emergencyLoaded`: the fields stay `readOnly` and Save sends
-  `emergency: null` (leave the doc alone) until a snapshot has arrived —
-  otherwise a save merges two empty strings over a stored contact. `_emergencyDirty`:
-  until the admin types, a fresher snapshot may RE-SEED, so a stale cache-first
-  emission is corrected by the server one instead of saved back as a lost
-  update; after typing, nothing clobbers the fields. `_emergencyFailed`: a
-  failed read renders `employees_emergencyLoadFailed`, never "none on file".
-  The initial value is read with `ref.read` in `initState` rather than firing
-  the listener immediately, because that fire lands where `setState` is illegal.
-  **The reset-password credential dialog opens on the ROOT navigator**, captured
-  before the await: a drag-dismiss pops the sheet directly (`PopScope` cannot
-  veto it), and the issued password must outlive the sheet.
-- **The emergency pair is its own section, not a tail on availability.** Both
-  the edit sheet (`MonoSectionLabel` `employees_sectionEmergency`) and the
-  read-only detail view (its own `KeyValuePanel`, rendered only when non-empty)
-  group them apart from hours and access — who to call when something goes
-  wrong on site is a different question from when someone works.
-- **An employee is never deleted — disable is the only removal** (owner decision
-  2026-08-02, which withdrew a shipped delete). Deleting the `users` doc
-  orphaned every past appointment's `employeeIds` link: the visit keeps the
-  denormalized `employeeNames` and loses the crew colour and the person.
-  `syncUsersByUid` already does strictly more on disable — it disables the Auth
-  account, calls `revokeRefreshTokens`, and purges `presence/location`,
-  `fcmTokens`, every `liveActivityTokens` row and the `liveActivityCards`
-  marker. `allow delete` is withdrawn from `/users`; the Admin SDK bypasses
-  rules, so console cleanup is unaffected.
-- **Revoking a PERMISSION deletes nothing server-side, and the published privacy
-  policy now says so** (2026-08-08 audit). `presence/location` is deleted only by
-  `PresenceSyncController.unregister()` and `fcmTokens` only by
-  `unregisterCurrentDevice()`, and both are reached from exactly three places:
-  sign-out, self-service account deletion, and the server-side disable/delete
-  bridge (`functions/bridge.js`). Losing the OS permission mid-stream only runs
-  `_stop()`, which cancels the subscription and timers — no network call. That
-  matters because **the stored fix keeps rendering on the admin live map for as
-  long as it exists**: the 2 h `presenceHiddenAfter` cutoff (2026-09-13) was
-  REMOVED 2026-09-14 by owner call, so `LiveMapAggregator.groupTeam` pins every
-  fix at any age, and `staff_marker_icon.dart` has no staleness branch — a
-  day-old pin looks like a live one (only the sheet row shows the age). **A pin
-  needs its owner's `locationSharingEnabled` ON, and that gate is the backstop
-  that replaced the cutoff**: without it, presence docs written before sharing
-  became opt-in (2026-09-04) would reappear for people who never turned it on,
-  and a failed `unregister()` delete would pin someone who switched sharing off.
-  NOT SEEN now means sharing on with no fix yet. The policy used to promise
-  deletion on revocation and promise the pin disappeared; owner call was to
-  correct the TEXT rather than the code, so `docs/legal/privacy-policy.html`
-  §2, §6 and §8 now describe this behaviour exactly. **The two must stay in
-  step**: if you ever wire permission-revocation into a delete, reintroduce an
-  age cutoff, or drop the sharing gate, update those sections in the same change
-  — and republish (see below), or the site keeps describing the old behaviour.
-- **`isTestAccount` hides an account from every teammate LIST and COUNT, and
-  from no LOOKUP** (2026-09-13, for the Apple App Review account). It is an
-  ADMIN-ONLY field: a switch on `edit_person_sheet.dart`, on `updateEmployee`'s
-  patch and in `toMap()`, and deliberately absent from
-  `kSelfServiceUserFields` and `isAvailabilityOnlyChange()`'s `hasOnly`, so a
-  person cannot un-hide themselves (an ADMIN tester can clear its own flag
-  through the admin branch — accepted). No rules change: `isValidUserData` is a
-  per-key check, not a `hasOnly`. **The filter has two owners, never a call-site
-  copy.** `EmployeeRecord.isAssignable` is `jobTitle.isAssignable &&
-  !isTestAccount`, which removes the account from `assignableEmployeesProvider`
-  (both assignee pickers, the dashboard's workload, capacity and availability
-  flags, the picker's availability reducer), the calendar crew filter, the
-  time-off clash swap pool and a book-again crew in one place; and
-  `LiveMapAggregator` (`join`/`groupTeam`) removes it from the map, its sheet
-  and the drawer's on-the-clock badge. The Team roster splits it into a
-  collapsed `TestAccountsSection` at the bottom rather than dropping it —
-  without that an admin could never reach the switch again. **Never filter a
-  LOOKUP**: `employeeColorMapProvider`/`employeeNameMapProvider`, the detail
-  sheet's and My details' own-record reads, `usedColors` (a tester's colour is
-  still taken) and the clash dialog's `_rosterName` keep it, or crew names and
-  colours blank on jobs already assigned to it. `offerableAssignees` still
-  offers a tester STORED on a job, so hiding it from the picker cannot strand
-  it there. `neverSetUpAccountsProvider` keeps it too — that list is a security
-  flag about a starting password, not a teammate listing. It reads
-  `allUsersStreamProvider` for the same reason: `employeesStreamProvider`
-  filters to `active`, so the flag would be permanently empty and never fire,
-  and `assignableEmployeesProvider` would also hide a pending dispatcher. Its
-  sort is oldest-first with a null `createdAt` LISTED LAST, never dropped — the
-  field is function-owned and absent on legacy docs, and "unknown age" must not
-  become "not shown". History, the tester's
-  own session and every server-side push are untouched.
-- **`docs/legal/*.html` are SOURCES, not the published pages.** The live site is
-  the separate `gvogas/es-pro-legal` GitHub Pages repo, where
-  `privacy-policy.html` is published as **`index.html`** (which is why the other
-  pages link to the privacy policy by absolute root URL — a relative
-  `privacy-policy.html` 404s). The four files must stay **byte-identical** across
-  the two repos; a 2026-08-08 audit found the support page still describing the
-  signup-code flow deleted in P4c, months after the app stopped having it.
-  Editing `docs/legal/` alone changes nothing a user can read.
-- **A disabled or invited employee's colour is TAKEN.** `usedColors` reads
-  `allUsersStreamProvider`, never `employeesStreamProvider` — the latter filters
-  to `status == 'active'`, so a disabled employee's colour was offered again and
-  two people ended up the same hue, which is what the appointment bar and the
-  calendar dots key on.
-- **`allow update` on `/users` has TWO branches as of P5 (2026-08-10), and the
-  brackets around them are load-bearing.** It reads
-  `(isAdmin() || (isSelf() && isAvailabilityOnlyChange())) && <denylist> &&
-  emailMovesThroughAuth() && <emergency guards> && isValidUserData(...)`.
-  **`emailMovesThroughAuth()` is part of that conjunction and this quote
-  dropped it until 2026-09-05** — a reader reconstructing the rule from the
-  doc loses the guard that forces every email change through
-  `changeEmployeeEmail`, so the Firestore row and the Auth account can diverge. Without the outer parentheses the
-  denylist and the validator bind to the self branch alone and an admin write
-  skips both. `isSelf()` gates on `isActiveUser()` as well as
-  `resource.data.uid == request.auth.uid`: a **disabled** account keeps its Auth
-  credential until `syncUsersByUid` revokes it, and an **invited** one is
-  mid-setup with `completeEmployeeSetup` owning its doc — neither may self-edit,
-  and both must fall through to the admin branch.
-  **`isAvailabilityOnlyChange()` uses `hasOnly`, so it is a whitelist of the
-  ENTIRE diff, not a per-key permit**: one unnamed key rejects the whole write,
-  which reaches the user as an opaque `permission-denied` on an ordinary save.
-  `kSelfServiceUserFields`
-  (`employees/domain/policies/self_service_fields.dart`) is its hand-mirror, and
-  `test/features/employees/domain/self_service_fields_test.dart` reads the rules
-  back and fails the build if the two drift — Dart and CEL cannot share a
-  constant, so that test is the only thing enforcing it. Add a key to the RULES
-  first, then to the Dart set; the reverse order ships a silent
-  `permission-denied`. `travelAlertsEnabled` and `locationSharingEnabled` are on the list
-  deliberately — a per-person notification or privacy preference is exactly the
-  category it exists for, and the second one is the ONLY thing that stops the
-  phone uploading a position, so an admin-only field would make consent
-  something the person cannot withdraw. Note the two default OPPOSITE ways:
-  absent `travelAlertsEnabled` reads as ON, absent `locationSharingEnabled` as
-  OFF. Both are also on `isAvailabilityOnlyChange`'s `hasOnly` set, so the
-  Settings toggle and the availability form can each write theirs alone.
-  **`monthEndReviewPush` is the opposite case: ADMIN-ONLY and on NEITHER
-  list** (2026-09-13). It decides who receives the month-end overdue push, an
-  operational setting rather than a personal preference, so nobody may opt
-  themselves in or out. It is written only by the admin `updateEmployee` path
-  (and `toMap`), shown on `EditPersonSheet` only while the person is an admin,
-  saved `false` whenever the admin switch is off, and absent reads as OFF. No
-  rules change was needed: `isValidUserData` is per-key and the admin
-  `allow update` carries no key allowlist.
-  **`email` must never join it** — it is a sign-in
-  identity, and Auth and Firestore move together through `changeEmployeeEmail`
-  or not at all. Neither may `maxJobsPerDay`, `role`, `jobTitle`, `colorValue`
-  or `status`: those stay admin-only on both branches.
-  The client write path is `EmployeesRepository.updateSelfDetails`, deliberately
-  **separate** from `updateEmployee` rather than a flag on it — that method's
-  patch carries `role`, `email` and the emergency `FieldValue.delete()` scrub,
-  every one of which the `hasOnly` would reject. It is a plain `update()`, not a
-  transaction (one person, one device, no concurrent writer, and see the
-  no-client-transactions rule). **Because the patch names every allowlisted key,
-  each caller must pass through the values it isn't changing** — My details
-  carries the stored `travelAlertsEnabled`, Settings carries the stored
-  availability, and both carry the STORED phone rather than in-progress text.
-  A guessed default there silently flips somebody's setting.
-- **An employee's own sign-in email moves through `changeEmployeeEmail`'s SELF
-  branch** (P5, 2026-08-10) — never a users-doc write, which is why `email` is
-  off the self allowlist. `resolveEmailChangeCaller`
-  (`functions/employee_accounts_self.js`, pure and jest-tested) is the one gate:
-  an **active admin** may move any doc, an **active employee** may move their
-  OWN, and nothing else gets through — disabled, invited, unknown role, missing
-  bridge doc, or an employee naming somebody else's docId. Widening the callable
-  past admins must never widen WHICH doc a caller can reach; that function
-  exists to make the mistake hard to write. Guard order is auth → payload →
-  identity → rate limit → work, and the per-caller budget stays: this rewrites a
-  sign-in identity.
-  **`isSelf` reports whether the caller IS the target, independent of role**,
-  because it routes the notification: an admin edit tells the EMPLOYEE
-  (`notifyEmailChanged`), a self edit tells the ACTIVE ADMINS
-  (`notifyAdminsOfSelfEmailChange` → the shared `sendToActiveAdmins`, which P6's
-  time-off requests will reuse — build new fan-outs on it rather than inlining
-  the query). An admin editing their own row is a *self* change and must not be
-  pushed a notice about what they just did. **The admin notice carries the NAME,
-  never the address**: it lands on every admin's Lock Screen and an email is PII.
-  Client side, `SelfEmailService` re-authenticates BEFORE calling — an
-  unattended unlocked phone changing the sign-in address is the account-takeover
-  primitive — and the sheet demands the address **twice**, because the Admin SDK
-  sets it with no proof of control and a typo locks the person out until an
-  admin undoes it. That ordering is pinned by
-  `test/features/settings/services/self_email_service_test.dart` (`verifyInOrder`
-  plus the half that matters: a thrown re-auth must `verifyNever` the callable),
-  the same way `completeAccountSetup`'s password-then-activate order is.
-  **The server restates it for a NON-ADMIN caller**: `assertFreshReauth`
-  (`functions/security.js`, shared with `deleteAccount`) rejects a caller whose
-  `auth_time` is over 5 minutes old, so a direct call cannot skip the client's
-  ordering. **That gate keys on the caller's ROLE (`isAdmin`), never on
-  `isSelf`** — the two are deliberately separate fields on
-  `resolveEmailChangeCaller`'s result, because an admin editing their OWN
-  roster row IS `isSelf` and yet arrives through `updateEmployee`, which has no
-  re-auth step to satisfy. Keyed on `isSelf`, that save was rejected outright —
-  and since `_changeAuthEmail` runs BEFORE the Firestore write, the whole edit
-  (name, phone, colour, availability with it) died as an opaque `stale-auth`
-  five minutes after sign-in. `isSelf` routes the NOTIFICATION and nothing
-  else; don't collapse them. The durable budget is **5/hour per caller uid on
-  BOTH branches**
-  (down from the 20 it shared with account creation) — the freshness gate is
-  what differs, not the budget: this rewrites a sign-in identity, so a
-  compromised session of either role must not be able to walk the roster.
-  **The ADMIN branch is deliberately NOT gated on freshness** — it is
-  reached from `updateEmployee`, which has no re-auth step to satisfy, so the
-  check would reject every admin email edit made minutes after sign-in. That
-  residue is real and stated: an unattended *admin* session can still rewrite a
-  colleague's address, bounded by `assertAdmin` and the budget. Closing it needs
-  a re-auth prompt on the admin save path first. Firebase's `verifyBeforeUpdateEmail` is not the answer: it
-  flips Auth OUTSIDE the callable and leaves `users.email` stale with no trigger
-  to reconcile it — the exact desync the callable exists to end.
-- **`travelAlertsEnabled` defaults to ON, and absent MUST read as ON.**
-  `wantsTravelAlerts` (`functions/travel_utils.js`) and
-  `EmployeeRecord.fromMap`'s `!= false` are the two halves; every users doc
-  written before the field existed has no value, so an `undefined`-is-off
-  reading would silence departure alerts fleet-wide — and the symptom is a push
-  that never arrives, which nobody reports. Only an explicit `false` opts out.
-  **It gates the ESCALATION to `leaveNow` only**: an opted-out assignee still
-  gets the fixed 30-minute `reminder`, the same degradation a missing origin or
-  a Routes failure already takes.
-  **The flag must be read BEFORE the Routes call, not beside the `kind`
-  choice** — `resolveReminderForAssignee` skips the whole
-  `decideOrigin`/`computeTravelSeconds` block when it is off, so `travelSeconds`
-  stays null and `computeLeadMinutes(null)` yields the fixed 30. Read only at
-  `kind`, the escalation was suppressed but the LEAD TIME was still
-  travel-derived, so an opted-out tech got the generic "Upcoming job" push up to
-  `MAX_LEAD_MINUTES` (90) early on a long drive — and the business still paid
-  Google Routes for an estimate that changed nothing. Pinned by
-  `travel_utils.test.js` ("an opted-out assignee"), which asserts the sweep
-  never calls `fetchImpl`. The toggle is in Settings › NOTIFICATIONS (a
-  SERVER flag, unlike the device-local Live Activity switch beside it — the
-  sweep picks the push kind, so a local preference could never reach it), and
-  the row is hidden until the person's own record loads rather than rendered
-  against a guessed default. `EmployeeRecord.toMap()` deliberately does NOT emit
-  it: an admin save must leave it exactly as it was.
+- Decide authorization from the LIVE `users` doc, never a trigger snapshot: `bridge_reconcile.js` reads the profile and `usersByUid` rows in a transaction, because events arrive out of order and an old activation must not restore a disabled or deleted account. Keep the bridge-ownership checks when removing stale uids, and re-check the live profile after each Auth write, retrying when it changed. (ADR-0061)
+- Keep `reconcileAuthAccess` computing "revoke" for anything not `active` (only a uid or bridge-owner mismatch returns early), so it never re-enables an invited account and an active→invited demotion revokes again; call it only when `authAccessChange(before, after)` is non-null, or a new invite gets disabled. (ADR-0061)
+- Keep `resetProvisionedPassword` sending `disabled: false` with the password — a console-demoted account was disabled by that revoke, and a reset that left it disabled handed over a password nobody could use. (ADR-0061)
+- Never delete an employee; disable is the only removal — deleting the `users` doc orphans every past appointment's `employeeIds` (the visit keeps `employeeNames` but loses the colour and the person). `syncUsersByUid` on disable disables Auth, calls `revokeRefreshTokens` and purges `presence/location`, `fcmTokens`, every `liveActivityTokens` row and the `liveActivityCards` marker. `/users` grants no `allow delete`; console cleanup uses the Admin SDK. (ADR-0080)
 
-- **`EmployeesRepository.cachedUserDocId(uid)`** returns the doc id
-  `watchUserDoc` last resolved, so a caller already watching that stream does
-  not pay a second `where('uid').limit(1).get()` for it; null means "query the
-  slow way", never "no doc".
+## Invite and setup (P4c)
 
-- **The team roster's "jobs today" count is ONE listener, not one per row.**
-  `employeeJobsTodayProvider` reduces a single `appointmentsInRangeProvider` over
-  today's range into a `Map<String,int>`; every row reads the map. The range
-  comes from `todayRangeProvider`, which watches `currentDayProvider` — never
-  `DateTime.now()`, or the counts stick on yesterday in an app left open across
-  midnight. Cancelled visits don't count. **The employee detail's TODAY panel
-  filters that SAME stream** (`employeeTodayJobsProvider`) rather than opening a
-  per-employee query — the Team tab already holds the day range open, so a
-  detail costs no extra read and the panel can't disagree with the count on the
-  row that opened it.
+- Provision only through `createEmployeeAccount` (`functions/employee_accounts_admin.js`): an Auth account on a random `generateStartingPassword()` value, NEVER persisted (Firestore is readable by every admin session, backup and export), plus an `invited` `users` doc already carrying the real `uid`. Never reintroduce a code-based invite anywhere in the stack. (ADR-0063, ADR-0064)
+- Never bring back a shared default starting password without reinstating a mailbox check — the random password is what paid for dropping the `email_verified` setup guard. Don't write the residual risk up as closed: whoever holds the address AND the generated password can still activate first, so create the account at the moment you hand the credentials over. (ADR-0064)
+- Write the new doc `role: "employee"` always (hard-coded in `performCreateAccount`; never read a role or `isAdmin` off the payload); make an admin by a later toggle on `edit_person_sheet.dart`. (ADR-0064)
+- Route `invited` to `AccountSetupScreen` at both gates (root `CLAUDE.md`); the person chooses their own password and fills name/phone/consent, and `completeEmployeeSetup` flips the doc to `active`.
+- Hold `accountOperations/{uid}` (`withAccountOperation`) across setup's Auth password write AND activation transaction, and across re-provision's claim AND password reset, keeping it through the Auth call (releasing at the Firestore commit reopens the reset race); duplicate creates take an email-hash lock first. Re-provision resolves its target by `uid`, never email (`users.email` can disagree with Auth), refuses a uid already on another doc, and rotates the password (`resetProvisionedPassword`) only AFTER `performCreateAccount`'s transaction claims the person still `invited`. Re-running create on an `invited` person IS the "lost it" path; once set up it refuses `email-exists`. Locks have no TTL or takeover; recovery: `docs/audits/AUDIT_ROLLOUT_2026-09-23.md`. (ADR-0066)
+- Keep `newPassword` optional on `completeEmployeeSetup` for older builds, but stamp the server-owned `setupRequiresPassword` on re-provision BEFORE rotating Auth; a flagged invitation refuses legacy setup with `setup-upgrade-required`. Never clear the flag in a client write or fall back to the uncoordinated password path. (ADR-0066)
+- Roll provisioning back — delete the Auth account when the Firestore write fails, only if this call minted it — since an Auth account with no `users` doc is invisible to every admin surface. `deleteEmployeeAccount` works only while `invited`, transactionally, so a setup that commits first makes it refuse. (ADR-0066)
+- Never revert a password when activation fails after it changed — the person just chose it, and setup never assumes the current password is the starting one. Renew the session afterwards BEST-EFFORT (`_renewSession(label:)`): the account is already active, and reporting a failed reauth sent a retry to `not-pending`. (ADR-0066)
+- Require 8+ characters with an uppercase and a lowercase Unicode letter (`\p{Lu}`/`\p{Ll}`, matching `PasswordRequirement`) and a digit. The Admin SDK bypasses the console password policy, so keep `isStrongPassword` at least as strict as that console config (which lives nowhere in the repo); `setSetupPassword` maps `auth/password-does-not-meet-requirements` / `auth/invalid-password` to `invalid-newPassword` (`AuthFailureWeakPassword`). (ADR-0065)
+- Bind `TextLimits.password` (128, the `newPassword` cap of `completeEmployeeSetup`/`completePasswordReset`) only to the new-password fields of `AccountSetupScreen` and `ChangePasswordScreen`; sign-in stays uncapped on purpose (`text_limits_test.dart` pins the ≤).
+- Validate the password TRIMMED — `completeAccountSetup` stores `newPassword.trim()`, so a raw check let `"Aa1!bcd "` set 7 characters; the strength meter and checklist read the same trimmed value. (ADR-0065)
+- Refuse a retyped starting password with `AuthService._refuseIfStillTheStartingPassword`, which reauthenticates with the trimmed candidate BEFORE the callable; success → `AuthFailureStartingPasswordReused`, a FIELD error. Keep it in the SERVICE (a cold start through `SplashScreen` holds no typed password, unlike `login_screen.dart`); treat `wrong-password` / `invalid-credential` / `invalid-login-credentials` as the PASS case, and rethrow any other error, or a network blip waves the reuse through. (ADR-0065)
+- Keep three `AccountSetupScreen` guards that look redundant: consent re-checked inside `_finishSetup` (keyboard submit bypasses the button); `AuthFailureSetupAlreadyComplete` WALKS THEM IN (the password change landed); abandoning setup is a PLAIN `signOut`, not `AccountExitController` — an `invited` account holds no push, presence or Live Activity registration. If any registration ever starts before activation, route through the shared exit path. (ADR-0065)
+- Keep `_mapSetupError` mapping the retired `email-not-verified` to `AuthFailureSetupNotAvailableYet`, so a rolled-back backend degrades to an `isExpected` failure rather than `AuthFailureUnknown`. (ADR-0064)
+- Stamp consent only when the payload flags are `true` (`buildActivationPatch`) — an unconditional stamp mints a consent record for someone who never saw the checkbox.
+
+## Admin password reset (active accounts)
+
+- Reset an ACTIVE account's password only by admin action (employee emails are not real inboxes, so Forgot password reaches nobody): Reset password in `edit_person_sheet.dart`'s footer, shown only for an `active`, non-admin doc whose known `uid` is not the signed-in admin → `EmployeeFormController.resetPassword` (sealed `PasswordResetIssued`/`Failed`/`Busy`) → `resetEmployeePassword`. (ADR-0062)
+- Make the admin re-enter their OWN password first (`showPasswordReauthDialog`, then `AccountDeletionService.reauthenticateWithPassword` BEFORE the callable); the server restates it with `assertFreshReauth` (`stale-auth` → `EmployeesFailureReauthRequired`). (ADR-0062)
+- Keep the server refusing self, non-active and any admin target (`target-is-admin` → `EmployeesFailureTargetIsAdmin`, re-checked in `markPasswordResetRequired`'s transaction, which also re-checks `active` + the same `uid`, so a concurrent promotion or disable can't get the flag stamped), then, under `accountOperations/{uid}` (`password-reset`): `passwordResetRequired: true` FIRST, then the `generateStartingPassword()` password, then `revokeRefreshTokens` — an Auth failure then only forces an unneeded change. A revoke failure logs `logger.error` (`uidHash`) and still RETURNS the credentials, since the password is already set. (ADR-0062)
+- Return the email from the Auth record `updateUser` returns, using the Firestore copy only when Auth has none — older docs can disagree with Auth. Show it in `showNewAccountDialog` (`employees_passwordReset` / `employees_newPasswordIssued`) on the ROOT navigator captured before the await — a drag-dismiss pops the sheet (`PopScope` can't veto) and the password must outlive it. (ADR-0062)
+- Route `active && passwordResetRequired` per root `CLAUDE.md`; `resumeAfterSignUp` refuses a still-flagged doc, and the splash cached-identity fast path doesn't read the flag (a pre-1.63 temporary-password sign-in skips the screen until sign-out — accepted). (ADR-0062)
+- Keep `completePasswordReset` on the same `isStrongPassword` and `setSetupPassword` mapping as setup: Auth first, then clear the flag in a TRANSACTION re-checking `active` + `uid`, so a doc disabled mid-change keeps it; `not-required` reads as already done. `AuthService.completePasswordReset` refuses the temporary password through `_refuseIfStillTheStartingPassword` (a password-field error, never a banner), renews best-effort and routes in via `resumeAfterSignUp`. (ADR-0062)
+- Have `ChangePasswordScreen` surface offline through its own banner, log ONCE via `logger.authFailure` (the service doesn't double-file), and on Log out run `deregisterThisDevice` BEFORE `signOut()`, `restoreThisDevice` if sign-out fails — the account is active and holds registrations. (ADR-0062)
+
+## Email is a sign-in identity
+
+- Move an email edit through BOTH stores or neither: `FirebaseEmployeesRepository.updateEmployee` is the ONLY caller of `changeEmployeeEmail` (`functions/employee_accounts_self.js`), calling it (`_changeAuthEmail`) BEFORE its own write when the email changed AND the doc has a `uid`. Keep the call inside `updateEmployee`, not on `EmployeesRepository`, so no call site can forget it. A doc with no `uid` takes the direct client write — the one path that may write `email` alone. (ADR-0067)
+- Keep the server order Auth FIRST, then Firestore, reverting Auth if the doc write fails (a failed revert `logger.error`s uid + docId, never addresses); `performChangeEmail`'s transaction re-checks the previous email and uniqueness and raises `email-changed` on a concurrent edit. (ADR-0067)
+- Keep `resolveEmailChangeCaller` (pure, jest-tested) the one gate: an active admin may move any doc, an active employee only their OWN, everyone else is refused — widening the callable must never widen WHICH doc a caller reaches. Guard order: auth → payload → identity → freshness → rate limit → work. (ADR-0067)
+- Gate freshness (`assertFreshReauth`, 5 minutes, shared with `deleteAccount`) on the caller's ROLE (`isAdmin`), never `isSelf` — an admin editing their own row is `isSelf` yet arrives through `updateEmployee`, which has no re-auth step. The admin branch stays ungated, an accepted residue until the admin save path gets a re-auth prompt. Budget 5/hour per caller uid on BOTH branches. (ADR-0067)
+- Route the notification on `isSelf`: an admin edit tells the EMPLOYEE (`notifyEmailChanged`, `kind:"emailChanged"`, via `sendToEmployee`); a self edit tells the active admins (`notifyAdminsOfSelfEmailChange` → `sendToActiveAdmins`, the base for new admin fan-outs) with the NAME, never the address (Lock Screen, PII). Both are best-effort — the admin still has to tell the person. (ADR-0067)
+- Re-authenticate in `SelfEmailService` BEFORE calling (`self_email_service_test.dart`: `verifyInOrder`, and `verifyNever` the callable after a failed re-auth), and demand the address twice — the Admin SDK sets it with no proof of control. Never use `verifyBeforeUpdateEmail`: it flips Auth outside the callable and leaves `users.email` stale. (ADR-0067)
+
+## Credentials on screen
+
+- Treat a displayed starting password as a credential: widget/controller state only, keyed to its account (`_credentialsFor`, so a recycled `State` can't show it on another row); never passed to `logger.*`, a notice or an error, never written to SharedPreferences or secure storage. (ADR-0068)
+- Copy credentials only through `copyCredentialsToClipboard` (`employees/widgets/fields/credential_line.dart`), the one sanctioned egress and payload owner — never re-inline `'$email\n$password'`. Build every credential surface from `CredentialLine`, `CopyCredentialsButton`, `kMaskedCredential` and `credentialPanelDecoration`, never a re-derived control or tint. (ADR-0068)
+- Thread "is there a password" as ONE nullable `String?` (payload, Copy both / Copy email label, `kMaskedCredential`), both params REQUIRED with no default — a parallel `hasPassword` bool let the label disagree with the clipboard. (ADR-0068)
+- Pass `createAccount` the whole `EmployeeRecord`, never loose scalars: `performCreateAccount`'s existing-doc branch overwrites `name`/`firstName`/`lastName`/`phone`/`colorValue`/`jobTitle`/`role`, so an omitted one is wiped. `EmployeeFormController.createAccount` destructures it in ONE place (a new server field must be added there by hand — no compile error), and `PendingInviteTile` passes `widget.employee`. (ADR-0068)
+- Expanding a pending row is NOT a re-issue (no round-trip, nothing rotates): with no server echo it masks the password with a hint that Reset password issues a new one, and copies the email alone. Only Reset password re-provisions. (ADR-0068)
+
+## Busy state
+
+- Track `EmployeeFormActivity` busy state as SETS OF DOC IDS (`savingIds`, `deletingAccountIds`) and guard `_save` per `docId`: the same person twice is a double-tap to refuse, a different person must proceed (one flag let `EmployeeSaveBusy` silently drop another row's action). Rows read `isSavingId(id)` / `isDeletingAccountId(id)` through a `select`; `isSaving` (`isNotEmpty`) serves the two modal sheets; `isDeletingAccount` is test-only — check a surface is modal before wiring it. A new person keys on `''`. Never collapse to booleans or add a call-site flag. (ADR-0069)
+- Run `updateEmployee`'s `emergency` write inside the same `_save` as the users-doc write, so Save keeps one in-flight flag and a failure surfaces once.
+- Report a server refusal of `EmployeeFormController.deleteAccount` (setup finished meanwhile) as `AccountDeleteFailed`, never success — the live stream has flipped the row to Active by the time the notice lands.
+
+## Deep links
+
+- Keep `FlutterDeepLinkingEnabled` false (Flutter's handler would consume the URL before `app_links`); an old `invite?code=` link falls to `IgnoredLink` on purpose. The `homeWidget` skip lives in root `CLAUDE.md` and `ios/CLAUDE.md`. (ADR-0063, ADR-0070)
+
+## The `users` doc and its rules
+
+- Keep `uid`, `termsAcceptedAt`, `locationConsentAt`, `setupRequiresPassword` and `passwordResetRequired` function-owned: all five on the `/users` `allow update` denylist, and all but `setupRequiresPassword` (plus `emergencyContact`/`emergencyPhone`) on `allow create` — a created doc with a forged `uid` repoints the `usersByUid` bridge. Neither `EmployeeRecord.toMap()` nor `updateEmployee` emits any of them (never put `passwordResetRequired` on a client write path); `toMap()` also omits `status` (deactivate/reactivate) and `email` (only via `changeEmployeeEmail`); it round-trips editable fields, and `updateEmployee`'s field-scoped patch is the real write path. (ADR-0071)
+- Keep `/users` `allow update` as `(isAdmin() || (isSelf() && isAvailabilityOnlyChange())) && <denylist> && emailMovesThroughAuth() && emergencyFieldNotSet(...) && isValidUserData(...)` — without the outer brackets the guards bind to the self branch and an admin write skips them. `isSelf()` requires `isActiveUser()`, so a disabled (credential not yet revoked) or invited account falls to the admin branch. (ADR-0079)
+- Treat `isAvailabilityOnlyChange()`'s `hasOnly` as a whitelist of the ENTIRE diff — one extra key turns a save into `permission-denied`. `kSelfServiceUserFields` (`self_service_fields.dart`) is its hand-mirror, checked by `self_service_fields_test.dart`; add a key to the RULES first, then the Dart set. (ADR-0079)
+- Keep `travelAlertsEnabled` and `locationSharingEnabled` self-writable — sharing is the only thing stopping a position upload, so admin-only would make consent unwithdrawable. Never add `email`, `maxJobsPerDay`, `role`, `jobTitle`, `colorValue`, `status`, `isTestAccount` or `monthEndReviewPush` to the self set. (ADR-0079)
+- Write self edits only through `EmployeesRepository.updateSelfDetails`, a plain `update()` (no transaction), separate from `updateEmployee`, whose patch carries keys the `hasOnly` rejects. Every caller passes the STORED values it isn't changing (My details the stored `travelAlertsEnabled`, Settings the stored availability, both the stored phone) — a guessed default flips someone's setting. (ADR-0079)
+- Keep `monthEndReviewPush` ADMIN-ONLY, on neither self list: written by the admin `updateEmployee` path and `toMap()`, shown on `EditPersonSheet` only for an admin, saved `false` whenever the admin switch is off, absent = OFF. (ADR-0079)
+- Keep `isTestAccount` admin-only (an admin tester clearing its own flag is accepted) and filter it in exactly two owners, never a call-site copy: `EmployeeRecord.isAssignable` (`jobTitle.isAssignable && !isTestAccount`) and `LiveMapAggregator` (`join`/`groupTeam`). The roster moves it to a collapsed `TestAccountsSection`, or an admin could never reach the switch. (ADR-0074)
+- Never filter a LOOKUP for `isTestAccount` (colour and name maps, own-record reads, `usedColors`, `offerableAssignees`, `neverSetUpAccountsProvider`), or names and colours blank on assigned jobs. (ADR-0074)
+- Read `allUsersStreamProvider` in `neverSetUpAccountsProvider` (the active-only stream would leave it empty), oldest first with a null `createdAt` LISTED LAST, never dropped; and in `usedColors`, so a disabled or invited employee's colour stays taken — the bars and dots key on it.
+- Size a `/users` rules cap to the widest value a shipped SERVER path writes (the client caps with `TextLimits`): `phone`/`emergencyPhone` 40, since `createEmployeeAccount` accepts 40 — tighter leaves server-created docs un-updatable, even by `deactivateEmployee`. Retiring a callable never licenses tightening its cap; its docs outlive it. (ADR-0076)
+- Never make a client cap LOOSER than its callable's, or the callable rejects an unfixable `invalid-argument`: name halves `TextLimits.employeeNameHalf` (100, not the clients' 200), composed `name` capped 250 server and rules (the join reaches 201), email `TextLimits.authEmail` (254, not 320). `text_limits_test.dart` reads `firestore.rules`, both `employee_accounts_*.js` and the Wave import's `IMPORT_FIELD_CAPS` back and fails on drift. (ADR-0076)
+
+## Names, titles, days, phones
+
+- Build `users.name` on every write path through `composeEmployeeName` (`employee_name_policy.dart`), which falls back to the stored name, then `kUnnamedEmployee` (`'—'`, an EM dash) — never `''`. Working hours join with an EN dash; treat a non-ASCII sweep over `lib/` as a change to shipped strings. (ADR-0073)
+- Render through `EmployeeRecord.displayName` (→ `displayEmployeeName`, public for `account_status_provider.dart`'s raw map). The edit sheet seeds First from the whole `name` when both halves are empty. `EmployeeFormValidator` takes the halves, never the composed name (which is never empty); `requireLastName` is the invite/edit difference. (ADR-0073)
+- Keep `role` the ACCESS flag (`admin`/`employee`, what rules gate on) and `jobTitle` descriptive; `JobTitleChips` never touches the access toggle. Its one gate: `JobTitle.isAssignable` is false for `dispatcher`, with no personal-block or day-off carve-out (a dispatcher's empty calendar is accepted). Pickers and dashboard per-person numbers read `assignableEmployeesProvider`, never raw `employeesStreamProvider`; it is DERIVED, not filtered in the stream, because `_resolveActiveEmployees` must still see a stored dispatcher as active. (ADR-0074)
+- Store `workingDays` Sunday-indexed (`[0]` = Sunday, like intl's `NARROWWEEKDAYS`), converting only through `sundayIndexOf` (`calendar/domain/month_grid.dart`) — never `day.weekday % 7` at a call site. Write back through `orderedWorkingDays`' `storedIndex`, never the visual position; give `formatWorkingDays` Sunday-indexed, unrotated labels (`weekdayAbbreviationsForLocale`); name a day set via `joinWeekdayNames` (`work_schedule_pickers.dart`). (ADR-0075)
+- Share the daily-cap picker: `showMaxJobsPicker` (`work_schedule_pickers.dart`) with `kMaxJobsOptions` and `maxJobsLabel` (`work_schedule_policy.dart`), on the Team sheet and My details. The read-only detail renders NO row for an uncapped person. (ADR-0075)
+- Store phones FORMATTED through `PhoneInputFormatter` (`core/validators/phone_format.dart`), e.g. `(514) 555-1234`, passing anything with `+` untouched and appending digits past the tenth (extensions). `launchPhoneCall` strips to digits (keeping a leading `+`) for `tel:`. Keep `TextLimits.phone` (24) above `formatPhoneNumber`'s widest output — the length formatter runs AFTER the mask, and at 15 an 11-digit NANP number was untypeable. (ADR-0077)
+- Keep `functions/scripts/backfill-client-phone-formatting.js` formatting only NANP (ten digits with no `+`, or eleven starting 1, dropping that country code) — narrower than `formatPhoneNumber`, whose progressive mask misreads eleven digits. (ADR-0077)
+
+## Emergency contact
+
+- Store the emergency pair in `users/{docId}/private/emergency` (admin OR the active owner), never on the users doc, and never widen a `/users` read clause to reach it — every active employee reads every active peer doc, and the contact is a non-user who never consented. `EmployeeRecord` doesn't carry it (`EmergencyContact` via `emergencyContactProvider`); a read failure renders "not shown", never "none on file". (ADR-0078)
+- Keep `emergencyFieldNotSet(f)` on `allow update` (create bans both keys): it refuses a write that LEAVES a value and admits absence — never "simplify" it to a denylist entry, which rejects `updateEmployee`'s `FieldValue.delete()` scrub and strands any doc carrying the pair. Keep the scrub in `updateEmployee`, not `saveEmergencyContact` (self-service calls that, and its `hasOnly` rejects deletes), and keep `isValidUserData`'s caps for the pass-through. Pinned by `emergency_contact_rules_test.dart`. (ADR-0078)
+- Seed `EditPersonSheet`'s pair asynchronously behind three flags: `_emergencyLoaded` (fields `readOnly`, Save sends `emergency: null` until a snapshot lands), `_emergencyDirty` (re-seed from a fresher snapshot until the admin types), `_emergencyFailed` (`employees_emergencyLoadFailed`). Read the initial value with `ref.read` in `initState` — an immediate listener fire lands where `setState` is illegal. (ADR-0078)
+- Render the pair as its own section (`MonoSectionLabel` `employees_sectionEmergency` on edit; its own `KeyValuePanel`, only when non-empty, on detail), apart from hours and access.
+
+## My details
+
+- Make `MyDetailsScreen` the ONLY self-edit surface, scoped to exactly the person's two grants (`private/emergency` and the self clause); anything more would be `permission-denied`. (ADR-0079)
+- Keep its TWO save behaviours: identity fields (phone, emergency pair) behind a Save/Discard bar shown only while dirty against the stored values; availability (days, hours, on-call) applied immediately and optimistically, rolled back with a notice. An availability write sends the STORED phone, never the controller text. (ADR-0079)
+- Show its SCHEDULING section (`maxJobsPerDay` only, via admin `updateEmployee`) to admins and HIDE it for a technician; keep role, job title and colour on the Team sheet — a self-service role edit is a privilege-escalation shape. (ADR-0079)
+
+## Legal text
+
+- Change `docs/legal/privacy-policy.html` §2, §6 and §8 in the same change as any revocation delete, age cutoff or sharing-gate change, and republish. (ADR-0080)
+- Treat `docs/legal/*.html` as SOURCES: publish to `gvogas/es-pro-legal` (privacy policy as `index.html`, so links to it are absolute) and keep the four files byte-identical. (ADR-0071)
+- Keep the consent sentence a LINK: `ConsentRow` (`auth/widgets/account_setup/consent_row.dart`) finds `auth_termsOfServiceLink` verbatim inside `auth_termsAndLocationConsent` in EVERY locale (`new_success_strings_test.dart`); `indexOf < 0` falls back to plain text on purpose. It is Stateful only to dispose its `TapGestureRecognizer`. `LegalSettingsCard` keeps the durable Terms row beside Privacy (`AppUrls`). (ADR-0071)
+
+## Streams and counts
+
+- Keep `watchEmployees()` active-only with NO `orderBy` (it would exclude docs missing `name`); use `watchAllUsers()` (admin-only) for every status. Cap every `users` stream at `_userStreamLimit` (1000) with the warn in `_toSortedEmployeeRecords` — bounded-and-loud, never unbounded or silent. (ADR-0072)
+- Keep `employeesStreamProvider` `autoDispose` and NOT derived from `allUsersStreamProvider` (that one is admin-only and includes invited/disabled) — its consumers are transient sheets and the Dashboard, and without it one sheet pins a second `users` listener for the session. (ADR-0072)
+- Count the roster's "jobs today" with ONE listener: `employeeJobsTodayProvider` reduces `appointmentsInRangeProvider` over `todayRangeProvider` (watching `currentDayProvider`, never `DateTime.now()`, or counts stick across midnight) into a map, excluding cancelled; the detail's TODAY panel (`employeeTodayJobsProvider`) filters the SAME stream.
+- Treat a null from `EmployeesRepository.cachedUserDocId(uid)` (the doc id `watchUserDoc` last resolved) as "query the slow way", never "no doc".
+
+## Travel alerts
+
+- Read absent `travelAlertsEnabled` as ON (`EmployeeRecord.fromMap`'s `!= false`, `wantsTravelAlerts`); `toMap()` never emits it. Sweep behaviour: `.claude/rules/notifications.md`. (ADR-0081)

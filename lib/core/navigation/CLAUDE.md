@@ -54,4 +54,9 @@ Loaded when working under `lib/core/navigation/`. Root context: `../../../CLAUDE
   `initialTab` appeared nowhere under `test/`, so a push landing on the
   calendar instead of the requested tab (a push-notification tap, or a drawer
   entry taken before the shell exists) would not have failed anything.
+- **Guard `TopRouteObserver.didRemove` by `identical` on the `Route`, never the
+  name** — `pushNamedAndRemoveUntil` pushes before it removes, so a name test lets
+  a removed same-named route overwrite the top; `hub_shell.dart` removes its
+  `HubTabRedirectRoute` while it is top. Pinned by `top_route_observer_test.dart`.
+  (ADR-0070)
 
