@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status: IN PROGRESS — paused 2026-10-07 after 5 of 15 files.** Decision 3 SIGNED OFF by the owner 2026-10-07. Tasks 1, 2, 3, 7, 9, 13 and 16 are DONE and committed; resume from "Progress and handoff" just below, which is the authority on what is left.
+> **Status: COMPLETE 2026-10-07.** All 18 tasks done; see "Progress and handoff" below. The open owner decision (moving Flutter-only rules from `appointments.md` to the calendar file) is still undecided.
 
 ## Progress and handoff (2026-10-07)
 
@@ -20,21 +20,24 @@
 
 Every always-loaded file is done: ~90 KB → ~43 KB per session.
 
-**Left, in this order** (sizes re-measured 2026-10-07; next ADR number is **0061**):
+**Done in one parallel run (2026-10-07, second session).** Ten writers ran at once, each in its own ADR number block, then got an independent R6b review and one fix round; the blocks were compacted afterwards into 0061-0183 (pre-commit, so nothing was renumbered after publishing). One commit per file.
 
-| Task | File | Bytes now | Notes |
-|---|---|---:|---|
-| 4 | `.claude/rules/employees.md` | 70 136 | `:545` pointer already fixed (`3c514746`). |
-| 5 | `.claude/rules/clients.md` | 65 093 | Its `ownPhoneDigits`/`scoreRecord` passage (~old 740-748) duplicates `search.md` — point there. |
-| 6 | `.claude/rules/notifications.md` | 54 036 | Mostly prose; R6 must show a walkthrough holds no imperative before deleting it. |
-| 8 | `.claude/rules/frontend.md` | 47 927 | `widget-timer` is enforced; say exactly what it covers (`/widgets/`, `/screens/` only). |
-| 10 | `functions/CLAUDE.md` | 36 225 | Per-function narrative goes to `docs/CLOUD_FUNCTIONS.md` if not already there. |
-| 11 | `.claude/rules/wave.md` | 35 172 | `:331` has a stale pointer into root `CLAUDE.md` — fix. |
-| 12 | `lib/features/calendar/CLAUDE.md` | 31 554 | `:8-12` claims status/multi-day rules "stay in root" — stale, now `appointments.md`. See the open decision below. |
-| 14 | `.claude/rules/analytics.md` | 12 061 | Import ban is enforced by `check_rules`. |
-| 15 | `ios/CLAUDE.md` | 11 425 | Also fix `ios/SiriIntents/README.md:117` (`supportedVersion` → `supportedVersions`, `[3, 4]`). |
-| 17 | `lib/features/feature_tour/CLAUDE.md` | 10 639 | — |
-| 18 | final check | — | Total size, every ADR cited and indexed, `flutter analyze`, `dart run tool/check_rules.dart`, `dart run tool/test.dart`; add `search.md` to any remaining rules-file lists. |
+| Task | File | Before → after | ADRs |
+|---|---|---|---|
+| 4 | `.claude/rules/employees.md` | 70 136 → 26 419 | 0061–0081 |
+| 5 | `.claude/rules/clients.md` | 64 202 → 20 642 | 0082–0100 |
+| 6 | `.claude/rules/notifications.md` | 53 941 → 16 217 | 0101–0120 |
+| 8 | `.claude/rules/frontend.md` | 47 494 → 15 218 | 0121–0134 |
+| 10 | `functions/CLAUDE.md` (+ `docs/CLOUD_FUNCTIONS.md`) | 35 801 → 11 237 | 0135–0140 (accounts history went into employees' ADRs) |
+| 11 | `.claude/rules/wave.md` | 34 684 → 14 902 | 0141–0150 |
+| 12 | `lib/features/calendar/CLAUDE.md` | 31 131 → 12 640 | 0151–0162 |
+| 14 | `.claude/rules/analytics.md` | 11 887 → 6 962 | 0163–0168 |
+| 15 | `ios/CLAUDE.md` (+ `ios/SiriIntents/README.md`) | 11 267 → 7 253 | 0169–0177 |
+| 17 | `lib/features/feature_tour/CLAUDE.md` | 10 486 → 7 553 | 0178–0183 |
+
+Task 18 (final check) ran on the result: every cited ADR resolves, `docs/decisions/README.md` has one row per ADR, `check_rules`, `flutter analyze` and `tool/test.dart` re-run. Next ADR number is **0184**. The corpus is ~263 KB (from ~608 KB); employees and clients stay above 20 KB because each of their ~70 bullets is a rule plus one reason, which both reviewers confirmed.
+
+**Code follow-ups found by the reviews (not done; docs-only pass):** in `build/rules_audit/FOLLOWUPS.md` until filed — stale code comments (`sync_run.js:154`, `notifications.js` overdue window, `schedule_snapshot_provider.dart:20`, `breakpoints.dart:31`, `dashboard_screen.dart:84`, `client_name_phone_lift.dart:16`), the unreachable History employee tour catalog and its hand-written test set, job-details/Dashboard tours with no inflated `scrollCacheExtent`, and `firestore.rules` `/users` create denylist lacking `setupRequiresPassword` (owner call).
 
 **The loop that worked, per file** (do not skip a step; every file's R6b found 15-18 problems after all mechanical checks passed):
 1. **Writer** (an Opus subagent) runs R1-R6 and stops before R6b and the commit. Its prompt must carry the lessons: losses are REASON clauses, so keep one clause of why wherever a "fix" would be wrong; keep numeric values; every `(ADR-NNNN)` must cover its bullet; never pad an ADR with verbatim old text to keep symbols greppable; check every code name and claim against the code and correct inherited errors (reviews found a wrong widget class, "narrows" that was "refuses", a function that "trims" but doesn't); don't overclaim what a tool enforces; one clause per reason.

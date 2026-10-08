@@ -67,3 +67,126 @@ not to "fix". Number sequentially from one counter; never renumber.
 | 0058 | The overdue review is the one bulk close | `.claude/rules/appointments.md` |
 | 0059 | The dashboard window is one live listener plus one `.get()` | `.claude/rules/appointments.md` |
 | 0060 | History scoping by `employeeIds`; the UI is admin-only | `.claude/rules/appointments.md` |
+| 0061 | Auth access reconciles against the live users doc | `.claude/rules/employees.md` |
+| 0062 | Admin password reset of an active account | `.claude/rules/employees.md` |
+| 0063 | P4c: the admin invites, the employee sets up | `.claude/rules/employees.md` |
+| 0064 | A random starting password, the retired mailbox guard, and employee-only creation | `.claude/rules/employees.md` |
+| 0065 | Setup password rules: trimmed, Unicode, and never the starting password | `.claude/rules/employees.md` |
+| 0066 | Setup and provisioning share a server lock; re-provision resolves by uid | `.claude/rules/employees.md` |
+| 0067 | An email edit moves Auth and Firestore together | `.claude/rules/employees.md` |
+| 0068 | Starting-password credential surfaces | `.claude/rules/employees.md` |
+| 0069 | Employee form busy state is keyed per doc id | `.claude/rules/employees.md` |
+| 0070 | The deep-link dispatcher skips `homeWidget`; the route observer tracks Route identity | `.claude/rules/employees.md` |
+| 0071 | Function-owned user fields, the consent link, and the legal sources | `.claude/rules/employees.md` |
+| 0072 | The `users` streams are bounded, warned and sorted in Dart | `.claude/rules/employees.md` |
+| 0073 | `users.name` is composed, never abandoned | `.claude/rules/employees.md` |
+| 0074 | Job title is not role; dispatchers and test accounts leave lists, never lookups | `.claude/rules/employees.md` |
+| 0075 | `workingDays` is Sunday-indexed with one conversion owner | `.claude/rules/employees.md` |
+| 0076 | User-field caps: rules never tighter than the server, client never looser than the callable | `.claude/rules/employees.md` |
+| 0077 | Phone numbers are stored formatted | `.claude/rules/employees.md` |
+| 0078 | The emergency contact lives in a private subcollection | `.claude/rules/employees.md` |
+| 0079 | Self-service: the two-branch `/users` update and My details | `.claude/rules/employees.md` |
+| 0080 | Never delete an employee; revoking a permission deletes nothing | `.claude/rules/employees.md` |
+| 0081 | `travelAlertsEnabled` defaults ON and is read before the Routes call | `.claude/rules/employees.md` |
+| 0082 | `ClientRecord`: legacy `businessName` read, function-owned fields never written | `.claude/rules/clients.md` |
+| 0083 | Clients are archived, not deleted; delete is a fenced callable for junk only | `.claude/rules/clients.md` |
+| 0084 | Clients list header: Filter button in the row, no chips, sealed one-of filter | `.claude/rules/clients.md` |
+| 0085 | The clients count line states only what it can prove | `.claude/rules/clients.md` |
+| 0086 | Client grouping: opt-in, one sliver card, no letter headings | `.claude/rules/clients.md` |
+| 0087 | Every client list filter is a server `where`; nullable sort fields need a backfill | `.claude/rules/clients.md` |
+| 0088 | `ClientType.building` replaced `propertyManagement` with no legacy alias | `.claude/rules/clients.md` |
+| 0089 | Client buildings: a server-owned projection with the city in the key | `.claude/rules/clients.md` |
+| 0090 | Wave sync badge reads the live doc; a no-op push heals sync state | `.claude/rules/clients.md` |
+| 0091 | `jobCount` is an absolute recount that excludes cancelled visits | `.claude/rules/clients.md` |
+| 0092 | Client phone fields are normalized on the way in; extensions are first-class | `.claude/rules/clients.md` |
+| 0093 | `mobile` folds into `phone`, in the app and in the Wave import | `.claude/rules/clients.md` |
+| 0094 | `clients.name` is Wave's customer name: a person's bare number, a business's name | `.claude/rules/clients.md` |
+| 0095 | Saves compose through `composeSave`; a number in the name field is lifted into phone | `.claude/rules/clients.md` |
+| 0096 | `clients.address` is the street line; reads and propagation compare the composed address | `.claude/rules/clients.md` |
+| 0097 | Booking client picker: phone slices, local narrowing, and a visible failure | `.claude/rules/clients.md` |
+| 0098 | Recent clients removed; the collapsed match summary not built | `.claude/rules/clients.md` |
+| 0099 | History: left date rail, sticky month bars in groups, one count | `.claude/rules/clients.md` |
+| 0100 | Client Job history: server-ordered past visits, provider-owned bound | `.claude/rules/clients.md` |
+| 0101 | The app never prompts for notification permission on its own | `.claude/rules/notifications.md` |
+| 0102 | Repeat-series pushes collapse through a fail-open claim ledger | `.claude/rules/notifications.md` |
+| 0103 | Change-push fan-out: no retry, per-recipient isolation, reachability first | `.claude/rules/notifications.md` |
+| 0104 | Travel-aware "time to leave" reminders degrade, never regress | `.claude/rules/notifications.md` |
+| 0105 | A sweep cap keeps the jobs the sweep is about: order by direction | `.claude/rules/notifications.md` |
+| 0106 | Three scheduled functions: riders instead of new timers | `.claude/rules/notifications.md` |
+| 0107 | Presence is foreground-only, opt-in, and asks once | `.claude/rules/notifications.md` |
+| 0108 | Presence writes: throttle, heartbeat, rollback, and teardown races | `.claude/rules/notifications.md` |
+| 0109 | Live map: staleness is text, a pin never dims or expires | `.claude/rules/notifications.md` |
+| 0110 | The "Be on the team map" page is the in-context location step | `.claude/rules/notifications.md` |
+| 0111 | Home-screen widget payload: UTC instants, hand-mirrored builders, Toronto days | `.claude/rules/notifications.md` |
+| 0112 | The server widget window queries an overlap, capped | `.claude/rules/notifications.md` |
+| 0113 | Live Activities: direct APNs, best-effort, server-owned lifecycle | `.claude/rules/notifications.md` |
+| 0114 | Live Activity content: server-built text, countdown, real departure time | `.claude/rules/notifications.md` |
+| 0115 | Live Activity opt-out, registry indexes and secret binding | `.claude/rules/notifications.md` |
+| 0116 | Off-app schedule mirrors: one identity, one window, locked-safe fields | `.claude/rules/notifications.md` |
+| 0117 | CarPlay reads the Siri snapshot (v4), bypasses the app lock, fails fast offline | `.claude/rules/notifications.md` |
+| 0118 | Month-end overdue review rides the digest | `.claude/rules/notifications.md` |
+| 0119 | Crew status pushes removed; name people by the raw id index | `.claude/rules/notifications.md` |
+| 0120 | One appointment link opener for push, widget and app links | `.claude/rules/notifications.md` |
+| 0121 | Theme roles: `ColorScheme` only for Material's implicit consumers | `.claude/rules/frontend.md` |
+| 0122 | Token placements that look arbitrary, and the off-scale inset exemption | `.claude/rules/frontend.md` |
+| 0123 | `AppTopBar` is not an `AppBar`; `preferredSize` is an upper bound | `.claude/rules/frontend.md` |
+| 0124 | `GhostControl` owns the tap floor; header pair and drawer rows | `.claude/rules/frontend.md` |
+| 0125 | One platform-adaptivity seam; capability gates are injected | `.claude/rules/frontend.md` |
+| 0126 | Form-sheet chrome: `FormSheetFrame`, `SheetPanel`, measured header slots | `.claude/rules/frontend.md` |
+| 0127 | Field primitives: `AttachedDropdown`, no counters, one label, switch rows | `.claude/rules/frontend.md` |
+| 0128 | Every external launch goes through `launchExternalUri` | `.claude/rules/frontend.md` |
+| 0129 | Forms add photos through `pickAndAddAppointmentImages` | `.claude/rules/frontend.md` |
+| 0130 | Layout traps that shipped | `.claude/rules/frontend.md` |
+| 0131 | Two responsive gates; the nav rail is gone | `.claude/rules/frontend.md` |
+| 0132 | Provider lifetime: tap-handler reads, which stream, combiner retry | `.claude/rules/frontend.md` |
+| 0133 | `DateFormat` is memoized per locale, in two owners | `.claude/rules/frontend.md` |
+| 0134 | Shared widget owners that replaced drifted copies | `.claude/rules/frontend.md` |
+| 0135 | Shared `functions/` rules have one owner module, extracted from drifted copies | `functions/CLAUDE.md` |
+| 0136 | `recount_claim.js` is the one owner of the recount claim ledger | `functions/CLAUDE.md` |
+| 0137 | Business-time primitives: dependency-free leaves, calendar-day offsets, hoisted formatters | `functions/CLAUDE.md` |
+| 0138 | Push decisions live in `notification_policy.js`; sweeps are imported from their own module | `functions/CLAUDE.md` |
+| 0139 | Client edits compare the composed address; client delete counts live | `functions/CLAUDE.md` |
+| 0140 | Operator scripts: one preamble, one paging loop, `main()` behind `require.main` | `functions/CLAUDE.md` |
+| 0141 | Wave callables: a kept name, one admin guard, a server-side business | `.claude/rules/wave.md` |
+| 0142 | Wave module layout: an acyclic leaf, one outbox require path, one connection reader | `.claude/rules/wave.md` |
+| 0143 | The import never touches a client with an un-pushed outbox job | `.claude/rules/wave.md` |
+| 0144 | Wave import: hash gate, delta query and a watermark that only advances over covered windows | `.claude/rules/wave.md` |
+| 0145 | Wave push is event-driven; the daily rider is only a drain | `.claude/rules/wave.md` |
+| 0146 | Sync and Retry responses report every outcome; requeue runs in chunks | `.claude/rules/wave.md` |
+| 0147 | Auto-import cadence deleted; `waveSetImportSchedule` kept as a no-op | `.claude/rules/wave.md` |
+| 0148 | Wave refusals a retry cannot fix: stale links, enum values, inline strings | `.claude/rules/wave.md` |
+| 0149 | The customer contract owns "will Wave accept this client?" | `.claude/rules/wave.md` |
+| 0150 | Contract enforcement: the `blocked` state, one evaluation, three points | `.claude/rules/wave.md` |
+| 0151 | Month grid: our own widget, derived row count, ±7-day overscan | `lib/features/calendar/CLAUDE.md` |
+| 0152 | Day dots count jobs, not people; cancelled and time off get none | `lib/features/calendar/CLAUDE.md` |
+| 0153 | Day token: today is a ring, selection a fill, one owner | `lib/features/calendar/CLAUDE.md` |
+| 0154 | One owner for a single-day window: `AppointmentDateRange.forDay` | `lib/features/calendar/CLAUDE.md` |
+| 0155 | Portrait calendar: two scroll areas, a non-scrolling grid capped by a ConstrainedBox | `lib/features/calendar/CLAUDE.md` |
+| 0156 | Calendar header: measured month label, not a text-scale gate | `lib/features/calendar/CLAUDE.md` |
+| 0157 | Agenda sinks closed jobs; the collapsed row keeps avatars and a time line | `lib/features/calendar/CLAUDE.md` |
+| 0158 | Agenda header, Done rule and dots share `countsAsWork` | `lib/features/calendar/CLAUDE.md` |
+| 0159 | `AppointmentCard` is the one card; crew bar bands every assignee | `lib/features/calendar/CLAUDE.md` |
+| 0160 | Time-off strip: the reason leads; shared non-working-time ground | `lib/features/calendar/CLAUDE.md` |
+| 0161 | Holidays: computed, display-only, a rule inside the day token | `lib/features/calendar/CLAUDE.md` |
+| 0162 | Holiday list precedence, agenda row placement, three date traps | `lib/features/calendar/CLAUDE.md` |
+| 0163 | Analytics parameters: a key allowlist, closed value sets, bucketed counts | `.claude/rules/analytics.md` |
+| 0164 | Analytics screen views: one owner per screen, membership asserted | `.claude/rules/analytics.md` |
+| 0165 | Analytics identity: `user_role` only, from the live doc, no reset on sign-out | `.claude/rules/analytics.md` |
+| 0166 | `AnalyticsService` returns `void`, never throws, resolves Firebase lazily | `.claude/rules/analytics.md` |
+| 0167 | Analytics build posture: off in debug, no ad id, SPM only | `.claude/rules/analytics.md` |
+| 0168 | Analytics events: success branch only; three parameters absent on purpose | `.claude/rules/analytics.md` |
+| 0169 | iOS is Swift Package Manager only; no Podfile, ever | `ios/CLAUDE.md` |
+| 0170 | Crashlytics dSYM upload on all three code-bearing targets | `ios/CLAUDE.md` |
+| 0171 | iOS 18.0 deployment floor; App Check through App Attest | `ios/CLAUDE.md` |
+| 0172 | Register native channels from didInitializeImplicitFlutterEngine | `ios/CLAUDE.md` |
+| 0173 | CarPlay is a native scene in Runner, entitled through Runner.entitlements | `ios/CLAUDE.md` |
+| 0174 | Keep NSLocationAlwaysAndWhenInUseUsageDescription declared | `ios/CLAUDE.md` |
+| 0175 | Every extension carries its own PrivacyInfo.xcprivacy | `ios/CLAUDE.md` |
+| 0176 | Tap deep links keep the homeWidget query item | `ios/CLAUDE.md` |
+| 0177 | CarPlay rows: time in the text, avatar for admins only | `ios/CLAUDE.md` |
+| 0178 | Tours keyed on a sealed TourScope; storage key is the bare name; gate chosen by type | `lib/features/feature_tour/CLAUDE.md` |
+| 0179 | Seen flags per step, migrated once through a frozen snapshot | `lib/features/feature_tour/CLAUDE.md` |
+| 0180 | Start a tour only on rendered targets of a settled, ready page | `lib/features/feature_tour/CLAUDE.md` |
+| 0181 | One tourWrap parameter per multi-step widget | `lib/features/feature_tour/CLAUDE.md` |
+| 0182 | Audit tour copy and coverage when a toured surface changes | `lib/features/feature_tour/CLAUDE.md` |
+| 0183 | Employee tours follow the employee drawer | `lib/features/feature_tour/CLAUDE.md` |
