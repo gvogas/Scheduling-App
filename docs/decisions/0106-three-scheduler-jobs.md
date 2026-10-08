@@ -15,5 +15,13 @@ assignee so a late-registering token is retried without re-notifying anyone, and
 for a console TTL. Every rider sits in its own `try`, below the digest. The log label
 `sendOverdueJobPrompts failed` stays: it is a stable search tag.
 
+The digest has already sent when any rider runs, so no rider can affect the push and none may skip another:
+add a new one the same way, never above the digest and never sharing a `try`. The reminder half calls the
+billable Routes API and the overdue half is Firestore-only, so a throw in either must not skip the other.
+`timeoutSeconds` covers the sum: 420 for the sweep (the larger of the two old budgets, 120 and 300, plus
+headroom), 540 for the digest and its four steps (the Wave import alone carried 540). The digest binds
+`WAVE_FULL_ACCESS_TOKEN` because its Wave rider pushes. The digest has no ledger: it runs once daily and a
+rare duplicate is accepted.
+
 ## Consequences
 A fourth scheduled function starts costing money; reach for an existing sweep first.

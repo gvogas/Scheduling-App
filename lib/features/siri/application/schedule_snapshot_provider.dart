@@ -17,7 +17,7 @@ final scheduleSnapshotProvider =
       // An identity read that FAILED is propagated as an error, never collapsed
       // into a settled null: null means "signed out, clear the snapshot", and a
       // Firestore failure is not that — Siri would answer "no appointments" to
-      // someone who has jobs. See `AppSyncListeners._isUnsettled`.
+      // someone who has jobs. See `AppSyncListeners.isUnsettled`.
       if (identityAsync.hasError) {
         return AsyncValue<Map<String, dynamic>?>.error(
           identityAsync.error!,

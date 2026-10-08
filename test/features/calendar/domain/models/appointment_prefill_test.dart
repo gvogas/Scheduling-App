@@ -67,9 +67,9 @@ void main() {
     });
 
     test('carries nothing of the visit itself', () {
-      // Status, photos, field notes, the time record, the crew signal, the
-      // series and run fields, ids and timestamps: a source with all of them
-      // set yields the same draft as one with none.
+      // Status, photos, field notes, the time record, the series and run
+      // fields, ids and timestamps: a source with all of them set yields the
+      // same draft as one with none.
       expect(
         AppointmentPrefill.bookAgain(_finished, client: _client),
         AppointmentPrefill.bookAgain(_bare, client: _client),

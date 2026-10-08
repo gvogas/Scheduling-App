@@ -23,5 +23,10 @@ with an `endTime` upper bound of `TRAVEL_WINDOW_MS + MAX_BOOKING_MS`. Estimates 
 ## Consequences
 Removing the context `.limit()` re-reads every future appointment each sweep; narrowing its bound to the
 travel window drops an intervening job that runs a day longer from `decideOrigin`'s first prong. A cached
-estimate that TRIGGERS a send fires on stale traffic. Needs the Routes API enabled on the
+estimate that TRIGGERS a send fires on stale traffic. `MAX_BOOKING_MS` (one day) is deliberately NOT widened
+to the 14-day span cap (tried and reverted 2026-08-04): `decideOrigin`'s intervening prong tests RAW instants
+(`startMs < candidateStartMs && endMs > nowMs`), which a multi-day run satisfies at every hour of every day,
+so a tech with an 08:00 one-off inside an Aug 1-10 run would depart from that run's address at 07:00 while
+at home. Scoping the prong needs the daily-window model (`day_slice_utils.js`, mirrored 2026-08-10) and nobody
+has applied it here; until then a long run stays out of the context, a known gap rather than a regression. Needs the Routes API enabled on the
 `GOOGLE_MAP_API_KEY` restriction.
