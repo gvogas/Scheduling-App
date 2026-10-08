@@ -164,6 +164,10 @@ async function verifySafety(project, firestore, auth, admin) {
       name: {stringValue: "Flagged"},
       passwordResetRequired: {booleanValue: true},
     }), 403);
+    assert.equal(await write(`users/${prefix}-setup-flagged`, {
+      name: {stringValue: "Setup flagged"},
+      setupRequiresPassword: {booleanValue: true},
+    }), 403);
     assert.equal(await write(`users/${prefix}-plain`, {
       name: {stringValue: "Plain"},
     }), 200);

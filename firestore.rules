@@ -138,7 +138,7 @@ service cloud.firestore {
             && !request.resource.data.keys()
                  .hasAny(['uid', 'termsAcceptedAt', 'locationConsentAt',
                           'emergencyContact', 'emergencyPhone',
-                          'passwordResetRequired'])
+                          'setupRequiresPassword', 'passwordResetRequired'])
             && isValidUserData(request.resource.data);
 
       // Rejects a colorValue write that isn't a valid integer string — otherwise a bad
