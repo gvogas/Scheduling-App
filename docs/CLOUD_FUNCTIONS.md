@@ -626,7 +626,7 @@ IS the target, independent of role, so an admin editing their own row counts as
 self. An admin edit pushes the EMPLOYEE (`notifyEmailChanged`); a self edit
 pushes the ACTIVE ADMINS (`notifyAdminsOfSelfEmailChange` → the shared
 `sendToActiveAdmins` in `notification_utils.js`, excluding the person who made
-the change). **The admin notice carries the NAME, never the address** — it lands
+the change; bounded by `ADMIN_FANOUT_MAX` (100) with a warn at the cap). **The admin notice carries the NAME, never the address** — it lands
 on every admin's Lock Screen and an email is PII. Both are best-effort and run
 after the commit: the change is already durable in both stores, so a push
 failure must not hand the caller an error for something that worked.
@@ -832,9 +832,7 @@ server-side to `role == 'employee' && status == 'active'`; tokens live in
 so the send path needs no uid translation), and stale tokens are deleted on
 send failure. Text is localized per token doc (`locale: 'en'|'fr'`) from an
 inline EN/FR table; every message sets an APNs `sound` so delivery isn't
-silent, plus a now-inert `android: {priority: 'high'}` (kept because it costs
-nothing and FCM ignores it for an APNs-only fleet — the app has been iOS-only
-since `android/` was deleted on 2026-08-05). **Deployed 2026-07-11**
+silent. **Deployed 2026-07-11**
 — see Deployment status. Design: `docs/archive/2026-07-08-push-notifications.md`.
 
 ### `notifyAppointmentChanges` — `notifications.js`
@@ -1067,8 +1065,12 @@ retry loop. Without this the rules' `status == 'active'` gates would still be
 reachable with a stale credential. Auth writes cannot join the transaction, so
 `reconcileAuthAccess` re-reads the profile after each one and repeats (up to 3
 attempts, then throws so the event retries) when `uid` or `status` moved
-meanwhile; it skips an `invited` profile and a uid whose bridge row belongs to
-another profile.
+meanwhile; it returns early only when the profile's `uid` changed or the uid's
+bridge row belongs to another profile. **An `invited` profile is not skipped
+(2026-09-28):** only an `active` profile restores, so active → invited revokes
+the credential again, while a newly created invited doc is never disabled
+because the reconcile runs only when `authAccessChange(before, after)` is
+non-null.
 
 Deactivation used to additionally **rotate the Storage download tokens** on
 every photo of every appointment the person was assigned to
@@ -1097,9 +1099,9 @@ The bridge's pure rules live in `bridge_policy.js` (`shouldHaveBridge`,
 `scripts/backfill.js` — the only script here that deletes, and until 2026-08-16
 the only one with no test.
 
-### The shared `functions/scripts/_*.js` trio
+### The shared `functions/scripts/_*.js` modules
 Every one-off script in that directory runs under `applicationDefault()`, so
-nothing on the command line says which project it will write to. Three shared
+nothing on the command line says which project it will write to. The shared
 modules exist because each of them prevents a specific way a bulk run goes
 wrong, and each was hand-copied (and had drifted) before it was extracted:
 
@@ -1117,7 +1119,17 @@ wrong, and each was hand-copied (and had drifted) before it was extracted:
   pointing at a service-account JSON, whose project `applicationDefault()`
   reads internally and never exposes on `app.options`). The banner goes blank
   precisely when credentials were supplied properly, which is the worst
-  possible time. All ten scripts now print it.
+  possible time. Every script prints it.
+- **`bootstrapScript(argv, {assertFlags})`** (`_project.js`, 2026-08-31) — the
+  preamble wiring the two together: resolve `dryRun` once and hand the same
+  value to both. Pass the script's own `assertFlags` wrapper, not a flag list.
+  `scripts/backfill.js` deliberately does not use it (it branches on
+  `FIRESTORE_EMULATOR_HOST` and hard-fails on missing credentials).
+- **`scanByName`** (`_scan.js`) — the document-id paging loop,
+  `for await (const doc of scanByName(collection, {pageSize}))`; it was
+  hand-written six times before extraction.
+- A script that is also a module guards `main()` behind
+  `require.main === module`, so jest can load it.
 
 ## Client → appointment propagation
 
@@ -1139,7 +1151,7 @@ excludes docs missing the field. **Early-returns with no transaction** when
 `buildingKey`/`deletionToken`, and the membership collection has no grant (Admin
 SDK only). Needs the nine new `clients` composites READY, and
 `scripts/backfill-client-buildings.js` (rerunnable; `--dry-run` reads only) for
-existing docs. **NOT YET DEPLOYED**; see
+existing docs. **Deployed 2026-09-29** (`e70b494d`); deploy ordering is in
 [audit rollout](audits/AUDIT_ROLLOUT_2026-09-23.md).
 
 ### `propagateClientEdits` — `client_propagation.js`
@@ -1147,7 +1159,13 @@ existing docs. **NOT YET DEPLOYED**; see
 `clientPhone` / `address` to that client's **future** appointments (history is
 left as it was at visit time). `address` follows the client only when the
 appointment's stored address equals the client's *previous* address (a differing
-one is treated as a per-appointment custom address). Requires the composite index
+one is treated as a per-appointment custom address). **Both sides of that
+comparison are the COMPOSED address** (`composeFullAddress`,
+`client_address_utils.js`), never the stored field: `clients/{id}.address` is
+the street line with separate locality fields, while an appointment holds one
+composed string, so fanning a raw street line onto it would strip the city off
+a live job — and comparing raw fields meant an apt-bearing client never took an
+address correction at all. Requires the composite index
 `(clientId ASC, startTime ASC)` on `appointments`. `retry: true` — writes are
 absolute values. The page loop runs to **exhaustion on purpose and must not
 gain a total cap** (truncating would leave stale denormalized `clientName` on
