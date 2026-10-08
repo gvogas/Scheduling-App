@@ -113,10 +113,12 @@ Run the app once while signed in (that writes the snapshot), then ask Siri:
   as their own reviewed increment — not as drift.
 - `ScheduleSnapshot.swift` is hand-mirrored with `buildScheduleSnapshot` in
   `lib/features/siri/domain/schedule_snapshot.dart`. Change one, change both,
-  and bump `version` on either side of a schema change. **Currently v3**
-  (`supportedVersion` here, `scheduleSnapshotVersion` there) — a snapshot
-  stamped with anything else is rejected outright, so the first launch after a
-  bump answers "Open ES Pro to sync your schedule." once, until the app
+  and bump `version` on either side of a schema change. **Currently v4**
+  (`scheduleSnapshotVersion` there; `supportedVersions` here is `[3, 4]`,
+  since v4's CarPlay fields are additive and the on-disk snapshot stays v3
+  until the app next runs) — a snapshot stamped with anything outside that set
+  is rejected outright, so the first launch after a
+  bump outside that set answers "Open ES Pro to sync your schedule." once, until the app
   rewrites the payload. New fields land as optionals so a stale payload still
   decodes far enough to hit that version gate rather than failing mid-decode.
   v3 added `dayIndex`/`dayCount`/`isOvernight` and — the part that matters —
@@ -124,9 +126,12 @@ Run the app once while signed in (that writes the snapshot), then ask Siri:
   began, each entry carrying that day's own window. Before it, Siri said
   "nothing today" on day 2 of a five-day job.
 - The snapshot stays readable while the device is locked, so it carries only the
-  fields the intents speak (client name, title, times, address, status,
-  `isAllDay`, the day counter) plus the doc `id` Phase-4 writes target. Don't
-  widen it casually.
+  fields the surfaces use (client name, title, times, address, status,
+  `isAllDay`, the day counter, v4's `isPersonal`/`isDayOff` flags) plus the doc
+  `id` Phase-4 writes target. ADMIN snapshots also carry `crew` (names and
+  stored colours) and `viewer` — other people's names, accepted by the owner
+  for CarPlay (see the CarPlay bullet in `.claude/rules/notifications.md`).
+  Don't widen it casually.
 - All spoken text lives in `SiriStrings`. `who(_:article:)` is the single
   client → title → placeholder resolver (a personal job has no client), and
   `timePhrase(_:)` is the single start-time-or-"all day" resolver — it also
