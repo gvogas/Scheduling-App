@@ -56,6 +56,7 @@ Widget _wrap({
   Object? appointmentsError,
   Stream<List<AppointmentRecord>> Function()? appointmentsStream,
   List<EmployeeRecord> users = const [_jane],
+  double textScale = 1,
 }) {
   return ProviderScope(
     // Production disables Riverpod's automatic retry; Retry must do the work.
@@ -89,6 +90,12 @@ Widget _wrap({
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: lightTheme(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
         home: const DashboardScreen(isAdmin: true, employeeId: 'admin1'),
       ),
     ),
@@ -355,6 +362,53 @@ void main() {
     expect(subscriptions, 2);
     expect(find.text("Couldn't load the dashboard"), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  group('2x text on a narrow phone', () {
+    void narrow(WidgetTester tester) {
+      tester.view.physicalSize = const Size(375, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
+
+    testWidgets('workload rows do not overflow', (tester) async {
+      narrow(tester);
+      await tester.pumpWidget(
+        _wrap(
+          appointments: [_appt(id: 'up', start: DateTime(2026, 7, 8, 14))],
+          clientsRepo: clientsRepo,
+          textScale: 2,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Jane Doe'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the tour tooltip actions do not overflow', (tester) async {
+      SharedPreferences.setMockInitialValues({'tour_seen_steps': <String>[]});
+      narrow(tester);
+      await tester.pumpWidget(
+        _wrap(
+          appointments: [_appt(id: 'up', start: DateTime(2026, 7, 8, 14))],
+          clientsRepo: clientsRepo,
+          textScale: 2,
+        ),
+      );
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      final scope = const DestinationTour(
+        PushedDestination.dashboard,
+      ).storageKey;
+      expect(ShowcaseView.getNamed(scope).isShowcaseRunning, isTrue);
+      expect(tester.takeException(), isNull);
+
+      ShowcaseView.getNamed(scope).dismiss();
+      await tester.pump(const Duration(milliseconds: 500));
+    });
   });
 
   group('tour on a phone viewport', () {

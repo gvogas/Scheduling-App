@@ -76,6 +76,7 @@ class _WorkloadRow extends StatelessWidget {
         ),
         const SizedBox(width: AppSpacing.sp12),
         Expanded(
+          flex: 2,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -111,13 +112,16 @@ class _WorkloadRow extends StatelessWidget {
           ),
         ),
         const SizedBox(width: AppSpacing.sp12),
-        Text(
-          context.l10n.dashboard_workloadCounts(
-            row.todayCount,
-            row.weekCount,
-          ),
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: scheme.onSurfaceVariant,
+        Flexible(
+          child: Text(
+            context.l10n.dashboard_workloadCounts(
+              row.todayCount,
+              row.weekCount,
+            ),
+            textAlign: TextAlign.end,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
         ),
       ],
