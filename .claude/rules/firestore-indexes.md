@@ -65,7 +65,7 @@ these is also swept in-code, so a missing policy is never a correctness bug.
 **A composite index is NOT redundant just because another index starts with the
 same fields — Firestore appends `__name__` to the ordered fields, and that
 lands at the END.** `appointments (employeeIds CONTAINS, endTime ASC)` was
-deleted on 2026-08-29 as a "redundant prefix" of
+deleted on 2026-08-28 as a "redundant prefix" of
 `(employeeIds CONTAINS, endTime ASC, startTime ASC)`. It is not one: the
 surviving index really reads `(employeeIds, endTime, startTime, __name__)`, so
 no prefix of it ever puts `__name__` directly after `endTime` — which is
