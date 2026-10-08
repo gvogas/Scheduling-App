@@ -4,430 +4,90 @@ paths:
   - "test/**"
 ---
 
-# Frontend (Flutter / Material Design)
+# Frontend (Flutter / Material 3)
 
-## Design Tokens
+`ColorScheme`, `TextTheme` and `ThemeData` are the source of truth. Employee `colorValue` (int) drives appointment card borders and avatar backgrounds.
 
-Token file: `lib/core/theme/design_tokens.dart`. Never hardcode raw colors, spacing, or radius in widgets. The four `ThemeExtension`s live one level down in `core/theme/extensions/{app_card_style,app_status_colors,app_palette,app_mono_type}.dart` (each carries ~40 fields plus a `copyWith` and a `lerp`, which is what made the token file 965 lines) and are **re-exported by `design_tokens.dart`** — that single import path is a precondition of the split, not a nicety, since every `theme.palette` / `theme.statusColors` call site resolves its getter through it. Import the token file, never an extension file directly.
+## Design tokens
 
-**Placement rule (redesign, 2026-07-30): a role goes on `ColorScheme` iff Material's own widgets read that slot implicitly; everything else goes on a `ThemeExtension`.** Where the design splits one Material slot in two, the slot takes the variant the framework's implicit consumers need and the extension takes the other. So `colorScheme.primary` is the saturated **fill** blue (FilledButton, FAB, app bar) while `palette.primaryAccent` is the text/icon blue; conversely `colorScheme.error` is the lifted **foreground** red (input error text/borders) while `palette.dangerFill` is the destructive fill — **a destructive filled button must read `palette.dangerFill`, never `scheme.error`**, or it is unreadable in dark. Four extensions are registered on both themes: `AppStatusColors` (`theme.statusColors`), `AppCardStyle` (`theme.cardStyle`), `AppPalette` (`theme.palette`), `AppMonoType` (`theme.monoType`).
+`lib/core/theme/design_tokens.dart` owns the token classes and their rungs: `AppColors`, `AppSpacing`, `AppRadius`, `AppShadow`, `AppDuration`, `AppMotion` (shared `AnimationStyle`, e.g. `sheetStyle`).
 
-**Fonts are bundled asset families, not `google_fonts`** (the package is gone): `kFontSans` = Instrument Sans, `kFontMono` = IBM Plex Mono. A call site never writes a raw `fontFamily` for numbers — it writes `theme.monoType.data` / `.numeralKpi` / `.groupLabel` etc. `AppMonoType.light`/`.dark` are `static final`, not `const`, because Dart has no const functions and a const initializer cannot construct a `TextStyle` from a constructor *parameter*; that is why the `extensions:` lists in `themes.dart` are non-const. Don't "restore" the const.
+- Never hardcode raw colours, spacing or radius in widgets, and never use static `AppColors.*` light tokens in `build()` — map through `Theme.of(context).colorScheme` so dark mode works.
+- Import only `design_tokens.dart`, never a file under `core/theme/extensions/` — every `theme.<x>` getter resolves through its re-export. (ADR-0121)
+- Put a role on `ColorScheme` only if Material's widgets read that slot implicitly; everything else goes on a `ThemeExtension` in `ThemeData.extensions` of both themes: `AppStatusColors` (`theme.statusColors`), `AppCardStyle` (`theme.cardStyle`, via `appCardDecoration`), `AppPalette` (`theme.palette`), `AppMonoType` (`theme.monoType`). (ADR-0121)
+- Fill a destructive button with `palette.dangerFill`, never `scheme.error` (the foreground red, unreadable as a fill in dark); `colorScheme.primary` is the fill blue, `palette.primaryAccent` the text/icon blue. (ADR-0121)
+- Use `ColorScheme.tertiary` for warning only; success reads `theme.statusColors.success`/`successContainer`/`onSuccessContainer`.
+- Never branch on `isDark`/`Theme.of(context).brightness` for styling — add an extension field, set it in `.light` and `.dark`, read the getter. Only mode-selection UI may, resolving effective brightness via `isDarkMode(themeMode, MediaQuery.platformBrightnessOf(context))`, with `toggleTheme` flipping via `toggledThemeMode` (`core/theme/theme_notifier.dart`); `themeMode == ThemeMode.dark` misreads `system`. (ADR-0121)
+- Use bundled `kFontSans`/`kFontMono`, never `google_fonts` or a raw `fontFamily` for numbers (`theme.monoType.data`/`.numeralKpi`/`.groupLabel`). Keep `AppMonoType.light`/`.dark` `static final` and `themes.dart`'s `extensions:` lists non-const. (ADR-0121)
+- Store employee colour as the LIGHT-theme ARGB int, never a lifted value; render it with `crewColorOf` (exact dark map for the ten `AppColors.crewPalette` hues) and its text with `avatarForegroundFor` — white fails contrast on a lifted colour.
+- Keep `AppColors.crewDefault` a `crewPalette` member, the nine `nav*` drawer hues a separate set (reordering the pool must not repaint the drawer), `decorativeHueRing` theme-independent, and every `AppRadius` rung even if unused. (ADR-0122)
+- Treat any off-scale `EdgeInsets` optical nudge (e.g. 1–3, 5, 7, 9–15, 18, 20, 25, 30, 48, spN ± 2) as an accepted exemption, not a finding; everything else reaches for a token first. (ADR-0122)
 
-**Employee colour is STORED as the light-theme ARGB int.** Render it through `crewColorOf(theme, storedInt)` (exact per-theme map for the ten `AppColors.crewPalette` hues, generic HSL lift for anything custom) and pick its foreground with `avatarForegroundFor(theme, background)` — white on a lifted crew colour fails contrast at avatar sizes. **Never store a lifted value.**
+## Widgets
 
-**Four `design_tokens.dart` placements that look arbitrary and are not.** `AppColors.crewDefault` (a colourless employee) must stay a `crewPalette` MEMBER — a hue outside the pool is also outside the dark-theme override map, so it takes the generic HSL lift instead of its designed dark counterpart, and no picker would offer it. The nine `nav*` drawer hues are a SEPARATE set even though each equals a crew hue: `crewPalette` is the pool employee colours are ASSIGNED from, so reordering it (a normal change) would silently repaint the drawer; they live in the token file rather than as literals in `drawer_catalog.dart`, and render through `crewColorOf` for the dark lift. `decorativeHueRing` (the custom-colour swatch) is theme-INDEPENDENT on purpose — a spectrum, not a semantic colour — and lives there only to keep `lib/` free of literal colours; its last stop repeats the first so the sweep closes. `AppRadius` `r8`–`r24` is a COMPLETE rung ladder: an unused rung (`r24`) is what makes the next design decision a lookup instead of a new hardcoded number, so don't prune one for being unreferenced; `rCard`/`rPanel`/`rSheet`/`rDialog` are the design's named surfaces, off-scale by design.
-
-| Token class | Use for |
-|---|---|
-| `AppColors` | semantic color names; use `ColorScheme` tokens in `build()` for dark-mode safety |
-| `AppSpacing` | `sp4` / `sp8` / `sp12` / `sp16` / `sp24` / `sp32` |
-| `AppRadius` | `r8` / `r12` / `r16` / `r20` / `r24` / `rFull` |
-| `AppShadow` | elevation shadows |
-| `AppDuration` | animation durations |
-| `AppMotion` | shared `AnimationStyle` (e.g. `sheetStyle` for bottom sheets) |
-
-**Off-scale `EdgeInsets` values are an ACCEPTED EXEMPTION, not a backlog** (owner call, 2026-09-05). Roughly two dozen sites pad at 5, 9, 10, 11, 13, 14, 15, 18, 20, 25 or 48 — several mixing a token value with an off-scale one in the same `fromLTRB` (`inline_month_calendar.dart`, `calendar_month_grid.dart`, `app_nav_drawer.dart`). They are deliberate optical nudges with no unambiguous token to map to, and adding those steps to `AppSpacing` would destroy the scale that makes it useful. Every audit since 2026-08 has re-found them; this paragraph is where that stops. The rule above is unchanged for everything else: reach for a token first, and go off-scale only for an optical correction you would have to undo by hand.
-
-Never use static `AppColors.*` light tokens directly in `build()` — always map through `Theme.of(context).colorScheme` so dark mode works.
-
-**`ColorScheme.tertiary` is the warning palette (amber) in both themes — never use it for success.** Success-meaning surfaces (banners, badges, notices, checkmarks) read `theme.statusColors.success` / `successContainer` / `onSuccessContainer` (the `AppStatusColors` extension); tertiary is only for warning/attention accents.
-
-**Never branch on `isDark` / `Theme.of(context).brightness` for styling.** A
-light↔dark difference that `ColorScheme` can't express on its own (shadow vs.
-border, mode-specific decoration) lives in a `ThemeExtension` registered on
-`ThemeData.extensions`, read through a `theme.<x>` getter — see `AppStatusColors`
-(`theme.statusColors`) and `AppCardStyle` (`theme.cardStyle`, wrapped by
-`appCardDecoration(theme, ...)`). To add a per-theme value: add a field to the
-extension, set it in both `.light`/`.dark`, and read the getter — no brightness
-check at the call site. The **only** legitimate `isDark` is mode-selection UI
-(the dark-mode toggle), never appearance — and there it must resolve the
-*effective* brightness via `isDarkMode(themeMode, MediaQuery.platformBrightnessOf(context))`
-(`core/theme/theme_notifier.dart`), NOT `themeMode == ThemeMode.dark`, or the
-switch mis-reads the default `system` mode on a dark phone and needs two taps.
-`toggleTheme` flips via `toggledThemeMode(...)` for the same reason.
-
-## Design Principle
-
-Material Design 3 (Flat / Elevation). Use `ColorScheme`, `TextTheme`, and `ThemeData` as the source of truth. Employee `colorValue` (int) drives appointment card borders and avatar backgrounds.
-
-## Widget Framework
-
-- Material widgets first. Reach for custom widgets only when Material doesn't fit.
-- Shared widgets live in `lib/shared/widgets/`. Feature-specific widgets live in the feature's `widgets/` folder.
-- `AppTopBar` (`shared/widgets/app_bars/`) is the standard screen header, and **it is not an `AppBar` any more** (2026-09-11, the "fresh" redesign). It paints `theme.scaffoldBackgroundColor` with a `displayLarge` title, ghost controls, and no bar and no divider (a title-side `count` was built and removed 2026-09-12 with no caller — the Clients count lives in its list header); `compact: context.isLandscape` drops the title onto the 48px controls row as `titleLarge`. It still `implements PreferredSizeWidget` and every screen still uses it — never hand-build a bare `AppBar`. **Dropping the `AppBar` means it reproduces three things the framework was giving it**, and all three are load-bearing: the `AnnotatedRegion<SystemUiOverlayStyle>` (brightness ESTIMATED off the painted surface through `overlayStyleFor` in `design_tokens.dart`, the one owner shared with `CalendarHeaderBlock` and `AuthScaffold` — never branched on `theme.brightness`), the safe-area inset, and — because `actions` no longer suppresses anything — the absence of an implicit `EndDrawerButton`.
-  **`preferredSize` is an upper BOUND, not the rendered height, and that is deliberate.** The getter has no `BuildContext`, so it cannot see the text scaler; it reserves the text-driven rows at `Breakpoints.maxTextScale` (2.2 — the SAME constant `main()` caps the composed scale with, so raising the cap cannot silently clip the header) and the header renders its real rows inside that. Two `Scaffold` facts make this correct rather than sloppy, both worth knowing before anyone "tightens" it: `Scaffold` adds `MediaQuery.paddingOf(context).top` ITSELF (`scaffold.dart`, `_appBarMaxHeight`), so including the inset here double-counts it; and `contentTop` comes from the **laid-out** height (`layoutChild(_ScaffoldSlot.appBar, …).height`), so over-reserving leaves no gap and only *under*-reserving clips. The bound is also what bounds the `Flexible` title row — a `RenderFlex` with unbounded height would throw. Don't add a `textScaler` parameter to "fix" it: 10 call sites would default it to `noScaling` and clip at 2×.
-  **The calendar's agenda day/week toggle is two `GhostControl.icon` tiles**, the active one `GhostTone.selected` — not a Material `SegmentedButton`, which painted its selected half `secondaryContainer` green directly under the header's ghost controls.
-  **One screen has no `AppTopBar` at all: the calendar** (`CalendarHeaderBlock`, P2). A `PreferredSizeWidget`'s height is fixed per build, so it cannot host the week strip that rises in and out on collapse. That block now paints the same page colour and ghost controls as the header, and sets its own `AnnotatedRegion` the same way. Don't generalise the exception.
-- **A ghost control has ONE owner: `GhostControl` (`shared/widgets/primitives/ghost_control.dart`), and it owns the TAP FLOOR as well as the paint.** `kGhostTile` (38) is the painted tile, `kGhostTapTarget` (48) the minimum hit area, and the 48 lives INSIDE the `InkWell` — the six hand-spelled copies it replaced put the 48px box *around* the gesture, so three of them reserved the layout and tapped at 38 (the clients Filter button measured 38x34, its chips 35 tall). The tile is `Ink`, not a nested `Material`, precisely so the splash still paints over the fill while the InkWell above it is the bigger box. Four `GhostTone`s cover every live variant — `ghost` (surface + `outlineVariant`), `accent` (primary border and glyph, the Filter button), `selected` (`onSurface` fill, page-colour label, a picked filter chip) and `active` (`primary` fill, `onPrimary` glyph, the calendar crew filter); add a tone only for a variant that exists. `SheetHeaderBar`'s Cancel/verb deliberately stay `TextButton`s (its disabled-verb assertion is what that buys) and reach 48 through `tapTargetSize.padded` instead. **A pill hugs its tile: the `Center` inside it takes `widthFactor: 1`.** A bare `Center` fills the width it is offered, and in `AppTopBar`'s controls row the pill is handed a `Flexible` — so the Calendar pill's box swallowed the row and its painted tile floated 84px adrift of the hamburger, which reads as the pill being in the wrong place rather than as a layout bug. Pinned by `ghost_control_test.dart` and by `app_top_bar_test.dart` (the `AppBar` harness in `app_header_pair_test.dart` does NOT reproduce it, so don't put the assertion there).
-- **Every screen passes `actions: const [AppHeaderPair()]` and `endDrawer: AppNavDrawer(...)`.** The pair (Calendar pill + hamburger) is the uniform header chrome, styled as ghost controls since 2026-09-11 — `scheme.surface` fill, 1px `scheme.outlineVariant` border, `scheme.onSurface` glyph, `AppRadius.rFull`, a 38px painted box inside a 48px tap target, and the pill's calendar glyph alone in `scheme.primary`. Putting it in `actions` **used to** be what suppressed Flutter's automatic `EndDrawerButton`; since `AppTopBar` stopped being an `AppBar` there is no implicit button to suppress, so that is no longer the reason to do it — uniformity is. It resolves its host through `Scaffold.of(context)`, so **no screen needs a `GlobalKey<ScaffoldState>`** — don't reintroduce one. The Calendar pill calls `goHomeToCalendar(context)`, the one canonical go-home gesture (close drawer → calendar tab → collapse the pushed stack); never hand-roll its parts. Pushed screens' `onBack` is a plain `Navigator.maybePop` — back means back, the pill covers go-home. `AppNavDrawer` is right-anchored, 284 px, and is the nav surface at **every** screen size; its rows come from `drawerGroups(isAdmin:)` in `features/navigation/domain/drawer_catalog.dart`. A closed drawer's child is never built, so watching `.autoDispose` count providers in its body is free — do **not** add an "is open" flag. **A row's leading is a 28×28 tinted icon chip** — `drawerRowIcon(d)` on `drawerDotColor(d)` at `theme.cardStyle.iconChipAlpha`, the same idiom as `InfoCardRow` — so colour is never a row's only cue. Icon and colour are two separate exhaustive switches over the sealed `AppDestination`, not one record: a row's icon is stable while its hue is decoration. The row padding is `sp8`, not `sp12`, **specifically so the 28px chip fits inside the existing 48 px minimum** rather than growing the drawer; don't "restore" `sp12`.
-- `AppointmentCard`, `StatusChip`, `AppAvatar`, `SkeletonLoader`, `SkeletonList` (N stacked `SkeletonListTile`s — the standard list loading state; deliberately NOT scrollable, since two of its callers sit inside `infinite_scroll_pagination`'s `SliverFillRemaining`, which asks its child for intrinsics and throws on a nested `ListView`. It was hand-built at each call site and had already drifted on the row gap), `AppEmptyState`, `AppSearchBar` (the one search-field style — Clients/History/Employees all use it), `EmployeeColorGrid`, `SectionLabel` (uppercase mini-header), `showConfirmDialog` (Cancel/confirm dialog; `destructive:` toggles the error-filled confirm), `AppDialogFrame` (`shared/widgets/dialogs/` — the bare dialog SHELL: title, scrollable body, action row, and the one inset value with no token behind it. It is the frame under a dialog that is NOT a Cancel/confirm question, so it does not replace `showConfirmDialog` and deliberately does not wrap it; the three call sites that had the same twelve lines each are the booking-conflict, series-scope and time-off clash dialogs), `DialogActionPair` (`shared/widgets/dialogs/dialog_action_pair.dart` — the outlined-secondary + filled-primary 44px dialog footer those same three dialogs use) — use these before creating new ones.
-- `EmployeeColorGrid` **hides** colors taken by another employee (never grey/disable them; the current selection always stays visible), and its custom dialog is a tap-a-swatch palette + shades only — don't reintroduce the color wheel or hex-code field.
-- `ClearTextButton` (`shared/widgets/fields/`) is the one clear-"x" suffix — `LabeledTextField` adds it to every editable field automatically (a custom `suffixIcon` or `readOnly` picker field opts out); its `onCleared` must keep host state/validation in sync, and the optional `placeholder` renders while the field is empty. Never hand-roll a suffix clear button.
-- `AttachedDropdown` (`shared/widgets/fields/`) is the bordered suggestion list
-  that attaches under a text field — margin, border, radius and clip in one
-  place. `AddressAutocompleteField` and `ClientPicker` both build on it; they
-  were two hand-written copies of the same shape, the second carrying a comment
-  asserting it matched the first, which is the drift `SheetPanel` already
-  exists to stop. It owns the CHROME only: each caller still builds its own
-  rows, so the address field's plain list and the client picker's
-  divider-indexed one with its fallback caption stay different on purpose.
-- `BusyButtonIcon` (`shared/widgets/primitives/`) is the leading slot for a `*.icon` button that swaps to a spinner while busy — use it instead of hand-rolling `isBusy ? SizedBox(CircularProgressIndicator) : Icon(...)` (the button keeps its own styling and disables itself). `AnimatedLoadingButton` (`core/animations/`) remains the primary/submit button (whole label↔spinner swap). For a destructive (delete/cancel) `OutlinedButton`, style it with `destructiveOutlinedButtonStyle(context, {minimumSize})` (`core/theme/button_styles.dart`) rather than repeating the `scheme.error` foreground + border.
-- **Platform adaptivity is one seam: `context.isCupertino`** (`core/adaptive/adaptive.dart`;
-  reads `Theme.of(context).platform`, NOT `defaultTargetPlatform`, so tests force the look via
-  `ThemeData(platform:)`). It is the single source of truth for iOS-vs-Android UI branching —
-  route new platform branches through it; never scatter `Platform.isIOS` / `defaultTargetPlatform`
-  at call sites. The one exception is real device **capability** (not look) — e.g. which map apps
-  exist uses `dart:io Platform.isIOS` in `AddressMapLauncher`. A capability gate that guards
-  REAL LOGIC takes `defaultIsIosPlatform` (`core/platform/ios_platform.dart`) as an injected
-  `bool Function()` instead, so the harness can reach behind it: `flutter test` runs on the host,
-  where a bare `Platform.isIOS` returns first and leaves everything after it untestable — on the
-  only platform that ships. It lives in `core/` because two of its callers already import each
-  other; don't re-declare a private copy beside a third (`widget_sync_service.dart` carried one
-  until 2026-08-22). Shared adaptive widgets, all
-  Android-unchanged: `showAdaptiveActionSheet` (`core/adaptive/adaptive_action_sheet.dart` —
-  `CupertinoActionSheet` on iOS, Material bottom sheet on Android; the one "pick one option"
-  chooser), `AdaptiveProgressIndicator` (busy spinner — `BusyButtonIcon` / `AnimatedLoadingButton`
-  already delegate to it; don't hand-roll `SizedBox(CircularProgressIndicator)`), and
-  `AppScrollBehavior` on `MaterialApp.scrollBehavior` (iOS `CupertinoScrollbar`, vertical
-  scrollables only). Prefer the `.adaptive` Material constructors (`Switch.adaptive` /
-  `SwitchListTile.adaptive` with `activeTrackColor: scheme.primary`, `RefreshIndicator.adaptive`)
-  over the plain ones. `showConfirmDialog` and `AppBackButton` already render their Cupertino
-  variants on iOS. **One design-mandated exception: `showSeriesScopeDialog` has NO Cupertino
-  branch** (P2). The design puts a consequence line under each scope option ("12 remaining visits
-  through 26 Jan") and an action sheet cannot render one. That is a single exception, not a policy
-  change — don't use it to justify dropping other Cupertino branches.
-- **Sheet chrome added by P2** — `FormSheetFrame` (`shared/widgets/sheets/`) is the add/edit form shell: a fixed-height sheet whose bar carries **Cancel · title · primary verb**, no grabber. **`SheetHeaderBar` IS that bar and `FormSheetFrame` is its ONLY caller** — there is no separate close-button sheet header, and the detail sheets (appointment, client, employee) carry no header bar at all: they are a `DetailSheetListView` with a drag handle. Since 2026-09-11 the bar speaks the same fresh vocabulary as `AppTopBar`: **no coloured band and no divider** (it sits on the sheet's own `surfaceContainerLowest`), a `headlineLarge` title in `scheme.onSurface`, and Cancel/verb painted as ghost tiles — `scheme.surface` fill, 1px `scheme.outlineVariant` border, `AppRadius.rFull`, a 38px painted box that `tapTargetSize.padded` lifts to the 48px tap floor. Both stay `TextButton`s, which is what keeps the disabled-verb assertion meaningful; the verb's label keeps `palette.primaryAccent` (`textMuted` disabled) because it is the accented control, the way the header pill keeps its calendar glyph in `scheme.primary`. It **is** a sheet, so never nest it inside another `DraggableScrollableSheet` — switch chrome above it, the way `EventDetailsSheet` picks the frame by `isEditing`. Destructive actions go in the scroll footer, never the bar. `SheetPanel` (`shared/widgets/cards/`) is the white divided-row container inside a form sheet — **build one through it, never by hand**: three private copies appeared in one release (the selected-client card, the picker's result panel, the previous-job-address list) and had already drifted on corner radius, two falling through to `appCardDecoration`'s `r12` beside an `r16` sibling in the same section, while a fourth widget in the same diff called `SheetPanel` correctly. It also indexes its dividers, where a hand-built copy compared record VALUES against `rows.first` and would drop a divider between two equal rows; `SheetFieldRow` (`shared/widgets/fields/`) is the label-over-value picker row used for dates and times — free-text fields keep `LabeledTextField`, which owns the error shake and the clear button. `SheetPanelRow` (`shared/widgets/cards/`) is the third row shape: label-over-**child** (a chip strip) or label-beside-**trailing** (a switch), for a row that has no picked *value* — a `SheetFieldRow` with an empty value renders a blank second line where the value belongs. It was private to `edit_person_sheet.dart` until the AVAILABILITY panel appeared on My details too (P5, 2026-08-10); both screens must render that panel identically. **Never use a `ListTile` family widget inside a `SheetPanel`** — the panel paints its own decoration, and `ListTile` asserts ("background color or ink splashes may be invisible") when its background sits inside a `DecoratedBox`. `KeyValuePanel` (`shared/widgets/cards/`) is the read-only detail sheet's 70px mono key column. **`FormSheetFrame` is the ONLY form-sheet chrome** — the older `FormSheetScaffold` was retired once P3/P4 migrated the last client and employee sheets, and `EntityFormHeader` went with the edit forms that used it. Both have zero declarations and zero call sites; the only survivor is the tombstone comment in `form_sheet_frame.dart:16` (the stale `add_client_sheet_test.dart` comment this used to name was fixed, and reads `FormSheetFrame` now). This bullet said "**`FormSheetScaffold` survives**" long after it did not, while the Forms & sheets section below told you to build new sheets on it — so build on `FormSheetFrame`, and treat a mention of either retired class as documentation to correct rather than an API to find. `InfoCard` IS live and untouched.
-- `SettingsSwitchTile` (`settings/widgets/cards/settings_tile.dart`) is the
-  Settings row whose control is a switch, and the WHOLE ROW toggles it — a
-  shrink-wrapped `Switch.adaptive` is about 31pt, under both tap minimums, on
-  the row whose label is what you are aiming at. Four hand-built tile+switch
-  pairs had already drifted on that property, leaving two halves of one screen
-  at different row heights. `onTap` overrides the row toggle for a row that
-  also navigates (location sharing opens a screen; only its switch flips
-  sharing). **A settings card indexes its dividers off its row LIST**, the way
-  `SheetPanel` does — the `isLast` flag it replaced made every row's divider
-  depend on whether some LATER row was visible, so adding one meant editing
-  every earlier row's condition, and the flag was already dead at four sites.
-- `DetailSheetListView` (`shared/widgets/sheets/`) is the standard scrollable shell for a detail view shown in a bottom sheet (`showHandle: true`) or a master-detail pane — standard padding, optional drag handle, keyboard-inset-aware bottom gap (`handleGap` tunes the post-handle spacing). Use it for new detail views instead of a bare `ListView`.
-- Detail-view building blocks are shared by the client and appointment view
-  bodies: `QuickActionsRow` + `QuickActionButton` (`shared/widgets/primitives/`,
-  tinted Call/Email/Directions tiles — pass only the buttons whose data exists)
-  and `InfoCard` + `InfoCardRow` (`shared/widgets/cards/`, a bordered card of
-  tappable rows with tinted icon chips). Reuse these for any new detail surface;
-  don't hand-roll a contact card or action-button row. The actions launch
-  through the shared helpers — `launchPhoneCall` (`core/launchers/`),
-  `AddressMapLauncher`, `EmailComposeLauncher` — built where `ref` lives (both
-  choosers delegate to `showAdaptiveActionSheet` with no local Material branch).
-  Those all delegate to **`launchExternalUri`**
-  (`core/launchers/external_uri_launcher.dart`), the single launch + catch +
-  `logger.warn(tag)` + error-notice body. Never hand-roll a bare `launchUrl`:
-  the copies it replaced had drifted, and one had lost its `try`/`catch`, so a
-  thrown `launchUrl` escaped to the zone handler as a FATAL instead of a
-  notice. `AddressMapLauncher.showMapChoices` is the one carve-out (it surfaces
-  via a sanctioned SnackBar, not a notice) and still wraps its own `try`.
-  Read-only detail bodies **omit empty sections** entirely rather than rendering
-  "None" placeholders.
-- **Multi-stop routing** is a separate seam from single-address launching:
-  `buildGoogleMapsRouteUrl` (`maps/domain/route_url_builder.dart`) builds one
-  directions URL through the stops in order (`maxRouteStops = 10` — Google's
-  9 waypoints + 1 destination cap; extra stops are silently dropped, so warn
-  the user), and `launchGoogleMapsRoute` (`core/launchers/route_map_launcher.dart`)
-  opens that prebuilt URI. Apple Maps has no multi-stop URL scheme, so this is
-  Google-only; `AddressMapLauncher` remains the per-stop chooser for a single
-  address. Don't route a multi-stop run through `AddressMapLauncher`.
-- `AppAvatar` (sizes `xs/sm/md/lg`) resolves its background through `crewColorOf` and its foreground through `avatarForegroundFor` (design_tokens) — do not hand-roll initials-on-color circles or the black/white contrast ternary. `contrastingForegroundFor` survives as the light-path primitive inside `avatarForegroundFor`. A caller that must lay avatars out by hand (the appointment card's overlapped crew stack, which can't use `LayoutBuilder` under `IntrinsicHeight`) reads `AvatarSize.<x>.diameter` — never a local copy of the number, which drifts silently with no compile error.
-- `BrandMark` (`shared/widgets/branding/brand_logo.dart`) is the app logo
-  (`assets/images/brand_mark.png`, the 512px derivative — the 1254px
-  `icon.png` master is deliberately NOT bundled; see `assets/images/README.md`)
-  — never hand-roll an `Image`/`Icon` for branding.
-  Pass `decorative: true` where a visible `brandName` wordmark sits beside it
-  (splash, onboarding bar) so a screen reader doesn't read the name twice; leave
-  it on where the mark is the only brand cue (auth header). Auth screens get the
-  mark from the hero header in `auth_scaffold.dart` (P4b — `AuthBrandHeader`
-  is deleted, along with the `EntityFormHeader` the retired edit forms used);
-  `brandName` is a proper noun — never localize it.
-- `WarningNote` (`shared/widgets/feedback/`) is the amber "heads up, but nothing
-  failed" box — a caveat attached to an action that *succeeded*. A real failure
-  stays `AuthBanner` / `composeErrorNotice`. Its icon reads `onWarningContainer`,
-  the same token as the text beside it; the hand-rolled copies it replaced had
-  already drifted to `status.warning`, which is the standalone accent and does
-  not hold contrast on the container fill.
-  **`filled: false` is the same note without the container**, for a caption
-  already inside a bordered surface where a second amber panel reads as a
-  nested box — the booking-conflict dialog. Take the flag rather than
-  hand-rolling that row again.
-- `accentPillButtonStyle(context)` (`core/theme/button_styles.dart`) is the
-  tinted accent pill that opens an edit sheet from a detail header. The client
-  detail's and the team profile card's are the same control — style both through
-  it, the way destructive outlined buttons go through
-  `destructiveOutlinedButtonStyle`.
-- **`ScrollToTopButton` (`shared/widgets/primitives/`) is the floating "back to top" control**, and it rides the enclosing `PrimaryScrollController` rather than taking a controller — every list surface here already sits in a `PrimaryScrollScope`, so a host adds it by stacking it over the list. It hides itself under `threshold` (400) and reads `hasClients` before every touch of `offset`, which is false between a rebuild and the list re-attaching. A host that floats it (or a FAB) over a list owes that list **`kFloatingControlsClearance`** (`core/layout/floating_controls.dart`, 90) of bottom padding, or the last row rests underneath and can be neither read nor tapped. That constant was the calendar's `kAgendaFloatingControlsClearance` until the clients list needed it too. **Its animated shell is `FloatingPill` (same folder), shared with the calendar's `TodayPill`** — the scale/fade/`IgnorePointer`, shadow, surface `Material` and `InkWell` were byte-identical in both; a third floating control composes it rather than copying either.
-- **`measureTextWidth` (`core/layout/text_measure.dart`) is the one owner of "measure, then pick the label that fits".** Two headers carry a long form and a short one and choose between them before layout — the calendar's month row (`September` / `Sep`) and the agenda's day title (`Friday, September 11` / `Fri, Sep 11`, which otherwise ellipsised to "Friday, Septe…" beside the count and the toggle). Pass the same `TextStyle` the `Text` will use; it reads the ambient `textScaler` itself.
-- `AppointmentStatus.fromRaw` (status_chip.dart) is the only string→status mapper — never add a per-widget switch.
-- **Image picking goes through `pickAppointmentImages(context, ref)`**
-  (`calendar/widgets/sheets/image_source_picker.dart`) — never call
-  `ImagePickerService` / `image_picker` directly from UI. **A FORM adds them
-  through `pickAndAddAppointmentImages` beside it**, which owns the pick, the
-  post-await `context.mounted` re-check and the notice naming what the per-job
-  cap dropped. The pick is the longest await in the app — an OS action sheet
-  and then the camera or Photos picker — so the form can be gone when it
-  returns; the two hosts spelled that out separately and had already drifted on
-  which `mounted` they checked. The CREW path
-  (`DetailsFieldRecordView._addPhotos`) deliberately does not use it: it
-  clamps against the job's stored count as well as the per-pick cap and
-  uploads in the background rather than staging into form state. It offers Camera /
-  Gallery; camera is gated by `MediaPermissionService` (`permission_handler`),
-  gallery uses the OS photo picker (no permission needed). Read-only appointment
-  photos render as an `AppointmentImageCarousel` (`smooth_page_indicator`);
-  edit mode uses the `PhotoPickerSection` thumbnail strip.
-
-- **`TourSteps`** (`feature_tour/domain/tour_steps.dart`) owns a screen's step
-  ids, keys and `step()` wrapper. Six screens had a copy of the trio that had to
-  stay in sync (`keys[id]!` force-unwraps; `indexOf`/`length` feed "step N of
-  M") and Settings had already drifted. One `late final _tour = TourSteps(dest,
-  isAdmin:)` per screen — don't re-inline it. **The app bar's `bottom:` slot
-  uses `stepBarIf`**, the `PreferredSizeWidget` sibling of `stepIf`: without it
-  that one slot escaped the class's ownership and Clients, History and Team each
-  re-spelled the same six-line `has(id) ? TourShowcaseBar(...) : bar` block by
-  hand.
+- Use Material first; feature widgets live in the feature's `widgets/`. Check `lib/shared/widgets/` before creating one: Cancel/confirm questions use `showConfirmDialog` (`destructive:`); any other dialog uses `AppDialogFrame` + `DialogActionPair`, which deliberately doesn't wrap it. (ADR-0134)
+- Keep `SkeletonList` (`skeleton_loader.dart`, stacked `SkeletonListTile`s) non-scrollable — two callers sit in a `SliverFillRemaining` that throws on a nested `ListView`. (ADR-0134)
+- Use `WarningNote` for an amber caveat on a SUCCESS (`filled: false` inside a bordered surface), its icon on `onWarningContainer`; a failure stays `AuthBanner`/`composeErrorNotice`. (ADR-0134)
+- Build detail views on `DetailSheetListView` (`showHandle:`, `handleGap`) with `QuickActionsRow`/`QuickActionButton` (only buttons whose data exists) and `InfoCard`/`InfoCardRow`; never a bare `ListView` or hand-rolled contact card. Omit empty sections rather than render "None".
+- Use `AppTopBar` as every screen header, never a bare `AppBar`; `compact: context.isLandscape`. The calendar (`CalendarHeaderBlock`) is the one screen without it; don't generalise that. It is NOT an `AppBar`, so it must keep its `AnnotatedRegion` (via `overlayStyleFor`, never `theme.brightness`), the safe-area inset and no implicit `EndDrawerButton`. (ADR-0123)
+- Keep `AppTopBar.preferredSize` an upper bound at `Breakpoints.maxTextScale` (2.2) — no top inset (`Scaffold` adds it), no `textScaler` param (every call site would default to `noScaling` and clip at 2×). (ADR-0123)
+- Pass `textScaler: MediaQuery.textScalerOf(context)` at every `AppSearchBar` call site, or its context-free `preferredSize` clips at large text. (ADR-0123)
+- Build every ghost control through `GhostControl` (`ghost_control.dart`): `kGhostTile` 38 painted, `kGhostTapTarget` 48 INSIDE the `InkWell`, tile is `Ink`; `GhostTone` `ghost`/`accent`/`selected`/`active`, a new tone only for a real variant. The agenda day/week toggle is two `GhostControl.icon` tiles, not a `SegmentedButton`. (ADR-0124)
+- Give a pill's `Center` `widthFactor: 1`, or it fills `AppTopBar`'s `Flexible`; assert that in `ghost_control_test.dart`/`app_top_bar_test.dart`, not `app_header_pair_test.dart`. (ADR-0124)
+- Give every screen `actions: const [AppHeaderPair()]` and `endDrawer: AppNavDrawer(...)`, with no `GlobalKey<ScaffoldState>`. The pill calls `goHomeToCalendar(context)`, never hand-rolled parts; `onBack` is `Navigator.maybePop`. (ADR-0124)
+- Keep `AppNavDrawer` right-anchored, 284 px, at every size, rows from `drawerGroups(isAdmin:)` (`drawer_catalog.dart`), with no "is open" flag. A row leads with a 28×28 `drawerRowIcon(d)` chip on `crewColorOf(theme, drawerDotColor(d))` (the dark lift) at `theme.cardStyle.iconChipAlpha` (two separate switches over `AppDestination`) and keeps `sp8` padding to fit 48 px. (ADR-0124)
+- Branch iOS-vs-Android LOOK only on `context.isCupertino` (`core/adaptive/adaptive.dart`), never `Platform.isIOS`/`defaultTargetPlatform`. A capability check may use `dart:io` (`AddressMapLauncher`); one guarding real logic injects `defaultIsIosPlatform` (`core/platform/ios_platform.dart`), never a private copy. (ADR-0125)
+- Use `showAdaptiveActionSheet` for pick-one choosers, `AdaptiveProgressIndicator` for spinners (never a hand-rolled `SizedBox(CircularProgressIndicator)`), the `.adaptive` Material constructors and `AppScrollBehavior`. `showConfirmDialog` and `AppBackButton` are already adaptive; `showSeriesScopeDialog` alone has no Cupertino branch, and is no precedent. (ADR-0125)
+- Use `BusyButtonIcon` for a busy `*.icon` button, `AnimatedLoadingButton` for submit, `destructiveOutlinedButtonStyle` for a destructive `OutlinedButton` and `accentPillButtonStyle` for the detail-header edit pill (`core/theme/button_styles.dart`).
+- Let `EmployeeColorGrid` HIDE others' colours (never grey them; the selection stays visible); its custom dialog is swatches + shades, no wheel or hex.
+- Render avatars with `AppAvatar` (`xs/sm/md/lg`), never hand-rolled; hand layout reads `AvatarSize.<x>.diameter`, never a copied number. `contrastingForegroundFor` stays the light-path primitive inside `avatarForegroundFor`.
+- Pass `BrandMark(decorative: true)` beside a visible `brandName` wordmark only; never hand-roll a brand `Image`/`Icon` or localize `brandName`. (ADR-0134)
+- Launch through `launchPhoneCall`, `AddressMapLauncher`, `EmailComposeLauncher` (built where `ref` lives), all over `launchExternalUri` — never a bare `launchUrl` (one lost its `try` and went FATAL). `AddressMapLauncher.showMapChoices` is the SnackBar carve-out and keeps its own `try`. (ADR-0128)
+- Route a multi-stop run through `buildGoogleMapsRouteUrl` (`maxRouteStops` 10; extras drop silently, so warn) and `launchGoogleMapsRoute`, never `AddressMapLauncher`. (ADR-0128)
+- Map strings to status only via `AppointmentStatus.fromRaw` (`appointment_status_values.dart`).
+- Pick images via `pickAppointmentImages(context, ref)`, never `ImagePickerService`/`image_picker` from UI; a FORM adds them via `pickAndAddAppointmentImages`, which owns the post-await `context.mounted` re-check — the crew path `DetailsFieldRecordView._addPhotos` deliberately doesn't. Camera is gated by `MediaPermissionService`; display is `AppointmentImageCarousel` (read-only) / `PhotoPickerSection` (edit). (ADR-0129)
+- Float `ScrollToTopButton` over a `PrimaryScrollScope` list (`threshold` 400; check `hasClients` before `offset`); a list under a floating control or FAB gets `kFloatingControlsClearance` (90) bottom padding; a new floating control composes `FloatingPill`. (ADR-0134)
+- Pick a long/short label via `measureTextWidth` (`core/layout/`), passing the `Text`'s own `TextStyle`. (ADR-0134)
+- Give each toured screen one `late final _tour = TourSteps(dest, isAdmin:)` and `stepBarIf` (the `stepIf` sibling) for the `bottom:` slot; never re-inline them. (ADR-0134)
 
 ## Layout
 
-- Use `Column`, `Row`, `Stack`, `Expanded`, `Flexible`, `Wrap` for layout. Prefer `SizedBox` over `Padding` when only size is needed.
-- Touch targets: minimum 48×48 logical pixels (Material guideline).
-- **A `Container` that carries an `alignment` EXPANDS to its parent's bounded
-  width** — it is not a way to centre a child inside a hug-width box. Setting
-  `alignment: Alignment.center` on a chip to centre it inside a `minHeight: 44`
-  tap floor is what made every `EmployeePicker` chip take a whole row of the
-  `Wrap`, avatar and name stranded in the middle, from 2026-08-22 until
-  2026-09-12. Drop the `alignment`: the `constraints` still hold the tap floor,
-  and a `Row` under a min-height constraint already centres on its cross axis.
-  Reach for `Align(widthFactor: 1)` only when the child genuinely needs an
-  alignment it cannot get from its own cross-axis rules.
-- Avoid deeply nested widget trees — extract into named methods or sub-widgets.
-- **Responsive:** `Breakpoints.tablet = 840`, `tabletShortestSide = 600`,
-  `expanded = 1200`. Context getters:
-  `isWide` (`width ≥ 840`), `isLandscape` (orientation),
-  `isSplitLayout` (`isWide || isLandscape`), and
-  `isTwoPane` (`MediaQuery.shortestSide ≥ 600`). Two DIFFERENT gates, don't
-  conflate them:
-  - `isSplitLayout` drives the **calendar Split chrome** only, so
-    **landscape phones AND tablets** render the calendar side-by-side (month
-    grid | day agenda, details in a sheet — it has no detail pane) while
-    portrait phones stay single-column. The **nav rail is gone** (deleted
-    2026-07-30 with `AdaptiveShell`, `Breakpoints.expanded` and `isExpanded`);
-    `AppNavDrawer` is the nav surface at every size, so `isSplitLayout` no
-    longer gates any nav chrome. Don't reintroduce a rail or a size-gated drawer.
-  - `isTwoPane` drives the **list-screen master-detail** (`MasterDetailScaffold`,
-    list | detail side by side). It's **tablet-class only and
-    orientation-independent** (shortest side ≥ 600): a landscape phone reports
-    `isSplitLayout` but NOT `isTwoPane` — it's too narrow for a
-    readable detail pane, so it falls back to the single list + a pushed detail
-    sheet, and rotating a phone never swaps a pane in. Gate every list
-    master-detail on `isTwoPane`, never on `isSplitLayout` or a raw width.
-  In landscape, app bars slim down via `AppTopBar(compact: true)`.
-- **Compact / narrow folding:** dense rows (cards, headers, action bars, detail
-  rows) that stack vertically on small phones or large text read
-  `context.isCompact` (`width < Breakpoints.compactWidth` (360) `|| textScale >
-  Breakpoints.compactTextScale` (1.4)); `context.isNarrowWidth` is the
-  width-only variant for layouts that fold on screen width alone. Sheets that
-  grow on short (landscape-phone) viewports gate on
-  `Breakpoints.shortViewportHeight` (700). All live in `core/layout/breakpoints.dart`
-  beside `isWide`/`isSplitLayout` — never re-inline the `width<360 || scale>1.4`
-  predicate at a call site.
-- **No `LayoutBuilder`-based widget under `IntrinsicHeight`/`IntrinsicWidth`.**
-  `LayoutBuilder` can't return intrinsic dimensions, so it throws
-  `LayoutBuilder does not support returning intrinsic dimensions` during the
-  intrinsic pass — which in release builds surfaces later as a paint-time
-  `Null check operator used on a null value` on the enclosing scroll viewport
-  (the aborted layout leaves slivers with null geometry). `auto_size_text`'s
-  `AutoSizeText` wraps an internal `LayoutBuilder`, so it cannot live inside an
-  `IntrinsicHeight` subtree. `AppointmentCard` uses `IntrinsicHeight` to stretch
-  the employee-color bar, so its title stays a plain `Text` — don't swap it back
-  to `AutoSizeText`.
-- **A `DraggableScrollableSheet` with a `controller` needs a KEYED slot when
-  any earlier sibling is conditional.** A `Stack`/`Column` matches unkeyed
-  siblings by position, so an `if (...)` child appearing or vanishing above the
-  sheet re-slots it into a NEW element — whose `initState` attaches the
-  controller before the old one's `dispose` detaches it. Debug asserts
-  "Draggable scrollable controller is already attached to a sheet"; release is
-  worse, because the old `dispose` then detaches (and disposes the extent of)
-  the NEW sheet, so every later `animateTo`/`jumpTo` silently no-ops. The live
-  map's team sheet shipped this under its conditional `EmptyMapCard`
-  (2026-09-14); pinned in `live_map_screen_test.dart`.
-- **Multiple primary scrollables alive at once → wrap each in
-  `PrimaryScrollScope`** (`core/layout/primary_scroll_scope.dart`). A route
-  offers one `PrimaryScrollController`, and the app-wide `Scrollbar`/
-  `CupertinoScrollbar` (`AppScrollBehavior`) throws "attached to more than one
-  ScrollPosition" if two controllerless primary `ScrollView`s attach to it. This
-  happens in the hub's `IndexedStack` of always-alive tabs and in the calendar /
-  master-detail splits — each tab and each pane is already scoped; scope any new
-  simultaneously-mounted scroll surface the same way. `MasterDetailScaffold`
-  scopes its two panes for you.
-- **Every FAB inside the persistent hub (`routes/hub_shell.dart`) needs a unique
-  `heroTag`.** The `IndexedStack` keeps every tab's `Scaffold` (and FAB) mounted
-  at once, so a default/shared hero tag collides ("multiple heroes share the same
-  tag"). The tags are declared in the tab screens the hub keeps mounted (not in
-  `hub_shell.dart` itself). Existing tags (3): `addFab`
-  (`main_calendar_screen.dart`), `clientsAddFab` (`clients_screen.dart`) and
-  `employeesAddFab` (`employees_screen.dart`). `todayFab` retired in P2 — the
-  Today control is now a plain `Material` pill, not a FAB — and
-  `liveMapRosterFab` / `liveMapRecenterFab` went on 2026-09-13, when the map's
-  controls became ghost tiles over a draggable team sheet.
-- **`AppSearchBar` call sites must pass `textScaler: MediaQuery.textScalerOf(context)`.**
-  Its `preferredSize` has no `BuildContext`, so without the scaler the app-bar
-  bottom slot reserves fixed height and clips the field at large text sizes.
+- Lay out with `Column`/`Row`/`Stack`/`Expanded`/`Flexible`/`Wrap`; `SizedBox` over `Padding` for size alone; extract deep trees. Touch targets ≥ 48×48.
+- Never centre a child in a hug-width box with a `Container` `alignment` — it expands to the parent's width; the constraints already hold the tap floor. Use `Align(widthFactor: 1)` only when truly needed. (ADR-0130)
+- Never put a `LayoutBuilder`-based widget (incl. `AutoSizeText`) under `IntrinsicHeight`/`IntrinsicWidth`; it throws in the intrinsic pass, so `AppointmentCard`'s title stays plain `Text`. (ADR-0130)
+- Key a controlled `DraggableScrollableSheet`'s slot when an earlier sibling is conditional, or the old `dispose` detaches the new sheet and `animateTo`/`jumpTo` no-op. (ADR-0130)
+- Wrap each simultaneously-mounted primary scrollable in `PrimaryScrollScope` (`core/layout/`), or the app scrollbar throws; `MasterDetailScaffold` scopes its panes. (ADR-0130)
+- Give every FAB under `HubShell`'s `IndexedStack` a unique `heroTag`, declared in its tab screen: `addFab`, `clientsAddFab`, `employeesAddFab`. (ADR-0130)
+- Gate through `core/layout/breakpoints.dart`, never a raw width. `isSplitLayout` (`isWide` || `isLandscape`) drives ONLY the calendar split; `isTwoPane` (shortest side ≥ 600) drives list master-detail, never `isSplitLayout` (a landscape phone is too narrow for a detail pane, and rotation never swaps one in). No nav rail or size-gated drawer. (ADR-0131)
+- Fold dense rows on `context.isCompact` (width-only: `context.isNarrowWidth`); never re-inline the predicate.
 
-## Notices & user feedback
+## Notices
 
-- Notices slide in from the **top** of the screen via `Overlay` (`NoticeListener`).
-  `NoticeListener` is in `MaterialApp.builder`, which sits above the `Navigator`,
-  so `Overlay.maybeOf(context)` returns null. It must be constructed with
-  `navigatorKey: _navigatorKey` (from `_PaulAppState`) to reach the Navigator's
-  overlay. Omitting it silently suppresses all notices.
-- `NoticeListener` also fires the haptic cue per notice kind (medium impact for
-  error, light otherwise) — never add a call-site haptic alongside a notice.
-- Do not call `ScaffoldMessenger.showSnackBar` for user feedback — use
-  `ref.read(noticeServiceProvider).success/error/info(message)` instead.
-  The three sites that must use a SnackBar (account-disabled in
-  `core/app/account_exit_controller.dart`,
-  photo-upload in `core/app/photo_upload_failure_listener.dart`, map-launch in
-  `features/maps/address_map_launcher.dart`)
-  build it through `errorSnackBar(context, message, {action})`
-  (`shared/widgets/feedback/`) — don't hand-roll the `errorContainer` + icon `Row`.
+- Construct `NoticeListener` (in `MaterialApp.builder`, above the `Navigator`, where `Overlay.maybeOf` is null) with `navigatorKey: _navigatorKey` from `_PaulAppState`, or every notice is silently dropped. It fires the per-kind haptic; never add one at a call site.
+- Never use `ScaffoldMessenger.showSnackBar` for feedback; only `account_exit_controller.dart`, `photo_upload_failure_listener.dart` and `address_map_launcher.dart` use a SnackBar, via `errorSnackBar(context, message, {action})`, never a hand-rolled `errorContainer` row.
 
 ## Forms & sheets
 
-- `FormSheetFrame` (`shared/widgets/sheets/`) is the chrome for an add/edit
-  form shown in a bottom sheet — a FIXED-HEIGHT sheet whose `SheetHeaderBar`
-  carries **Cancel · title · primary verb**, and no grabber. Use it for new form
-  sheets (it's the form-sheet sibling of `DetailSheetListView`), and never nest
-  it inside another `DraggableScrollableSheet`: it *is* a sheet. Destructive
-  actions go in the scroll footer, never in the bar.
-  **`FormSheetScaffold` and `EntityFormHeader` are DELETED** (P3/P4, P4b) —
-  this bullet named both as the thing to build on for a long time after. There
-  is no replacement for `EntityFormHeader`; the surfaces that had one now put
-  the name in the frame's title.
-- **`SheetHeaderBar` MEASURES its two side slots; don't put them back on a
-  flex.** Both ghost tiles take the width of the WIDER of the two labels
-  (`measureTextWidth`, capped at 34% of the bar each), so the title's
-  `Expanded` is centred by construction and gets every point the verbs don't
-  need. The flat `flex: 3/4/3` it replaced left the title 40% of the bar, which
-  truncated "New Appointment" to "New Appoin..." on the WIDEST iPhone at
-  default text size while both tiles sat half empty — on every sheet in the
-  app, since this is the one header they all render. The cap is what keeps the
-  bar from overflowing at a large text scale. Pinned by
-  `sheet_header_bar_test.dart`, which holds BOTH halves: equal tile widths, and
-  the title taking the whole remainder.
-- **No capped field renders a character counter** (2026-09-12). `LabeledTextField`
-  still HAS `showCounter` and keeps its two tests — it is a real capability, not
-  dead code — but nothing passes it now. The appointment Notes field was the one
-  caller in the app, so a permanent "0/4000" sat under a single field while
-  Materials (2000), Title (200) and Address (500) all enforced silently. Either
-  every capped field advertises its cap or none does; none is the quieter answer,
-  and 4000 is a number nobody approaches. The cap is still enforced — without
-  `showCounter` the limit routes through `LengthLimitingTextInputFormatter`
-  instead of `TextField.maxLength`, which is the same ceiling with no counter row.
-- **The suggestion list under a text field has ONE owner, `AttachedDropdown`
-  (`shared/widgets/fields/attached_dropdown.dart`), and so does its ROW.** The
-  panel was shared already; the rows were not — the client picker's were
-  hand-built and divided, the address field's were bare `ListTile(dense: true)`
-  with no dividers and a different vertical rhythm, so one form showed two
-  different controls doing the same job. Three rules inside it are
-  load-bearing: the panel paints its own `palette.sheetRow` fill and
-  `cardStyle.pillShadow`, because it floats OVER the form and with no fill it
-  borrowed the sheet colour and in dark was separated only by a 6%-white
-  hairline; `AttachedDropdownRow` holds the 48pt tap floor itself, since the
-  client row it replaced painted about 36; and the trailing chevron is the
-  WHOLE affordance — no button and no verb. The row it replaced hung a
-  `tapTargetSize.shrinkWrap` `TextButton` ("Attach") inside the `InkWell` that
-  already performed the same action, which is a second, smaller target for one
-  job. The button AND its word were dropped 2026-09-12 by owner call, taking
-  `clients_attach` out of both ARBs with them; don't reintroduce a trailing
-  label. Pinned by `attached_dropdown_test.dart`.
-- **A field that already renders a label must not be labelled again by the form
-  around it.** `AddressAutocompleteField` defaults its label to
-  `common_address` AND reuses it as the placeholder, so the appointment form's
-  own `formLabel` above it read "Job address / Address / Address" down three
-  lines. `AppointmentAddressField` passes `calendar_jobAddress` down as the
-  field's own label instead, and renders `formLabel` itself only on the
-  client-address pill branch, which has no field to carry one.
-- Text-field length caps live in `lib/core/validators/text_limits.dart`.
-  Use the constants via `LabeledTextField(maxLength: TextLimits.x)` —
-  don't hardcode integer caps at call sites.
-- `AuthScaffold` wraps every auth form in an `AutofillGroup`, and the sign-in /
-  create-account success paths commit it via `TextInput.finishAutofillContext()`
-  so OS password managers offer to save the credentials — keep both halves when
-  touching auth flows (commit only on success, never on a failed attempt).
-- **Field error animation is built into `LabeledTextField`** — setting
-  `errorText` shakes the field (`AnimatedFormFieldWrapper`: controller-based,
-  fires only on null→non-null transitions, tree-stable so keyboard focus
-  survives) and fade-slides the error row in/out. Never re-wrap call sites or
-  add a second animation; auth screens keep their own `AnimatedFormFieldWrapper`
-  usage around bare `TextField`s.
-- Any new animation must collapse to instant when
-  `MediaQuery.disableAnimationsOf(context)` is true (see the wrapper and
-  `_AnimatedFieldError` for the pattern).
-- Sheet-from-search: 80 ms settle before `showModalBottomSheet`;
-  double unfocus with 120 ms gap after sheet closes.
+- Build every add/edit sheet on `FormSheetFrame` (`shared/widgets/sheets/`): fixed height, no grabber, its `SheetHeaderBar` (sole caller) carrying Cancel · title · verb as `TextButton`s, which keeps the disabled-verb assertion. Never nest it in a `DraggableScrollableSheet` — switch chrome above it, as `EventDetailsSheet` does on `isEditing`; destructive actions go in the scroll footer. (ADR-0126)
+- Treat `FormSheetScaffold`, `EntityFormHeader` and `AuthBrandHeader` as deleted (a mention is a doc to fix); put a name in the frame's title. (ADR-0126)
+- Keep `SheetHeaderBar`'s side slots MEASURED: both take the width of the WIDER label (`measureTextWidth`, each capped at 34%), which centres the title — never a flex (a `flex: 3/4/3` truncated "New Appointment" on the widest iPhone). (ADR-0126)
+- Build divided panels through `SheetPanel`, never by hand; rows are `SheetFieldRow` (picked value), `SheetPanelRow` (child or trailing) or `LabeledTextField`, never a `ListTile` (it asserts in a `DecoratedBox`). (ADR-0126)
+- Use `LabeledTextField` for free text: it owns `ClearTextButton` (opt out via `suffixIcon`/`readOnly`; `onCleared` keeps host state in sync; `placeholder` while empty) and the `errorText` shake (`AnimatedFormFieldWrapper`, null→non-null only, focus-stable) and fade. Never re-wrap or add a second animation; auth screens keep their own wrapper on bare `TextField`s.
+- Pass no `showCounter` (the cap still applies); caps come from `TextLimits` (`core/validators/text_limits.dart`), never an inline integer. (ADR-0127)
+- Use `AttachedDropdown` + `AttachedDropdownRow` for suggestion lists: it owns the fill, shadow and 48pt row, and the chevron is the whole affordance — no trailing label. (ADR-0127)
+- Never relabel a field that renders its own label: `AppointmentAddressField` passes `calendar_jobAddress` down. (ADR-0127)
+- Use `SettingsSwitchTile` for a Settings switch row (whole row toggles; `onTap` overrides it for a row that also navigates), and index card dividers off the row list, never an `isLast` flag. (ADR-0127)
+- Keep `AuthScaffold`'s `AutofillGroup` and call `TextInput.finishAutofillContext()` only on success (sign-in, account setup, change password).
+- Collapse any new animation to instant under `MediaQuery.disableAnimationsOf(context)` (see `_AnimatedFieldError`).
+- Open a sheet from search via `SheetFocus` (`core/utils/sheet_focus.dart`): 80 ms settle before `showModalBottomSheet`, double unfocus 120 ms apart after.
 
-## Accessibility
+## Accessibility & performance
 
-- All interactive elements must be keyboard/switch accessible.
-- Provide `Semantics` labels on icon buttons and custom interactive widgets.
-- Respect `MediaQuery.textScaler` — never clamp text scale without a visual
-  reason. Sanctioned exception: `StatusChip` internally caps its label scaling
-  at 1.3× — never wrap a `StatusChip` call site in
-  `MediaQuery(textScaler: noScaling)`; the chip handles it.
-- Color must never be the sole indicator of state.
-
-## Performance
-
-- `const` constructors wherever possible.
-- Large lists: use `ListView.builder`, not `ListView(children: [...])`.
-- Avoid rebuilding heavy subtrees — use `const` or lift state.
-- Images from Firebase Storage: show `SkeletonLoader` while loading, handle errors gracefully.
-- **Never `ref.read` an `autoDispose` provider's value from a tap handler.**
-  Nothing is subscribed at that moment, so the read BUILDS it cold, gets
-  `AsyncLoading` back, takes the `?? []` branch and disposes it again — a
-  failure that looks like empty data, is identical on every tap rather than
-  only the first, and logs nothing. `CrewFilterButton` shipped this: its sheet
-  offered "All crew" and nobody else, always. Watch the value in `build` and
-  pass it into the handler.
-  **Then pick WHICH stream to watch by how long the widget lives.** A permanent
-  widget must not watch `employeesStreamProvider` (or anything derived from it,
-  such as `assignableEmployeesProvider`): it is `autoDispose` precisely so a
-  transient sheet cannot pin a SECOND live `users` listener for the session, and
-  a widget on a `HubShell` tab is alive as long as the session is. The calendar
-  header already watches `allUsersStreamProvider` for its colour and name maps,
-  so deriving from that one is warm at tap time AND free. A sheet or dialog is
-  transient and should keep using the autoDispose stream.
-  **A `Notifier` that awaits one must HOLD it** — `ref.listen(p, (_, _) {})`
-  around the await, closed in a `finally` — rather than trusting whatever
-  happens to be watching from the widget layer. `AddEventController.applyPrefill`
-  is the reference; the tell that it was missing was a keep-alive in the unit
-  test with no production counterpart.
-- **A Retry over a COMBINING provider must invalidate the errored SOURCES, not
-  the combiner.** A `Provider.autoDispose<AsyncValue<T>>` that folds several
-  stream/future providers (`_firstFailure`, `liveMapTeamProvider`) recomputes
-  from their cached state when invalidated, so the error comes straight back
-  and the button does nothing — and automatic retry is off app-wide
-  (`main.dart`), so nothing else re-subscribes either. Gate each invalidate on
-  that source's `hasError` where a healthy one would be re-billed:
-  `retryDashboardSources` and the live map's `_retryTeam` are the two
-  instances. A widget test of it needs `retry: (_, _) => null` on its
-  `ProviderScope`, or Riverpod's test-default retry recovers first and the
-  test passes against the broken wiring.
-- **`DateFormat` is memoized per locale** (`calendar/domain/month_grid.dart`:
-  `longDateFormatFor`, `weekdayAbbrevFormatFor`, `_symbolsFormat`). Constructing
-  one verifies the locale and parses a skeleton into pattern fields, and the
-  calendar built a fresh one PER DAY CELL for a semantics label — 30–90 per
-  rebuild on every day tap and month swipe. Never call a `DateFormat.*`
-  constructor inside a cell/item builder.
-- **There are two owners of a locale-keyed `DateFormat` cache, and they key on
-  different locale sources on purpose.** `month_grid.dart`'s cache above is
-  keyed on a passed `Localizations.localeOf` — use it for context-bound UI.
-  `lib/core/utils/date_utils_helper.dart:5-11` keys on `Intl.defaultLocale`
-  instead, for context-free code with no `BuildContext` to read. Don't merge
-  them; add a third owner only if one actually appears.
+- Make interactive elements keyboard/switch accessible, label icon buttons with `Semantics`; colour is never the only cue.
+- Never clamp `MediaQuery.textScaler` without a visual reason; `StatusChip` caps itself at 1.3× (via `StatusPill`), so never wrap it in `noScaling`.
+- Prefer `const`, `ListView.builder` and lifted state; Storage images show a placeholder while loading and handle errors.
+- Never `ref.read` an `autoDispose` provider's value from a tap handler — it builds cold and returns `AsyncLoading`, read as empty data; watch in `build`. A permanent widget derives from `allUsersStreamProvider`, never `employeesStreamProvider`/`assignableEmployeesProvider` (a second session-long `users` listener), and re-applies `isActive && isAssignable`, as `CrewFilterButton` does (it carries invited/disabled users). (ADR-0132)
+- Make a `Notifier` awaiting an autoDispose provider HOLD it (`ref.listen(p, (_, _) {})`, closed in `finally`), as `AddEventController.applyPrefill` does. (ADR-0132)
+- Make a Retry over a combining provider invalidate the errored SOURCES, not the combiner, gating an invalidate on `hasError` where a healthy source would be re-billed — retry is off app-wide (`main.dart`); see `retryDashboardSources`, `_retryTeam`. Its widget test needs `retry: (_, _) => null` on the `ProviderScope`. (ADR-0132)
+- Never construct a `DateFormat` in a cell/item builder; use `month_grid.dart`'s `longDateFormatFor`/`weekdayAbbrevFormatFor`/`_symbolsFormat` (keyed on `Localizations.localeOf`) or `DateUtilsHelper` (`Intl.defaultLocale`, context-free). Don't merge them; add a third only if one appears. (ADR-0133)
+- `tool/check_rules.dart` (widget-timer) flags a raw `Timer` only under `/widgets/` and `/screens/`; the `Debouncer` rule (root `CLAUDE.md`) applies everywhere.
