@@ -81,8 +81,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       scope: _tour.scope,
       isAdmin: widget.isAdmin,
       stepKeys: _tour.keys,
-      // Gated on the data: an ungated start against the loading skeleton finds
-      // zero targets and permanently marks the screen seen.
+      // A start on the skeleton finds no targets and won't retry this visit.
       ready: stats is AsyncData<DashboardStats>,
       autoScroll: true,
       child: _buildScaffold(context, stats),

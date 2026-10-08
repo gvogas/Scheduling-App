@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/navigation/app_destination.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
@@ -12,9 +13,14 @@ import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/dashboard/application/dashboard_providers.dart';
 import 'package:scheduling/features/dashboard/screens/dashboard_screen.dart';
+import 'package:scheduling/features/dashboard/widgets/sections/attention_flags_section.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
+import 'package:scheduling/features/feature_tour/domain/tour_definitions.dart';
+import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:showcaseview/showcaseview.dart';
 
 import '../../../support/tour_test_support.dart';
 
@@ -349,5 +355,55 @@ void main() {
     expect(subscriptions, 2);
     expect(find.text("Couldn't load the dashboard"), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  group('tour on a phone viewport', () {
+    for (final size in [const Size(375, 667), const Size(667, 375)]) {
+      testWidgets('includes the below-fold attention step at $size', (
+        tester,
+      ) async {
+        SharedPreferences.setMockInitialValues({'tour_seen_steps': <String>[]});
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(
+          _wrap(
+            appointments: [_appt(id: 'up', start: DateTime(2026, 7, 8, 14))],
+            clientsRepo: clientsRepo,
+          ),
+        );
+        // Fixed pumps: a running showcase animates forever.
+        for (var i = 0; i < 10; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+
+        final scope = const DestinationTour(
+          PushedDestination.dashboard,
+        ).storageKey;
+        final attention = find.byType(
+          AttentionFlagsSection,
+          skipOffstage: false,
+        );
+        expect(attention, findsOneWidget);
+        expect(tester.getRect(attention).top, greaterThan(size.height + 250));
+        expect(ShowcaseView.getNamed(scope).isShowcaseRunning, isTrue);
+
+        ShowcaseView.getNamed(scope).dismiss();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(
+          prefs.getStringList('tour_seen_steps'),
+          containsAll([
+            for (final id in tourStepsFor(
+              const DestinationTour(PushedDestination.dashboard),
+              isAdmin: true,
+            ))
+              id.name,
+          ]),
+        );
+      });
+    }
   });
 }
