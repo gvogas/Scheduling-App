@@ -81,6 +81,12 @@ paths:
 - Collapse any new animation to instant under `MediaQuery.disableAnimationsOf(context)` (see `_AnimatedFieldError`).
 - Open a sheet from search via `SheetFocus` (`core/utils/sheet_focus.dart`): 80 ms settle before `showModalBottomSheet`, double unfocus 120 ms apart after.
 
+## Admin gate
+
+- Read a live admin gate from `isActiveAdminProvider` (`features/auth/application/`; `role == 'admin' && status == 'active'` off `currentUserDocProvider`), never a route argument's push-time `isAdmin`. It fails CLOSED while the doc is unsettled, errored or EMPTY; the empty-doc flicker for a real admin is ACCEPTED — holding the last answer needs a uid and drags Firebase auth into widget tests, so reopen the decision rather than file it as a bug. (ADR-0046)
+- Resolve it ONCE per consumer and feed every gate there from that value: `DayRouteScreen` (`widget.isAdmin && ref.watch(...)` → crew picker, provider choice, `buildDayRoute`, `showActions` and `_prepareBuild`'s memo key, or the first cached `DayRoute` wins forever), the `AdminOnly` wrapper on `/history` (`app_routes.dart`, degrading to `InvalidRouteScreen`), `SettingsScreen._isAdmin` over `_isAdminArg`, `AppNavDrawer` (in `build`, one value for the admin groups, the header's role label and the calendar row's count query; the gate sits at the widget that feeds the pure `drawerGroups(isAdmin:)`, never in the catalog), and `DetailsViewBody._canRecordFieldWork`. (ADR-0046)
+- Remember `_canRecordFieldWork` reads it as a NEGATIVE gate (`false` moves toward granting the compose box); it is safe only because `activeUserIdentityProvider.value` is also null in the unsettled window — don't remove or reorder that second check. (ADR-0046)
+
 ## Accessibility & performance
 
 - Make interactive elements keyboard/switch accessible, label icon buttons with `Semantics`; colour is never the only cue.

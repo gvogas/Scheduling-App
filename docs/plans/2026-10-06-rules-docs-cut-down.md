@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status: COMPLETE 2026-10-07.** All 18 tasks done; see "Progress and handoff" below. The open owner decision (moving Flutter-only rules from `appointments.md` to the calendar file) is still undecided.
+> **Status: COMPLETE 2026-10-07.** All 18 tasks done; see "Progress and handoff" below. The owner decision (moving Flutter-only rules from `appointments.md` to the calendar file) was decided 2026-10-08: moved.
 
 ## Progress and handoff (2026-10-07)
 
@@ -47,7 +47,7 @@ Task 18 (final check) ran on the result: every cited ADR resolves, `docs/decisio
 
 **Budget gate in practice:** the line-count formula (Decision 1) misfires on long-line files and data tables; files have landed at 7-38 KB, not 10. The working gate is "under the R1 budget, or the reviewer confirms nothing is compressible without losing a rule or reason".
 
-**Open owner decision:** move ~7 KB of Flutter-only rules (the clash-alert dialog internals, the assignee picker rules, the action-bar/tour wiring) from `appointments.md` into `lib/features/calendar/CLAUDE.md`, so a `functions/` or rules session stops loading them. Options: do it in Task 12, do it now, or leave them. Not decided.
+**Open owner decision:** move ~7 KB of Flutter-only rules (the clash-alert dialog internals, the assignee picker rules, the action-bar/tour wiring) from `appointments.md` into `lib/features/calendar/CLAUDE.md`, so a `functions/` or rules session stops loading them. **Decided 2026-10-08: moved** (action bar/admin gate/tour wiring, time-off clash dialog, picker dimming/availability; ~4.8 KB net out of `appointments.md`).
 
 **Follow-ups found during the cut-down, not done:** `firestore.rules` still carries long rationale comments in the appointment block (against `code-quality.md`'s "rationale comments deleted"); the comment in `functions/security.js:340` ("keep guards inline per callable") contradicts `assertAdminCall`; `test/features/calendar/domain/models/appointment_prefill_test.dart:70` mentions the removed crew signal; the `appointments.md` / `firestore-indexes.md` index-deletion date disagrees (2026-08-28 vs 2026-08-29).
 

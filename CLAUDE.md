@@ -49,7 +49,7 @@ dart run tool/test.dart   # full suite, sharded: ~3 min vs ~10 for bare `flutter
 
 Scoped files load only under their `paths:`; this says where a subject lives. (ADR-0024)
 
-- `.claude/rules/appointments.md`: status allowlist + `displayStatusAt` ladder, `showActions`, personal / time-off / all-day blocks, 14-day span + `AppointmentDaySlice`, `findBusyEmployees`, assignee crew notes + job time record (their `allow update` disjuncts in `firestore.rules`/`storage.rules`), templates, overdue review, dashboard window, mark-complete, assignee-retaining edit merge, picker dimming + availability, technician History scope.
+- `.claude/rules/appointments.md`: status allowlist + `displayStatusAt` ladder, personal / time-off / all-day blocks, 14-day span + `AppointmentDaySlice`, `findBusyEmployees`, assignee crew notes + job time record (their `allow update` disjuncts in `firestore.rules`/`storage.rules`), templates, overdue review, dashboard window, mark-complete, assignee-retaining edit merge, technician History scope.
 - `.claude/rules/clients.md`: `clients.name` IS the phone + `ClientNamePolicy` (also used from `lib/core/validators/phone_format.dart`, `functions/client_name_utils.js`), `ClientRecord` back-compat, archive-not-delete, `jobCount`, list filters + server paging, Job history, type filter, Wave sync badge, inline add-client, History rail + sections.
 - `.claude/rules/employees.md`: P4c invite/setup, `changeEmployeeEmail`, starting password, `/users` two-branch `allow update` + rules caps, `watchEmployees`, `users.name`, `workingDays`, `private/emergency`, `EmployeeFormActivity`, `MyDetailsScreen`, `travelAlertsEnabled`, roster jobs-today count (one listener), credential handling.
 - `.claude/rules/images.md`: magic bytes, pick/compress, render-from-bytes, two caches, `appointments/{id}/images`, offline upload queue, cascade + recount.
@@ -58,9 +58,9 @@ Scoped files load only under their `paths:`; this says where a subject lives. (A
 - `.claude/rules/wave.md`: Wave outbox/worker, dead-letter, customer import, Settings UI, app never reads Wave.
 - `.claude/rules/analytics.md`: `AnalyticsParams.allParams`, sanitizer, `user_role`, observer vs hub-shell screen views.
 - `.claude/rules/firestore-indexes.md`: TTL policies (offset `0`), index exemptions, never `--force`.
-- `.claude/rules/frontend.md`: design tokens, `GhostControl`, layout + responsive, notices, forms + sheets, accessibility, performance.
+- `.claude/rules/frontend.md`: design tokens, `GhostControl`, layout + responsive, notices, forms + sheets, live admin gate (`isActiveAdminProvider`), accessibility, performance.
 - `.claude/rules/testing.md`: shard isolation, hand-mirrored Dart/JS pairs, harness, device-only verification.
-- `lib/features/calendar/CLAUDE.md`: P2 month grid/pager/collapse, `AppointmentCard`, closed-job sink, time-off strip, holidays.
+- `lib/features/calendar/CLAUDE.md`: P2 month grid/pager/collapse, `AppointmentCard`, closed-job sink, time-off strip, holidays, action bar + `showActions`/admin gate + tours, time-off clash dialog, picker dimming.
 - `lib/core/navigation/CLAUDE.md`: `AppDestination` (`.name` is the tour key), `navigateToDestination`/`selectAndReveal`, `_popToShell`.
 - `lib/features/feature_tour/CLAUDE.md`: `TourScope`, visibility gates, `isTargetRendered`, `ready:` gate, `markFormToursSeen()`.
 - `functions/CLAUDE.md`: module map, `*_policy.js` split, callable guards, recount claims.
