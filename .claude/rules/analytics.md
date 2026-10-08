@@ -7,168 +7,44 @@ paths:
 
 # Analytics (Firebase Analytics, iOS only)
 
-Added 2026-09-07. Root context: `../../CLAUDE.md`, which carries the two
-invariants that have to be visible from every feature.
+Root context: `../../CLAUDE.md`, which carries the two invariants every feature must see.
 
-- **`lib/core/analytics/` is a four-file module and each file owns one thing.**
-  `analytics_events.dart` is the vocabulary (event names, the parameter
-  ALLOWLIST, user properties, and the canonical `source`/`surface`/`scope`
-  values); `analytics_privacy.dart` is the sanitizer and the bucketing;
-  `analytics_screens.dart` maps a route or a hub tab to a canonical screen
-  name; `analytics_service.dart` is the only file in the repo allowed to import
-  `firebase_analytics`. `analytics_providers.dart` holds the two providers and
-  the build-mode constants.
-- **The parameter ALLOWLIST is the privacy guarantee, not the doc comments.**
-  `sanitizeAnalyticsParams` drops any key absent from
-  `AnalyticsParams.allParams` and asserts in debug. That is what makes a leak
-  structurally impossible rather than merely discouraged: this app holds client
-  phone numbers, street addresses, job notes and employee emails, and those
-  never escape by deliberate decision — they escape through one call site
-  passing a convenient `'client_name': record.name`. Adding a parameter means
-  adding it to that set FIRST, which is the moment somebody has to decide
-  whether it is safe to transmit. The sanitizer also narrows types: only `num`,
-  `bool` (sent as 1/0 — Firebase has no boolean parameter) and `String`
-  survive, and anything else is DROPPED rather than `toString()`-ed, because
-  `toString()` on a domain model is exactly how a whole client record reaches a
-  wire.
-- **A parameter VALUE has an owner too, not just the parameter NAME.**
-  `AnalyticsSources`, `AnalyticsSurfaces`, `AnalyticsScopes`,
-  `AnalyticsContactActions`, `AnalyticsFilters`, `AnalyticsSettings`,
-  `AnalyticsDirections` and `AnalyticsArchiveActions` are the closed value
-  sets, all in `analytics_events.dart`. The last four were added 2026-09-10,
-  when ~22 `direction`/`filter_name`/`setting_name`/`action` values were still
-  bare literals across eight files while the module header claimed to own
-  "every event name, parameter name and parameter value". Nothing REJECTS an
-  undeclared value — the sanitizer gates keys, not values — so `'app_lock'` vs
-  `'applock'` silently becomes a second console row that nobody notices until
-  a report is wrong. A value spelled at a call site is the whole failure. The
-  employee-status value is the exception that proves the shape: it goes out as
-  `UserStatus.active.name`, because that vocabulary already had an owner and a
-  second copy here would drift from what the doc actually stores.
-- **Counts are BUCKETED and a query is never sent.** `bucketCount` collapses
-  the long tail (an exact `result_count` of 4173 describes one business on one
-  day) and `bucketQueryLength` reports a query's shape only — a client search
-  here is somebody's surname or phone number by definition.
-- **`setUserId` is never called, anywhere.** The role goes out as the
-  `user_role` user property and nothing else identifies a person. App version,
-  device model and OS version are deliberately NOT declared as user properties:
-  Firebase reports all three as automatic dimensions, so declaring them would
-  spend a property slot on data the console already has.
-- **`user_role` follows the LIVE Firestore doc**, through
-  `AnalyticsIdentityListener` (`core/app/`, a sibling of `AppSyncListeners`,
-  registered from `main.dart`'s `build`). An EMPTY role CLEARS the property
-  rather than holding the last one — that covers sign-out AND the bootstrap
-  window a fresh sign-in passes through (settled-but-empty doc), where
-  attributing events to the previous session's role is the misattribution the
-  live read exists to avoid. An UNSETTLED read (loading or error) is the
-  opposite case and HOLDS the last value: it says nothing about the role, and
-  blanking on every transient Firestore hiccup would be its own mislabel.
-  A stale role here would mis-label every event for the rest of the
-  session, and the resulting report ("employees use the dashboard heavily")
-  reads perfectly plausible.
-- **Sign-out does NOT call `resetAnalyticsData`.** That would mint a new app
-  instance id, and retention — "do people come back?" — is measured against
-  that id. `user_role` is cleared instead. The tradeoff is real and was taken
-  deliberately: two people signing in on one handed-over device share an
-  instance id. Nothing identifying is attached to it.
-- **The route observer and the hub shell SPLIT the screen views, and the split
-  is the duplicate guard.** `analyticsScreenForRoute` returns null for the four
-  routes in `kShellOwnedRoutes`, so `FirebaseAnalyticsObserver` ignores them and
-  `HubShellState` reports those tabs itself (`initState` for the opening tab, a
-  `tab != _current` check in `select`). Without that, `HubTabRedirectRoute` —
-  which pushes a NAMED route and then hands off to the live shell — would count
-  one arrival path twice and the other two once, so the four tabs would read
-  busier than they are by an amount that depends on the user's back stack. The
-  two halves move together; changing one alone silently double- or
-  under-counts.
-- **iOS reports a screen view of its OWN, and it is turned OFF in `Info.plist`**
-  (`FirebaseAutomaticScreenReportingEnabled=false`, 2026-09-10). Firebase's
-  native automatic reporting fires on `UIViewController` appearance, which in a
-  Flutter app means one anonymous `screen_view` per launch carrying
-  `ga_screen_class=FlutterViewController` and NO `ga_screen` at all — a third
-  source of screen views, below Flutter, that the split above cannot see or
-  guard. It inflated `screen_view` by one per session and put a nameless row in
-  the Screens report, describing the one "screen" that is not one. It hid on
-  the first debug run because the automatic event fires BEFORE
-  `setCollectionEnabled` settles and was dropped as "Analytics is disabled.
-  Event not logged"; it appeared on the very next launch. Don't remove the key
-  to restore the iOS default.
-- **A sheet reports itself.** A `showModalBottomSheet` route carries no name,
-  so the observer skips it — the add-appointment, appointment-details,
-  add/edit-client and invite/edit-person sheets each call `logScreenView` from
-  their own `initState`. Without that, the create funnels have no entry step and
-  only their successful completions are visible.
-- **Three parameters are ABSENT on purpose — don't "complete" them.**
-  `job_completed` has no `has_notes`: the parent `fieldNotes` string is the
-  LEGACY write path (crew notes live in a subcollection), so it would read near
-  zero; `note_added` already answers how often notes are written.
-  `search_used` has no result count: the debounce commit is the one place that
-  knows a search ran, and the results are not fetched yet there — a count sent
-  later would be a second event for one search. `contact_action` has no
-  `source`: it fires from the shared launch helpers, which every call site
-  passes through and which by construction do not know the calling screen;
-  threading a surface down to them would put a display concern in a launcher.
-- **An event fires on the SEALED SUCCESS branch, never before the write.**
-  `AddEventSubmitted`, `EventDetailsSaved`, `EventDetailsActionOk`,
-  `ClientSaved`, `EmployeeAccountCreated`. The `Busy` members are the
-  reentrancy guard's no-op and wrote nothing, so counting one would report jobs
-  and clients that never existed — the same reason those branches surface no
-  notice.
-- **`AnalyticsService` methods return `void` and CANNOT throw.** Every send is
-  wrapped; a failure is a `logger.warn` under the `ANALYTICS` tag and nothing
-  more. `void` rather than `Future<void>` is deliberate: a future would make
-  every call site — most of them inside an `async` widget handler — either
-  `await` a round trip in the middle of a user action or wrap it in
-  `unawaited(...)`, and `unawaited_futures` is on in this repo.
-- **`FirebaseAnalytics.instance` is resolved LAZILY and returns null when
-  `Firebase.apps.isEmpty`.** That is the normal state of a widget test.
-  Resolving in the constructor would make merely READING
-  `analyticsServiceProvider` throw, so all ~20 instrumented widgets would need
-  a provider override to stay testable — and the first suite that forgot one
-  would fail with a Firebase error pointing nowhere near the analytics call.
-  Returning null rather than throwing-and-catching is what keeps the whole
-  suite quiet: a throw would print a `logger.warn` from every instrumented
-  widget in it. Consequence: no existing test needed an analytics override.
-- **Collection is OFF in debug unless `--dart-define=ANALYTICS_DEBUG=true`**
-  (`kAnalyticsCollectionEnabled`, `analytics_providers.dart`), the same posture
-  `main()` takes for Crashlytics. Every `flutter run` would otherwise file real
-  events against the production property, and that noise is indistinguishable
-  from real usage precisely because it comes from a real device doing
-  real-looking things. `build_env` (`release`/`debug`) is set as a user
-  property so DebugView traffic stays filterable in the console.
-- **DebugView needs the `-FIRDebugEnabled` launch argument on the Xcode
-  scheme**, which is separate from the define above: the define decides whether
-  events are COLLECTED at all, the launch argument decides whether they stream
-  to DebugView in real time. Both are needed to watch events live in a debug
-  build.
-- **`FIREBASE_ANALYTICS_WITHOUT_ADID=true` swaps `FirebaseAnalytics` for
-  `FirebaseAnalyticsCore`** in the plugin's `Package.swift`, dropping IDFA / ad
-  identifier collection. This app sells no ads and has no attribution need, so
-  the ad id buys nothing and costs a heavier App Store privacy disclosure (and
-  a potential ATT prompt). Set it in the environment for any `flutter build
-  ios` that ships.
-- **The plugin is SPM-safe** (`ios/firebase_analytics/Package.swift`), which is
-  a precondition here — there is no Podfile and never will be. Vet any future
-  analytics dependency the same way.
-- **Every send checks MEMBERSHIP, not merely shape.** `_log` asserts
-  `isKnownEvent`, `_setUserProperty` asserts `isKnownUserProperty`, and
-  `logScreenView` asserts `AnalyticsScreens.allScreens.contains(...)`. That
-  last one checked only that the name was well-formed until 2026-09-10, so
-  `allScreens` was a 20-entry list with no production reader — a new sheet
-  passing an undeclared name compiled, passed, and shipped an orphan screen
-  row with the suite still green, because the test walks the SET rather than
-  the call sites. A declared set that nothing asserts against is the drift the
-  module says it exists to prevent.
-- **`analytics_events.dart` names are pinned by tests, because Firebase drops a
-  malformed name SILENTLY** — the event simply never appears in the console,
-  which is discovered weeks into a reporting window. `analytics_events_test.dart`
-  walks every declared name through `AnalyticsNames`, which also encodes that
-  the user-property cap (24) is SHORTER than the event cap (40): a name valid
-  as an event can be too long as a property.
-- **`overdue_review_applied`** (2026-09-13) fires on the review screen's
-  `OverdueReviewApplied` branch only, never on `Busy`, with `action`
-  (`AnalyticsOverdueReviewActions.complete` / `not_done`) and `count`, a new
-  `allParams` key sent through `bucketCount`. The screen reports as
-  `overdue_review` through the route observer, and a job opened from it reports
-  `AnalyticsSources.overdueReview`. A new parameter must be registered as a
-  custom dimension in GA before it shows in reports.
+## Module
+
+- Keep `lib/core/analytics/` one owner per file: `analytics_events.dart` (event names, the parameter ALLOWLIST, user properties, the closed `source`/`surface`/`scope` and other value sets), `analytics_privacy.dart` (sanitizer, bucketing), `analytics_screens.dart` (route/tab → screen name), `analytics_providers.dart` (the two providers, build-mode constants), `analytics_service.dart`.
+- Import `firebase_analytics` only in `analytics_service.dart`. Enforced by `tool/check_rules.dart` (analytics-import).
+- Keep every `AnalyticsService` method `void` and non-throwing: each send goes through `_guard`, a failure is only a `logger.warn` under `ANALYTICS`. Not `Future<void>` — call sites would `await` mid-action or need `unawaited(...)` (`unawaited_futures` is on). (ADR-0166)
+- Resolve `FirebaseAnalytics.instance` LAZILY for sends (`_analytics`), returning null when `Firebase.apps.isEmpty` (every widget test) — resolving in the constructor makes reading `analyticsServiceProvider` throw, and throw-and-catch would `warn` from all ~20 instrumented widgets. `navigationObserver` resolves eagerly; only `main.dart`'s `build` reads `analyticsObserverProvider`, so keep it out of tests. (ADR-0166)
+
+## Privacy
+
+- Treat `AnalyticsParams.allParams` as the privacy guarantee: `sanitizeAnalyticsParams` drops any undeclared key and asserts in debug. Add a new parameter to the set FIRST — that is where someone decides it is safe to send. (ADR-0163)
+- Let only `num`, `bool` (sent as 1/0) and `String` (trimmed, capped at `kAnalyticsMaxValueLength`) through; DROP anything else, never `toString()` it — that is how a whole domain model reaches the wire. (ADR-0163)
+- Spell every parameter VALUE from its closed set in `analytics_events.dart` (`AnalyticsSources`, `AnalyticsSurfaces`, `AnalyticsScopes`, `AnalyticsContactActions`, `AnalyticsFilters`, `AnalyticsSettings`, `AnalyticsDirections`, `AnalyticsArchiveActions`, `AnalyticsOverdueReviewActions`, `AnalyticsBuildEnvs`), never a call-site literal — the sanitizer gates keys, not values, so a misspelling is a silent second console row. A value with an existing owner reuses it (`UserStatus.active.name`). (ADR-0163)
+- Send counts through `bucketCount` and a query only as `bucketQueryLength`, never the query text — a client search is a surname or phone number. (ADR-0163)
+- Never call `setUserId`. The role goes out as the `user_role` user property only; don't declare app version, device model or OS version as properties (Firebase reports them automatically). (ADR-0165)
+
+## Identity
+
+- Drive `user_role` from the LIVE Firestore doc via `AnalyticsIdentityListener` (`core/app/`, registered in `main.dart`'s `build` after `AppSyncListeners`). A settled EMPTY role CLEARS it (sign-out, and the fresh-sign-in bootstrap window); a loading or error read HOLDS the last value — a stale role mislabels every event for the session, plausibly. (ADR-0165)
+- Never call `resetAnalyticsData` on sign-out — it mints a new app instance id and breaks retention; clear `user_role` at the sign-out site instead (`delete_account_flow.dart`, `change_password_screen.dart`), not waiting for the listener, so the `sign_out` event and anything after it stay off the old role. Accepted: two people on one handed-over device share an instance id. (ADR-0165)
+
+## Events
+
+- Fire on the sealed SUCCESS branch, never before the write and never on `Busy` (a no-op that wrote nothing), e.g. `AddEventSubmitted`, `EventDetailsSaved`, `EventDetailsActionOk`, `ClientSaved`, `EmployeeAccountCreated`, `EmployeeUpdated`, `EmployeeStatusChanged`, `OverdueReviewApplied`. (ADR-0168)
+- Assert membership on every send, not just shape: `_log` → `isKnownEvent`, `_setUserProperty` → `isKnownUserProperty`, `logScreenView` → `AnalyticsScreens.allScreens.contains` — a declared set nothing asserts against lets an orphan name ship with the suite green. (ADR-0164)
+- Keep every declared name walked through `AnalyticsNames` by `analytics_events_test.dart` — Firebase drops a malformed name SILENTLY. The user-property cap (24) is shorter than the event cap (40). (ADR-0163)
+- Leave these ABSENT — don't "complete" them: `has_notes` on `job_completed` (`fieldNotes` is the legacy path; `note_added` covers it), a result count on `search_used` (results aren't fetched at the debounce commit; a later send is a second event), `source` on `contact_action` (the shared launch helpers can't know the calling screen). (ADR-0168)
+- Send `overdue_review_applied` with `action` (`complete`/`not_done`) and `count` via `bucketCount`, on the review screen's success branch only; the screen reports as `overdue_review` through the route observer, and a job opened from it as `AnalyticsSources.overdueReview`. Register a new parameter as a GA custom dimension before it shows in reports. (ADR-0168)
+
+## Screen views
+
+- Split screen views between the route observer and the hub shell, and move both halves together: `analyticsScreenForRoute` returns null for the four `kShellOwnedRoutes`, and `HubShellState` reports those tabs itself (`initState`, and `select` only when `tab != _current`) — else `HubTabRedirectRoute`'s named push double-counts one arrival path. (ADR-0164)
+- Keep `FirebaseAutomaticScreenReportingEnabled=false` in `ios/Runner/Info.plist`; don't remove it to restore the iOS default — native reporting adds a nameless `FlutterViewController` `screen_view` per launch that the split can't guard. (ADR-0164)
+- Have any surface the observer can't see call `logScreenView` from its own `initState`: the unnamed `showModalBottomSheet` sheets (add-appointment, add/edit-client, invite/edit-person), `EventDetailsView` (`_logView`), `ClientDetailView` (also the two-pane pane, so a tile-side event would miss tablet opens) and `OnboardingScreen` (built inline by `OnboardingGate`; `analyticsScreenForRoute` has no onboarding case) — else the create funnels lose their entry step. (ADR-0164)
+
+## Build and iOS
+
+- Keep collection OFF in debug unless `--dart-define=ANALYTICS_DEBUG=true` (`kAnalyticsCollectionEnabled`), or every `flutter run` files real-looking events against production; `build_env` (`release`/`debug`) is a user property so DebugView traffic stays filterable. Live DebugView also needs `-FIRDebugEnabled` on the Xcode scheme. (ADR-0167)
+- Build every shipping `flutter build ios` with `FIREBASE_ANALYTICS_WITHOUT_ADID=true` (swaps `FirebaseAnalytics` for `FirebaseAnalyticsCore` in the plugin's `Package.swift`) — no ads, so the ad id only costs privacy disclosure and a possible ATT prompt. (ADR-0167)
+- Vet any new analytics dependency for SPM support, as `firebase_analytics` was — there is no Podfile, ever. (ADR-0167)
