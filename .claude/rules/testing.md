@@ -96,6 +96,7 @@ before each file; nothing else is reset. The leaks found when sharding landed
   only platform that ships. `defaultIsIosPlatform` (`core/platform/`) is the
   default; `AppSyncListeners` and `LiveActivityRegistrationController` both take
   one. Add the seam rather than writing off the branch as device-only.
+- The test font draws every glyph as a full em box (~1.8× real width), so a tight-row overflow test is pessimistic and can fail on a row that fits on a device. Measure one with `InstrumentSans` loaded through `FontLoader` under a TEST-ONLY family name (`TourMetricsSans`), never `InstrumentSans` itself, which would change the metrics for every later file in the shard.
 - Overflow regressions: sweep the screen at a small viewport (375×667) across
   text scales 0.8–2.0 and assert no exceptions — reuse the `_scaled` /
   `_pumpAtViewport` harness pattern in

@@ -10,6 +10,23 @@ All notable changes to this project are documented here.
 The `+N` build number after the version (e.g. `1.1.0+5`) is the store version
 code; it increments by one on every store upload regardless of the semver part.
 
+## [1.64.1+95] - 2026-10-09
+
+Easier-to-scan address suggestions, plus layout fixes for large text.
+
+### Changed
+- **Address suggestions show the street above the city.** Each suggestion
+  now reads as two lines, the street address in bold with the city below,
+  so similar addresses are quicker to tell apart.
+
+### Fixed
+- **The Dashboard fits on small phones with the largest text size.** Chart
+  legends, the team workload counts and the new-clients list wrap instead of
+  running off the edge.
+- **Tour tips fit with the largest text size.** The Skip and Next buttons
+  stay on screen instead of being cut off, and on a normal-size phone they
+  keep their labels and the step count at any text size.
+
 ## [1.64.0+94] - 2026-10-07
 
 Features can be paused remotely without a new release, plus a safer admin

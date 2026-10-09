@@ -26,14 +26,16 @@ void main() {
       expect(AddressSuggestion.fromJson(const {}).description, '');
     });
 
-    test('fromJson reads the street and city lines the backend adds', () {
+    test('fromJson reads the street and city lines from structuredFormat', () {
       final s = AddressSuggestion.fromJson(const {
         'placePrediction': {
           'placeId': 'abc',
           'text': {'text': '123 Main St, Montréal, QC'},
+          'structuredFormat': {
+            'mainText': {'text': '123 Main St'},
+            'secondaryText': {'text': 'Montréal, QC'},
+          },
         },
-        'mainText': '123 Main St',
-        'secondaryText': 'Montréal, QC',
       });
       expect(
         (s.mainText, s.secondaryText, s.description),
@@ -41,7 +43,7 @@ void main() {
       );
     });
 
-    test('fromJson leaves the lines empty for an older backend', () {
+    test('fromJson leaves the lines empty without structuredFormat', () {
       final s = AddressSuggestion.fromJson(const {
         'placePrediction': {
           'placeId': 'abc',
@@ -53,8 +55,12 @@ void main() {
 
     test('fromJson ignores non-string lines', () {
       final s = AddressSuggestion.fromJson(const {
-        'mainText': 42,
-        'secondaryText': {'text': 'x'},
+        'placePrediction': {
+          'structuredFormat': {
+            'mainText': {'text': 42},
+            'secondaryText': 'x',
+          },
+        },
       });
       expect((s.mainText, s.secondaryText), ('', ''));
     });

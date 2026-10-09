@@ -1821,9 +1821,9 @@ not default it off.
   cases. Mirrored in `.claude/rules/testing.md`.
 
 Run: `dart run tool/test.dart` — the sharded full suite, ~3 min against ~10 for bare `flutter test`, which
-still works and gives the same count (4039 passing as of 2026-10-07, the 1.64.0+94 release pass — that is the runner's count;
-`grep`ing for `test(`/`testWidgets(` gives fewer (3730 as of 2026-10-07), since some cases are
-generated inside loops; `functions` adds 2237 jest tests across 107 suites in
+still works and gives the same count (4055 passing as of 2026-10-09, the 1.64.1+95 release pass — that is the runner's count;
+`grep`ing for `test(`/`testWidgets(` gives fewer (3745 as of 2026-10-09), since some cases are
+generated inside loops; `functions` adds 2219 jest tests across 106 suites in
 `functions/__tests__/` — the parallel `functions/test/` directory was
 merged away). **`functions/node_modules` must be installed before `npx jest`
 means anything**: on an empty install it resolves a throwaway jest from the npx

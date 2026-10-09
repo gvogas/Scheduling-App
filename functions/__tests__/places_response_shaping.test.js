@@ -66,58 +66,18 @@ describe("placesAutocomplete response shaping", () => {
     ]);
   });
 
-  test("adds plain mainText and secondaryText per suggestion", async () => {
-    global.fetch = jest.fn().mockResolvedValue(okResponse({suggestions: [{
-      placePrediction: {
-        placeId: "p1",
-        text: {text: "14 Elm St, Montréal, QC, Canada"},
-        structuredFormat: {
-          mainText: {text: "14 Elm St", matches: [{endOffset: 6}]},
-          secondaryText: {text: "Montréal, QC, Canada"},
-        },
-      },
-    }]}));
-
-    const result = await runAutocomplete({input: "14 Elm"});
-    expect(result.suggestions[0]).toMatchObject({
-      mainText: "14 Elm St",
-      secondaryText: "Montréal, QC, Canada",
-    });
-  });
-
-  test("returns empty lines when structuredFormat is absent", async () => {
+  test("passes structuredFormat through untouched", async () => {
+    const structuredFormat = {
+      mainText: {text: "14 Elm St", matches: [{endOffset: 6}]},
+      secondaryText: {text: "Montréal, QC, Canada"},
+    };
     global.fetch = jest.fn().mockResolvedValue(okResponse({suggestions: [
-      {placePrediction: {placeId: "p1", text: {text: "14 Elm St"}}},
+      {placePrediction: {placeId: "p1", structuredFormat}},
     ]}));
 
     const result = await runAutocomplete({input: "14 Elm"});
-    expect(result.suggestions[0]).toMatchObject({
-      mainText: "",
-      secondaryText: "",
-    });
-  });
-
-  test("returns an empty line for a non-string part", async () => {
-    global.fetch = jest.fn().mockResolvedValue(okResponse({suggestions: [{
-      placePrediction: {
-        placeId: "p1",
-        structuredFormat: {mainText: {text: 42}},
-      },
-    }]}));
-
-    const result = await runAutocomplete({input: "14 Elm"});
-    expect(result.suggestions[0]).toMatchObject({
-      mainText: "",
-      secondaryText: "",
-    });
-  });
-
-  test("leaves a non-object suggestion as-is", async () => {
-    global.fetch = jest.fn()
-        .mockResolvedValue(okResponse({suggestions: [null, "x"]}));
-
-    const result = await runAutocomplete({input: "14 Elm"});
-    expect(result).toEqual({suggestions: [null, "x"]});
+    expect(result.suggestions[0].placePrediction.structuredFormat)
+        .toEqual(structuredFormat);
   });
 
   test("coerces a missing suggestions field to an empty array", async () => {
@@ -154,7 +114,8 @@ describe("placesAutocomplete response shaping", () => {
     }]}));
 
     const result = await runAutocomplete({input: "saint-j"});
-    expect(result.suggestions[0].secondaryText).toBe("Saint-Jérôme, QC");
+    const format = result.suggestions[0].placePrediction.structuredFormat;
+    expect(format.secondaryText.text).toBe("Saint-Jérôme, QC");
   });
 
   test("rejects a missing input before any upstream call", async () => {

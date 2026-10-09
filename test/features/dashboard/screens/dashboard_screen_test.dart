@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -58,6 +59,7 @@ Widget _wrap({
   List<EmployeeRecord> users = const [_jane],
   double textScale = 1,
   Locale locale = const Locale('en'),
+  ThemeData? theme,
 }) {
   return ProviderScope(
     // Production disables Riverpod's automatic retry; Retry must do the work.
@@ -91,7 +93,7 @@ Widget _wrap({
         locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        theme: lightTheme(),
+        theme: theme ?? lightTheme(),
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(
             context,
@@ -387,33 +389,65 @@ void main() {
       expect(find.text('Jane Doe'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
+  });
 
-    for (final locale in AppLocalizations.supportedLocales) {
-      testWidgets('the tour tooltip actions do not overflow in '
-          '${locale.languageCode}', (tester) async {
-        SharedPreferences.setMockInitialValues({'tour_seen_steps': <String>[]});
-        narrow(tester);
-        await tester.pumpWidget(
-          _wrap(
-            appointments: [_appt(id: 'up', start: DateTime(2026, 7, 8, 14))],
-            clientsRepo: clientsRepo,
-            textScale: 2,
-            locale: locale,
-          ),
+  // The test font draws every glyph as a full em box, so a tooltip row it
+  // overflows can fit on a device; this group measures with the app's font.
+  group('tour tooltip actions with real glyph widths', () {
+    const family = 'TourMetricsSans';
+    setUpAll(() async {
+      final loader = FontLoader(family);
+      for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
+        loader.addFont(
+          rootBundle.load('assets/fonts/InstrumentSans-$weight.ttf'),
         );
-        for (var i = 0; i < 10; i++) {
-          await tester.pump(const Duration(milliseconds: 100));
-        }
+      }
+      await loader.load();
+    });
 
-        final scope = const DestinationTour(
-          PushedDestination.dashboard,
-        ).storageKey;
-        expect(ShowcaseView.getNamed(scope).isShowcaseRunning, isTrue);
-        expect(tester.takeException(), isNull);
+    for (final width in [260.0, 360.0]) {
+      for (final locale in AppLocalizations.supportedLocales) {
+        testWidgets('fit at 2x text in ${locale.languageCode} at $width px', (
+          tester,
+        ) async {
+          SharedPreferences.setMockInitialValues({
+            'tour_seen_steps': <String>[],
+          });
+          tester.view.physicalSize = Size(width, 800);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final base = lightTheme();
+          await tester.pumpWidget(
+            _wrap(
+              appointments: [_appt(id: 'up', start: DateTime(2026, 7, 8, 14))],
+              clientsRepo: clientsRepo,
+              textScale: 2,
+              locale: locale,
+              theme: base.copyWith(
+                textTheme: base.textTheme.apply(fontFamily: family),
+              ),
+            ),
+          );
+          for (var i = 0; i < 10; i++) {
+            await tester.pump(const Duration(milliseconds: 100));
+          }
 
-        ShowcaseView.getNamed(scope).dismiss();
-        await tester.pump(const Duration(milliseconds: 500));
-      });
+          final scope = const DestinationTour(
+            PushedDestination.dashboard,
+          ).storageKey;
+          expect(ShowcaseView.getNamed(scope).isShowcaseRunning, isTrue);
+          expect(tester.takeException(), isNull);
+          // Only a narrow phone swaps Skip for an icon; large text alone
+          // doesn't, since the actions cap their own scale.
+          expect(
+            find.byIcon(Icons.close),
+            width < 360 ? findsOneWidget : findsNothing,
+          );
+
+          ShowcaseView.getNamed(scope).dismiss();
+          await tester.pump(const Duration(milliseconds: 500));
+        });
+      }
     }
   });
 

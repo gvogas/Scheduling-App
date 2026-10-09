@@ -33,6 +33,7 @@ Loaded when working here or on a screen hosting a tour (showcaseview 5.x). Root 
 - Give a widget hosting more than one step ONE `Widget Function(TourStepId, Widget)? tourWrap`, never a parameter per step, wired as `tourWrap: _tour.stepIf` (a tear-off of the `TourSteps` method) — a new step then costs a call at the target, not a parameter threaded through two or three widgets and their tests. (ADR-0181)
 - Re-read a step's description whenever a toured surface changes shape, and add a step for every new control — nothing catches stale copy or an untoured control mechanically. Keep the count assertions in `tour_definitions_test.dart`: they make growing a catalog a deliberate edit, not a silent one. (ADR-0182)
 - Give an employee tour to exactly the destinations `drawerGroups(isAdmin: false)` offers (Calendar, Day route, Settings) and leave every other employee catalog empty. `tour_definitions_test.dart` DERIVES that set from `drawerGroups`, so a drawer change fails the test until the catalogs follow. (ADR-0183)
+- Gate the compact tooltip actions (no step counter, Skip as an icon) on `context.isNarrowWidth`, never `isCompact`: every action caps its text at `kTourActionMaxTextScale`, so large text can't widen showcaseview's non-flexing action Row. Pinned at real glyph widths in `dashboard_screen_test.dart`.
 
 ## Seen flags
 

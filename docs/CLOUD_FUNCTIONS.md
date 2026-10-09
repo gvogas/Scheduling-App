@@ -2,7 +2,7 @@
 
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
-refreshed 2026-10-09 (**31 exports**: `waveSetImportSchedule` removed from `index.js` but still live until the owner deletes it — ADR-0184; `completeEmployeeSetup` now requires `newPassword` — ADR-0185; neither deployed yet). Previously refreshed 2026-10-07 (release 1.64.0+94 — still **32 exports**; source changes NOT yet deployed: `resetEmployeePassword` gained a fresh-reauth gate and refuses admin targets, the kill-switch parsers became strict, `endLiveActivity` keeps tokens while paused, and the FCM message dropped its Android block). Previously refreshed 2026-09-29 (release 1.63.0+93 — **32 exports, all 32 deployed**:
+refreshed 2026-10-09 (release 1.64.1+95 — **31 exports**; `placesAutocomplete` adds `structuredFormat` to its field mask and passes suggestions through untouched; `waveSetImportSchedule` removed from `index.js` but still live until the owner deletes it — ADR-0184; `completeEmployeeSetup` now requires `newPassword` — ADR-0185; neither deployed yet). Previously refreshed 2026-10-07 (release 1.64.0+94 — still **32 exports**; source changes NOT yet deployed: `resetEmployeePassword` gained a fresh-reauth gate and refuses admin targets, the kill-switch parsers became strict, `endLiveActivity` keeps tokens while paused, and the FCM message dropped its Android block). Previously refreshed 2026-09-29 (release 1.63.0+93 — **32 exports, all 32 deployed**:
 `resetEmployeePassword` and `completePasswordReset` went live at `306ed848`, and
 the release's review fixes to both bodies at `cc38be5d` the same day — see the
 deploy log; re-checked 2026-10-01, nothing in `functions/` has changed since). Earlier 2026-09-29: `syncClientBuilding` went live at `e70b494d`. Previously refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
@@ -741,10 +741,10 @@ highest-cost function in the project was not a cap. The trade is one Firestore
 transaction per lookup where there were none; keep the GCP Maps Platform billing
 alert regardless.
 
-Returns `{suggestions: [...]}`: each upstream entry passed through (field mask
-`placeId`, `text`, `structuredFormat`) plus plain `mainText` (street) and
-`secondaryText` (city) strings, `""` when Places omits them (added 2026-10-09;
-a build without them renders the flat `placePrediction.text.text`).
+Returns `{suggestions: [...]}`: each upstream entry passed through untouched
+(field mask `placeId`, `text`, `structuredFormat`, added 2026-10-09). The app
+reads the street/city lines from `structuredFormat.mainText`/`secondaryText`;
+a build that predates them renders the flat `placePrediction.text.text`.
 
 Refuses with `failed-precondition` / `feature-disabled` while `feature_address_autocomplete` is off (before the rate limiter).
 

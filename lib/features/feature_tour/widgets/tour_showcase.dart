@@ -38,7 +38,7 @@ class TourShowcase extends StatelessWidget {
     final text = tourStepText(context.l10n, id);
     final noMotion = MediaQuery.disableAnimationsOf(context);
     // showcaseview's action Row can't flex; drop the counter when it won't fit.
-    final showCounter = !context.isCompact;
+    final showCounter = !context.isNarrowWidth;
     return Showcase(
       key: showcaseKey,
       scope: scope.storageKey,
