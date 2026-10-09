@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:scheduling/core/layout/breakpoints.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
@@ -36,6 +37,8 @@ class TourShowcase extends StatelessWidget {
     final scheme = theme.colorScheme;
     final text = tourStepText(context.l10n, id);
     final noMotion = MediaQuery.disableAnimationsOf(context);
+    // showcaseview's action Row can't flex; drop the counter when it won't fit.
+    final showCounter = !context.isCompact;
     return Showcase(
       key: showcaseKey,
       scope: scope.storageKey,
@@ -61,26 +64,28 @@ class TourShowcase extends StatelessWidget {
       // Package defaults already give position: inside + spaceBetween.
       tooltipActionConfig: const TooltipActionConfig(actionGap: AppSpacing.sp8),
       tooltipActions: [
-        TooltipActionButton.custom(
-          button: MediaQuery.withClampedTextScaling(
-            maxScaleFactor: kTourActionMaxTextScale,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sp8),
-              child: Text(
-                context.l10n.tour_stepCounter(index + 1, count),
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
+        if (showCounter)
+          TooltipActionButton.custom(
+            button: MediaQuery.withClampedTextScaling(
+              maxScaleFactor: kTourActionMaxTextScale,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: AppSpacing.sp8),
+                child: Text(
+                  context.l10n.tour_stepCounter(index + 1, count),
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
         TooltipActionButton.custom(
           button: TourActionButton(
             label: context.l10n.tour_skip,
             style: theme.textTheme.labelLarge?.copyWith(
               color: scheme.onSurfaceVariant,
             ),
+            compactIcon: Icons.close,
             onTap: () => ShowcaseView.getNamed(scope.storageKey).dismiss(),
           ),
         ),

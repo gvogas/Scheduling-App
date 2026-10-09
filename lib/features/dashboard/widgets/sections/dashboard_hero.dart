@@ -177,10 +177,12 @@ class _StatusLegend extends StatelessWidget {
                 decoration: BoxDecoration(color: color, shape: BoxShape.circle),
               ),
               const SizedBox(width: AppSpacing.sp4),
-              Text(
-                '$count ${statusLabel(l10n, status)}',
-                style: theme.textTheme.labelSmall?.copyWith(
-                  color: scheme.onPrimary,
+              Flexible(
+                child: Text(
+                  '$count ${statusLabel(l10n, status)}',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: scheme.onPrimary,
+                  ),
                 ),
               ),
             ],

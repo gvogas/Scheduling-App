@@ -57,6 +57,7 @@ Widget _wrap({
   Stream<List<AppointmentRecord>> Function()? appointmentsStream,
   List<EmployeeRecord> users = const [_jane],
   double textScale = 1,
+  Locale locale = const Locale('en'),
 }) {
   return ProviderScope(
     // Production disables Riverpod's automatic retry; Retry must do the work.
@@ -87,6 +88,7 @@ Widget _wrap({
       setTextScale: (_) {},
       setLanguage: (_) {},
       child: MaterialApp(
+        locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: lightTheme(),
@@ -366,7 +368,7 @@ void main() {
 
   group('2x text on a narrow phone', () {
     void narrow(WidgetTester tester) {
-      tester.view.physicalSize = const Size(375, 800);
+      tester.view.physicalSize = const Size(260, 800);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
     }
@@ -386,29 +388,33 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('the tour tooltip actions do not overflow', (tester) async {
-      SharedPreferences.setMockInitialValues({'tour_seen_steps': <String>[]});
-      narrow(tester);
-      await tester.pumpWidget(
-        _wrap(
-          appointments: [_appt(id: 'up', start: DateTime(2026, 7, 8, 14))],
-          clientsRepo: clientsRepo,
-          textScale: 2,
-        ),
-      );
-      for (var i = 0; i < 10; i++) {
-        await tester.pump(const Duration(milliseconds: 100));
-      }
+    for (final locale in AppLocalizations.supportedLocales) {
+      testWidgets('the tour tooltip actions do not overflow in '
+          '${locale.languageCode}', (tester) async {
+        SharedPreferences.setMockInitialValues({'tour_seen_steps': <String>[]});
+        narrow(tester);
+        await tester.pumpWidget(
+          _wrap(
+            appointments: [_appt(id: 'up', start: DateTime(2026, 7, 8, 14))],
+            clientsRepo: clientsRepo,
+            textScale: 2,
+            locale: locale,
+          ),
+        );
+        for (var i = 0; i < 10; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
 
-      final scope = const DestinationTour(
-        PushedDestination.dashboard,
-      ).storageKey;
-      expect(ShowcaseView.getNamed(scope).isShowcaseRunning, isTrue);
-      expect(tester.takeException(), isNull);
+        final scope = const DestinationTour(
+          PushedDestination.dashboard,
+        ).storageKey;
+        expect(ShowcaseView.getNamed(scope).isShowcaseRunning, isTrue);
+        expect(tester.takeException(), isNull);
 
-      ShowcaseView.getNamed(scope).dismiss();
-      await tester.pump(const Duration(milliseconds: 500));
-    });
+        ShowcaseView.getNamed(scope).dismiss();
+        await tester.pump(const Duration(milliseconds: 500));
+      });
+    }
   });
 
   group('tour on a phone viewport', () {

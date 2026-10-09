@@ -170,7 +170,7 @@ class _SeriesLegend extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sp4),
-              Text(s.label, style: labelStyle),
+              Flexible(child: Text(s.label, style: labelStyle)),
             ],
           ),
       ],

@@ -2,7 +2,7 @@
 
 Things left over from the rules cut-down and its code follow-up pass.
 
-**Status: items 1–4 DONE 2026-10-08.** Item 5 is new and open.
+**Status: ALL DONE 2026-10-08.**
 
 ## 1. Run the touched tests in isolation — DONE
 
@@ -28,9 +28,10 @@ Action bar/tours, time-off clash dialog and picker dimming moved to
 `lib/features/calendar/CLAUDE.md`; the live admin gate (`isActiveAdminProvider`)
 to `frontend.md`, since it governs Settings, the nav drawer and `/history` too.
 
-## 5. Dashboard hero overflows at 260 px with 2x text — OPEN
+## 5. Dashboard at 260 px with 2x text — DONE
 
-At the 260 px / 2x harness `CLAUDE.md` asks for, `dashboard_hero.dart`'s
-`_StatusLegend` `Row` (line ~171) overflows by 57 px. Fix it, then move the
-"2x text on a narrow phone" group in `dashboard_screen_test.dart` from 375 px
-to 260 px.
+The 375 px tests now run at 260 px, the tooltip one in every supported locale.
+Fixed there: the hero and weekly-chart legend labels flex; a new-client row
+folds its date under the name on `context.isCompact`; on `isCompact` the tour
+tooltip drops its step counter, caps its pills at 1× and shows Skip as a
+labelled close icon (French "Passer"/"Suivant" didn't fit otherwise).
