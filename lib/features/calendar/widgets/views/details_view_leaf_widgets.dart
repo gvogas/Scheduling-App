@@ -300,16 +300,7 @@ class DetailsPhotosView extends ConsumerWidget {
     final loading = ref.watch(provider.select((s) => s.isLoadingPictures));
     final notifier = ref.watch(photoUploadNotifierProvider);
     final appointmentId = appointment.id;
-    // The GATE itself must watch the queue, not just read it once: a
-    // background upload can be started from view mode
-    // (DetailsFieldRecordView.uploadInBackground) with no remount of this
-    // widget, and none of the other watches above (existingImages, newImages,
-    // the notifier singleton) fire when only the pending count changes.
-    // Without this outer listener the FIRST photo on a job with none left the
-    // whole section a SizedBox.shrink for the entire upload, so the crew saw
-    // no sign their photo existed. This also now supplies the value the old
-    // inner listener read, so there is only one — the per-drain rebuild stays
-    // scoped to this row rather than the whole detail body.
+    // The gate must WATCH the queue: a view-mode background upload changes only the pending count (ADR-0010).
     return ListenableBuilder(
       listenable: Listenable.merge([notifier.pending, notifier.failures]),
       builder: (context, _) {

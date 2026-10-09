@@ -181,11 +181,7 @@ class _StripCell extends StatelessWidget {
   Widget _buildDot(ThemeData theme) {
     return SizedBox(
       height: _kStripDot + _kStripDotGap,
-      // Kept on the selected day too — the same rule as the month
-      // grid's cells (owner call, 2026-07-31). The selection circle
-      // only fills the day number, so the dot below it stays legible,
-      // and hiding it made the day being looked at the one day whose
-      // crew was invisible.
+      // Kept on the selected day too, like the month grid's cells (ADR-0152).
       child: dotColors.isEmpty
           ? null
           : Padding(

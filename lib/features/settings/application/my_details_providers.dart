@@ -97,11 +97,7 @@ final myUpcomingAppointmentsProvider =
               ),
         'MYDET upcoming range stream failed',
       );
-      // Time off is not booked WORK, so it must not warn you about switching
-      // off the day you booked off — and the dashboard's admin-side flag reads
-      // the same question through the same `daysWithBookedWork`, from records
-      // already filtered in `dashboardRecordsProvider`. Filtering only there
-      // let the two owners of one question disagree.
+      // Time off isn't WORK: the same filter `dashboardRecordsProvider` applies before `daysWithBookedWork`.
       return [
         for (final job in jobs)
           if (job.employeeIds.contains(docId) && !job.isTimeOff) job,

@@ -57,11 +57,7 @@ class AppNavDrawer extends ConsumerWidget {
       liveMapEnabled: ref.watch(featureFlagsProvider.select((f) => f.presence)),
     );
 
-    // The shadow wraps the drawer from OUTSIDE. A BoxShadow is painted from the
-    // edges of its own box and its blur reaches inward as well as outward, so a
-    // decoration placed inside the drawer paints a dark 44px haze across the
-    // drawer's own surface, above the background and below the rows: invisible
-    // against the dark theme, a grey fog over the light one (fixed 2026-07-31).
+    // The shadow wraps the drawer from OUTSIDE; inside, its inward blur fogs the light theme.
     return DecoratedBox(
       decoration: BoxDecoration(boxShadow: theme.cardStyle.drawerShadow),
       child: Drawer(

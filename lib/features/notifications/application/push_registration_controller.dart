@@ -74,17 +74,9 @@ class PushRegistrationController with ReentrantSync {
   Future<void> sync() => runCoalesced(_syncGuarded);
 
   Future<void> _syncGuarded() async {
-    // Teardown runs BEFORE signOut(), so a body resuming mid-teardown still
-    // holds a valid credential. Worse here than elsewhere: if it lands after
-    // `deleteToken()`, FCM mints a FRESH token and this upserts it, leaving a
-    // signed-out device registered and still receiving that account's pushes —
-    // and the write succeeds, so nothing logs an error.
+    // Teardown runs before `signOut()`: a late body would upsert the fresh token `deleteToken()` mints.
     final generation = syncGeneration;
-    // The guard opens HERE, not after the gate: `readAccountGateInputs` reads
-    // a provider and `_refreshSub.cancel()` is awaited, so both can throw —
-    // and `sync()` is called unawaited from four sites, which is exactly what
-    // the catch below exists to contain. `PresenceSyncController._syncGuarded`
-    // already puts the identical gate read inside its try.
+    // The guard opens HERE: the gate read and the awaited cancel can throw, and `sync()` runs unawaited.
     try {
       final gate = readAccountGateInputs(_ref, _auth);
       // Null is "we don't know yet" — leave the registration as it is.
@@ -189,13 +181,7 @@ class PushRegistrationController with ReentrantSync {
     invalidateSync();
     try {
       final service = _ref.read(pushNotificationServiceProvider);
-      // Resolve BOTH from the device when this session never completed a
-      // registration — the two fields are set only on a fully-successful sync,
-      // so an incomplete session left a stale `fcmTokens` row that the server
-      // keeps trying to push to (`syncUsersByUid` purges these on DISABLE, not
-      // on sign-out), one per device per incomplete session. The token is what
-      // identifies THIS device, so it has to come from FCM rather than from a
-      // kind/platform sweep, which would de-register the user's other phones.
+      // The token comes from FCM, never a kind/platform sweep, which would de-register the user's other phones.
       final token = _registeredToken ?? await service.currentToken();
       final docId = _registeredDocId ?? await _resolveUserDocId();
       if (docId != null && token != null) {

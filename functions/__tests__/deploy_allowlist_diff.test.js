@@ -97,11 +97,14 @@ describe("compareTrees", () => {
 
   test("reports removals and vanished owners per file", () => {
     const head = BASE.replace("\"isAdmin\", // #compat-1.47.0\n", "");
+    const gone = "function goneHandler(req) {\n" +
+      "  assertPayloadShape(req.data, new Set([\"x\"]));\n}\n";
     const result = compareTrees(
-        files({"a.js": BASE, "gone.js": BASE}), files({"a.js": head}));
+        files({"a.js": BASE, "gone.js": gone}), files({"a.js": head}));
     expect(result.removed).toEqual(
         [{file: "a.js", owner: "createHandler", key: "isAdmin"}]);
-    expect(result.missingOwners.map((m) => m.file)).toContain("gone.js");
+    expect(result.missingOwners).toEqual(
+        [{file: "gone.js", owner: "goneHandler"}]);
   });
 
   test("a file new at HEAD is fine, and security.js is skipped", () => {
@@ -109,6 +112,23 @@ describe("compareTrees", () => {
         files({}),
         files({"new.js": BASE, "security.js": "assertPayloadShape(a, b);"}));
     expect(result).toEqual({removed: [], missingOwners: []});
+  });
+
+  test("an owner that moved files is still compared, by name", () => {
+    const head = BASE.replace("\"isAdmin\", // #compat-1.47.0\n", "");
+    const result = compareTrees(
+        files({"old.js": BASE}), files({"admin.js": head}));
+    expect(result.missingOwners).toEqual([]);
+    expect(result.removed).toEqual(
+        [{file: "admin.js", owner: "createHandler", key: "isAdmin"}]);
+  });
+
+  test("an owner defined in two HEAD files stays a vanished owner", () => {
+    const result = compareTrees(
+        files({"old.js": BASE}), files({"a.js": BASE, "b.js": BASE}));
+    expect(result.removed).toEqual([]);
+    expect(result.missingOwners).toContainEqual(
+        {file: "old.js", owner: "createHandler"});
   });
 
   test("an unreadable HEAD file throws rather than skipping", () => {

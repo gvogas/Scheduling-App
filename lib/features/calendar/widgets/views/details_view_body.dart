@@ -304,11 +304,7 @@ class DetailsViewBody extends ConsumerWidget {
     EventDetailsController notifier,
   ) async {
     final previousStatus = AppointmentStatus.storedRaw(appointment.status);
-    // Everything the Undo needs, resolved BEFORE the sheet closes. The action
-    // runs after `onClose()` has dropped the last listener on the autoDispose
-    // controller, so touching `notifier`, `ref` or `context` in there is a
-    // use-after-dispose — and it runs from a timer callback with no caller
-    // left to catch the StateError.
+    // Resolved BEFORE the sheet closes: the Undo runs from a timer after the controller is disposed (ADR-0033).
     final l10n = context.l10n;
     final id = appointment.id;
     final notices = ref.read(noticeServiceProvider);

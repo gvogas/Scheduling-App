@@ -69,20 +69,7 @@ class AppPalette extends ThemeExtension<AppPalette> {
   final double crewCustomLift;
   final double? avatarInkLightness; // null = plain contrast foreground
 
-  // The three calendar holiday-marker hues — the 2px rule under a day number,
-  // one per `HolidaySet`. They live here rather than as a brightness branch in
-  // the calendar, because a light/dark difference belongs on the extension.
-  //
-  // Three plain fields rather than a `HolidaySet`-keyed map, for two reasons
-  // that are NOT "core must not import a feature type" — this repo does that
-  // in a dozen places, and `status_chip.dart` even re-exports one. The real
-  // ones: `lerp` interpolates a `Color` field but can only SNAP a map at the
-  // midpoint (see `crewOverride` above), which would step the hue mid-theme-
-  // animation; and `holidays.dart` imports `l10n.dart` for its label
-  // resolvers, so taking `HolidaySet` would drag `AppLocalizations` into the
-  // theme layer, which today has zero feature imports. A switch EXPRESSION
-  // over the enum is exhaustiveness-checked anyway, so a fourth member still
-  // breaks the build. Resolved through `holidayHueFor`.
+  // Plain fields, not a `HolidaySet` map: `lerp` would snap a map mid-animation (ADR-0161).
   final Color holidayStatutory;
   final Color holidayOrthodox;
   final Color holidayConstruction;

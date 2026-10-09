@@ -114,15 +114,7 @@ class _AppointmentDateRowsState extends State<AppointmentDateRows> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _dateRows(context, divider),
-        // Deliberately NOT wrapped in an `AnimatedSize`: dismissing the panel
-        // is a deliberate tap on the row, so a gap that keeps shrinking for
-        // 200ms afterwards just shoves the rest of the form around after the
-        // fact. Two things rule out the tidier spellings — `reverseDuration`
-        // never applies here (`RenderAnimatedSize` always drives its controller
-        // FORWARD, so it is not used on a shrink), and a zero duration makes
-        // that render object re-dirty itself inside its own `performLayout`.
-        // The inner calendar keeps its own `AnimatedSize` for the 4↔6 row
-        // change when you page a month, which is the one worth animating.
+        // Deliberately NOT `AnimatedSize`: it ignores `reverseDuration` on a shrink, and a zero duration re-dirties its own layout.
         if (_open != null)
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

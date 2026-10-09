@@ -65,11 +65,7 @@ class _AddressAutocompleteFieldState
   @override
   void initState() {
     super.initState();
-    // Both eager, not lazy `late final`s: the debounce error handler and the
-    // two post-await catches all run after this field can be gone, and
-    // `ref.read` on an unmounted consumer throws under Riverpod 3. A lazy
-    // initializer is one moved line away from being first touched below an
-    // await.
+    // Eager, not lazy `late final`s: the handlers run after this field can be gone.
     _logger = ref.read(loggerProvider);
     _service = ref.read(placesRepositoryProvider);
     _debounce = Debouncer.tagged(
@@ -130,13 +126,7 @@ class _AddressAutocompleteFieldState
     // failed fetch will still retry.
     if (query == _lastFetched) return;
     final requestId = ++_requestId;
-    // Resolved BEFORE the await, not inside the catch. `AppLogger` is
-    // context-free and the log must survive unmount — but `ref.read` is not:
-    // under Riverpod 3 it THROWS a StateError once the consumer is unmounted.
-    // This method runs from a Debouncer timer with no error handler, so that
-    // throw escaped to the zone handler as a FATAL — on the most-used field in
-    // the app, whenever a lookup failed after the sheet was dismissed. Holding
-    // the logger keeps both properties.
+    // Logger resolved BEFORE the await: `ref.read` throws once unmounted (ADR-0033).
     setState(() {
       _isLoading = true;
       _serviceError = null;

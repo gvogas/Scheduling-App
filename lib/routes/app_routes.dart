@@ -71,17 +71,7 @@ class AppRoutes {
         final args = settings.arguments as DashboardArgs?;
         return AppPageRoute(
           settings: settings,
-          // Defaults CLOSED like every other appointment surface: this flag
-          // becomes the cards' `showActions`, and a `true` default is what
-          // once showed employees Edit/Cancel/Delete affordances the rules
-          // then rejected. An argless push is a caller bug, not a licence.
-          //
-          // THE ASYMMETRY WITH THE ARG-REQUIRED ROUTES BELOW IS DELIBERATE.
-          // Those recover to an invalid-link screen on an argless push,
-          // which is the right answer for a route whose whole content is its
-          // argument: there is nothing to render. This one is the app's HOME,
-          // reached from a cold start and from every back stack, so blocking
-          // admin-only affordances is the least-privilege fallback.
+          // Defaults CLOSED; this is HOME, so least privilege rather than an invalid-link screen (ADR-0017).
           builder: (_) => DashboardScreen(
             isAdmin: args?.isAdmin ?? false,
             employeeId: args?.employeeId ?? '',

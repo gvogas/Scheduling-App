@@ -128,11 +128,7 @@ class AgendaSliverList extends StatelessWidget {
     final firstClosedIndex = events.indexWhere(
       (slice) => slice.appointment.isClosed,
     );
-    // The rule's count must answer the header's question, or the two disagree
-    // on the same block, so it filters through the same `countsAsWork`: a
-    // completed DAY OFF and a CANCELLED visit both sink into the closed tail
-    // and are rendered there, but neither is a job the day's work included, so
-    // `_jobLabel` counts neither.
+    // Through `countsAsWork`, so the rule's count agrees with the header (ADR-0158).
     final closedJobCount = events
         .skip(firstClosedIndex < 0 ? events.length : firstClosedIndex)
         .where((slice) => countsAsWork(slice.appointment))

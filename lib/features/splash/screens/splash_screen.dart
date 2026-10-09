@@ -41,12 +41,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   /// Optimistic fast path — a cache hit routes immediately as an employee; a
   /// miss falls back to the authoritative provider.
   Future<void> _decideRoute() async {
-    // Read the uid, which Firebase.initializeApp restores synchronously, and
-    // fire the cache read in parallel with App Check.
-    // Held for the whole boot: both handlers below run after an await, and a
-    // `ref.read` on an unmounted consumer throws under Riverpod 3 — which
-    // would turn a HANDLED cache miss into a StateError rethrown into `_boot`,
-    // on the very first screen.
+    // Held for the whole boot: both handlers run after an await, where `ref.read` throws.
     final logger = ref.read(loggerProvider);
     final uid = ref.read(firebaseAuthProvider).currentUser?.uid;
     final cacheFuture = uid == null

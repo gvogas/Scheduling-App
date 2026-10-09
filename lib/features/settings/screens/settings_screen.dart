@@ -254,11 +254,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
   /// turning it back on re-registers. Best effort — it never throws.
   Future<void> _toggleLiveActivity({required bool value}) async {
     if (_pendingLiveActivityValue != null) return;
-    // Both providers are resolved up front. This runs unawaited from
-    // `Switch.onChanged`, so backing out of Settings mid-flight unmounts the
-    // consumer — and under Riverpod 3 the second `ref.read` would then throw a
-    // StateError into the void. This was the only async handler in this file
-    // with no guard at all.
+    // Resolved up front: this runs unawaited from `onChanged` and can outlive the consumer.
     final enabled = ref.read(liveActivityEnabledProvider.notifier);
     final controller = ref.read(liveActivityRegistrationControllerProvider);
     final analytics = ref.read(analyticsServiceProvider);

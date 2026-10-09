@@ -43,11 +43,7 @@ final scheduleSnapshotProvider =
                 range: range,
               )),
             );
-      // Crew colour lives on the roster, not on the appointment, and only an
-      // admin's snapshot carries crew at all. `allUsersStreamProvider` is not
-      // autoDispose, so every watcher shares its ONE `users` listener — this
-      // opens no second Firestore query. A roster that has not settled yet
-      // simply yields names without colours rather than stalling the snapshot.
+      // `allUsersStreamProvider` is shared, so this opens no second `users` query.
       final roster = identity.role == 'admin'
           ? ref.watch(allUsersStreamProvider).value ?? const <EmployeeRecord>[]
           : const <EmployeeRecord>[];

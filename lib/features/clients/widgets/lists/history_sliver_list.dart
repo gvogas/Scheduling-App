@@ -100,11 +100,7 @@ class _HistorySliverListState extends State<HistorySliverList> {
             SliverList.builder(itemCount: rows.length, itemBuilder: _item)
           else
             for (final section in _sectionsFor(rows))
-              // The group is what makes the bar STICKY rather than STACKING: a
-              // pinned header is bounded by its group's scroll extent, so July's
-              // bar pushes August's out on the way past instead of parking a
-              // second bar under it. A year of history would otherwise pile
-              // twelve bars across the top of the screen.
+              // The group makes the month bar STICKY rather than STACKING (ADR-0099).
               SliverMainAxisGroup(
                 slivers: [
                   SliverPersistentHeader(
@@ -168,11 +164,7 @@ class _HistorySliverListState extends State<HistorySliverList> {
               // No live name map here — crewFor falls back to the record's
               // denormalized employeeNames.
               crew: crewFor(app, colorMap: widget.colorMap),
-              // Dims a cancelled visit to 0.6 and strikes its title through.
-              // History keeps the plain full-height card otherwise: the
-              // agenda's collapsed green treatment exists to sink closed work
-              // out of the way of what's left today, and here everything is
-              // closed.
+              // History keeps the full-height card; only a cancelled visit dims and strikes through.
               dimWhenCancelled: true,
               // Carries the caller's role rather than a hardcoded false: an
               // admin needs to reach a finished job's Edit button from here,

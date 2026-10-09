@@ -164,15 +164,22 @@ jobs:
       - name: Allowlists are a superset of the last deploy
         if: steps.plan.outputs.functions == 'true'
         run: |
-          # Deploy-log rows land on dev first, so main's copy can lag.
-          log=docs/DEPLOYMENT.md
-          git show origin/dev:docs/DEPLOYMENT.md > dev-deploy-log.md 2>/dev/null && log=dev-deploy-log.md
-          base=$(node functions/scripts/deploy/deploy_log.js last-sha "$log")
-          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-            echo "::warning::No usable last-deploy sha in the Deploy log ('$base'); allowlist check skipped. Do DEPLOYMENT.md §4(a) by hand."
-            exit 0
+          # Check against BOTH logs: dev's rows can lead main's, but only main's copy is protected.
+          git show origin/dev:docs/DEPLOYMENT.md > dev-deploy-log.md 2>/dev/null || : > dev-deploy-log.md
+          checked=""
+          for log in docs/DEPLOYMENT.md dev-deploy-log.md; do
+            base=$(node functions/scripts/deploy/deploy_log.js last-sha "$log")
+            if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+              echo "::warning::No usable last-deploy sha in $log ('$base')."
+              continue
+            fi
+            case " $checked " in *" $base "*) continue ;; esac
+            (cd functions && node scripts/deploy/allowlist_diff.js "$base")
+            checked="$checked $base"
+          done
+          if [ -z "$checked" ]; then
+            echo "::warning::No usable last-deploy sha in either Deploy log; allowlist check skipped. Do DEPLOYMENT.md §4(a) by hand."
           fi
-          cd functions && node scripts/deploy/allowlist_diff.js "$base"
 
       - name: TTL drift report
         if: steps.plan.outputs.indexes != ''

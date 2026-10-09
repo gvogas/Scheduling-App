@@ -182,12 +182,7 @@ class AuthFailureNoAccountRecord extends AuthFailure {
       c.l10n.error_noAccountRecordContactAdmin;
 }
 
-// The password they chose IS the starting password the admin issued.
-// Detected by [AuthService.completeAccountSetup] reauthenticating with the
-// typed value: if that SUCCEEDS it is still the current credential, so
-// setup would leave the account active on a password the admin holds.
-// Surfaced as a field error on the password, never a banner — it names the
-// one field the person has to change.
+// The chosen password IS the admin-issued starting password; a field error, never a banner.
 class AuthFailureStartingPasswordReused extends AuthFailure {
   const AuthFailureStartingPasswordReused();
   @override

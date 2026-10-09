@@ -21,7 +21,9 @@ Keep real single-field indexes on those entries rather than the Firebase docs'
 `"indexes": []` example — `live_activity_registry.js` `_pruneExpired` queries
 `.where("expiresAt", "<=", now)`, and the token sweep is a **collection-group**
 query, so `liveActivityTokens.expiresAt` needs a `COLLECTION_GROUP`-scoped index
-or the reaper fails `FAILED_PRECONDITION` into a swallowed no-op.
+or the reaper fails `FAILED_PRECONDITION` into a swallowed no-op. The live
+map's admin `presence` collection-group read orders by `updatedAt`, so the
+`COLLECTION_GROUP`-scoped `presence.updatedAt` override stays too.
 
 **`fieldOverrides` also carries the single-field index EXEMPTIONS** (added
 2026-08-13, entries with `"indexes": []`). Firestore indexes every field of

@@ -34,17 +34,7 @@ class AppDialogFrame extends StatelessWidget {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.rDialog),
       ),
-      // The body SCROLLS, and that is not belt-and-braces. `Dialog` hands its
-      // child the viewport height minus the insets, and a bare `Column` there
-      // overflows rather than scrolling — at 260 logical px with 2x text every
-      // dialog built on this frame ran off the bottom (the series-scope one by
-      // 178px, before this frame gained a single new caller). These dialogs
-      // stack a title, two radio options with a consequence line each and an
-      // action row, so they are the tallest custom surfaces in the app and the
-      // first to go over.
-      //
-      // `MainAxisSize.min` stays on the column: the scroll view sizes to its
-      // child, so a short dialog is still short and only a tall one scrolls.
+      // The body SCROLLS: a bare `Column` in a `Dialog` overflows at 260 px with 2x text.
       child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.sp24),
         child: Column(

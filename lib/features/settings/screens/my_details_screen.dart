@@ -213,11 +213,7 @@ class _MyDetailsScreenState extends ConsumerState<MyDetailsScreen> {
   /// through the callable.
   Future<void> _changeEmail(String docId, String currentEmail) async {
     if (_isSaving || _isEmailSheetOpen) return;
-    // Its OWN guard, set synchronously before the sheet opens, rather than
-    // `_isSaving`: the modal barrier is not up yet on the frame the row is
-    // tapped, so an unguarded double-tap stacks two change-email sheets and
-    // dismissing the top one leaves a second live — two `changeOwnEmail` calls
-    // queued back to back against a 5/hour budget.
+    // Own guard, set before the sheet opens: the barrier isn't up on the tap frame, so a double-tap stacks sheets.
     _isEmailSheetOpen = true;
     final ChangeEmailDraft? draft;
     try {

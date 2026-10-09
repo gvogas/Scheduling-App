@@ -236,20 +236,9 @@ final widgetPayloadProvider =
       }
       // Rebuild on day rollover so app doesn't keep showing yesterday's jobs.
       final today = ref.watch(currentDayProvider);
-      // The shared mirror window, not this payload's own today+tomorrow: the
-      // Siri snapshot holds a permanent listener on the same family, and its
-      // window is a strict superset of what the widget needs. Asking for the
-      // same range value means one listener for both.
-      // `buildWidgetPayload` re-scopes to today/tomorrow in Dart regardless.
+      // The shared mirror window, so the widget and the Siri snapshot share one listener (ADR-0116).
       final range = AppointmentDateRange.forMirrors(today);
-      // Role-branched the same way the Siri snapshot is, and for the same
-      // reason: an ADMIN already holds a business-wide listener on this exact
-      // range for the snapshot, and their own jobs are a strict subset of it —
-      // asking for `myAppointmentsProvider` as well opened a SECOND permanent
-      // Firestore listener over documents the first was already streaming.
-      // The assignee filter has to happen here: `buildWidgetPayload` day-scopes
-      // but does NOT filter by assignee, so feeding it the business-wide list
-      // would put every colleague's jobs on the admin's home screen.
+      // Admins reuse the business-wide listener, so filter by assignee here: `buildWidgetPayload` doesn't.
       final appts = identity.role == 'admin'
           ? ref
                 .watch(appointmentsInRangeProvider(range))

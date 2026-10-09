@@ -126,6 +126,9 @@ self-service settings. Root context: `../../CLAUDE.md`.
 - Keep `employeesStreamProvider` `autoDispose` and NOT derived from `allUsersStreamProvider` (that one is admin-only and includes invited/disabled) — its consumers are transient sheets and the Dashboard, and without it one sheet pins a second `users` listener for the session. (ADR-0072)
 - Count the roster's "jobs today" with ONE listener: `employeeJobsTodayProvider` reduces `appointmentsInRangeProvider` over `todayRangeProvider` (watching `currentDayProvider`, never `DateTime.now()`, or counts stick across midnight) into a map, excluding cancelled; the detail's TODAY panel (`employeeTodayJobsProvider`) filters the SAME stream.
 - Treat a null from `EmployeesRepository.cachedUserDocId(uid)` (the doc id `watchUserDoc` last resolved) as "query the slow way", never "no doc".
+- Let the roster provider wait for the ROLE before picking its query, selected down to the role STRING — an admin read as an employee gets `watchAssignableUsers` (no invited/disabled rows), and a raw doc `Map` compares by identity, re-reading `users` on every own-doc write.
+- Keep `EmployeeRecord.fromMap` lenient on every field — it runs in three `users` streams and on sign-in, so one console-edited doc would throw app-wide and lock that person out.
+- Sort a person's day (`employee_schedule_providers.dart`) by THAT day's slice start, never the stored `startTime` (a run begun days ago would list first) — the Dart mirror of `notification_policy.js`'s clock-time sort.
 
 ## Travel alerts
 

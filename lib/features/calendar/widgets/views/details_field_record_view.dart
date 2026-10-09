@@ -136,12 +136,7 @@ class _DetailsFieldRecordViewState
     try {
       final files = await pickAppointmentImages(context, ref);
       if (files.isEmpty) return;
-      // The pick is the longest await in the app, so the sheet can be gone by
-      // the time it returns — and the cap below MUST read live state, so it
-      // cannot be hoisted the way the services above were. Under Riverpod 3
-      // `ref.read` on an unmounted consumer throws, which this method's own
-      // `catch` would file as "photo pick failed" while the crew's photos went
-      // unqueued.
+      // The cap below reads live state, so it can't be hoisted, and `ref.read` throws once unmounted.
       if (!mounted) return;
       // Measured AFTER the pick — that await is the longest in the app, and a
       // background upload landing inside it would otherwise go uncounted and

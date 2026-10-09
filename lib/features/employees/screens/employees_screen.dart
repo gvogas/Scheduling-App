@@ -182,12 +182,7 @@ class _AddEmployeePageState extends ConsumerState<AddEmployeePage> {
   }
 
   Widget _buildMasterList() {
-    // Gated on the stream that actually supplies the rows. It used to watch
-    // employeesStreamProvider here while every row came from
-    // allUsersStreamProvider via filteredEmployeesProvider - a second live
-    // `users` query pinned for the session, and a spinner keyed off a query
-    // whose results the list never showed (watchEmployees filters to active,
-    // so it excludes the invited and disabled rows this roster renders).
+    // Gated on the stream that supplies the rows; `employeesStreamProvider` filters to active.
     final employeesAsync = ref.watch(allUsersStreamProvider);
     return employeesAsync.when(
       loading: () => const SkeletonList(),
@@ -299,15 +294,7 @@ class _AddEmployeePageState extends ConsumerState<AddEmployeePage> {
 
   @override
   Widget build(BuildContext context) {
-    // Watches the stream this screen actually renders. It used to listen to
-    // employeesStreamProvider, which nothing here shows - and because that
-    // provider is not autoDispose and the hub keeps this tab mounted, merely
-    // listening pinned a second live `users` query for the whole session. The
-    // ref.watch above was moved off it for exactly that reason; this was the
-    // half that got left behind.
-    //
-    // Only log on the data-to-error transition - otherwise this would re-log
-    // on every rebuild while the stream stays errored.
+    // The rendered stream, not `employeesStreamProvider`; logs only on the data-to-error transition.
     ref.listen(allUsersStreamProvider, (previous, next) {
       if (!isFirstAsyncError(previous, next)) return;
       ref

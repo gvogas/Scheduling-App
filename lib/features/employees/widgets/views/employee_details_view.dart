@@ -57,16 +57,7 @@ class EmployeeDetailsView extends ConsumerWidget {
             email: employee.email,
           );
 
-    // Its own document (users/{id}/private/emergency), gated by rules to an
-    // admin and the person themselves. Team is admin-only, so a viewer here
-    // always passes that rule and a failed read means the read failed - not
-    // that there is none on file. If this view is ever reused on a non-admin
-    // surface it must distinguish the two, the way MyDetailsScreen does.
-    //
-    // Loading and error deliberately render the SAME thing here (the panel is
-    // omitted below when the rows are empty), which is what "not shown" means
-    // on a read-only surface. The failure itself is not swallowed: the
-    // provider logs it once per error emission.
+    // Admin-only surface, so a failed read is never "none on file"; the provider logs it (ADR-0078).
     final emergency =
         ref.watch(emergencyContactProvider(employee.id)).value ??
         EmergencyContact.empty;

@@ -61,14 +61,7 @@ mixin DeleteAccountFlow<T extends ConsumerStatefulWidget> on ConsumerState<T> {
       await deregisterThisDevice(devices);
       deregistered = devices;
       await authService.signOut();
-      // After the sign-out lands — the catch below rolls the device state back
-      // and leaves the person signed IN, which is not a sign-out.
-      //
-      // `resetAnalyticsData` is deliberately NOT called: it would mint a new
-      // app instance id, and retention ("do people come back?") is measured
-      // against that id. `user_role` is cleared instead — here rather than
-      // waiting for `AnalyticsIdentityListener`, so nothing logged between
-      // this call and the doc emptying carries the old role.
+      // After the sign-out lands; never `resetAnalyticsData`, clear `user_role` instead (ADR-0165).
       analytics
         ..logSignOut()
         ..setUserRole(null);

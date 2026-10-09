@@ -233,12 +233,7 @@ class DashboardAggregator {
     DateTime now,
   ) {
     final monday = mondayOf(now);
-    // ONE bucketing pass through the day-scoping owner, not seven scans. This
-    // asked `runsOn` per (job, day), and `runsOn` builds an `AppointmentDaySlice`
-    // only to discard it as a bool — so a week's worth of probes allocated ~7×
-    // the list length and threw ~6/7 of it away, on every live snapshot AND
-    // every employees-stream emission. `expandToDays` does the same clamped
-    // day-scoping in one pass and keys by the same normalized day.
+    // ONE `expandToDays` pass, not a `runsOn` probe per (job, day).
     final byDay = expandToDays(
       [
         for (final a in appointments)

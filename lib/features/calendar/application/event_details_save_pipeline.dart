@@ -85,12 +85,7 @@ class EventDetailsSavePipeline {
       status: status,
       repeat: repeat,
       seriesId: appointment.seriesId,
-      // Carried like `seriesId`: the run label is fixed at booking and the
-      // edit form cannot change it. Dropping it here rebuilt the record as a
-      // plain single-day job, so the returned record disagreed with the stored
-      // one and anything rendering it lost "Day 3 of 5". The stored fields
-      // themselves survived only because `toMap` omits them and `update()`
-      // leaves an omitted field alone — which is luck, not a guarantee.
+      // Carried like `seriesId`: the edit form can't change the run label, and dropping it loses "Day 3 of 5".
       dayIndex: appointment.dayIndex,
       dayCount: appointment.dayCount,
     );
