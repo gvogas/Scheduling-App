@@ -122,83 +122,48 @@ void main() {
     expect(branch, isNot(contains('appointmentSpanNotWidened')));
   });
 
-  group('the crew-notes branch', () {
-    // Added 2026-09-01. The technician could read a job and tap "Mark as
-    // complete" and nothing else — no way to record what they found, on a trade
-    // where the field record IS the billable artifact and the upsell pipeline.
-    // It travelled by phone call instead.
-    String notesBranch() => employeeBranchNaming("'fieldNotes'");
+  group('the photo-touch branch', () {
+    // The legacy `fieldNotes` disjunct, narrowed 2026-10-09 (ADR-0188): an
+    // assignee photo add batches an `updatedAt`-only parent update, and on an
+    // open job this is the only disjunct admitting it.
+    String touchBranch() => employeeBranchNaming("hasOnly(['updatedAt'])");
 
     test('is a SEPARATE disjunct from the mark-done flip', () {
-      // Not a widened `hasOnly` on the status branch: that branch is the most
-      // security-sensitive write in the app and its exact key set is what makes
-      // it possible to reason about.
       expect(employeeBranches(), hasLength(3));
-      expect(collapsed(employeeBranch()), isNot(contains("'fieldNotes'")));
-      expect(collapsed(notesBranch()), isNot(contains("'status'")));
+      expect(collapsed(touchBranch()), isNot(contains("'status'")));
     });
 
-    test('restricts the diff to fieldNotes and updatedAt', () {
+    test('restricts the diff to updatedAt alone', () {
       expect(
-        collapsed(notesBranch()),
-        contains("affectedKeys() .hasOnly(['fieldNotes', 'updatedAt'])"),
+        collapsed(touchBranch()),
+        contains("affectedKeys() .hasOnly(['updatedAt'])"),
       );
     });
 
-    test('writes fieldNotes, never the dispatcher NOTES field', () {
-      // Two fields on purpose: `notes` is the brief written when the job was
-      // booked, and an assignee must not be able to overwrite it.
-      final body = collapsed(notesBranch());
-      expect(body, contains("'fieldNotes'"));
-      expect(body, isNot(contains("['notes'")));
-      expect(body, isNot(contains("'notes',")));
+    test('refuses an assignee write of fieldNotes or notes', () {
+      final body = collapsed(touchBranch());
+      expect(body, isNot(contains('fieldNotes')));
+      expect(body, isNot(contains("'notes'")));
+      for (final branch in employeeBranches()) {
+        expect(collapsed(branch), isNot(contains('fieldNotes')));
+      }
     });
 
-    test('bounds the string', () {
+    test('pins updatedAt, so the serverTimestamp photo touch passes', () {
       expect(
-        collapsed(notesBranch()),
-        contains('isBoundedString(request.resource.data.fieldNotes, 4000)'),
-      );
-    });
-
-    test('the cap is conditional, so an updatedAt-only touch still passes', () {
-      // `hasOnly` admits a SUBSET, and an assignee adding a photo touches this
-      // document with an `updatedAt`-only diff — the images store bumps the
-      // parent in the same batch as the rows.
-      expect(
-        collapsed(notesBranch()),
-        contains("!('fieldNotes' in request.resource.data)"),
-      );
-    });
-
-    test('pins updatedAt, like the flip beside it', () {
-      expect(
-        collapsed(notesBranch()),
+        collapsed(touchBranch()),
         contains('request.resource.data.updatedAt == request.time'),
       );
     });
 
     test('carries NO status gate, deliberately', () {
-      // Unlike mark-done. A note is additive and is often the explanation for a
-      // job that went wrong — "nobody home", "needs a part" — so a cancelled or
-      // already-closed visit is exactly when one is worth recording.
-      final body = collapsed(notesBranch());
+      // A photo is often the record of a job that went wrong.
+      final body = collapsed(touchBranch());
       expect(body, isNot(contains("status != 'cancelled'")));
       expect(body, isNot(contains('status ==')));
     });
 
-    test('the shape guards stay off this branch too', () {
-      // Same reasoning as the flip: a legacy doc predating the caps must stay
-      // note-able, and the diff is already restricted to two keys.
-      final body = collapsed(notesBranch());
-      expect(body, isNot(contains('isValidAppointmentData')));
-      expect(body, isNot(contains('isValidAppointmentSpan')));
-    });
-
-    test('the field is capped on the ADMIN path as well', () {
-      // The admin re-serializes the whole record, so the cap has to live in the
-      // shape guard too or a long note is only bounded on one of the two ways
-      // it can be written.
+    test('the field is still capped on the ADMIN path', () {
       expect(
         rules,
         contains(

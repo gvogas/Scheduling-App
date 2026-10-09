@@ -197,45 +197,49 @@ class _SortPill extends StatelessWidget {
       // The Filter button's vocabulary, painted rather than built
       // from GhostControl: the popup owns the tap, and a second
       // InkWell inside it would fight for the same gesture.
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: kGhostTapTarget),
-        child: Center(
-          widthFactor: 1,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: kGhostTile),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(AppRadius.rFull),
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-            ),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: AppSpacing.sp8,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              spacing: 6,
-              children: [
-                Icon(
-                  Icons.sort_rounded,
-                  size: 15,
-                  color: theme.colorScheme.onSurface,
-                ),
-                Flexible(
-                  child: Text(
-                    ClientsListHeader.sortLabel(l10n, sort),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: kFontSans,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface,
-                    ),
+      child: _buildTrigger(theme, l10n),
+    );
+  }
+
+  Widget _buildTrigger(ThemeData theme, AppLocalizations l10n) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: kGhostTapTarget),
+      child: Center(
+        widthFactor: 1,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: kGhostTile),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(AppRadius.rFull),
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: AppSpacing.sp8,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 6,
+            children: [
+              Icon(
+                Icons.sort_rounded,
+                size: 15,
+                color: theme.colorScheme.onSurface,
+              ),
+              Flexible(
+                child: Text(
+                  ClientsListHeader.sortLabel(l10n, sort),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: kFontSans,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

@@ -72,40 +72,47 @@ class AppNavDrawer extends ConsumerWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Header(isAdmin: isLiveAdmin, userName: userName),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(12, 14, 12, 20),
-                children: [
-                  for (final (index, group) in groups.indexed) ...[
-                    if (index > 0) const SizedBox(height: AppSpacing.sp16),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(13, 0, 13, 7),
-                      child: Text(
-                        group.title(l10n),
-                        style: theme.monoType.groupLabel.copyWith(
-                          color: theme.palette.textMuted,
-                        ),
-                      ),
-                    ),
-                    for (final destination in group.rows)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
-                        child: _NavRow(
-                          destination: destination,
-                          isAdmin: isLiveAdmin,
-                          employeeId: employeeId,
-                          userName: userName,
-                          email: email,
-                        ),
-                      ),
-                  ],
-                ],
-              ),
-            ),
+            Expanded(child: _buildList(theme, l10n, groups, isLiveAdmin)),
             const _VersionFooter(),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildList(
+    ThemeData theme,
+    AppLocalizations l10n,
+    List<DrawerGroup> groups,
+    bool isLiveAdmin,
+  ) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 20),
+      children: [
+        for (final (index, group) in groups.indexed) ...[
+          if (index > 0) const SizedBox(height: AppSpacing.sp16),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(13, 0, 13, 7),
+            child: Text(
+              group.title(l10n),
+              style: theme.monoType.groupLabel.copyWith(
+                color: theme.palette.textMuted,
+              ),
+            ),
+          ),
+          for (final destination in group.rows)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 2),
+              child: _NavRow(
+                destination: destination,
+                isAdmin: isLiveAdmin,
+                employeeId: employeeId,
+                userName: userName,
+                email: email,
+              ),
+            ),
+        ],
+      ],
     );
   }
 }
@@ -248,60 +255,63 @@ class _NavRow extends ConsumerWidget {
               horizontal: 13,
               vertical: AppSpacing.sp8,
             ),
-            child: Row(
-              children: [
-                // The tinted icon chip InfoCardRow already uses, at 28 rather
-                // than 34 to sit inside the row's 48px minimum. The icon is
-                // what identifies the row; the tint is decoration, so colour
-                // is never the only cue.
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: tint.withValues(
-                      alpha: theme.cardStyle.iconChipAlpha,
-                    ),
-                    borderRadius: BorderRadius.circular(AppRadius.r8),
-                  ),
-                  child: Icon(
-                    drawerRowIcon(destination),
-                    size: 16,
-                    color: tint,
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.sp12),
-                Expanded(
-                  child: Text(
-                    drawerRowLabel(context.l10n, destination),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: kFontSans,
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w600,
-                      color: isActive
-                          ? scheme.onPrimaryContainer
-                          : scheme.onSurface,
-                    ),
-                  ),
-                ),
-                // An absent count renders nothing - the empty-omitted rule.
-                if (count != null) ...[
-                  const SizedBox(width: AppSpacing.sp8),
-                  Text(
-                    '$count',
-                    style: drawerCountIsAlert(destination)
-                        ? theme.monoType.data.copyWith(
-                            color: theme.statusColors.overdue,
-                          )
-                        : theme.monoType.data,
-                  ),
-                ],
-              ],
-            ),
+            child: _buildContent(context, theme, scheme, isActive, count, tint),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildContent(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme scheme,
+    bool isActive,
+    int? count,
+    Color tint,
+  ) {
+    return Row(
+      children: [
+        // The tinted icon chip InfoCardRow already uses, at 28 rather
+        // than 34 to sit inside the row's 48px minimum. The icon is
+        // what identifies the row; the tint is decoration, so colour
+        // is never the only cue.
+        Container(
+          width: 28,
+          height: 28,
+          decoration: BoxDecoration(
+            color: tint.withValues(alpha: theme.cardStyle.iconChipAlpha),
+            borderRadius: BorderRadius.circular(AppRadius.r8),
+          ),
+          child: Icon(drawerRowIcon(destination), size: 16, color: tint),
+        ),
+        const SizedBox(width: AppSpacing.sp12),
+        Expanded(
+          child: Text(
+            drawerRowLabel(context.l10n, destination),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontFamily: kFontSans,
+              fontSize: 14.5,
+              fontWeight: FontWeight.w600,
+              color: isActive ? scheme.onPrimaryContainer : scheme.onSurface,
+            ),
+          ),
+        ),
+        // An absent count renders nothing - the empty-omitted rule.
+        if (count != null) ...[
+          const SizedBox(width: AppSpacing.sp8),
+          Text(
+            '$count',
+            style: drawerCountIsAlert(destination)
+                ? theme.monoType.data.copyWith(
+                    color: theme.statusColors.overdue,
+                  )
+                : theme.monoType.data,
+          ),
+        ],
+      ],
     );
   }
 

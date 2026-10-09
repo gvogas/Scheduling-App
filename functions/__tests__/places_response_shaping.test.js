@@ -45,14 +45,79 @@ const runAutocomplete = (data) =>
 const runDetails = (data) => placesGetDetails.run({data, auth: AUTH});
 
 describe("placesAutocomplete response shaping", () => {
-  test("passes through the upstream suggestions array", async () => {
-    const suggestions = [
-      {placePrediction: {placeId: "p1", text: {text: "14 Elm St"}}},
-    ];
-    global.fetch = jest.fn().mockResolvedValue(okResponse({suggestions}));
+  test("passes through each upstream suggestion unchanged", async () => {
+    const prediction = {placeId: "p1", text: {text: "14 Elm St"}};
+    global.fetch = jest.fn().mockResolvedValue(
+        okResponse({suggestions: [{placePrediction: prediction}]}));
 
     const result = await runAutocomplete({input: "14 Elm"});
-    expect(result).toEqual({suggestions});
+    expect(result.suggestions[0].placePrediction).toEqual(prediction);
+  });
+
+  test("requests structuredFormat in the field mask", async () => {
+    global.fetch = jest.fn().mockResolvedValue(okResponse({}));
+
+    await runAutocomplete({input: "14 Elm"});
+    const headers = global.fetch.mock.calls[0][1].headers;
+    expect(headers["X-Goog-FieldMask"].split(",")).toEqual([
+      "suggestions.placePrediction.placeId",
+      "suggestions.placePrediction.text",
+      "suggestions.placePrediction.structuredFormat",
+    ]);
+  });
+
+  test("adds plain mainText and secondaryText per suggestion", async () => {
+    global.fetch = jest.fn().mockResolvedValue(okResponse({suggestions: [{
+      placePrediction: {
+        placeId: "p1",
+        text: {text: "14 Elm St, Montréal, QC, Canada"},
+        structuredFormat: {
+          mainText: {text: "14 Elm St", matches: [{endOffset: 6}]},
+          secondaryText: {text: "Montréal, QC, Canada"},
+        },
+      },
+    }]}));
+
+    const result = await runAutocomplete({input: "14 Elm"});
+    expect(result.suggestions[0]).toMatchObject({
+      mainText: "14 Elm St",
+      secondaryText: "Montréal, QC, Canada",
+    });
+  });
+
+  test("returns empty lines when structuredFormat is absent", async () => {
+    global.fetch = jest.fn().mockResolvedValue(okResponse({suggestions: [
+      {placePrediction: {placeId: "p1", text: {text: "14 Elm St"}}},
+    ]}));
+
+    const result = await runAutocomplete({input: "14 Elm"});
+    expect(result.suggestions[0]).toMatchObject({
+      mainText: "",
+      secondaryText: "",
+    });
+  });
+
+  test("returns an empty line for a non-string part", async () => {
+    global.fetch = jest.fn().mockResolvedValue(okResponse({suggestions: [{
+      placePrediction: {
+        placeId: "p1",
+        structuredFormat: {mainText: {text: 42}},
+      },
+    }]}));
+
+    const result = await runAutocomplete({input: "14 Elm"});
+    expect(result.suggestions[0]).toMatchObject({
+      mainText: "",
+      secondaryText: "",
+    });
+  });
+
+  test("leaves a non-object suggestion as-is", async () => {
+    global.fetch = jest.fn()
+        .mockResolvedValue(okResponse({suggestions: [null, "x"]}));
+
+    const result = await runAutocomplete({input: "14 Elm"});
+    expect(result).toEqual({suggestions: [null, "x"]});
   });
 
   test("coerces a missing suggestions field to an empty array", async () => {
@@ -78,6 +143,18 @@ describe("placesAutocomplete response shaping", () => {
     const result = await runAutocomplete({input: "saint-j"});
     expect(result.suggestions[0].placePrediction.text.text)
         .toBe("Saint-Jérôme, QC");
+  });
+
+  test("repairs upstream mojibake in the structured lines", async () => {
+    global.fetch = jest.fn().mockResolvedValue(okResponse({suggestions: [{
+      placePrediction: {
+        placeId: "p1",
+        structuredFormat: {secondaryText: {text: "Saint-Jã©Rã´Me, QC"}},
+      },
+    }]}));
+
+    const result = await runAutocomplete({input: "saint-j"});
+    expect(result.suggestions[0].secondaryText).toBe("Saint-Jérôme, QC");
   });
 
   test("rejects a missing input before any upstream call", async () => {

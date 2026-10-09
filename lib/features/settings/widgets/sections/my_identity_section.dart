@@ -149,48 +149,7 @@ class _MyIdentitySectionState extends State<MyIdentitySection> {
           ),
         ),
         const SizedBox(height: AppSpacing.sp16),
-        SheetPanel(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.sp16),
-              child: Column(
-                children: [
-                  LabeledTextField(
-                    key: const Key('myPhone'),
-                    label: l10n.employees_phoneNumber,
-                    controller: _phone,
-                    keyboard: TextInputType.phone,
-                    inputFormatters: const [PhoneInputFormatter()],
-                    maxLength: TextLimits.phone,
-                  ),
-                  const SizedBox(height: AppSpacing.sp16),
-                  _EmailRow(
-                    email: widget.email,
-                    onChangeEmail: widget.onChangeEmail,
-                  ),
-                  const SizedBox(height: AppSpacing.sp16),
-                  LabeledTextField(
-                    key: const Key('myEmergencyContact'),
-                    label: l10n.employees_emergencyContact,
-                    controller: _contact,
-                    textCapitalization: TextCapitalization.words,
-                    textInputAction: TextInputAction.next,
-                    maxLength: TextLimits.employeeEmergencyContact,
-                  ),
-                  const SizedBox(height: AppSpacing.sp16),
-                  LabeledTextField(
-                    key: const Key('myEmergencyPhone'),
-                    label: l10n.employees_emergencyPhone,
-                    controller: _emergencyPhone,
-                    keyboard: TextInputType.phone,
-                    inputFormatters: const [PhoneInputFormatter()],
-                    maxLength: TextLimits.phone,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+        _buildFieldsPanel(l10n),
         if (_isDirty) ...[
           const SizedBox(height: AppSpacing.sp16),
           _SaveBar(
@@ -206,6 +165,51 @@ class _MyIdentitySectionState extends State<MyIdentitySection> {
             ),
           ),
         ],
+      ],
+    );
+  }
+
+  Widget _buildFieldsPanel(AppLocalizations l10n) {
+    return SheetPanel(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(AppSpacing.sp16),
+          child: Column(
+            children: [
+              LabeledTextField(
+                key: const Key('myPhone'),
+                label: l10n.employees_phoneNumber,
+                controller: _phone,
+                keyboard: TextInputType.phone,
+                inputFormatters: const [PhoneInputFormatter()],
+                maxLength: TextLimits.phone,
+              ),
+              const SizedBox(height: AppSpacing.sp16),
+              _EmailRow(
+                email: widget.email,
+                onChangeEmail: widget.onChangeEmail,
+              ),
+              const SizedBox(height: AppSpacing.sp16),
+              LabeledTextField(
+                key: const Key('myEmergencyContact'),
+                label: l10n.employees_emergencyContact,
+                controller: _contact,
+                textCapitalization: TextCapitalization.words,
+                textInputAction: TextInputAction.next,
+                maxLength: TextLimits.employeeEmergencyContact,
+              ),
+              const SizedBox(height: AppSpacing.sp16),
+              LabeledTextField(
+                key: const Key('myEmergencyPhone'),
+                label: l10n.employees_emergencyPhone,
+                controller: _emergencyPhone,
+                keyboard: TextInputType.phone,
+                inputFormatters: const [PhoneInputFormatter()],
+                maxLength: TextLimits.phone,
+              ),
+            ],
+          ),
+        ),
       ],
     );
   }

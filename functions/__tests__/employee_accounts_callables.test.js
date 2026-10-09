@@ -588,25 +588,16 @@ describe("completeEmployeeSetup activation", () => {
     d1: {email: "ada@example.com", uid: "emp-uid", status: "invited"},
   });
 
-  test("legacy setup remains compatible before an admin reset", async () => {
-    const docs = invitedDocs();
-    getFirestore.mockReturnValue(makeDb(docs, []));
-    await expect(completeEmployeeSetup.run({
-      data: {firstName: "Ada"}, auth: {uid: "emp-uid"},
-    })).resolves.toEqual({ok: true});
-    expect(getAuth().updateUser).not.toHaveBeenCalled();
-  });
-
-  test("legacy setup cannot activate after an admin reset", async () => {
-    const docs = invitedDocs();
-    docs.d1.setupRequiresPassword = true;
-    getFirestore.mockReturnValue(makeDb(docs, []));
-    await expect(completeEmployeeSetup.run({
-      data: {firstName: "Ada"}, auth: {uid: "emp-uid"},
-    })).rejects.toThrow("setup-upgrade-required");
-    expect(docs.d1.status).toBe("invited");
-    expect(getAuth().updateUser).not.toHaveBeenCalled();
-  });
+  test("refuses a setup with no newPassword and leaves it invited",
+      async () => {
+        const docs = invitedDocs();
+        getFirestore.mockReturnValue(makeDb(docs, []));
+        await expect(completeEmployeeSetup.run({
+          data: {firstName: "Ada"}, auth: {uid: "emp-uid"},
+        })).rejects.toThrow("invalid-newPassword");
+        expect(docs.d1.status).toBe("invited");
+        expect(getAuth().updateUser).not.toHaveBeenCalled();
+      });
 
   test("password failure leaves the invitation pending and releases the lock",
       async () => {

@@ -256,7 +256,6 @@ class _AddressAutocompleteFieldState
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     ref.listen(featureFlagsProvider.select((f) => f.addressAutocomplete), (
       _,
       enabled,
@@ -267,68 +266,82 @@ class _AddressAutocompleteFieldState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        LabeledTextField(
-          label: widget.label ?? context.l10n.common_address,
-          controller: widget.controller,
-          required: widget.required,
-          optional: widget.optional,
-          keyboard: TextInputType.streetAddress,
-          autofillHints: const [AutofillHints.fullStreetAddress],
-          maxLength: TextLimits.appointmentAddress,
-          errorText: widget.errorText,
-          onChanged: _onTextChanged,
-          // The custom suffix used to cost this field the clear "x" every
-          // other text field gets. ClearTextButton's placeholder slot is
-          // exactly this case: the pin while empty, the x once there is an
-          // address to wipe.
-          suffixIcon: _isLoading
-              ? const Padding(
-                  padding: EdgeInsets.all(AppSpacing.sp12),
-                  child: AdaptiveProgressIndicator(size: 16),
-                )
-              : ClearTextButton(
-                  controller: widget.controller,
-                  onCleared: _onCleared,
-                  placeholder: Icon(
-                    Icons.location_on_outlined,
-                    size: 18,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-        ),
+        _buildTextField(context),
         if (_suggestions.isNotEmpty)
           AttachedDropdown(
             children: [
-              for (final s in _suggestions)
-                AttachedDropdownRow(
-                  leading: Icon(
-                    Icons.location_on_outlined,
-                    size: 18,
-                    color: scheme.onSurfaceVariant,
-                  ),
-                  headline: s.description,
-                  // An address is the whole answer and runs long; one line
-                  // ellipsised the town off the end of most of them.
-                  headlineMaxLines: 2,
-                  headlineStyle: Theme.of(context).textTheme.bodyMedium,
-                  onTap: () => _selectSuggestion(s),
-                ),
+              for (final s in _suggestions) _buildSuggestionRow(context, s),
             ],
           ),
-        if (_serviceError != null)
-          Padding(
-            padding: const EdgeInsets.only(
-              top: AppSpacing.sp8,
-              left: AppSpacing.sp4,
-            ),
-            child: Text(
-              _serviceError!,
-              style: Theme.of(
-                context,
-              ).textTheme.bodySmall?.copyWith(color: scheme.error),
-            ),
-          ),
+        if (_serviceError != null) _buildServiceError(context),
       ],
+    );
+  }
+
+  Widget _buildTextField(BuildContext context) {
+    return LabeledTextField(
+      label: widget.label ?? context.l10n.common_address,
+      controller: widget.controller,
+      required: widget.required,
+      optional: widget.optional,
+      keyboard: TextInputType.streetAddress,
+      autofillHints: const [AutofillHints.fullStreetAddress],
+      maxLength: TextLimits.appointmentAddress,
+      errorText: widget.errorText,
+      onChanged: _onTextChanged,
+      // ClearTextButton's placeholder: the pin while empty, the x once filled.
+      suffixIcon: _isLoading
+          ? const Padding(
+              padding: EdgeInsets.all(AppSpacing.sp12),
+              child: AdaptiveProgressIndicator(size: 16),
+            )
+          : ClearTextButton(
+              controller: widget.controller,
+              onCleared: _onCleared,
+              placeholder: Icon(
+                Icons.location_on_outlined,
+                size: 18,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+    );
+  }
+
+  Widget _buildSuggestionRow(BuildContext context, AddressSuggestion s) {
+    final leading = Icon(
+      Icons.location_on_outlined,
+      size: 18,
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
+    if (s.mainText.trim().isEmpty) {
+      return AttachedDropdownRow(
+        leading: leading,
+        headline: s.description,
+        // Flat fallback: two lines, or the town ellipsises off most addresses.
+        headlineMaxLines: 2,
+        headlineStyle: Theme.of(context).textTheme.bodyMedium,
+        onTap: () => _selectSuggestion(s),
+      );
+    }
+    return AttachedDropdownRow(
+      leading: leading,
+      headline: s.mainText,
+      detail: s.secondaryText,
+      semanticLabel: s.description.isNotEmpty ? s.description : null,
+      onTap: () => _selectSuggestion(s),
+    );
+  }
+
+  Widget _buildServiceError(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.sp8, left: AppSpacing.sp4),
+      child: Text(
+        _serviceError!,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.error,
+        ),
+      ),
     );
   }
 }

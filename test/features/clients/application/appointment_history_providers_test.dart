@@ -11,7 +11,7 @@ import 'package:scheduling/features/clients/application/appointment_history_prov
 
 class _MockAppointmentsRepo extends Mock implements AppointmentsRepository {}
 
-const HistorySearchKey _leak = (query: 'leak', employeeId: null);
+const _leak = 'leak';
 
 void main() {
   late _MockAppointmentsRepo repo;

@@ -37,3 +37,5 @@ keyed by employee/admin scope.
 A write path calling neither serves stale results, including a just-deleted appointment that opens a
 detail view for a doc that no longer exists. Don't restore a drop-the-window invalidation. Invalidation
 policy stays per-repo — they legitimately differ on the `_localWrites` poke.
+
+**Amended 2026-10-09:** `updateFieldNotes` and the `isRecordWrite` flag are deleted (ADR-0186); every `_patchWindow` call now fires both events.

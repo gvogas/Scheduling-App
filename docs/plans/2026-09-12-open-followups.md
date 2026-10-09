@@ -1,7 +1,7 @@
 # Open follow-ups from the 2026-09-12 session
 
 **Date:** 2026-09-12
-**Status: OPEN — item 4 CLOSED 2026-09-12, item 5 CLOSED 2026-09-19, the other three still blocked (re-verified 2026-10-01:** `appointment_form_fields.dart` and `job_address_section.dart` still mix `SheetPanel` with loose fields, and the Places details field mask is still `formattedAddress,addressComponents`, with no `structuredFormat`). Five items, each blocked on a
+**Status: OPEN — item 4 CLOSED 2026-09-12, item 5 CLOSED 2026-09-19, item 2 BUILT 2026-10-09 on dev (functions deploy pending, backend first, then app build), items 1 and 3 still blocked (re-verified 2026-10-01:** `appointment_form_fields.dart` and `job_address_section.dart` still mix `SheetPanel` with loose fields). Five items, each blocked on a
 different thing — a design decision, a deploy, a machine permission, a commit
 boundary, and a device. None is blocked on not knowing what to do.
 
@@ -41,7 +41,17 @@ re-open the mockup and design the text-row variant before writing any of it.
 
 ## 2. Street/city split on address suggestions
 
-**Blocked on: a Cloud Functions deploy.**
+**BUILT 2026-10-09 on dev — functions deploy pending (backend first), then app build.**
+`placesAutocomplete` now masks `suggestions.placePrediction.structuredFormat`
+and adds plain `mainText`/`secondaryText` strings (`""` when Places omits them)
+beside each passed-through `placePrediction`, which is unchanged, so 1.63 keeps
+working. `AddressSuggestion` carries both as optional (`''` default), and
+`AddressAutocompleteField` renders them through `AttachedDropdownRow`'s
+headline/`detail` pair, falling back to the flat two-line `description` when
+`mainText` is empty; the row's `semanticLabel` still reads the full address.
+The text below is the original reasoning.
+
+**Was blocked on: a Cloud Functions deploy.**
 
 Address suggestions render as one flat line. A proper row is a bold street line
 over a muted city line — the clarity win the 2026-09-12 dropdown rebuild could

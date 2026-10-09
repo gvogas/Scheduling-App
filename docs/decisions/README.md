@@ -190,3 +190,8 @@ not to "fix". Number sequentially from one counter; never renumber.
 | 0181 | One tourWrap parameter per multi-step widget | `lib/features/feature_tour/CLAUDE.md` |
 | 0182 | Audit tour copy and coverage when a toured surface changes | `lib/features/feature_tour/CLAUDE.md` |
 | 0183 | Employee tours follow the employee drawer | `lib/features/feature_tour/CLAUDE.md` |
+| 0184 | `waveSetImportSchedule` deleted | `.claude/rules/wave.md` |
+| 0185 | Employee setup requires a password; the legacy setup path is retired | `.claude/rules/employees.md` |
+| 0186 | `updateFieldNotes` deleted | `.claude/rules/appointments.md` |
+| 0187 | Technician-scoped History retired | `.claude/rules/appointments.md` |
+| 0188 | The assignee `fieldNotes` disjunct narrowed to an `updatedAt`-only touch | `.claude/rules/appointments.md` |

@@ -198,7 +198,8 @@ describe("buildAppointmentPatch", () => {
         {clientName: "Ada", employeeIds: ["emp1"]},
     );
     expect(patch.historySearchScopes).toContain("all:t:bea");
-    expect(patch.historySearchScopes).toContain("emp:emp1:t:bea");
+    expect(patch.historySearchScopes.every((t) => t.startsWith("all:")))
+        .toBe(true);
     expect(patch.historySearchScopes).not.toContain("all:t:ada");
   });
 

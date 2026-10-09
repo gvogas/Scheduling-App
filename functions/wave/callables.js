@@ -184,9 +184,7 @@ const waveGetConnection = onCall(
       // offering a Sync button over an invisible queue. Two `count()`
       // aggregates — billed per 1000 index entries, not per job.
       //
-      // ADDITIVE fields: an older build parses this response by name and
-      // ignores the rest, so adding to it is safe (the same contract the
-      // two-way sync's five `pushed*` fields rely on).
+      // Additive fields only: the app parses this response by name.
       //
       // Best-effort and reported as `null`, never 0, when the read fails.
       // Zero means "the queue is empty", which is the one thing an admin
@@ -245,9 +243,7 @@ const waveRetryFailedJobs = onCall(
 
       const businessId = await readWaveBusinessId();
       if (!businessId) {
-        // Same state, same code as the other two connection gates. This threw
-        // `wave/not-connected`, which no shipped Flutter mapper knows, so
-        // "Retry failed" on a disconnected install read as a generic error.
+        // Same code as the other two connection gates; the app maps only it.
         throw new HttpsError("failed-precondition", "wave/not-bootstrapped");
       }
 
@@ -294,28 +290,7 @@ const waveRetryFailedJobs = onCall(
     },
 );
 
-// waveSetImportSchedule — retired no-op kept for shipped builds.
-const waveSetImportSchedule = onCall(
-    APP_CHECK,
-    async (req) => {
-      // #compat-1.61.0: `schedule` stays accepted, and is ignored.
-      const uid = await assertAdminCall(req, new Set(["schedule"]));
-      logger.info("WAVE-SCHED ignored a retired cadence call",
-          {uidHash: shortHash(uid)});
-      return {schedule: "off"};
-    },
-);
-
-// waveImportCustomers — admin-only two-way sync: push the outbox to Wave,
-// then pull Wave customers back into `clients`.
-//
-// The name is inaccurate and stays anyway. It was first tagged #compat-1.37.1,
-// but that tag was wrong about WHY: renaming a deployed callable deletes the
-// old name, and EVERY shipped build calls this one — not just the 1.37.1 the
-// shim was about. So retiring that shim (2026-08-08) did not unblock a rename,
-// and a future one still needs the two-step: deploy the new name alongside,
-// ship a build that calls it, then drop the old name once no build calls it.
-// Same for wave_service.dart's caller.
+// Two-way sync. Never rename in place: every build calls waveImportCustomers.
 const waveImportCustomers = onCall(
     {
       secrets: [WAVE_FULL_ACCESS_TOKEN],
@@ -404,8 +379,7 @@ const waveImportCustomers = onCall(
         pushedFailed: pushed.failed,
         pushIncomplete: pushed.incomplete,
       });
-      // Additive fields only — the 1.37.1 build parses the import half of
-      // this response by name and ignores the rest.
+      // Additive fields only: the app parses this response by name.
       return {
         ...summary,
         pushedCreated: pushed.created,
@@ -421,7 +395,6 @@ module.exports = {
   selectBusiness,
   waveBootstrap,
   waveGetConnection,
-  waveSetImportSchedule,
   waveImportCustomers,
   waveRetryFailedJobs,
 };

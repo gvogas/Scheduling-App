@@ -161,80 +161,87 @@ class _StatsList extends ConsumerWidget {
             AppSpacing.sp16,
             AppSpacing.sp16,
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Its own provider, so changing the period recomputes four
-              // counters instead of every section on the screen.
-              ?switch (ref.watch(dashboardPeriodSummaryProvider)) {
-                AsyncData(:final value) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.sp24),
-                  child: PeriodSummarySection(summary: value),
-                ),
-                AsyncError() => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.sp24),
-                  child: CenteredErrorText(
-                    message: context.l10n.error_introLoadDashboard,
-                    onRetry: () => retryDashboardSources(ref),
-                  ),
-                ),
-                _ => null,
-              },
-              tour.stepIf(
-                TourStepId.dashboardUpcoming,
-                UpcomingTodaySection(
-                  ops: stats.todayOps,
-                  colorMap: colorMap,
-                  nameMap: nameMap,
-                  isAdmin: isAdmin,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sp24),
-              tour.stepIf(
-                TourStepId.dashboardWorkload,
-                EmployeeWorkloadSection(workload: stats.workload),
-              ),
-              const SizedBox(height: AppSpacing.sp24),
-              DailyLoadSection(days: stats.dailyLoad),
-              const SizedBox(height: AppSpacing.sp24),
-              BusinessTrendsSection(
-                buckets: stats.weekBuckets,
-                busiestWeekday: stats.busiestWeekday,
-              ),
-              const SizedBox(height: AppSpacing.sp24),
-              ?ref
-                  .watch(newClientsProvider)
-                  .whenOrNull(
-                    data: (clients) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.sp24),
-                      child: NewClientsSection(
-                        clients: clients,
-                        weeklyCounts: [
-                          for (final b in stats.weekBuckets) b.newClients,
-                        ],
-                      ),
-                    ),
-                  ),
-              tour.stepIf(
-                TourStepId.dashboardAttention,
-                AttentionFlagsSection(
-                  flags: stats.flags,
-                  colorMap: colorMap,
-                  nameMap: nameMap,
-                  isAdmin: isAdmin,
-                  // Both default to empty, so a source still settling shows the
-                  // appointment flags rather than blocking the section.
-                  neverSetUp:
-                      ref.watch(neverSetUpAccountsProvider).value ?? const [],
-                  availabilityConflicts:
-                      ref.watch(availabilityConflictsProvider).value ??
-                      const [],
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sp16),
-            ],
+          child: _buildSections(context, ref, colorMap, nameMap),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSections(
+    BuildContext context,
+    WidgetRef ref,
+    Map<String, Color> colorMap,
+    Map<String, String> nameMap,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Its own provider, so changing the period recomputes four
+        // counters instead of every section on the screen.
+        ?switch (ref.watch(dashboardPeriodSummaryProvider)) {
+          AsyncData(:final value) => Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sp24),
+            child: PeriodSummarySection(summary: value),
+          ),
+          AsyncError() => Padding(
+            padding: const EdgeInsets.only(bottom: AppSpacing.sp24),
+            child: CenteredErrorText(
+              message: context.l10n.error_introLoadDashboard,
+              onRetry: () => retryDashboardSources(ref),
+            ),
+          ),
+          _ => null,
+        },
+        tour.stepIf(
+          TourStepId.dashboardUpcoming,
+          UpcomingTodaySection(
+            ops: stats.todayOps,
+            colorMap: colorMap,
+            nameMap: nameMap,
+            isAdmin: isAdmin,
           ),
         ),
+        const SizedBox(height: AppSpacing.sp24),
+        tour.stepIf(
+          TourStepId.dashboardWorkload,
+          EmployeeWorkloadSection(workload: stats.workload),
+        ),
+        const SizedBox(height: AppSpacing.sp24),
+        DailyLoadSection(days: stats.dailyLoad),
+        const SizedBox(height: AppSpacing.sp24),
+        BusinessTrendsSection(
+          buckets: stats.weekBuckets,
+          busiestWeekday: stats.busiestWeekday,
+        ),
+        const SizedBox(height: AppSpacing.sp24),
+        ?ref
+            .watch(newClientsProvider)
+            .whenOrNull(
+              data: (clients) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.sp24),
+                child: NewClientsSection(
+                  clients: clients,
+                  weeklyCounts: [
+                    for (final b in stats.weekBuckets) b.newClients,
+                  ],
+                ),
+              ),
+            ),
+        tour.stepIf(
+          TourStepId.dashboardAttention,
+          AttentionFlagsSection(
+            flags: stats.flags,
+            colorMap: colorMap,
+            nameMap: nameMap,
+            isAdmin: isAdmin,
+            // Both default to empty, so a source still settling shows the
+            // appointment flags rather than blocking the section.
+            neverSetUp: ref.watch(neverSetUpAccountsProvider).value ?? const [],
+            availabilityConflicts:
+                ref.watch(availabilityConflictsProvider).value ?? const [],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sp16),
       ],
     );
   }

@@ -52,7 +52,30 @@ class SheetFieldRow extends StatelessWidget {
           : theme.colorScheme.onSurface,
     );
 
-    final content = Padding(
+    final content = _buildContent(theme, isEmpty, valueStyle);
+
+    if (onTap == null) return content;
+    return Semantics(
+      button: true,
+      // The trailing label is excluded with the rest of the subtree, so it has
+      // to be spoken here or it is invisible to a screen reader.
+      label:
+          '$label, ${isEmpty ? (placeholder ?? '') : value}'
+          '${trailingLabel == null ? '' : ', $trailingLabel'}',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        // 48 is the tap floor; the painted row is shorter at 1.0 scale.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: content,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContent(ThemeData theme, bool isEmpty, TextStyle? valueStyle) {
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
       child: Row(
         children: [
@@ -106,25 +129,6 @@ class SheetFieldRow extends StatelessWidget {
           ),
           ?trailing,
         ],
-      ),
-    );
-
-    if (onTap == null) return content;
-    return Semantics(
-      button: true,
-      // The trailing label is excluded with the rest of the subtree, so it has
-      // to be spoken here or it is invisible to a screen reader.
-      label:
-          '$label, ${isEmpty ? (placeholder ?? '') : value}'
-          '${trailingLabel == null ? '' : ', $trailingLabel'}',
-      excludeSemantics: true,
-      child: InkWell(
-        onTap: onTap,
-        // 48 is the tap floor; the painted row is shorter at 1.0 scale.
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 48),
-          child: content,
-        ),
       ),
     );
   }

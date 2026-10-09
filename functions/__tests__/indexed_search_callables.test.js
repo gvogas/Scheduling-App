@@ -3,8 +3,8 @@
 /**
  * Handler tests for the three `indexed_search` CALLABLES.
  *
- * The two existing suites cover the pure helpers (`historyScope`,
- * `mayReadHistoryDoc`, the conflict overlap rule); nothing drove the handlers,
+ * The existing suites cover the pure helpers (the conflict overlap rule);
+ * nothing drove the handlers,
  * so the guard ORDER, the early returns, the read-cap warns and the
  * re-verification pass were all unexercised at 18% function coverage.
  *
@@ -296,33 +296,39 @@ describe("searchHistory", () => {
     expect(chain.orderBy).toEqual(["startTime", "desc"]);
   });
 
-  test("a technician's tokens are pinned to their own scope", async () => {
+  test("a non-admin is refused before any read", async () => {
     security.profile = {role: "employee", docId: "e1"};
     const db = dbReturning([]);
     getFirestore.mockReturnValue(db);
-    await searchHistory.run(req());
-    expect(db.calls[0].where[0][2].every((t) => t.startsWith("emp:e1:")))
-        .toBe(true);
-  });
-
-  test("a technician asking for somebody else is refused", async () => {
-    security.profile = {role: "employee", docId: "e1"};
-    getFirestore.mockReturnValue(dbReturning([]));
-    const e = await expectRejection(searchHistory, req({employeeId: "e2"}));
+    const e = await expectRejection(searchHistory, req());
     expect(e.code).toBe("permission-denied");
+    expect(db.collection).not.toHaveBeenCalled();
+    expect(security.enforceDurableRateLimit).not.toHaveBeenCalled();
   });
 
-  test("a returned doc is re-verified against employeeIds, not just tokens",
-      async () => {
-        security.profile = {role: "employee", docId: "e1"};
-        getFirestore.mockReturnValue(dbReturning([
-          {id: "a1", clientName: "Smith", employeeIds: ["e1"]},
-          // Scope tokens drifted from employeeIds: rules would refuse this.
-          {id: "a2", clientName: "Smith", employeeIds: ["e9"]},
-        ]));
-        const out = await searchHistory.run(req({query: "smith"}));
-        expect(out.appointments.map((a) => a.id)).toEqual(["a1"]);
-      });
+  test("an employeeId sent by an admin is accepted and ignored", async () => {
+    const db = dbReturning([
+      {id: "a1", clientName: "Smith", employeeIds: ["e1"]},
+      {id: "a2", clientName: "Smith", employeeIds: ["e9"]},
+    ]);
+    getFirestore.mockReturnValue(db);
+    const out = await searchHistory.run(req({employeeId: "e1"}));
+    expect(security.assertPayloadShape).toHaveBeenCalledWith(
+        expect.anything(), new Set(["query", "employeeId"]));
+    expect(db.calls[0].where[0][2].every((t) => t.startsWith("all:")))
+        .toBe(true);
+    expect(out.appointments.map((a) => a.id)).toEqual(["a1", "a2"]);
+  });
+
+  test("a token hit is re-verified against the stored text", async () => {
+    getFirestore.mockReturnValue(dbReturning([
+      {id: "a1", clientName: "Smith"},
+      {id: "a2", clientName: "Smithers"},
+      {id: "a3", clientName: "Jones"},
+    ]));
+    const out = await searchHistory.run(req({query: "smith"}));
+    expect(out.appointments.map((a) => a.id)).toEqual(["a1", "a2"]);
+  });
 
   test("hitting the read cap warns", async () => {
     const many = Array.from({length: 200}, (_, i) => ({

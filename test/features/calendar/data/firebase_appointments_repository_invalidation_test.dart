@@ -112,12 +112,6 @@ final List<_WriteCase> _writeCases = [
     why: 'a photo write touches no field matchHistoryDocs reads',
   ),
   (
-    method: 'updateFieldNotes',
-    run: (r) => r.updateFieldNotes(id: 'a1', notes: 'left a quote'),
-    keepsA1: true,
-    why: 'a crew note changes no field the history matcher reads',
-  ),
-  (
     method: 'appendFieldNote',
     run: (r) => r.appendFieldNote(
       appointmentId: 'a1',
@@ -169,7 +163,6 @@ const _noRecordEvent = {
   'appendAppointmentPictures',
   'removeAppointmentPictures',
   'appendFieldNote',
-  'updateFieldNotes',
 };
 
 void main() {

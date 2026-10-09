@@ -37,3 +37,5 @@ second, so a partial run converges. Both orphan paths (the create's rollback `de
 `deleteEmployeeAccount` failing on Auth after the doc) `logger.error` the uid: an Auth account with no `users` doc
 permanently bricks that email, because the pre-flight refuses an Auth account no doc claims, and only the Firebase
 console can clear it.
+
+**Amended 2026-10-09:** the `email-not-verified` mapping and `AuthFailureSetupNotAvailableYet` are deleted (ADR-0185).

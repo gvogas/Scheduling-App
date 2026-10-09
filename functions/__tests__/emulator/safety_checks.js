@@ -122,11 +122,11 @@ async function verifySafety(project, firestore, auth, admin) {
         auth: {uid: admin.uid}, data: fields,
       }), /operation-in-progress/);
     });
-    // Reissue a starting password, then exercise the legacy setup request.
+    // Reissue a starting password, then send a setup with no newPassword.
     await createEmployeeAccount.run({auth: {uid: admin.uid}, data: fields});
     await assert.rejects(completeEmployeeSetup.run({
       auth: {uid}, data: {termsAccepted: true},
-    }), /setup-upgrade-required/);
+    }), /invalid-newPassword/);
     assert.equal((await person.ref.get()).data().status, "invited");
     await completeEmployeeSetup.run(setup);
     assert.equal((await person.ref.get()).data().status, "active");

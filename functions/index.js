@@ -55,7 +55,6 @@ exports.completePasswordReset = employeeAccountsSelf.completePasswordReset;
 exports.purgeExpiredHistory = maintenance.purgeExpiredHistory;
 exports.waveBootstrap = waveCallables.waveBootstrap;
 exports.waveGetConnection = waveCallables.waveGetConnection;
-exports.waveSetImportSchedule = waveCallables.waveSetImportSchedule;
 exports.waveImportCustomers = waveCallables.waveImportCustomers;
 exports.waveRetryFailedJobs = waveCallables.waveRetryFailedJobs;
 exports.waveUpsertCustomer = waveTriggers.waveUpsertCustomer;

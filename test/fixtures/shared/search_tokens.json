@@ -18,6 +18,15 @@
     {"input": "Ångström", "expect": "angstrom"},
     {"input": "Šarko", "expect": "arko"}
   ],
+  "historyScopes": [
+    {"name": "indexes every token under all: alone, never per assignee", "record": {"clientName": "Ada", "clientPhone": "", "employeeIds": ["e1", "e2"], "employeeNames": []},
+     "expect": ["all:t:ada", "all:t:a", "all:t:ad"]},
+    {"name": "a large crew no longer splits the field cap", "record": {"clientName": "Tremblay", "clientPhone": "5145554321",
+      "employeeIds": ["e0", "e1", "e2", "e3", "e4", "e5", "e6", "e7", "e8", "e9", "e10", "e11", "e12", "e13", "e14", "e15", "e16", "e17", "e18", "e19"],
+      "employeeNames": ["Technicien0", "Technicien1", "Technicien2", "Technicien3", "Technicien4", "Technicien5", "Technicien6", "Technicien7", "Technicien8", "Technicien9",
+        "Technicien10", "Technicien11", "Technicien12", "Technicien13", "Technicien14", "Technicien15", "Technicien16", "Technicien17", "Technicien18", "Technicien19"]},
+     "expectContains": "all:t:technicien19"}
+  ],
   "historySeam": {
     "record": {"clientName": "Marie Tremblay", "clientPhone": "5145554321", "employeeNames": ["Marc Dubois"]},
     "cases": [

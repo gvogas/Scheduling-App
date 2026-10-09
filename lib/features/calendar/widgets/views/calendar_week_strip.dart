@@ -147,58 +147,61 @@ class _StripCell extends StatelessWidget {
               // Every day in the strip belongs to the week on screen, so
               // nothing here is off-month and nothing fades.
               isFaint: false,
-              token: Container(
-                width: circleSize,
-                height: circleSize,
-                alignment: Alignment.center,
-                decoration: calendarDayCircleDecoration(
-                  scheme: scheme,
-                  isSelected: isSelected,
-                  showTodayRing: isToday,
-                ),
-                child: Text(
-                  '${day.day}',
-                  style: TextStyle(
-                    fontFamily: kFontSans,
-                    fontSize: 14.5,
-                    fontWeight: isSelected || isToday
-                        ? FontWeight.w700
-                        : FontWeight.w500,
-                    color: isSelected ? scheme.onPrimary : scheme.onSurface,
-                  ),
-                ),
-              ),
+              token: _buildCircle(scheme),
             ),
-            SizedBox(
-              height: _kStripDot + _kStripDotGap,
-              // Kept on the selected day too — the same rule as the month
-              // grid's cells (owner call, 2026-07-31). The selection circle
-              // only fills the day number, so the dot below it stays legible,
-              // and hiding it made the day being looked at the one day whose
-              // crew was invisible.
-              child: dotColors.isEmpty
-                  ? null
-                  : Padding(
-                      padding: const EdgeInsets.only(top: _kStripDotGap),
-                      child: Container(
-                        key: const ValueKey('calendar-strip-dot'),
-                        width: _kStripDot,
-                        height: _kStripDot,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: dotColors.first == null
-                              ? theme.palette.textFaint
-                              : crewColorOf(
-                                  theme,
-                                  dotColors.first!.toARGB32(),
-                                ),
-                        ),
-                      ),
-                    ),
-            ),
+            _buildDot(theme),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildCircle(ColorScheme scheme) {
+    return Container(
+      width: circleSize,
+      height: circleSize,
+      alignment: Alignment.center,
+      decoration: calendarDayCircleDecoration(
+        scheme: scheme,
+        isSelected: isSelected,
+        showTodayRing: isToday,
+      ),
+      child: Text(
+        '${day.day}',
+        style: TextStyle(
+          fontFamily: kFontSans,
+          fontSize: 14.5,
+          fontWeight: isSelected || isToday ? FontWeight.w700 : FontWeight.w500,
+          color: isSelected ? scheme.onPrimary : scheme.onSurface,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDot(ThemeData theme) {
+    return SizedBox(
+      height: _kStripDot + _kStripDotGap,
+      // Kept on the selected day too — the same rule as the month
+      // grid's cells (owner call, 2026-07-31). The selection circle
+      // only fills the day number, so the dot below it stays legible,
+      // and hiding it made the day being looked at the one day whose
+      // crew was invisible.
+      child: dotColors.isEmpty
+          ? null
+          : Padding(
+              padding: const EdgeInsets.only(top: _kStripDotGap),
+              child: Container(
+                key: const ValueKey('calendar-strip-dot'),
+                width: _kStripDot,
+                height: _kStripDot,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: dotColors.first == null
+                      ? theme.palette.textFaint
+                      : crewColorOf(theme, dotColors.first!.toARGB32()),
+                ),
+              ),
+            ),
     );
   }
 }

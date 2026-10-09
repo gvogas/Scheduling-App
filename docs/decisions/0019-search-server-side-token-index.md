@@ -39,3 +39,5 @@ write paths maintain the index too (`wave/customers_import.js`, `buildAppointmen
 A divergence between the two tokenizers, a missing backfill, or a server write that skips the tokens is
 a search that silently returns nothing. Don't remove the cap warn, and don't raise the cap without a real
 relevance order.
+
+**Amended 2026-10-09 by ADR-0187:** the index carries only the `all:` scope, with the whole field cap; no `emp:<id>:` scopes.

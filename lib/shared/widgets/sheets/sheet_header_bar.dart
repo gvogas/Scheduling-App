@@ -83,60 +83,68 @@ class SheetHeaderBar extends StatelessWidget {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final slot = _sideSlotWidth(context, constraints.maxWidth);
-          return Row(
-            children: [
-              SizedBox(
-                width: slot,
-                child: TextButton(
-                  style: style,
-                  onPressed: isBusy ? null : onCancel,
-                  child: Text(
-                    context.l10n.common_cancel,
+          return _buildRow(context, theme, scheme, style, slot);
+        },
+      ),
+    );
+  }
+
+  Widget _buildRow(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme scheme,
+    ButtonStyle style,
+    double slot,
+  ) {
+    return Row(
+      children: [
+        SizedBox(
+          width: slot,
+          child: TextButton(
+            style: style,
+            onPressed: isBusy ? null : onCancel,
+            child: Text(
+              context.l10n.common_cancel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: isBusy ? theme.palette.textMuted : scheme.onSurface,
+              ),
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            title,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.headlineLarge?.copyWith(
+              color: scheme.onSurface,
+            ),
+          ),
+        ),
+        SizedBox(
+          width: slot,
+          child: TextButton(
+            style: style,
+            onPressed: isBusy ? null : onPrimary,
+            child: isBusy
+                ? const AdaptiveProgressIndicator(size: 18)
+                : Text(
+                    primaryLabel,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.bodyMedium?.copyWith(
-                      color: isBusy
+                      fontWeight: FontWeight.w600,
+                      color: onPrimary == null
                           ? theme.palette.textMuted
-                          : scheme.onSurface,
+                          : theme.palette.primaryAccent,
                     ),
                   ),
-                ),
-              ),
-              Expanded(
-                child: Text(
-                  title,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.headlineLarge?.copyWith(
-                    color: scheme.onSurface,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: slot,
-                child: TextButton(
-                  style: style,
-                  onPressed: isBusy ? null : onPrimary,
-                  child: isBusy
-                      ? const AdaptiveProgressIndicator(size: 18)
-                      : Text(
-                          primaryLabel,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                            color: onPrimary == null
-                                ? theme.palette.textMuted
-                                : theme.palette.primaryAccent,
-                          ),
-                        ),
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+          ),
+        ),
+      ],
     );
   }
 }

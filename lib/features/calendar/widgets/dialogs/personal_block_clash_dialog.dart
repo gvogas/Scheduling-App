@@ -457,12 +457,6 @@ class _ClashRow extends StatelessWidget {
       _RowIdle() => (scheme.outlineVariant, scheme.surface),
     };
 
-    // Hoisted out of the chip loop so the tally isn't rebuilt per chip.
-    final freeFirstNames = switch (state) {
-      _RowOpen(:final free) => firstNameTally([for (final p in free) p.name]),
-      _ => const <String, int>{},
-    };
-
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.sp8),
       child: Container(
@@ -478,36 +472,44 @@ class _ClashRow extends StatelessWidget {
             _titleRow(context, theme),
             const SizedBox(height: AppSpacing.sp4),
             _statusLine(context, theme),
-            if (state case _RowOpen(:final free)) ...[
-              const SizedBox(height: AppSpacing.sp8),
-              Text(
-                context.l10n.calendar_swapPersonFor(blockedName),
-                style: theme.textTheme.labelMedium?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sp8),
-              Wrap(
-                spacing: AppSpacing.sp8,
-                runSpacing: AppSpacing.sp8,
-                children: [
-                  for (final person in free)
-                    _FreeCrewChip(
-                      person: person,
-                      // Disambiguates two people sharing a first name.
-                      shortName: shortAssigneeName(
-                        person.name,
-                        among: freeFirstNames,
-                      ),
-                      onTap: () => onPick(person),
-                    ),
-                ],
-              ),
-            ],
+            if (state case _RowOpen(:final free))
+              ..._swapPicker(context, theme, free),
           ],
         ),
       ),
     );
+  }
+
+  List<Widget> _swapPicker(
+    BuildContext context,
+    ThemeData theme,
+    List<EmployeeRecord> free,
+  ) {
+    // Hoisted out of the chip loop so the tally isn't rebuilt per chip.
+    final freeFirstNames = firstNameTally([for (final p in free) p.name]);
+    return [
+      const SizedBox(height: AppSpacing.sp8),
+      Text(
+        context.l10n.calendar_swapPersonFor(blockedName),
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      ),
+      const SizedBox(height: AppSpacing.sp8),
+      Wrap(
+        spacing: AppSpacing.sp8,
+        runSpacing: AppSpacing.sp8,
+        children: [
+          for (final person in free)
+            _FreeCrewChip(
+              person: person,
+              // Disambiguates two people sharing a first name.
+              shortName: shortAssigneeName(person.name, among: freeFirstNames),
+              onTap: () => onPick(person),
+            ),
+        ],
+      ),
+    ];
   }
 
   Widget _titleRow(BuildContext context, ThemeData theme) => Row(

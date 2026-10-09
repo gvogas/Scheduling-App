@@ -359,45 +359,7 @@ class _TeamRowFrame extends StatelessWidget {
               child: AppAvatar(name: name, color: color),
             ),
             const SizedBox(width: AppSpacing.sp12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                      if (isSelf) ...[
-                        const SizedBox(width: AppSpacing.sp8),
-                        StatusPill(
-                          label: context.l10n.liveMap_you,
-                          background: theme.colorScheme.primary.withValues(
-                            alpha: theme.cardStyle.iconChipAlpha,
-                          ),
-                          foreground: theme.palette.primaryAccent,
-                        ),
-                      ],
-                    ],
-                  ),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.palette.textTertiary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            Expanded(child: _buildNameBlock(context, theme)),
             if (trailing != null) ...[
               const SizedBox(width: AppSpacing.sp8),
               Text(
@@ -412,5 +374,45 @@ class _TeamRowFrame extends StatelessWidget {
       ),
     );
     return onTap == null ? row : InkWell(onTap: onTap, child: row);
+  }
+
+  Widget _buildNameBlock(BuildContext context, ThemeData theme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Flexible(
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (isSelf) ...[
+              const SizedBox(width: AppSpacing.sp8),
+              StatusPill(
+                label: context.l10n.liveMap_you,
+                background: theme.colorScheme.primary.withValues(
+                  alpha: theme.cardStyle.iconChipAlpha,
+                ),
+                foreground: theme.palette.primaryAccent,
+              ),
+            ],
+          ],
+        ),
+        Text(
+          subtitle,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.palette.textTertiary,
+          ),
+        ),
+      ],
+    );
   }
 }

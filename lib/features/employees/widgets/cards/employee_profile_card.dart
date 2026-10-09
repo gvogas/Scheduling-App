@@ -32,7 +32,29 @@ class EmployeeProfileCard extends StatelessWidget {
     final title = jobTitleLabel(l10n, employee.jobTitle);
     final name = employee.displayName;
 
-    final identity = Column(
+    final identity = _buildIdentity(theme, title, name);
+
+    final pill = onEdit == null ? null : _EditPill(onEdit: onEdit!);
+
+    return DecoratedBox(
+      decoration: appCardDecoration(
+        theme,
+        radius: AppRadius.r16,
+        color: theme.colorScheme.surfaceContainerLowest,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.sp16),
+        // The row holds an avatar, two-to-three text lines, chips and a pill,
+        // so it folds rather than overflow once text is scaled up.
+        child: context.isCompact
+            ? _buildStacked(name, identity, pill)
+            : _buildInline(name, identity, pill),
+      ),
+    );
+  }
+
+  Widget _buildIdentity(ThemeData theme, String title, String name) {
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -65,61 +87,37 @@ class EmployeeProfileCard extends StatelessWidget {
         ),
       ],
     );
+  }
 
-    final pill = onEdit == null ? null : _EditPill(onEdit: onEdit!);
+  Widget _buildStacked(String name, Widget identity, Widget? pill) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            AppAvatar(name: name, color: employee.color, size: AvatarSize.lg),
+            const SizedBox(width: AppSpacing.sp12),
+            Expanded(child: identity),
+          ],
+        ),
+        if (pill != null) ...[
+          const SizedBox(height: AppSpacing.sp12),
+          Align(alignment: AlignmentDirectional.centerEnd, child: pill),
+        ],
+      ],
+    );
+  }
 
-    return DecoratedBox(
-      decoration: appCardDecoration(
-        theme,
-        radius: AppRadius.r16,
-        color: theme.colorScheme.surfaceContainerLowest,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.sp16),
-        // The row holds an avatar, two-to-three text lines, chips and a pill,
-        // so it folds rather than overflow once text is scaled up.
-        child: context.isCompact
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      AppAvatar(
-                        name: name,
-                        color: employee.color,
-                        size: AvatarSize.lg,
-                      ),
-                      const SizedBox(width: AppSpacing.sp12),
-                      Expanded(child: identity),
-                    ],
-                  ),
-                  if (pill != null) ...[
-                    const SizedBox(height: AppSpacing.sp12),
-                    Align(
-                      alignment: AlignmentDirectional.centerEnd,
-                      child: pill,
-                    ),
-                  ],
-                ],
-              )
-            : Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AppAvatar(
-                    name: name,
-                    color: employee.color,
-                    size: AvatarSize.lg,
-                  ),
-                  const SizedBox(width: AppSpacing.sp12),
-                  Expanded(child: identity),
-                  if (pill != null) ...[
-                    const SizedBox(width: AppSpacing.sp8),
-                    pill,
-                  ],
-                ],
-              ),
-      ),
+  Widget _buildInline(String name, Widget identity, Widget? pill) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppAvatar(name: name, color: employee.color, size: AvatarSize.lg),
+        const SizedBox(width: AppSpacing.sp12),
+        Expanded(child: identity),
+        if (pill != null) ...[const SizedBox(width: AppSpacing.sp8), pill],
+      ],
     );
   }
 }

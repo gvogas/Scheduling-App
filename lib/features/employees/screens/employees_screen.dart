@@ -334,42 +334,50 @@ class _AddEmployeePageState extends ConsumerState<AddEmployeePage> {
           isAdmin: widget.isAdmin,
           employeeId: widget.employeeId,
         ),
-        floatingActionButton: widget.isAdmin
-            ? _tour.step(
-                TourStepId.employeesAdd,
-                targetBorderRadius: BorderRadius.circular(AppRadius.r16),
-                child: FloatingActionButton(
-                  // Needs to be unique across tabs, since IndexedStack keeps
-                  // every tab's FAB mounted at the same time.
-                  heroTag: 'employeesAddFab',
-                  // Until the roster settles we don't know which crew colours
-                  // are already reserved by active, invited, or disabled
-                  // people. Opening early would seed the picker from an empty
-                  // set and can offer a duplicate default.
-                  onPressed: usersReady ? _openInviteSheet : null,
-                  tooltip: context.l10n.employees_inviteEmployee,
-                  child: const Icon(Icons.add),
-                ),
-              )
-            : null,
+        floatingActionButton: _buildAddFab(usersReady),
         // Only the master list listens to the search controller, so typing
         // rebuilds just the list.
-        body: MasterDetailScaffold(
-          master: ListenableBuilder(
-            listenable: _searchController,
-            builder: (context, _) => _buildMasterList(),
-          ),
-          detail: selected == null
-              ? null
-              : EmployeeDetailsView(
-                  key: ValueKey(selected.id),
-                  employee: selected,
-                  isCurrentUserAdmin: widget.isAdmin,
-                  onEdit: () => _openEditSheet(selected),
-                ),
-          placeholder: _buildDetailPlaceholder(),
-        ),
+        body: _buildBody(selected),
       ),
+    );
+  }
+
+  Widget? _buildAddFab(bool usersReady) {
+    return widget.isAdmin
+        ? _tour.step(
+            TourStepId.employeesAdd,
+            targetBorderRadius: BorderRadius.circular(AppRadius.r16),
+            child: FloatingActionButton(
+              // Needs to be unique across tabs, since IndexedStack keeps
+              // every tab's FAB mounted at the same time.
+              heroTag: 'employeesAddFab',
+              // Until the roster settles we don't know which crew colours
+              // are already reserved by active, invited, or disabled
+              // people. Opening early would seed the picker from an empty
+              // set and can offer a duplicate default.
+              onPressed: usersReady ? _openInviteSheet : null,
+              tooltip: context.l10n.employees_inviteEmployee,
+              child: const Icon(Icons.add),
+            ),
+          )
+        : null;
+  }
+
+  Widget _buildBody(EmployeeRecord? selected) {
+    return MasterDetailScaffold(
+      master: ListenableBuilder(
+        listenable: _searchController,
+        builder: (context, _) => _buildMasterList(),
+      ),
+      detail: selected == null
+          ? null
+          : EmployeeDetailsView(
+              key: ValueKey(selected.id),
+              employee: selected,
+              isCurrentUserAdmin: widget.isAdmin,
+              onEdit: () => _openEditSheet(selected),
+            ),
+      placeholder: _buildDetailPlaceholder(),
     );
   }
 }

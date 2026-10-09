@@ -239,7 +239,7 @@ None. Zero `TODO(pre-ship)` markers (zero TODO/FIXME/HACK of any form in
   `*_policy.js` / module line; the export set must not change.
 
 ### I4 — long `build()`s and god files (split on touch) · low · high
-- **Status (2026-10-07):** **PARTLY DONE** (`228b0782`): the six named `build()`s split via private builder methods (clients_screen 137→49, details_view_body 143→66, notice_listener 124→41, employee_picker 109→56, live_map_team_sheet 93→30, main 87→51). The other ~57 long builds and the god files stay split-on-touch.
+- **Status (2026-10-09):** **DONE.** The remaining 60 long builds were split the same way; one is left at 61 lines (`_TrendChip`), where a split reads worse. Earlier, 2026-10-07 **PARTLY DONE** (`228b0782`): the six named `build()`s split via private builder methods (clients_screen 137→49, details_view_body 143→66, notice_listener 124→41, employee_picker 109→56, live_map_team_sheet 93→30, main 87→51). The other ~57 long builds and the god files stay split-on-touch.
 - 63 of 383 `build()`s exceed ~60 lines. Changed this window:
   `clients_screen.dart:139` (137 lines; seams: header row :189-215, list stack
   :220-260, FAB), `live_map_team_sheet.dart:45` (93), `main.dart:366` (87,

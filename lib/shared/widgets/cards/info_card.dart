@@ -64,7 +64,24 @@ class InfoCardRow extends StatelessWidget {
     final chipColor = iconColor ?? scheme.primary;
     final compact = context.isCompact;
 
-    final content = Padding(
+    final content = _buildContent(theme, scheme, chipColor, compact);
+
+    if (onTap == null) return content;
+
+    return Semantics(
+      button: true,
+      label: semanticLabel,
+      child: InkWell(onTap: onTap, child: content),
+    );
+  }
+
+  Widget _buildContent(
+    ThemeData theme,
+    ColorScheme scheme,
+    Color chipColor,
+    bool compact,
+  ) {
+    return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: AppSpacing.sp16,
         vertical: AppSpacing.sp12,
@@ -111,14 +128,6 @@ class InfoCardRow extends StatelessWidget {
           ],
         ],
       ),
-    );
-
-    if (onTap == null) return content;
-
-    return Semantics(
-      button: true,
-      label: semanticLabel,
-      child: InkWell(onTap: onTap, child: content),
     );
   }
 }

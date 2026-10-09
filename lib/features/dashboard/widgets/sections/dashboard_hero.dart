@@ -36,17 +36,7 @@ class DashboardHero extends StatelessWidget {
     ];
     // Resolve the counts once here and keep only the non-zero ones, so the bar
     // and legend stay in sync.
-    final visible = <_Segment>[
-      for (final (status, color) in segments)
-        if ((ops.statusCounts[DashboardAggregator.statusCountKey(status)] ??
-                0) >
-            0)
-          (
-            status,
-            color,
-            ops.statusCounts[DashboardAggregator.statusCountKey(status)]!,
-          ),
-    ];
+    final visible = _visibleSegments(segments);
     final total = ops.total;
 
     return Container(
@@ -58,44 +48,11 @@ class DashboardHero extends StatelessWidget {
         AppSpacing.sp16,
         AppSpacing.sp16,
       ),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(AppRadius.r16),
-        // Raw `Colors.black` below is not a missing token: it composes a SHADE
-        // OF the theme's own primary through `alphaBlend`, so it tracks
-        // whatever `scheme.primary` is in either theme.
-        gradient: LinearGradient(
-          colors: [
-            scheme.primary,
-            Color.alphaBlend(
-              Colors.black.withValues(alpha: 0.2),
-              scheme.primary,
-            ),
-          ],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
+      decoration: _buildDecoration(scheme),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text.rich(
-            TextSpan(
-              text: '$total ',
-              style: theme.textTheme.headlineLarge?.copyWith(
-                color: scheme.onPrimary,
-                fontWeight: FontWeight.w700,
-              ),
-              children: [
-                TextSpan(
-                  text: l10n.dashboard_visitsToday(total),
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: scheme.onPrimary.withValues(alpha: 0.85),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _buildTotal(theme, scheme, l10n, total),
           Text(
             DateUtilsHelper.formatDayHeader(now),
             style: theme.textTheme.bodySmall?.copyWith(
@@ -110,6 +67,63 @@ class DashboardHero extends StatelessWidget {
             const SizedBox(height: AppSpacing.sp12),
             _UnassignedBanner(count: ops.unassignedCount),
           ],
+        ],
+      ),
+    );
+  }
+
+  List<_Segment> _visibleSegments(List<(AppointmentStatus, Color)> segments) {
+    return <_Segment>[
+      for (final (status, color) in segments)
+        if ((ops.statusCounts[DashboardAggregator.statusCountKey(status)] ??
+                0) >
+            0)
+          (
+            status,
+            color,
+            ops.statusCounts[DashboardAggregator.statusCountKey(status)]!,
+          ),
+    ];
+  }
+
+  BoxDecoration _buildDecoration(ColorScheme scheme) {
+    return BoxDecoration(
+      borderRadius: BorderRadius.circular(AppRadius.r16),
+      // Raw `Colors.black` below is not a missing token: it composes a SHADE
+      // OF the theme's own primary through `alphaBlend`, so it tracks
+      // whatever `scheme.primary` is in either theme.
+      gradient: LinearGradient(
+        colors: [
+          scheme.primary,
+          Color.alphaBlend(Colors.black.withValues(alpha: 0.2), scheme.primary),
+        ],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+    );
+  }
+
+  Widget _buildTotal(
+    ThemeData theme,
+    ColorScheme scheme,
+    AppLocalizations l10n,
+    int total,
+  ) {
+    return Text.rich(
+      TextSpan(
+        text: '$total ',
+        style: theme.textTheme.headlineLarge?.copyWith(
+          color: scheme.onPrimary,
+          fontWeight: FontWeight.w700,
+        ),
+        children: [
+          TextSpan(
+            text: l10n.dashboard_visitsToday(total),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.onPrimary.withValues(alpha: 0.85),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
         ],
       ),
     );

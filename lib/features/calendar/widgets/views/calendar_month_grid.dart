@@ -94,51 +94,71 @@ class CalendarMonthGrid extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            height: _weekdayRowHeight(context),
-            child: ExcludeSemantics(
-              child: Row(
-                children: [
-                  for (var i = 0; i < 7; i++)
-                    Expanded(
-                      child: Center(
-                        child: Text(
-                          labels[i],
-                          key: ValueKey('calendar-weekday-$i'),
-                          style: theme.monoType.fieldLabel.copyWith(
-                            color: theme.palette.textMuted,
-                          ),
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
-          ),
+          _buildWeekdayRow(context, theme, labels),
           const SizedBox(height: AppSpacing.sp4),
           for (var row = 0; row < rows; row++) ...[
             if (row > 0) const SizedBox(height: _kCellGap),
-            SizedBox(
-              height: cellHeight,
-              child: Row(
-                children: [
-                  for (var col = 0; col < 7; col++)
-                    Expanded(
-                      child: CalendarDayCell(
-                        day: days[row * 7 + col],
-                        month: month,
-                        selectedDay: selectedDay,
-                        today: today,
-                        circleSize: circleSize,
-                        dotColors: dotColorsFor(days[row * 7 + col]),
-                        count: countFor(days[row * 7 + col]),
-                        onTap: onDaySelected,
-                      ),
-                    ),
-                ],
-              ),
+            _buildWeekRow(
+              days.sublist(row * 7, row * 7 + 7),
+              cellHeight: cellHeight,
+              circleSize: circleSize,
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeekdayRow(
+    BuildContext context,
+    ThemeData theme,
+    List<String> labels,
+  ) {
+    return SizedBox(
+      height: _weekdayRowHeight(context),
+      child: ExcludeSemantics(
+        child: Row(
+          children: [
+            for (var i = 0; i < 7; i++)
+              Expanded(
+                child: Center(
+                  child: Text(
+                    labels[i],
+                    key: ValueKey('calendar-weekday-$i'),
+                    style: theme.monoType.fieldLabel.copyWith(
+                      color: theme.palette.textMuted,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeekRow(
+    List<DateTime> week, {
+    required double cellHeight,
+    required double circleSize,
+  }) {
+    return SizedBox(
+      height: cellHeight,
+      child: Row(
+        children: [
+          for (final day in week)
+            Expanded(
+              child: CalendarDayCell(
+                day: day,
+                month: month,
+                selectedDay: selectedDay,
+                today: today,
+                circleSize: circleSize,
+                dotColors: dotColorsFor(day),
+                count: countFor(day),
+                onTap: onDaySelected,
+              ),
+            ),
         ],
       ),
     );
@@ -177,10 +197,15 @@ class CalendarDayCell extends StatelessWidget {
   final int count;
   final ValueChanged<DateTime> onTap;
 
+  ValueKey<String> get _cellKey => ValueKey(
+    'calendar-day-${day.year}-'
+    '${day.month.toString().padLeft(2, '0')}-'
+    '${day.day.toString().padLeft(2, '0')}',
+  );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     final inMonth = isInMonth(day, month);
     final isSelected = inMonth && isSameDate(day, selectedDay);
     final isToday = isSameDate(day, today);
@@ -189,48 +214,22 @@ class CalendarDayCell extends StatelessWidget {
     // is in, not to the one being read.
     final showTodayRing = isToday && inMonth;
 
-    final Color numberColor;
-    if (!inMonth) {
-      numberColor = theme.palette.textFaint;
-    } else if (isSelected) {
-      numberColor = scheme.onPrimary;
-    } else {
-      numberColor = scheme.onSurface;
-    }
-
-    final cellKey = ValueKey(
-      'calendar-day-${day.year}-'
-      '${day.month.toString().padLeft(2, '0')}-'
-      '${day.day.toString().padLeft(2, '0')}',
-    );
-
     // One lookup for both the marker hue and the label — the cell asks per
     // rebuild, and `holidaysOn` is year-cached behind this.
     final holidays = holidaysOn(day);
 
-    final content = Column(
-      mainAxisSize: MainAxisSize.min,
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _DayNumber(
-          day: day.day,
-          size: circleSize,
-          isSelected: isSelected,
-          showTodayRing: showTodayRing,
-          bold: isSelected || (isToday && inMonth),
-          color: numberColor,
-          // Off-month is the FAINT case, and for the construction shutdown it
-          // is the normal one — that run crosses July/August every year.
-          holidaySet: markerSetFrom(holidays),
-          isFaint: !inMonth,
-        ),
-        _CrewDotRow(dotColors: dotColors),
-      ],
+    final content = _buildContent(
+      theme,
+      holidays: holidays,
+      inMonth: inMonth,
+      isSelected: isSelected,
+      showTodayRing: showTodayRing,
+      bold: isSelected || (isToday && inMonth),
     );
 
     if (!inMonth) {
       return ExcludeSemantics(
-        key: cellKey,
+        key: _cellKey,
         child: Center(child: content),
       );
     }
@@ -248,15 +247,55 @@ class CalendarDayCell extends StatelessWidget {
       label: [
         dateLabel,
         if (count > 0) context.l10n.calendar_appointmentCount(count),
-        for (final holiday in holidays) holidayLabel(context.l10n, holiday.name),
+        for (final holiday in holidays)
+          holidayLabel(context.l10n, holiday.name),
       ].join(', '),
       excludeSemantics: true,
       child: InkResponse(
-        key: cellKey,
+        key: _cellKey,
         onTap: () => onTap(day.dateOnly),
         radius: circleSize,
         child: Center(child: content),
       ),
+    );
+  }
+
+  Widget _buildContent(
+    ThemeData theme, {
+    required List<Holiday> holidays,
+    required bool inMonth,
+    required bool isSelected,
+    required bool showTodayRing,
+    required bool bold,
+  }) {
+    final scheme = theme.colorScheme;
+    final Color numberColor;
+    if (!inMonth) {
+      numberColor = theme.palette.textFaint;
+    } else if (isSelected) {
+      numberColor = scheme.onPrimary;
+    } else {
+      numberColor = scheme.onSurface;
+    }
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _DayNumber(
+          day: day.day,
+          size: circleSize,
+          isSelected: isSelected,
+          showTodayRing: showTodayRing,
+          bold: bold,
+          color: numberColor,
+          // Off-month is the FAINT case, and for the construction shutdown it
+          // is the normal one — that run crosses July/August every year.
+          holidaySet: markerSetFrom(holidays),
+          isFaint: !inMonth,
+        ),
+        _CrewDotRow(dotColors: dotColors),
+      ],
     );
   }
 }

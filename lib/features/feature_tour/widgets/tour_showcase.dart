@@ -63,46 +63,53 @@ class TourShowcase extends StatelessWidget {
       disableScaleAnimation: noMotion,
       // Package defaults already give position: inside + spaceBetween.
       tooltipActionConfig: const TooltipActionConfig(actionGap: AppSpacing.sp8),
-      tooltipActions: [
-        if (showCounter)
-          TooltipActionButton.custom(
-            button: MediaQuery.withClampedTextScaling(
-              maxScaleFactor: kTourActionMaxTextScale,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.sp8),
-                child: Text(
-                  context.l10n.tour_stepCounter(index + 1, count),
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
+      tooltipActions: _buildActions(context, theme, scheme, showCounter),
+      child: child,
+    );
+  }
+
+  List<TooltipActionButton> _buildActions(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme scheme,
+    bool showCounter,
+  ) {
+    return [
+      if (showCounter)
+        TooltipActionButton.custom(
+          button: MediaQuery.withClampedTextScaling(
+            maxScaleFactor: kTourActionMaxTextScale,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sp8),
+              child: Text(
+                context.l10n.tour_stepCounter(index + 1, count),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
                 ),
               ),
             ),
           ),
-        TooltipActionButton.custom(
-          button: TourActionButton(
-            label: context.l10n.tour_skip,
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-            compactIcon: Icons.close,
-            onTap: () => ShowcaseView.getNamed(scope.storageKey).dismiss(),
-          ),
         ),
-        TooltipActionButton.custom(
-          button: TourActionButton(
-            label: context.l10n.tour_next,
-            style: theme.textTheme.labelLarge?.copyWith(
-              color: scheme.onPrimary,
-            ),
-            fill: scheme.primary,
-            onTap: () =>
-                ShowcaseView.getNamed(scope.storageKey).next(force: true),
+      TooltipActionButton.custom(
+        button: TourActionButton(
+          label: context.l10n.tour_skip,
+          style: theme.textTheme.labelLarge?.copyWith(
+            color: scheme.onSurfaceVariant,
           ),
+          compactIcon: Icons.close,
+          onTap: () => ShowcaseView.getNamed(scope.storageKey).dismiss(),
         ),
-      ],
-      child: child,
-    );
+      ),
+      TooltipActionButton.custom(
+        button: TourActionButton(
+          label: context.l10n.tour_next,
+          style: theme.textTheme.labelLarge?.copyWith(color: scheme.onPrimary),
+          fill: scheme.primary,
+          onTap: () =>
+              ShowcaseView.getNamed(scope.storageKey).next(force: true),
+        ),
+      ),
+    ];
   }
 }
 

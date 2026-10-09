@@ -126,6 +126,32 @@ async function _fetchPlacesJson(url, options, {label, uid}, controller) {
   }
 }
 
+/**
+ * The `text` of one `structuredFormat` part, or `""` when Places omitted it.
+ * @param {*} part A `{text}` object from `structuredFormat`.
+ * @return {string} The plain text, or "".
+ */
+function structuredText(part) {
+  return part && typeof part.text === "string" ? part.text : "";
+}
+
+/**
+ * Adds plain `mainText`/`secondaryText` beside the passed-through suggestion.
+ * @param {*} suggestion One upstream `suggestions[]` entry.
+ * @return {*} The entry plus the two lines, or the entry as-is if not an
+ * object.
+ */
+function withStructuredLines(suggestion) {
+  if (!suggestion || typeof suggestion !== "object") return suggestion;
+  const prediction = suggestion.placePrediction || {};
+  const format = prediction.structuredFormat || {};
+  return {
+    ...suggestion,
+    mainText: structuredText(format.mainText),
+    secondaryText: structuredText(format.secondaryText),
+  };
+}
+
 const placesAutocomplete = onCall(
     {
       enforceAppCheck: true,
@@ -172,7 +198,8 @@ const placesAutocomplete = onCall(
               "Content-Type": "application/json",
               "X-Goog-Api-Key": GOOGLE_MAP_API_KEY.value().trim(),
               "X-Goog-FieldMask": "suggestions.placePrediction.placeId," +
-                "suggestions.placePrediction.text",
+                "suggestions.placePrediction.text," +
+                "suggestions.placePrediction.structuredFormat",
             },
             body: JSON.stringify(body),
           },
@@ -181,8 +208,10 @@ const placesAutocomplete = onCall(
             uid,
           },
       );
+      const suggestions =
+        Array.isArray(data.suggestions) ? data.suggestions : [];
       return repairMojibakeDeep({
-        suggestions: Array.isArray(data.suggestions) ? data.suggestions : [],
+        suggestions: suggestions.map(withStructuredLines),
       });
     },
 );

@@ -17,27 +17,17 @@ class HistoryPager {
 
   final AppointmentsRepository _repo;
 
-  /// [employeeId] scopes the page to one assignee's jobs; null is the
-  /// business-wide archive.
   Future<List<AppointmentRecord>> fetchPage({
     required int limit,
     AppointmentRecord? after,
-    String? employeeId,
   }) {
-    return _repo.fetchHistoryPage(
-      after: after,
-      limit: limit,
-      employeeId: employeeId,
-    );
+    return _repo.fetchHistoryPage(after: after, limit: limit);
   }
 }
 
-/// One history search: the words, and whose history.
-typedef HistorySearchKey = ({String query, String? employeeId});
-
-/// Database-backed history search across the whole window.
+/// Database-backed history search across the whole window, keyed by query.
 final historySearchProvider = FutureProvider.autoDispose
-    .family<List<AppointmentRecord>, HistorySearchKey>((ref, key) async {
+    .family<List<AppointmentRecord>, String>((ref, query) async {
       final repo = ref.watch(appointmentsRepositoryProvider);
       // Resolved HERE, not inside the callback: this is autoDispose, so the
       // `Ref` is gone the moment the last listener does, and Riverpod 3's
@@ -50,7 +40,7 @@ final historySearchProvider = FutureProvider.autoDispose
             logger.warn('HIST-SEARCH invalidate error', e, st),
       );
       ref.onDispose(sub.cancel);
-      return await repo.searchHistory(key.query, employeeId: key.employeeId);
+      return await repo.searchHistory(query);
     });
 
 /// How far back the booking form looks for a client's previous addresses and

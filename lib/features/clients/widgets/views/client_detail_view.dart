@@ -180,7 +180,41 @@ class _ProfileCard extends StatelessWidget {
     // line used to repeat the title verbatim on every person client.
     final showPersonName = fullName.isNotEmpty && fullName != displayName;
 
-    final identity = Column(
+    final identity = _buildIdentity(
+      theme,
+      displayName,
+      subtitle,
+      fullName,
+      showPersonName,
+    );
+
+    final pill = _EditPill(onEdit: onEdit);
+
+    return DecoratedBox(
+      decoration: appCardDecoration(
+        theme,
+        radius: AppRadius.r16,
+        color: theme.colorScheme.surfaceContainerLowest,
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.sp16),
+        // The row holds an avatar, two-to-three text lines and a pill, so it
+        // folds rather than overflow once text is scaled up.
+        child: context.isCompact
+            ? _buildStacked(displayName, identity, pill)
+            : _buildInline(displayName, identity, pill),
+      ),
+    );
+  }
+
+  Widget _buildIdentity(
+    ThemeData theme,
+    String displayName,
+    String subtitle,
+    String fullName,
+    bool showPersonName,
+  ) {
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -210,47 +244,34 @@ class _ProfileCard extends StatelessWidget {
         ],
       ],
     );
+  }
 
-    final pill = _EditPill(onEdit: onEdit);
+  Widget _buildStacked(String displayName, Widget identity, Widget pill) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            AppAvatar(name: displayName, size: AvatarSize.lg),
+            const SizedBox(width: AppSpacing.sp12),
+            Expanded(child: identity),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sp12),
+        Align(alignment: AlignmentDirectional.centerEnd, child: pill),
+      ],
+    );
+  }
 
-    return DecoratedBox(
-      decoration: appCardDecoration(
-        theme,
-        radius: AppRadius.r16,
-        color: theme.colorScheme.surfaceContainerLowest,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.sp16),
-        // The row holds an avatar, two-to-three text lines and a pill, so it
-        // folds rather than overflow once text is scaled up.
-        child: context.isCompact
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      AppAvatar(name: displayName, size: AvatarSize.lg),
-                      const SizedBox(width: AppSpacing.sp12),
-                      Expanded(child: identity),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.sp12),
-                  Align(
-                    alignment: AlignmentDirectional.centerEnd,
-                    child: pill,
-                  ),
-                ],
-              )
-            : Row(
-                children: [
-                  AppAvatar(name: displayName, size: AvatarSize.lg),
-                  const SizedBox(width: AppSpacing.sp12),
-                  Expanded(child: identity),
-                  const SizedBox(width: AppSpacing.sp8),
-                  pill,
-                ],
-              ),
-      ),
+  Widget _buildInline(String displayName, Widget identity, Widget pill) {
+    return Row(
+      children: [
+        AppAvatar(name: displayName, size: AvatarSize.lg),
+        const SizedBox(width: AppSpacing.sp12),
+        Expanded(child: identity),
+        const SizedBox(width: AppSpacing.sp8),
+        pill,
+      ],
     );
   }
 }

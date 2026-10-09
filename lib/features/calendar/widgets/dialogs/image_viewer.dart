@@ -228,34 +228,7 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
       1.0,
     );
 
-    Widget pager = PageView.builder(
-      controller: _pageController,
-      itemCount: widget.images.length,
-      onPageChanged: (i) {
-        _transformController.value = Matrix4.identity();
-        setState(() => _currentIndex = i);
-      },
-      itemBuilder: (context, index) {
-        return InteractiveViewer(
-          transformationController: _transformController,
-          // A zoomed image owns single-finger pans.
-          panEnabled: _zoomed,
-          minScale: 1,
-          maxScale: 4,
-          child: Center(
-            child: Image(
-              image: widget.images[index],
-              fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => Icon(
-                Icons.broken_image_outlined,
-                color: foreground.withValues(alpha: 0.54),
-                size: 64,
-              ),
-            ),
-          ),
-        );
-      },
-    );
+    var pager = _buildPager(foreground);
 
     // Reduce motion skips the live drag transform.
     if (!reduceMotion && _dragOffset != 0) {
@@ -288,6 +261,37 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPager(Color foreground) {
+    return PageView.builder(
+      controller: _pageController,
+      itemCount: widget.images.length,
+      onPageChanged: (i) {
+        _transformController.value = Matrix4.identity();
+        setState(() => _currentIndex = i);
+      },
+      itemBuilder: (context, index) {
+        return InteractiveViewer(
+          transformationController: _transformController,
+          // A zoomed image owns single-finger pans.
+          panEnabled: _zoomed,
+          minScale: 1,
+          maxScale: 4,
+          child: Center(
+            child: Image(
+              image: widget.images[index],
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => Icon(
+                Icons.broken_image_outlined,
+                color: foreground.withValues(alpha: 0.54),
+                size: 64,
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

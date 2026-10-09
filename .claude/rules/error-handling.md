@@ -62,7 +62,7 @@ Keep it EXHAUSTIVE — the tag lives ONLY here and in the warn label, so a stale
 - `APPT-REVIEW` = overdue bulk close; `OverdueReviewController` logs and returns `OverdueReviewOutcome`, the screen composes; load listener and cap warn share it.
 - `EMP-DELETE` = remove a pending account; typed `EmployeesFailureAccountNoLongerPending` FIRST.
 - `ACCT-SIGNOUT`: `delete_account_flow.dart` composes; `auth_service.dart`'s two sites only log (a sign-out failing during teardown has no screen left to notify). It stays here because the intro key exists — don't move it to log-only on the strength of the service's uses.
-- Gone, don't re-add: `EMP-SAVE` (now `EMP-CREATE`), `EMP-REVOKE`, `WAVE-SCHED` / `WAVE-SCHEDULE` (gone from the app 2026-09-13; still live in `functions/wave/`). (ADR-0032)
+- Gone, don't re-add: `EMP-SAVE` (now `EMP-CREATE`), `EMP-REVOKE`, `WAVE-SCHED` / `WAVE-SCHEDULE` (gone from the app 2026-09-13; `WAVE-SCHED` lives on only as the `runWaveDaily` drain's log labels in `functions/wave/triggers.js`). (ADR-0032)
 
 **Log-only tags** (no intro key):
 

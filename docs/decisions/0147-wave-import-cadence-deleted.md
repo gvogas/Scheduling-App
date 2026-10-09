@@ -18,3 +18,5 @@ read, no write and no rate limit; log `WAVE-SCHED ignored a retired cadence call
 Retire it only once the log line is quiet AND no build at or below 1.61.0 remains, in its own deploy
 (`docs/DEPLOYMENT.md` §4a); removing the key early throws `unexpected-field` on every 1.61.0 device. Don't re-add the cadence. "No read" means
 no `wave/connection` read: `assertAdminCall` still reads the caller's `usersByUid` row.
+
+**Superseded 2026-10-09:** the callable is deleted (ADR-0184).

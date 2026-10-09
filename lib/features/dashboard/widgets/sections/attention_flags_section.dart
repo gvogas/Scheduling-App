@@ -69,55 +69,60 @@ class AttentionFlagsSection extends StatelessWidget {
               ),
             ],
           )
-        else ...[
-          if (flags.pendingSoon.isNotEmpty)
-            _FlagGroup(
-              title: l10n.dashboard_pendingSoonHeader(flags.pendingSoon.length),
-              appointments: flags.pendingSoon,
-              colorMap: colorMap,
-              nameMap: nameMap,
-              isAdmin: isAdmin,
-            ),
-          if (flags.pendingSoon.isNotEmpty && flags.overdueOpen.isNotEmpty)
-            const SizedBox(height: AppSpacing.sp16),
-          if (flags.overdueOpen.isNotEmpty)
-            _FlagGroup(
-              title: l10n.dashboard_overdueOpenHeader(flags.overdueOpen.length),
-              appointments: flags.overdueOpen,
-              colorMap: colorMap,
-              nameMap: nameMap,
-              isAdmin: isAdmin,
-            ),
-          if (neverSetUp.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sp16),
-            _PeopleGroup(
-              title: l10n.dashboard_neverSetUpHeader(neverSetUp.length),
-              rows: [
-                for (final person in neverSetUp)
-                  (name: person.name, detail: person.email),
-              ],
-            ),
-          ],
-          if (availabilityConflicts.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.sp16),
-            _PeopleGroup(
-              title: l10n.dashboard_availabilityConflictHeader(
-                availabilityConflicts.length,
-              ),
-              rows: [
-                for (final conflict in availabilityConflicts)
-                  (
-                    name: conflict.employee.name,
-                    detail: l10n.dashboard_availabilityConflictDays(
-                      joinWeekdayNames(context, conflict.days),
-                    ),
-                  ),
-              ],
-            ),
-          ],
-        ],
+        else
+          ..._buildFlags(context, l10n),
       ],
     );
+  }
+
+  List<Widget> _buildFlags(BuildContext context, AppLocalizations l10n) {
+    return [
+      if (flags.pendingSoon.isNotEmpty)
+        _FlagGroup(
+          title: l10n.dashboard_pendingSoonHeader(flags.pendingSoon.length),
+          appointments: flags.pendingSoon,
+          colorMap: colorMap,
+          nameMap: nameMap,
+          isAdmin: isAdmin,
+        ),
+      if (flags.pendingSoon.isNotEmpty && flags.overdueOpen.isNotEmpty)
+        const SizedBox(height: AppSpacing.sp16),
+      if (flags.overdueOpen.isNotEmpty)
+        _FlagGroup(
+          title: l10n.dashboard_overdueOpenHeader(flags.overdueOpen.length),
+          appointments: flags.overdueOpen,
+          colorMap: colorMap,
+          nameMap: nameMap,
+          isAdmin: isAdmin,
+        ),
+      if (neverSetUp.isNotEmpty) ...[
+        const SizedBox(height: AppSpacing.sp16),
+        _PeopleGroup(
+          title: l10n.dashboard_neverSetUpHeader(neverSetUp.length),
+          rows: [
+            for (final person in neverSetUp)
+              (name: person.name, detail: person.email),
+          ],
+        ),
+      ],
+      if (availabilityConflicts.isNotEmpty) ...[
+        const SizedBox(height: AppSpacing.sp16),
+        _PeopleGroup(
+          title: l10n.dashboard_availabilityConflictHeader(
+            availabilityConflicts.length,
+          ),
+          rows: [
+            for (final conflict in availabilityConflicts)
+              (
+                name: conflict.employee.name,
+                detail: l10n.dashboard_availabilityConflictDays(
+                  joinWeekdayNames(context, conflict.days),
+                ),
+              ),
+          ],
+        ),
+      ],
+    ];
   }
 }
 

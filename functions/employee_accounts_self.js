@@ -300,10 +300,8 @@ const completeEmployeeSetup = onCall(APP_CHECK, async (req) => {
     "firstName", "lastName", "phone", "termsAccepted", "locationConsent",
     "newPassword",
   ]));
-  const hasPassword = req.data?.newPassword !== undefined;
-  const newPassword = hasPassword ?
-    requireString(req.data, "newPassword", 128) : "";
-  if (hasPassword && !isStrongPassword(newPassword)) {
+  const newPassword = requireString(req.data, "newPassword", 128);
+  if (!isStrongPassword(newPassword)) {
     throw new HttpsError("invalid-argument", "invalid-newPassword");
   }
   const firstName = optionalString(req.data, "firstName", 100);
@@ -331,7 +329,7 @@ const completeEmployeeSetup = onCall(APP_CHECK, async (req) => {
       return {ok: false, reason: "not-pending"};
     }
     // Never log or persist this payload. Auth is the only password store.
-    if (hasPassword) await setSetupPassword(getAuth(), uid, newPassword);
+    await setSetupPassword(getAuth(), uid, newPassword);
     return db.runTransaction(async (tx) => {
       const found = await tx.get(
           db.collection("users").where("uid", "==", uid).limit(1),
@@ -343,9 +341,6 @@ const completeEmployeeSetup = onCall(APP_CHECK, async (req) => {
       // consent stamps rewritten by a replayed call.
       if (userData.status !== "invited") {
         return {ok: false, reason: "not-pending"};
-      }
-      if (!hasPassword && userData.setupRequiresPassword === true) {
-        throw new HttpsError("failed-precondition", "setup-upgrade-required");
       }
       const patch = buildActivationPatch(
           {firstName, lastName, phone, termsAccepted, locationConsent},

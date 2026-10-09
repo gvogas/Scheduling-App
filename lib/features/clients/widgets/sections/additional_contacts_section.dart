@@ -67,53 +67,11 @@ class AdditionalContactsSection extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (compact)
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  context.l10n.clients_additionalBusinessContacts,
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sp8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: TextButton.icon(
-                    onPressed: canAdd ? onAddContact : null,
-                    icon: const Icon(Icons.add),
-                    label: Text(context.l10n.clients_add),
-                  ),
-                ),
-              ],
-            )
+            _buildStackedHeader(context, theme, canAdd)
           else
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    context.l10n.clients_additionalBusinessContacts,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                TextButton.icon(
-                  onPressed: canAdd ? onAddContact : null,
-                  icon: const Icon(Icons.add),
-                  label: Text(context.l10n.clients_add),
-                ),
-              ],
-            ),
+            _buildInlineHeader(context, theme, canAdd),
           const SizedBox(height: AppSpacing.sp4),
-          Text(
-            context
-                .l10n
-                .clients_theFirstContactIsTheMainContactAboveAddMoreContactsHereIfNeeded,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: scheme.onSurfaceVariant,
-            ),
-          ),
+          _buildHint(context, theme, scheme),
           if (!canAdd) ...[
             const SizedBox(height: AppSpacing.sp8),
             Text(
@@ -142,6 +100,68 @@ class AdditionalContactsSection extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildStackedHeader(
+    BuildContext context,
+    ThemeData theme,
+    bool canAdd,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.l10n.clients_additionalBusinessContacts,
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sp8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton.icon(
+            onPressed: canAdd ? onAddContact : null,
+            icon: const Icon(Icons.add),
+            label: Text(context.l10n.clients_add),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInlineHeader(
+    BuildContext context,
+    ThemeData theme,
+    bool canAdd,
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            context.l10n.clients_additionalBusinessContacts,
+            style: theme.textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+        TextButton.icon(
+          onPressed: canAdd ? onAddContact : null,
+          icon: const Icon(Icons.add),
+          label: Text(context.l10n.clients_add),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHint(BuildContext context, ThemeData theme, ColorScheme scheme) {
+    return Text(
+      context
+          .l10n
+          .clients_theFirstContactIsTheMainContactAboveAddMoreContactsHereIfNeeded,
+      style: theme.textTheme.bodySmall?.copyWith(
+        color: scheme.onSurfaceVariant,
       ),
     );
   }

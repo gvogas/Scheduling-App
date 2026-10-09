@@ -30,3 +30,7 @@ The parent `fieldNotes` disjunct is not retirable when old builds age out: a cur
 append (`AppointmentImagesStore.append`) batches a parent `updatedAt`-only update, and on an open job that
 disjunct is the only one admitting the diff. Don't delete `updateFieldNotes` on a simplify pass without checking whether any build in the fleet still
 calls it. A new disjunct is a deliberate edit to the count tests, never a silent widening.
+
+**Amended 2026-10-09:** `updateFieldNotes` is deleted (ADR-0186); the parent disjunct and the legacy string stay.
+
+**Amended 2026-10-09 by ADR-0188:** the parent `fieldNotes` disjunct is narrowed to an `updatedAt`-only touch.

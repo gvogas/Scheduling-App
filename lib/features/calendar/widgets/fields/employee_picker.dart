@@ -215,58 +215,66 @@ class _EmployeeChip extends StatelessWidget {
           foregroundDecoration: isUnavailable
               ? _DashedPill(color: scheme.outlineVariant)
               : null,
-          decoration: BoxDecoration(
-            color: isUnavailable
-                ? Colors.transparent
-                : isSelected
-                ? scheme.primaryContainer
-                : scheme.surfaceContainerHighest,
-            border: isUnavailable
-                ? null
-                : Border.all(
-                    // An unselected chip carries the error outline, since "pick
-                    // someone" is what the error is asking for.
-                    color: hasError && !isSelected
-                        ? scheme.error
-                        : isSelected
-                        ? scheme.primary
-                        : scheme.outlineVariant,
-                    width: 1.5,
-                  ),
-            borderRadius: BorderRadius.circular(AppRadius.rFull),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Opacity(
-                opacity: isUnavailable ? 0.42 : 1,
-                child: AppAvatar(
-                  name: employee.name,
-                  color: employee.color,
-                  size: AvatarSize.xs,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.sp8),
-              Flexible(
-                child: Text(
-                  shortName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                    color: isUnavailable
-                        ? theme.palette.textTertiary
-                        : isSelected
-                        ? scheme.primary
-                        : scheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          decoration: _buildDecoration(scheme),
+          child: _buildRow(theme, scheme),
         ),
       ),
+    );
+  }
+
+  BoxDecoration _buildDecoration(ColorScheme scheme) {
+    return BoxDecoration(
+      color: isUnavailable
+          ? Colors.transparent
+          : isSelected
+          ? scheme.primaryContainer
+          : scheme.surfaceContainerHighest,
+      border: isUnavailable
+          ? null
+          : Border.all(
+              // An unselected chip carries the error outline, since "pick
+              // someone" is what the error is asking for.
+              color: hasError && !isSelected
+                  ? scheme.error
+                  : isSelected
+                  ? scheme.primary
+                  : scheme.outlineVariant,
+              width: 1.5,
+            ),
+      borderRadius: BorderRadius.circular(AppRadius.rFull),
+    );
+  }
+
+  Widget _buildRow(ThemeData theme, ColorScheme scheme) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Opacity(
+          opacity: isUnavailable ? 0.42 : 1,
+          child: AppAvatar(
+            name: employee.name,
+            color: employee.color,
+            size: AvatarSize.xs,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sp8),
+        Flexible(
+          child: Text(
+            shortName,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              color: isUnavailable
+                  ? theme.palette.textTertiary
+                  : isSelected
+                  ? scheme.primary
+                  : scheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

@@ -52,41 +52,7 @@ class ListItemTile extends StatelessWidget {
             children: [
               AppAvatar(name: avatarName, color: avatarColor),
               const SizedBox(width: AppSpacing.sp12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: compact ? 2 : 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (subtitle != null && subtitle!.isNotEmpty) ...[
-                      const SizedBox(height: AppSpacing.sp4),
-                      Text(
-                        subtitle!,
-                        maxLines: compact ? 2 : 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                    if (subtitleExtra != null) ...[
-                      const SizedBox(height: AppSpacing.sp8),
-                      subtitleExtra!,
-                    ],
-                    if (compact && trailing != null) ...[
-                      const SizedBox(height: AppSpacing.sp8),
-                      Align(alignment: Alignment.centerLeft, child: trailing),
-                    ],
-                  ],
-                ),
-              ),
+              Expanded(child: _buildText(theme, scheme, compact)),
               if (!compact && trailing != null) ...[
                 const SizedBox(width: AppSpacing.sp8),
                 trailing!,
@@ -108,5 +74,41 @@ class ListItemTile extends StatelessWidget {
     }
 
     return row;
+  }
+
+  Widget _buildText(ThemeData theme, ColorScheme scheme, bool compact) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          title,
+          maxLines: compact ? 2 : 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodyLarge?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        if (subtitle != null && subtitle!.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.sp4),
+          Text(
+            subtitle!,
+            maxLines: compact ? 2 : 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        if (subtitleExtra != null) ...[
+          const SizedBox(height: AppSpacing.sp8),
+          subtitleExtra!,
+        ],
+        if (compact && trailing != null) ...[
+          const SizedBox(height: AppSpacing.sp8),
+          Align(alignment: Alignment.centerLeft, child: trailing),
+        ],
+      ],
+    );
   }
 }

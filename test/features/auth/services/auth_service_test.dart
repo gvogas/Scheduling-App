@@ -61,34 +61,6 @@ void main() {
     ),
   );
 
-  group('completeAccountSetup against an OLD backend', () {
-    test(
-      'maps email-not-verified to an expected, actionable failure',
-      () async {
-        // The guard is gone from the live backend; this only fires if one is
-        // rolled back under a shipped app build (docs/DEPLOYMENT.md section 3).
-        stubSetup().thenThrow(
-          FirebaseFunctionsException(
-            code: 'failed-precondition',
-            message: 'email-not-verified',
-          ),
-        );
-
-        await expectLater(
-          service.completeAccountSetup(newPassword: 'N3wPassw0rd!'),
-          throwsA(isA<AuthFailureSetupNotAvailableYet>()),
-        );
-      },
-    );
-
-    test('files no non-fatal for a state the person cannot fix', () {
-      // The whole point of the mapping: without it this is
-      // AuthFailureUnknown, and every retry by someone permanently stuck
-      // records a Crashlytics issue.
-      expect(const AuthFailureSetupNotAvailableYet().isExpected, isTrue);
-    });
-  });
-
   group('completeAccountSetup starting-password check', () {
     test('refuses the starting password and never rotates it', () async {
       stubSetup().thenAnswer((_) async {});

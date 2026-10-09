@@ -232,32 +232,37 @@ class _EditablePhotoStrip extends StatelessWidget {
               child: _FailedPhotoThumb(),
             );
           }
-          return Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: onPickImages,
-              borderRadius: BorderRadius.circular(AppRadius.r8),
-              child: Ink(
-                width: 90,
-                height: 90,
-                decoration: BoxDecoration(
-                  border: Border.all(color: scheme.outlineVariant),
-                  borderRadius: BorderRadius.circular(AppRadius.r8),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.add, color: scheme.onSurfaceVariant),
-                    Text(
-                      context.l10n.calendar_addMore,
-                      style: labelStyle,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
+          return _addButton(context, scheme, labelStyle);
         },
+      ),
+    );
+  }
+
+  Widget _addButton(
+    BuildContext context,
+    ColorScheme scheme,
+    TextStyle? labelStyle,
+  ) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPickImages,
+        borderRadius: BorderRadius.circular(AppRadius.r8),
+        child: Ink(
+          width: 90,
+          height: 90,
+          decoration: BoxDecoration(
+            border: Border.all(color: scheme.outlineVariant),
+            borderRadius: BorderRadius.circular(AppRadius.r8),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.add, color: scheme.onSurfaceVariant),
+              Text(context.l10n.calendar_addMore, style: labelStyle),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -352,10 +357,7 @@ class _EditablePhotoStrip extends StatelessWidget {
         Positioned(
           top: 0,
           right: 4,
-          child: formRemoveButton(
-            context,
-            onTap: () => onRemoveNew(entry.key),
-          ),
+          child: formRemoveButton(context, onTap: () => onRemoveNew(entry.key)),
         ),
       ],
     );

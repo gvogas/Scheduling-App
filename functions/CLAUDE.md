@@ -4,7 +4,7 @@ Root context `../CLAUDE.md`. Per-function reference: `docs/CLOUD_FUNCTIONS.md`; 
 
 ## Wiring
 
-- Keep `index.js` a thin re-export of 32 functions under their original names; `docs/DEPLOYMENT.md` uses that count as a deploy abort check, so update it with any add or remove. (ADR-0030)
+- Keep `index.js` a thin re-export of 31 functions under their original names; `docs/DEPLOYMENT.md` uses that count as a deploy abort check, so update it with any add or remove. (ADR-0030)
 - Add a function to its domain module and re-export it from `index.js`; shared guards go in `security.js`, shared secrets in `params.js`, never back in `index.js` or a feature module. (ADR-0135)
 - Define each secret once: `params.js` owns `GOOGLE_MAP_API_KEY`, `APNS_AUTH_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`; never re-`defineSecret` one or re-export it from a feature module.
 - Every function carries a JSDoc block (`require-jsdoc` + `valid-jsdoc`; see `code-quality.md`). Run `cd functions && npm run lint` (eslint-config-google, 80-char lines) before any deploy.
@@ -17,7 +17,7 @@ Root context `../CLAUDE.md`. Per-function reference: `docs/CLOUD_FUNCTIONS.md`; 
 | Accounts | `account.js` (`deleteAccount`) + `account_policy.js`; `employee_accounts_admin.js` (`createEmployeeAccount`, `deleteEmployeeAccount`, `resetEmployeePassword`); `employee_accounts_self.js` (`completeEmployeeSetup`, `completePasswordReset`, `changeEmployeeEmail`); `account_operation.js` (`withAccountOperation`) |
 | Bridge | `bridge.js` (`syncUsersByUid`), `bridge_reconcile.js`, `bridge_policy.js` |
 | Clients | `clients.js` (`deleteClient`), `client_propagation.js` (`propagateClientEdits`), `client_job_count.js` (`recountClientJobs`, pure `clientsToRecount`), `client_buildings.js` (`syncClientBuilding`), `recount_claim.js`, `client_address_utils.js`, `client_name_utils.js` |
-| Search / actions | `indexed_search.js` (`searchClients`, `searchHistory`, `findAppointmentConflicts`; the token hit is a PREFILTER re-verified by `recordMatchesQuery`, `mayReadHistoryDoc` re-checks a non-admin against `employeeIds`, `blocksProposedWindow` applies the daily-window rule), `search_tokens.js` (hand-mirror) — see `.claude/rules/search.md`; `appointment_actions.js` (`restoreAppointmentStatus`) |
+| Search / actions | `indexed_search.js` (`searchClients`, `searchHistory`, `findAppointmentConflicts`; the token hit is a PREFILTER re-verified by `recordMatchesQuery`, `searchHistory` is admin-only, `blocksProposedWindow` applies the daily-window rule), `search_tokens.js` (hand-mirror) — see `.claude/rules/search.md`; `appointment_actions.js` (`restoreAppointmentStatus`) |
 | Images | `maintenance.js` (`validateUploadedImage`, `purgeExpiredHistory`) + `maintenance_policy.js`, `image_magic.js`, `appointment_images.js` (`cascadeDeleteAppointmentImages`, `recountAppointmentPictures`) — see `.claude/rules/images.md` |
 | Push | `notifications.js`, `notification_*.js`, `travel_*.js`, `widget_payload_utils.js`, `apns_client.js`, `live_activity_*.js` — see `.claude/rules/notifications.md` |
 | Time | `time_utils.js`, `day_slice_utils.js` |

@@ -181,54 +181,73 @@ class _InlineMonthCalendarState extends State<InlineMonthCalendar> {
                 onBack: () => _page(-1),
                 onForward: () => _page(1),
               ),
-              ExcludeSemantics(
-                child: Row(
-                  children: [
-                    for (var i = 0; i < 7; i++)
-                      Expanded(
-                        child: Center(
-                          child: Text(
-                            labels[i],
-                            style: theme.monoType.fieldLabel.copyWith(
-                              color: theme.palette.textMuted,
-                            ),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+              _buildWeekdayLabels(theme, labels),
               const SizedBox(height: AppSpacing.sp4),
               for (var row = 0; row < rows; row++)
-                SizedBox(
-                  height: cellHeight,
-                  child: Row(
-                    children: [
-                      for (final day in days.skip(row * 7).take(7))
-                        Expanded(
-                          child: _PickerDayCell(
-                            day: day,
-                            month: _month,
-                            isSelected: _isSelected(day),
-                            // Never on the selected day: a solid fill under a
-                            // soft one is just a muddier solid fill, and a
-                            // one-day job has both ends on it.
-                            isCompanion:
-                                !_isSelected(day) && _isCompanion(day),
-                            companionLabel: widget.companionLabel,
-                            isToday: isSameDate(day, today),
-                            isEnabled: _isEnabled(day),
-                            circleSize: circleSize,
-                            dayLabelFormat: dayLabelFormat,
-                            onTap: _onDayTapped,
-                          ),
-                        ),
-                    ],
-                  ),
+                _buildWeekRow(
+                  days.skip(row * 7).take(7),
+                  cellHeight: cellHeight,
+                  circleSize: circleSize,
+                  dayLabelFormat: dayLabelFormat,
+                  today: today,
                 ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildWeekdayLabels(ThemeData theme, List<String> labels) {
+    return ExcludeSemantics(
+      child: Row(
+        children: [
+          for (var i = 0; i < 7; i++)
+            Expanded(
+              child: Center(
+                child: Text(
+                  labels[i],
+                  style: theme.monoType.fieldLabel.copyWith(
+                    color: theme.palette.textMuted,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeekRow(
+    Iterable<DateTime> week, {
+    required double cellHeight,
+    required double circleSize,
+    required DateFormat dayLabelFormat,
+    required DateTime today,
+  }) {
+    return SizedBox(
+      height: cellHeight,
+      child: Row(
+        children: [
+          for (final day in week)
+            Expanded(
+              child: _PickerDayCell(
+                day: day,
+                month: _month,
+                isSelected: _isSelected(day),
+                // Never on the selected day: a solid fill under a
+                // soft one is just a muddier solid fill, and a
+                // one-day job has both ends on it.
+                isCompanion: !_isSelected(day) && _isCompanion(day),
+                companionLabel: widget.companionLabel,
+                isToday: isSameDate(day, today),
+                isEnabled: _isEnabled(day),
+                circleSize: circleSize,
+                dayLabelFormat: dayLabelFormat,
+                onTap: _onDayTapped,
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -355,18 +374,7 @@ class _PickerDayCell extends StatelessWidget {
     final scheme = theme.colorScheme;
     final inMonth = isInMonth(day, month);
 
-    final Color numberColor;
-    if (!isEnabled) {
-      numberColor = theme.palette.textFaint;
-    } else if (isSelected) {
-      numberColor = scheme.onPrimary;
-    } else if (isCompanion) {
-      numberColor = theme.palette.primaryAccent;
-    } else if (!inMonth) {
-      numberColor = theme.palette.textMuted;
-    } else {
-      numberColor = scheme.onSurface;
-    }
+    final numberColor = _numberColor(theme, inMonth);
 
     final circle = calendarDayTokenWithRule(
       theme: theme,
@@ -380,30 +388,7 @@ class _PickerDayCell extends StatelessWidget {
       // surface where the marker can prevent a mis-booking, so it has to say
       // which kind of day it is at the moment the date is chosen.
       keepHueWhenSelected: true,
-      token: Container(
-        width: circleSize,
-        height: circleSize,
-        alignment: Alignment.center,
-        decoration: calendarDayCircleDecoration(
-          scheme: scheme,
-          isSelected: isSelected,
-          showTodayRing: isToday,
-          // A tint of the SAME hue, never a second colour: this is one run with
-          // two ends, not two things to tell apart.
-          fill: isCompanion ? scheme.primary.withValues(alpha: 0.16) : null,
-        ),
-        child: Text(
-          '${day.day}',
-          style: TextStyle(
-            fontFamily: kFontSans,
-            fontSize: 14,
-            fontWeight: isSelected || isCompanion || isToday
-                ? FontWeight.w700
-                : FontWeight.w500,
-            color: numberColor,
-          ),
-        ),
-      ),
+      token: _buildCircle(scheme, numberColor),
     );
 
     final cellKey = ValueKey(
@@ -434,6 +419,42 @@ class _PickerDayCell extends StatelessWidget {
         onTap: () => onTap(day),
         radius: circleSize,
         child: Center(child: circle),
+      ),
+    );
+  }
+
+  Color _numberColor(ThemeData theme, bool inMonth) {
+    final scheme = theme.colorScheme;
+    if (!isEnabled) return theme.palette.textFaint;
+    if (isSelected) return scheme.onPrimary;
+    if (isCompanion) return theme.palette.primaryAccent;
+    if (!inMonth) return theme.palette.textMuted;
+    return scheme.onSurface;
+  }
+
+  Widget _buildCircle(ColorScheme scheme, Color numberColor) {
+    return Container(
+      width: circleSize,
+      height: circleSize,
+      alignment: Alignment.center,
+      decoration: calendarDayCircleDecoration(
+        scheme: scheme,
+        isSelected: isSelected,
+        showTodayRing: isToday,
+        // A tint of the SAME hue, never a second colour: this is one run with
+        // two ends, not two things to tell apart.
+        fill: isCompanion ? scheme.primary.withValues(alpha: 0.16) : null,
+      ),
+      child: Text(
+        '${day.day}',
+        style: TextStyle(
+          fontFamily: kFontSans,
+          fontSize: 14,
+          fontWeight: isSelected || isCompanion || isToday
+              ? FontWeight.w700
+              : FontWeight.w500,
+          color: numberColor,
+        ),
       ),
     );
   }

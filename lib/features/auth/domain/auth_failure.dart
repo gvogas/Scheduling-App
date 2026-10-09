@@ -46,11 +46,7 @@ sealed class AuthFailure extends Failure {
     AuthFailureSessionExpired() ||
     // Choosing the starting password again is an ordinary thing to try,
     // not a defect — the screen asks for a different one and they retype.
-    AuthFailureStartingPasswordReused() ||
-    // A backend older than this build refusing setup. Nothing the person did
-    // wrong, and nothing they can fix — so it must not file a non-fatal on
-    // every retry while they sit in a loop they cannot leave.
-    AuthFailureSetupNotAvailableYet() => true,
+    AuthFailureStartingPasswordReused() => true,
     // Console misconfiguration, a rules rejection, an unmapped error, or a
     // signed-in uid with no users doc — all real defects worth a non-fatal.
     AuthFailureOperationNotAllowed() ||
@@ -199,22 +195,6 @@ class AuthFailureStartingPasswordReused extends AuthFailure {
       c.l10n.validation_passwordMustDifferFromStarting;
 }
 
-// The backend still enforces the retired `email_verified` guard, i.e. it
-// predates the simplified-auth deploy while this build does not.
-//
-// Deliberately NOT named for that guard, and deliberately not asking anyone to
-// verify an address: this build has no verification UI left to offer, so the
-// person cannot satisfy the check and the only true statement is that setup is
-// unavailable right now. Reachable only in the rollout window
-// (`docs/DEPLOYMENT.md` §3) — a backend rolled back under a shipped app build.
-// Retire it once no pre-simplified-auth backend can be live.
-class AuthFailureSetupNotAvailableYet extends AuthFailure {
-  const AuthFailureSetupNotAvailableYet();
-  @override
-  String toLocalizedMessageInContext(BuildContext c, AuthErrorContext _) =>
-      c.l10n.error_setupNotAvailableYet;
-}
-
 // The credential went stale mid-setup (token expired, or the write needed a
 // recent login). Signing in again is the whole fix.
 class AuthFailureSessionExpired extends AuthFailure {
@@ -275,7 +255,6 @@ extension AuthFailureForgotPassword on AuthFailure {
       AuthFailureNoAccountRecord() ||
       AuthFailureSessionExpired() ||
       AuthFailureStartingPasswordReused() ||
-      AuthFailureSetupNotAvailableYet() ||
       AuthFailureUnknown() =>
         context.l10n.error_somethingWentWrongPleaseTryAgain,
     };

@@ -57,43 +57,13 @@ class StaffFocusPanel extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AppAvatar(name: point.name, color: point.color),
-              const SizedBox(width: AppSpacing.sp12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      point.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.sp4),
-                    Text(
-                      meta,
-                      style: theme.monoType.data.copyWith(
-                        color: theme.palette.textTertiary,
-                      ),
-                    ),
-                    if (addressAsync.isLoading)
-                      _AddressText(l10n.liveMap_resolvingAddress, muted: true)
-                    else if (address != null && address.isNotEmpty)
-                      _AddressText(address),
-                  ],
-                ),
-              ),
-              GhostControl.icon(
-                onTap: onClose,
-                icon: Icons.close_rounded,
-                tooltip: MaterialLocalizations.of(context).closeButtonLabel,
-              ),
-            ],
+          _buildHeader(
+            context,
+            theme,
+            l10n,
+            meta,
+            isResolving: addressAsync.isLoading,
+            address: address,
           ),
           GhostControl.pill(
             onTap: () => AddressMapLauncher.showMapChoices(
@@ -109,6 +79,54 @@ class StaffFocusPanel extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildHeader(
+    BuildContext context,
+    ThemeData theme,
+    AppLocalizations l10n,
+    String meta, {
+    required bool isResolving,
+    required String? address,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        AppAvatar(name: point.name, color: point.color),
+        const SizedBox(width: AppSpacing.sp12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                point.name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.sp4),
+              Text(
+                meta,
+                style: theme.monoType.data.copyWith(
+                  color: theme.palette.textTertiary,
+                ),
+              ),
+              if (isResolving)
+                _AddressText(l10n.liveMap_resolvingAddress, muted: true)
+              else if (address != null && address.isNotEmpty)
+                _AddressText(address),
+            ],
+          ),
+        ),
+        GhostControl.icon(
+          onTap: onClose,
+          icon: Icons.close_rounded,
+          tooltip: MaterialLocalizations.of(context).closeButtonLabel,
+        ),
+      ],
     );
   }
 }

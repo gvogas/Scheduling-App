@@ -215,37 +215,46 @@ class _MonthRow extends StatelessWidget {
           child: InkWell(
             onTap: onTap,
             borderRadius: BorderRadius.circular(AppRadius.r8),
-            child: ConstrainedBox(
-              // 40 is the painted row; the header's own padding carries it past
-              // the 48px tap floor.
-              constraints: const BoxConstraints(minHeight: 40),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Flexible(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: monthStyle,
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.sp8),
-                  Text(yearLabel, style: yearStyle),
-                  const SizedBox(width: 6),
-                  Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 18,
-                    color: theme.palette.textTertiary,
-                  ),
-                ],
-              ),
-            ),
+            child: _buildRow(theme, label, monthStyle, yearStyle),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildRow(
+    ThemeData theme,
+    String label,
+    TextStyle? monthStyle,
+    TextStyle? yearStyle,
+  ) {
+    return ConstrainedBox(
+      // 40 is the painted row; the header's own padding carries it past
+      // the 48px tap floor.
+      constraints: const BoxConstraints(minHeight: 40),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.baseline,
+        textBaseline: TextBaseline.alphabetic,
+        children: [
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: monthStyle,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sp8),
+          Text(yearLabel, style: yearStyle),
+          const SizedBox(width: 6),
+          Icon(
+            Icons.keyboard_arrow_down_rounded,
+            size: 18,
+            color: theme.palette.textTertiary,
+          ),
+        ],
+      ),
     );
   }
 }

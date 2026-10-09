@@ -459,12 +459,11 @@ service cloud.firestore {
             && request.resource.data.updatedAt == request.time
             && resource.data.status != 'cancelled')
 
+        // The photo batch's parent touch (ADR-0188).
         || (isAssignedEmployee(resource.data)
             && request.resource.data.diff(resource.data)
                .affectedKeys()
-               .hasOnly(['fieldNotes', 'updatedAt'])
-            && (!('fieldNotes' in request.resource.data)
-                || isBoundedString(request.resource.data.fieldNotes, 4000))
+               .hasOnly(['updatedAt'])
             && request.resource.data.updatedAt == request.time)
         // "Start job": its own branch, never a widening of mark-done (ADR-0055).
         || (isAssignedEmployee(resource.data)
@@ -601,13 +600,7 @@ service cloud.firestore {
         && !request.resource.data.diff(resource.data)
              .affectedKeys()
              .hasAny(['waveCustomerId', 'wave', 'jobCount', 'deletionToken', 'buildingKey']);
-      // No delete grant, deliberately. Delete belongs to the `deleteClient`
-      // callable, which refuses a client that still has appointments. Rules
-      // cannot express "only when this client has no appointments" — there is
-      // no cheap way to count a foreign collection here — so the callable is
-      // the only place that guarantee can live, and nothing may delete a client
-      // directly. The 1.37.1 compat grant that kept this open (for that build's
-      // ungated Delete button) retired 2026-08-08; don't restore it.
+      // No delete grant: only the `deleteClient` callable deletes (it refuses a client with history).
     }
 
     match /clientBuildings/{buildingId} {

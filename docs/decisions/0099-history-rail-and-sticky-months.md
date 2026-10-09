@@ -21,3 +21,5 @@ text search renders flat with month (+ year if not current, from `currentDayProv
 ## Consequences
 A test reads the bars actually painted, since a pushed-out bar stays in the tree. Dropping `employeeId` means
 re-adding it in two places, one of them `HistorySearchKey`, a provider family key, when technician History returns.
+
+**Amended 2026-10-09 by ADR-0187:** `HistoryPager.fetchPage`'s `employeeId` and `HistorySearchKey` are removed; technician History is not coming back.

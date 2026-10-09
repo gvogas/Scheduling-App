@@ -178,6 +178,39 @@ class DetailsViewBody extends ConsumerWidget {
     );
   }
 
+  List<Widget> _buildSections(
+    _DetailsViewData data,
+    EventDetailsController notifier, {
+    required bool canRecordFieldWork,
+  }) {
+    return [
+      if (data.materials.isNotEmpty) ...[
+        const SizedBox(height: AppSpacing.sp16),
+        DetailsMaterialsRow(items: data.materials),
+      ],
+      DetailsEmployeesView(appointment: appointment),
+      DetailsPhotosView(
+        appointment: appointment,
+        isCancelled: data.isCancelled,
+        // Only the editor can act on a retry. The crew re-add through the
+        // field record's own picker below, and a Retry that merely cleared
+        // the failure record destroyed their one trace of the loss.
+        onRetry: showActions ? notifier.enterEditing : null,
+      ),
+      // Anyone who may READ the job may read its crew notes — the same set
+      // the rules admit. The compose box below stays crew-only.
+      DetailsFieldNotesView(appointment: appointment),
+      // Offered to a NON-ADMIN ASSIGNEE only — exactly the set the crew
+      // branches of `firestore.rules` admit, so the surface and the rule
+      // cannot disagree about who may write.
+      if (canRecordFieldWork)
+        _tour(
+          TourStepId.jobFieldRecord,
+          DetailsFieldRecordView(appointment: appointment),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final provider = eventDetailsControllerProvider(
@@ -209,30 +242,11 @@ class DetailsViewBody extends ConsumerWidget {
         ..._buildHeaderBlock(context, data, notifier),
         _buildClientSection(context, ref, data, notifier),
         ClientContactsCards(contacts: data.extraContacts, collapsible: true),
-        if (data.materials.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.sp16),
-          DetailsMaterialsRow(items: data.materials),
-        ],
-        DetailsEmployeesView(appointment: appointment),
-        DetailsPhotosView(
-          appointment: appointment,
-          isCancelled: data.isCancelled,
-          // Only the editor can act on a retry. The crew re-add through the
-          // field record's own picker below, and a Retry that merely cleared
-          // the failure record destroyed their one trace of the loss.
-          onRetry: showActions ? notifier.enterEditing : null,
+        ..._buildSections(
+          data,
+          notifier,
+          canRecordFieldWork: canRecordFieldWork,
         ),
-        // Anyone who may READ the job may read its crew notes — the same set
-        // the rules admit. The compose box below stays crew-only.
-        DetailsFieldNotesView(appointment: appointment),
-        // Offered to a NON-ADMIN ASSIGNEE only — exactly the set the crew
-        // branches of `firestore.rules` admit, so the surface and the rule
-        // cannot disagree about who may write.
-        if (canRecordFieldWork)
-          _tour(
-            TourStepId.jobFieldRecord,
-            DetailsFieldRecordView(appointment: appointment),
-          ),
         _buildActionBar(
           context,
           ref,
@@ -521,50 +535,63 @@ class _DayOffBody extends StatelessWidget {
                 : Alignment.centerRight,
             child: DetailsEditChip(onTap: onEdit),
           ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sp4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(reason ?? subject, style: theme.textTheme.headlineLarge),
-              if (reason != null) ...[
-                const SizedBox(height: AppSpacing.sp4),
-                Text(
-                  subject,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: theme.palette.textTertiary,
-                  ),
-                ),
-              ],
-              const SizedBox(height: AppSpacing.sp8),
-              Text(
-                DateUtilsHelper.formatWhenLine(
-                  appointment.startTime,
-                  appointment.endTime,
-                  allDayLabel: l10n.calendar_dayOff,
-                  lastDay: appointment.endTime,
-                ),
-                style: theme.monoType.data,
-              ),
-            ],
-          ),
-        ),
+        _buildHeading(theme, l10n, subject: subject, reason: reason),
         const SizedBox(height: AppSpacing.sp16),
         const Divider(height: 1),
         const SizedBox(height: AppSpacing.sp16),
-        KeyValuePanel(
-          rows: [
-            KeyValueRow(
-              label: l10n.calendar_dayOff.toUpperCase(),
-              value: l10n.calendar_dayOffLength(days),
-            ),
-            if (notes.trim().isNotEmpty)
-              KeyValueRow(
-                label: l10n.calendar_notes.toUpperCase(),
-                value: notes.trim(),
+        _buildPanel(l10n, days),
+      ],
+    );
+  }
+
+  Widget _buildHeading(
+    ThemeData theme,
+    AppLocalizations l10n, {
+    required String subject,
+    required String? reason,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sp4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(reason ?? subject, style: theme.textTheme.headlineLarge),
+          if (reason != null) ...[
+            const SizedBox(height: AppSpacing.sp4),
+            Text(
+              subject,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: theme.palette.textTertiary,
               ),
+            ),
           ],
+          const SizedBox(height: AppSpacing.sp8),
+          Text(
+            DateUtilsHelper.formatWhenLine(
+              appointment.startTime,
+              appointment.endTime,
+              allDayLabel: l10n.calendar_dayOff,
+              lastDay: appointment.endTime,
+            ),
+            style: theme.monoType.data,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPanel(AppLocalizations l10n, int days) {
+    return KeyValuePanel(
+      rows: [
+        KeyValueRow(
+          label: l10n.calendar_dayOff.toUpperCase(),
+          value: l10n.calendar_dayOffLength(days),
         ),
+        if (notes.trim().isNotEmpty)
+          KeyValueRow(
+            label: l10n.calendar_notes.toUpperCase(),
+            value: notes.trim(),
+          ),
       ],
     );
   }
@@ -673,64 +700,72 @@ class _ClientSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (onCall != null || onDirections != null || onPushBack != null) ...[
-          QuickActionsRow(
-            buttons: [
-              if (onCall != null)
-                QuickActionButton(
-                  icon: Icons.phone_outlined,
-                  label: context.l10n.clients_call,
-                  onTap: onCall!,
-                ),
-              if (onDirections != null)
-                QuickActionButton(
-                  icon: Icons.directions_outlined,
-                  label: context.l10n.clients_directions,
-                  onTap: onDirections!,
-                ),
-              if (onPushBack != null)
-                _tour(
-                  TourStepId.jobPushBack,
-                  QuickActionButton(
-                    icon: Icons.update_rounded,
-                    label: context.l10n.calendar_pushBack,
-                    onTap: onPushBack!,
-                  ),
-                ),
-            ],
-          ),
+          _buildQuickActions(context),
           const SizedBox(height: AppSpacing.sp24),
         ],
         // The mono key column labels the content, so this panel needs no
         // SectionLabel above it.
-        KeyValuePanel(
-          rows: [
-            KeyValueRow(
-              label: context.l10n.calendar_client.toUpperCase(),
-              value: isPersonal ? context.l10n.calendar_personal : clientName,
+        _buildPanel(context),
+      ],
+    );
+  }
+
+  Widget _buildQuickActions(BuildContext context) {
+    return QuickActionsRow(
+      buttons: [
+        if (onCall != null)
+          QuickActionButton(
+            icon: Icons.phone_outlined,
+            label: context.l10n.clients_call,
+            onTap: onCall!,
+          ),
+        if (onDirections != null)
+          QuickActionButton(
+            icon: Icons.directions_outlined,
+            label: context.l10n.clients_directions,
+            onTap: onDirections!,
+          ),
+        if (onPushBack != null)
+          _tour(
+            TourStepId.jobPushBack,
+            QuickActionButton(
+              icon: Icons.update_rounded,
+              label: context.l10n.calendar_pushBack,
+              onTap: onPushBack!,
             ),
-            if (phone.isNotEmpty)
-              KeyValueRow(
-                label: context.l10n.clients_phone.toUpperCase(),
-                value: phone,
-                emphasize: true,
-                onTap: onCall,
-              ),
-            if (displayAddress.isNotEmpty)
-              KeyValueRow(
-                label: context.l10n.common_address.toUpperCase(),
-                value: displayAddress,
-                emphasize: true,
-                onTap: onDirections,
-                semanticLabel:
-                    '$displayAddress, ${context.l10n.maps_openAddressWith}',
-              ),
-            if (notes.isNotEmpty)
-              KeyValueRow(
-                label: context.l10n.calendar_notes.toUpperCase(),
-                value: notes,
-              ),
-          ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPanel(BuildContext context) {
+    return KeyValuePanel(
+      rows: [
+        KeyValueRow(
+          label: context.l10n.calendar_client.toUpperCase(),
+          value: isPersonal ? context.l10n.calendar_personal : clientName,
         ),
+        if (phone.isNotEmpty)
+          KeyValueRow(
+            label: context.l10n.clients_phone.toUpperCase(),
+            value: phone,
+            emphasize: true,
+            onTap: onCall,
+          ),
+        if (displayAddress.isNotEmpty)
+          KeyValueRow(
+            label: context.l10n.common_address.toUpperCase(),
+            value: displayAddress,
+            emphasize: true,
+            onTap: onDirections,
+            semanticLabel:
+                '$displayAddress, ${context.l10n.maps_openAddressWith}',
+          ),
+        if (notes.isNotEmpty)
+          KeyValueRow(
+            label: context.l10n.calendar_notes.toUpperCase(),
+            value: notes,
+          ),
       ],
     );
   }

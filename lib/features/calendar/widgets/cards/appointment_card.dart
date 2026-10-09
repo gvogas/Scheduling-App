@@ -314,52 +314,13 @@ class _DayOffStrip extends StatelessWidget {
           // Position the rail without forcing intrinsic layout.
           child: Stack(
             children: [
-              Container(
-                constraints: const BoxConstraints(
-                  minHeight: kNonWorkingRowMinHeight,
-                ),
-                padding: EdgeInsets.only(
-                  left: lead == null
-                      ? AppSpacing.sp12
-                      : _kRailInset + kNonWorkingRailWidth + _kRailGap,
-                  right: AppSpacing.sp12,
-                  top: _kStripPaddingY,
-                  bottom: _kStripPaddingY,
-                ),
-                decoration: nonWorkingTimeDecoration(theme),
-                child: Row(
-                  children: [
-                    if (lead != null) ...[
-                      Opacity(
-                        opacity: isOver ? 0.55 : 1,
-                        child: AppAvatar(
-                          name: lead.name,
-                          color: lead.color,
-                          size: AvatarSize.xs,
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.sp8),
-                    ],
-                    Expanded(
-                      child: NonWorkingTimeText(
-                        // The reason LEADS when there is one, and the sentence
-                        // drops to the caption beneath it.
-                        headline: reason ?? sentence,
-                        caption: reason == null ? null : sentence,
-                        isMuted: isOver,
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.sp8),
-                    // Finished days off reuse the done chip.
-                    if (isOver)
-                      StatusChip(status: displayStatus)
-                    else
-                      Text(
-                        l10n.calendar_dayOff.toUpperCase(),
-                        style: theme.monoType.groupLabel,
-                      ),
-                  ],
-                ),
+              _buildStrip(
+                theme,
+                l10n,
+                lead: lead,
+                displayStatus: displayStatus,
+                reason: reason,
+                sentence: sentence,
               ),
               if (lead != null)
                 Positioned(
@@ -373,6 +334,80 @@ class _DayOffStrip extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildStrip(
+    ThemeData theme,
+    AppLocalizations l10n, {
+    required AppointmentCrew? lead,
+    required AppointmentStatus displayStatus,
+    required String? reason,
+    required String sentence,
+  }) {
+    return Container(
+      constraints: const BoxConstraints(minHeight: kNonWorkingRowMinHeight),
+      padding: EdgeInsets.only(
+        left: lead == null
+            ? AppSpacing.sp12
+            : _kRailInset + kNonWorkingRailWidth + _kRailGap,
+        right: AppSpacing.sp12,
+        top: _kStripPaddingY,
+        bottom: _kStripPaddingY,
+      ),
+      decoration: nonWorkingTimeDecoration(theme),
+      child: _buildRow(
+        theme,
+        l10n,
+        lead: lead,
+        displayStatus: displayStatus,
+        reason: reason,
+        sentence: sentence,
+      ),
+    );
+  }
+
+  Widget _buildRow(
+    ThemeData theme,
+    AppLocalizations l10n, {
+    required AppointmentCrew? lead,
+    required AppointmentStatus displayStatus,
+    required String? reason,
+    required String sentence,
+  }) {
+    final isOver = displayStatus.isTerminal;
+    return Row(
+      children: [
+        if (lead != null) ...[
+          Opacity(
+            opacity: isOver ? 0.55 : 1,
+            child: AppAvatar(
+              name: lead.name,
+              color: lead.color,
+              size: AvatarSize.xs,
+            ),
+          ),
+          const SizedBox(width: AppSpacing.sp8),
+        ],
+        Expanded(
+          child: NonWorkingTimeText(
+            // The reason LEADS when there is one, and the sentence
+            // drops to the caption beneath it.
+            headline: reason ?? sentence,
+            caption: reason == null ? null : sentence,
+            isMuted: isOver,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sp8),
+        // Finished days off reuse the done chip.
+        if (isOver)
+          StatusChip(status: displayStatus)
+        else
+          Text(
+            l10n.calendar_dayOff.toUpperCase(),
+            style: theme.monoType.groupLabel,
+          ),
+      ],
     );
   }
 
@@ -525,7 +560,31 @@ class _TitleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final titleContent = _buildTitleContent(Theme.of(context));
+
+    if (!showChip) return titleContent;
+    final chip = StatusChip(status: status);
+    if (compact) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          titleContent,
+          const SizedBox(height: AppSpacing.sp8),
+          chip,
+        ],
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: titleContent),
+        const SizedBox(width: AppSpacing.sp8),
+        chip,
+      ],
+    );
+  }
+
+  Widget _buildTitleContent(ThemeData theme) {
     // Keep plain Text under IntrinsicHeight.
     final titleText = Text(
       title,
@@ -568,27 +627,7 @@ class _TitleRow extends StatelessWidget {
         ],
       );
     }
-
-    if (!showChip) return titleContent;
-    final chip = StatusChip(status: status);
-    if (compact) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          titleContent,
-          const SizedBox(height: AppSpacing.sp8),
-          chip,
-        ],
-      );
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(child: titleContent),
-        const SizedBox(width: AppSpacing.sp8),
-        chip,
-      ],
-    );
+    return titleContent;
   }
 }
 

@@ -86,39 +86,8 @@ class AvailabilityPanel extends StatelessWidget {
             ),
           ),
         ),
-        SheetFieldRow(
-          label: l10n.employees_startsAt,
-          value: materialL10n.formatTimeOfDay(
-            minutesToTimeOfDay(workStartMinutes),
-          ),
-          useMonoValue: true,
-          accent: true,
-          onTap: () => _pickTime(
-            context,
-            initial: workStartMinutes,
-            onPicked: (minutes) =>
-                onChanged(workingDays, minutes, workEndMinutes, onCall: onCall),
-          ),
-        ),
-        SheetFieldRow(
-          label: l10n.employees_endsAt,
-          value: materialL10n.formatTimeOfDay(
-            minutesToTimeOfDay(workEndMinutes),
-          ),
-          useMonoValue: true,
-          accent: true,
-          errorText: hoursErrorText,
-          onTap: () => _pickTime(
-            context,
-            initial: workEndMinutes,
-            onPicked: (minutes) => onChanged(
-              workingDays,
-              workStartMinutes,
-              minutes,
-              onCall: onCall,
-            ),
-          ),
-        ),
+        _buildStartRow(context, l10n, materialL10n),
+        _buildEndRow(context, l10n, materialL10n),
         ?maxJobsRow,
         SheetPanelRow(
           label: l10n.employees_onCall,
@@ -135,6 +104,45 @@ class AvailabilityPanel extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildStartRow(
+    BuildContext context,
+    AppLocalizations l10n,
+    MaterialLocalizations materialL10n,
+  ) {
+    return SheetFieldRow(
+      label: l10n.employees_startsAt,
+      value: materialL10n.formatTimeOfDay(minutesToTimeOfDay(workStartMinutes)),
+      useMonoValue: true,
+      accent: true,
+      onTap: () => _pickTime(
+        context,
+        initial: workStartMinutes,
+        onPicked: (minutes) =>
+            onChanged(workingDays, minutes, workEndMinutes, onCall: onCall),
+      ),
+    );
+  }
+
+  Widget _buildEndRow(
+    BuildContext context,
+    AppLocalizations l10n,
+    MaterialLocalizations materialL10n,
+  ) {
+    return SheetFieldRow(
+      label: l10n.employees_endsAt,
+      value: materialL10n.formatTimeOfDay(minutesToTimeOfDay(workEndMinutes)),
+      useMonoValue: true,
+      accent: true,
+      errorText: hoursErrorText,
+      onTap: () => _pickTime(
+        context,
+        initial: workEndMinutes,
+        onPicked: (minutes) =>
+            onChanged(workingDays, workStartMinutes, minutes, onCall: onCall),
+      ),
     );
   }
 

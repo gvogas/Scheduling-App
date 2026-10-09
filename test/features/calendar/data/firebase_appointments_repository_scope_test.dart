@@ -27,8 +27,8 @@ class _MockDocSnap extends Mock
 class _FakeDocSnap extends Fake
     implements QueryDocumentSnapshot<Map<String, dynamic>> {}
 
-/// A technician's History is the business-wide terminal archive narrowed by
-/// `employeeIds`.
+/// History is one business-wide terminal archive: no query is narrowed by
+/// `employeeIds`, and the index carries only the `all:` scope.
 void main() {
   setUpAll(() {
     registerFallbackValue(_FakeDocSnap());
@@ -38,12 +38,8 @@ void main() {
   late _MockFirestore firestore;
   late _MockCollection collection;
   late _MockDoc doc;
-
-  /// The unscoped chain, and the scoped chain that hangs off `arrayContains`.
-  late _MockQuery adminQuery;
-  late _MockQuery scopedQuery;
-  late _MockQuerySnapshot adminSnapshot;
-  late _MockQuerySnapshot scopedSnapshot;
+  late _MockQuery archiveQuery;
+  late _MockQuerySnapshot archiveSnapshot;
 
   _MockDocSnap hit(String id, Map<String, dynamic> data) {
     final d = _MockDocSnap();
@@ -52,157 +48,103 @@ void main() {
     return d;
   }
 
-  void stubChain(_MockQuery query, _MockQuerySnapshot snapshot) {
-    when(
-      () => query.where('status', whereIn: any(named: 'whereIn')),
-    ).thenReturn(query);
-    when(
-      () => query.orderBy(any(), descending: any(named: 'descending')),
-    ).thenReturn(query);
-    when(() => query.limit(any())).thenReturn(query);
-    when(() => query.startAfterDocument(any())).thenReturn(query);
-    when(() => query.get()).thenAnswer((_) async => snapshot);
-  }
-
   setUp(() {
     firestore = _MockFirestore();
     collection = _MockCollection();
     doc = _MockDoc();
-    adminQuery = _MockQuery();
-    scopedQuery = _MockQuery();
-    adminSnapshot = _MockQuerySnapshot();
-    scopedSnapshot = _MockQuerySnapshot();
+    archiveQuery = _MockQuery();
+    archiveSnapshot = _MockQuerySnapshot();
 
     when(() => firestore.collection('appointments')).thenReturn(collection);
     when(() => collection.doc(any())).thenReturn(doc);
     when(() => doc.update(any())).thenAnswer((_) async {});
 
-    // Business-wide: status is the first constraint on the collection.
     when(
       () => collection.where('status', whereIn: any(named: 'whereIn')),
-    ).thenReturn(adminQuery);
-    stubChain(adminQuery, adminSnapshot);
-
-    // Scoped: `arrayContains` first, then the same chain.
+    ).thenReturn(archiveQuery);
     when(
-      () => collection.where(
-        'employeeIds',
-        arrayContains: any(named: 'arrayContains'),
-      ),
-    ).thenReturn(scopedQuery);
-    stubChain(scopedQuery, scopedSnapshot);
+      () => archiveQuery.orderBy(any(), descending: any(named: 'descending')),
+    ).thenReturn(archiveQuery);
+    when(() => archiveQuery.limit(any())).thenReturn(archiveQuery);
+    when(() => archiveQuery.startAfterDocument(any())).thenReturn(archiveQuery);
+    when(() => archiveQuery.get()).thenAnswer((_) async => archiveSnapshot);
 
-    final marcsJob = hit('a1', {
-      'clientName': 'Sophie Tremblay',
-      'employeeIds': ['e1'],
-      'employeeNames': ['Marc'],
-      'status': 'done',
-      'startTime': Timestamp.fromDate(DateTime(2026, 6, 24, 9)),
-      'endTime': Timestamp.fromDate(DateTime(2026, 6, 24, 10)),
-    });
-    final zoesJob = hit('a2', {
-      'clientName': 'Sophie Tremblay',
-      'employeeIds': ['e2'],
-      'employeeNames': ['Zoé'],
-      'status': 'done',
-      'startTime': Timestamp.fromDate(DateTime(2026, 6, 23, 9)),
-      'endTime': Timestamp.fromDate(DateTime(2026, 6, 23, 10)),
-    });
-    when(() => adminSnapshot.docs).thenReturn([marcsJob, zoesJob]);
-    when(() => scopedSnapshot.docs).thenReturn([marcsJob]);
+    final docs = [
+      hit('a1', {
+        'clientName': 'Sophie Tremblay',
+        'employeeIds': ['e1'],
+        'employeeNames': ['Marc'],
+        'status': 'done',
+        'startTime': Timestamp.fromDate(DateTime(2026, 6, 24, 9)),
+        'endTime': Timestamp.fromDate(DateTime(2026, 6, 24, 10)),
+      }),
+      hit('a2', {
+        'clientName': 'Sophie Tremblay',
+        'employeeIds': ['e2'],
+        'employeeNames': ['Zoé'],
+        'status': 'done',
+        'startTime': Timestamp.fromDate(DateTime(2026, 6, 23, 9)),
+        'endTime': Timestamp.fromDate(DateTime(2026, 6, 23, 10)),
+      }),
+    ];
+    when(() => archiveSnapshot.docs).thenReturn(docs);
   });
 
   FirebaseAppointmentsRepository repo() =>
       FirebaseAppointmentsRepository(firestore);
 
-  group('the paged history query', () {
-    test('narrows to the assignee when a scope is given', () async {
-      await repo().fetchHistoryPage(limit: 25, employeeId: 'e1');
+  AppointmentRecord reassigned() => AppointmentRecord(
+    id: 'a1',
+    title: 'Leak',
+    clientName: 'Sophie Tremblay',
+    startTime: DateTime(2026, 6, 24, 9),
+    endTime: DateTime(2026, 6, 24, 10),
+    employeeIds: const ['e2'],
+    employeeNames: const ['Zoé'],
+    status: 'done',
+  );
 
-      verify(
-        () => collection.where('employeeIds', arrayContains: 'e1'),
-      ).called(1);
-      verify(
-        () => scopedQuery.where('status', whereIn: any(named: 'whereIn')),
-      ).called(1);
-    });
+  test('the paged history query is never narrowed by assignee', () async {
+    await repo().fetchHistoryPage(limit: 25);
 
-    test('stays business-wide without one', () async {
-      await repo().fetchHistoryPage(limit: 25);
-
-      verifyNever(
-        () => collection.where(
-          'employeeIds',
-          arrayContains: any(named: 'arrayContains'),
-        ),
-      );
-    });
+    verifyNever(
+      () => collection.where(
+        'employeeIds',
+        arrayContains: any(named: 'arrayContains'),
+      ),
+    );
   });
 
-  group('the search scan window', () {
-    test("a scoped search reads only that person's archive", () async {
-      final results = await repo().searchHistory('sophie', employeeId: 'e1');
+  test('a reassigned job stays in the patched search window', () async {
+    final r = repo();
+    await r.searchHistory('sophie');
 
-      expect(results.map((a) => a.id), ['a1']);
-      verifyNever(() => adminQuery.get());
-    });
+    await r.updateAppointment(reassigned());
+    final after = await r.searchHistory('sophie');
 
-    test('the two scopes are cached apart', () async {
-      final r = repo();
+    expect(after.map((a) => a.id), ['a1', 'a2']);
+    // Patched, not re-paged.
+    verify(() => archiveQuery.get()).called(1);
+  });
 
-      final everyone = await r.searchHistory('sophie');
-      final marcs = await r.searchHistory('sophie', employeeId: 'e1');
-      // Both again, from cache.
-      await r.searchHistory('sophie');
-      await r.searchHistory('sophie', employeeId: 'e1');
+  test('clearCaches forgets the window', () async {
+    final r = repo();
+    await r.searchHistory('sophie');
 
-      expect(everyone.map((a) => a.id), ['a1', 'a2']);
-      expect(marcs.map((a) => a.id), ['a1']);
-      verify(() => adminQuery.get()).called(1);
-      verify(() => scopedQuery.get()).called(1);
-    });
+    r.clearCaches();
+    await r.searchHistory('sophie');
 
-    test('a local write that unassigns the person drops the job from '
-        'THEIR window and keeps it in the archive', () async {
-      final r = repo();
-      await r.searchHistory('sophie');
-      await r.searchHistory('sophie', employeeId: 'e1');
+    verify(() => archiveQuery.get()).called(2);
+  });
 
-      // Marc is taken off a1; it is still done, so history keeps it.
-      await r.updateAppointment(
-        AppointmentRecord(
-          id: 'a1',
-          title: 'Leak',
-          clientName: 'Sophie Tremblay',
-          startTime: DateTime(2026, 6, 24, 9),
-          endTime: DateTime(2026, 6, 24, 10),
-          employeeIds: const ['e2'],
-          employeeNames: const ['Zoé'],
-          status: 'done',
-        ),
-      );
+  test('a write indexes only the all: scope', () async {
+    await repo().updateAppointment(reassigned());
 
-      final everyone = await r.searchHistory('sophie');
-      final marcs = await r.searchHistory('sophie', employeeId: 'e1');
-
-      expect(everyone.map((a) => a.id), ['a1', 'a2']);
-      expect(marcs, isEmpty);
-      // Patched, not re-paged: neither window was fetched again.
-      verify(() => adminQuery.get()).called(1);
-      verify(() => scopedQuery.get()).called(1);
-    });
-
-    test('clearCaches forgets every scope', () async {
-      final r = repo();
-      await r.searchHistory('sophie');
-      await r.searchHistory('sophie', employeeId: 'e1');
-
-      r.clearCaches();
-      await r.searchHistory('sophie');
-      await r.searchHistory('sophie', employeeId: 'e1');
-
-      verify(() => adminQuery.get()).called(2);
-      verify(() => scopedQuery.get()).called(2);
-    });
+    final written =
+        (verify(() => doc.update(captureAny())).captured.single as Map)
+            .cast<String, dynamic>();
+    final scopes = written['historySearchScopes'] as List;
+    expect(scopes, contains('all:t:sophie'));
+    expect(scopes.every((t) => (t as String).startsWith('all:')), isTrue);
   });
 }

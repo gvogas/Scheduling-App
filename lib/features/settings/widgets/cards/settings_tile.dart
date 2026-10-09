@@ -52,48 +52,56 @@ class SettingsTile extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.sp12),
         child: narrowOrLarge
-            ? Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ?leading,
-                      Expanded(
-                        child: Text(
-                          label,
-                          style: theme.textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w500,
-                            color: labelColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (trailing != null) ...[
-                    const SizedBox(height: AppSpacing.sp8),
-                    Align(alignment: Alignment.centerLeft, child: trailing),
-                  ],
-                ],
-              )
-            : Row(
-                children: [
-                  ?leading,
-                  Expanded(
-                    child: Text(
-                      label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w500,
-                        color: labelColor,
-                      ),
-                    ),
-                  ),
-                  ?trailing,
-                ],
-              ),
+            ? _buildStacked(theme, leading)
+            : _buildInline(theme, leading),
       ),
+    );
+  }
+
+  Widget _buildStacked(ThemeData theme, Widget? leading) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ?leading,
+            Expanded(
+              child: Text(
+                label,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w500,
+                  color: labelColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+        if (trailing != null) ...[
+          const SizedBox(height: AppSpacing.sp8),
+          Align(alignment: Alignment.centerLeft, child: trailing),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildInline(ThemeData theme, Widget? leading) {
+    return Row(
+      children: [
+        ?leading,
+        Expanded(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.w500,
+              color: labelColor,
+            ),
+          ),
+        ),
+        ?trailing,
+      ],
     );
   }
 }
@@ -147,10 +155,7 @@ class SettingsSwitchTile extends StatelessWidget {
       onTap: onTap ?? (isBusy ? null : () => onChanged(value: !value)),
       trailing: trailing == null
           ? control
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [control, trailing!],
-            ),
+          : Row(mainAxisSize: MainAxisSize.min, children: [control, trailing!]),
     );
   }
 }

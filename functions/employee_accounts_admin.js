@@ -156,9 +156,6 @@ async function performCreateAccount(db, fields, opts) {
       // Refresh the editable fields; status and uid are already right.
       tx.update(existing.ref, {
         name, firstName, lastName, phone, colorValue, jobTitle, role, uid,
-        // A legacy setup changed its password before calling us. Once an
-        // admin resets this invitation, only coordinated setup may activate it.
-        setupRequiresPassword: true,
         updatedAt: serverTimestamp(),
       });
       return {ok: true, docId: existing.id};

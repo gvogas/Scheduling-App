@@ -26,3 +26,5 @@ Auth and Firestore remain separate stores: a partial failure can leave an invite
 (the next sign-in routes back to setup). Locks have no TTL or automatic takeover; recovery is in
 `docs/audits/AUDIT_ROLLOUT_2026-09-23.md`. After setup, `deleteEmployeeAccount` refuses and disable is the only
 removal.
+
+**Amended 2026-10-09:** legacy setup without `newPassword` is refused and `setupRequiresPassword` is no longer stamped or read (ADR-0185).

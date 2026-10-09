@@ -18,3 +18,5 @@ technician reaches a finished job through the calendar's closed-job sink — so 
 The repository scoping, per-scope windows, server `historyScope` guard and `emp:<id>:` token scopes mirror a
 DEPLOYED contract older builds still call; removing any of them is a breaking backend change, not dead-code
 tidying.
+
+**Amended 2026-10-09 by ADR-0187:** the scoping, per-scope windows, `historyScope` and `emp:<id>:` scopes are removed; `employeeId` survives only as a `#compat-1.63.0` allowlist key.

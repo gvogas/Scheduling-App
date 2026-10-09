@@ -66,6 +66,21 @@ class MainCalendar extends ConsumerStatefulWidget {
   ConsumerState<MainCalendar> createState() => _MainCalendarState();
 }
 
+typedef _BuildData = ({
+  String userName,
+  Map<String, Color> colorMap,
+  Map<String, String> nameMap,
+  bool isLoading,
+  String monthLabel,
+  String monthLabelShort,
+  String yearLabel,
+  String dayTitle,
+  String dayTitleShort,
+  String jobLabel,
+  DateTime today,
+  List<DateTime> weekDays,
+});
+
 class _MainCalendarState extends ConsumerState<MainCalendar> {
   final _agendaController = ScrollController();
   final _collapse = CalendarCollapse();
@@ -331,21 +346,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
         ));
 
   /// Prepares the provider values build renders.
-  ({
-    String userName,
-    Map<String, Color> colorMap,
-    Map<String, String> nameMap,
-    bool isLoading,
-    String monthLabel,
-    String monthLabelShort,
-    String yearLabel,
-    String dayTitle,
-    String dayTitleShort,
-    String jobLabel,
-    DateTime today,
-    List<DateTime> weekDays,
-  })
-  _prepareBuild(BuildContext context) {
+  _BuildData _prepareBuild(BuildContext context) {
     final appointmentsAsync = ref.watch(_appointmentsProvider);
     final userName = ref.watch(currentUserNameProvider);
     final colorMap = ref.watch(employeeColorMapProvider);
@@ -452,56 +453,60 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
                 employeeId: widget.employeeId,
                 userName: data.userName,
               ),
-              body: Column(
-                children: [
-                  CalendarHeaderBlock(
-                    monthLabel: data.monthLabel,
-                    monthLabelShort: data.monthLabelShort,
-                    yearLabel: data.yearLabel,
-                    onPickMonth: _pickMonth,
-                    crewFilterButton: widget.isAdmin
-                        ? _tour.stepIf(
-                            TourStepId.calendarCrewFilter,
-                            const CrewFilterButton(),
-                          )
-                        : null,
-                    routeButton: _dayRouteButton(context),
-                    weekStrip: _weekStrip(data.today, data.colorMap),
-                  ),
-                  Expanded(
-                    // The header block reserves the status bar itself.
-                    child: SafeArea(
-                      top: false,
-                      child: Stack(
-                        children: [
-                          _content(
-                            isLoading: data.isLoading,
-                            colorMap: data.colorMap,
-                            nameMap: data.nameMap,
-                            today: data.today,
-                            dayTitle: data.dayTitle,
-                            dayTitleShort: data.dayTitleShort,
-                            jobLabel: data.jobLabel,
-                            weekDays: data.weekDays,
-                          ),
-                          Positioned(
-                            bottom: AppSpacing.sp16,
-                            left: AppSpacing.sp16,
-                            child: TodayPill(
-                              visible: _showTodayButton(data.today),
-                              onPressed: () => _goToToday(data.today),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              body: _buildBody(context, data),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, _BuildData data) {
+    return Column(
+      children: [
+        CalendarHeaderBlock(
+          monthLabel: data.monthLabel,
+          monthLabelShort: data.monthLabelShort,
+          yearLabel: data.yearLabel,
+          onPickMonth: _pickMonth,
+          crewFilterButton: widget.isAdmin
+              ? _tour.stepIf(
+                  TourStepId.calendarCrewFilter,
+                  const CrewFilterButton(),
+                )
+              : null,
+          routeButton: _dayRouteButton(context),
+          weekStrip: _weekStrip(data.today, data.colorMap),
+        ),
+        Expanded(
+          // The header block reserves the status bar itself.
+          child: SafeArea(
+            top: false,
+            child: Stack(
+              children: [
+                _content(
+                  isLoading: data.isLoading,
+                  colorMap: data.colorMap,
+                  nameMap: data.nameMap,
+                  today: data.today,
+                  dayTitle: data.dayTitle,
+                  dayTitleShort: data.dayTitleShort,
+                  jobLabel: data.jobLabel,
+                  weekDays: data.weekDays,
+                ),
+                Positioned(
+                  bottom: AppSpacing.sp16,
+                  left: AppSpacing.sp16,
+                  child: TodayPill(
+                    visible: _showTodayButton(data.today),
+                    onPressed: () => _goToToday(data.today),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
     );
   }
 

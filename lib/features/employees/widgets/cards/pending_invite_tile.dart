@@ -379,27 +379,7 @@ class _CredentialsBlock extends StatelessWidget {
       onCopy: onCopy,
     );
 
-    final values = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        CredentialLine(label: l10n.common_email, value: email),
-        const SizedBox(height: AppSpacing.sp8),
-        CredentialLine(
-          label: l10n.employees_temporaryPassword,
-          value: password ?? kMaskedCredential,
-        ),
-        if (password == null) ...[
-          const SizedBox(height: AppSpacing.sp4),
-          Text(
-            l10n.employees_passwordHiddenUntilReset,
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.palette.textMuted,
-            ),
-          ),
-        ],
-      ],
-    );
+    final values = _buildValues(theme, l10n);
 
     return Container(
       width: double.infinity,
@@ -424,6 +404,30 @@ class _CredentialsBlock extends StatelessWidget {
                 copyButton,
               ],
             ),
+    );
+  }
+
+  Widget _buildValues(ThemeData theme, AppLocalizations l10n) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        CredentialLine(label: l10n.common_email, value: email),
+        const SizedBox(height: AppSpacing.sp8),
+        CredentialLine(
+          label: l10n.employees_temporaryPassword,
+          value: password ?? kMaskedCredential,
+        ),
+        if (password == null) ...[
+          const SizedBox(height: AppSpacing.sp4),
+          Text(
+            l10n.employees_passwordHiddenUntilReset,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.palette.textMuted,
+            ),
+          ),
+        ],
+      ],
     );
   }
 }
