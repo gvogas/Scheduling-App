@@ -1,7 +1,7 @@
 # SiriIntents — Mac setup runbook (Phase 1)
 
-Design: [`docs/plans/2026-07-10-siri-app-intents-design.md`](../../docs/plans/2026-07-10-siri-app-intents-design.md).
-Plan: [`docs/plans/2026-07-19-siri-app-intents-implementation.md`](../../docs/plans/2026-07-19-siri-app-intents-implementation.md).
+Design: [`docs/archive/2026-07-10-siri-app-intents-design.md`](../../docs/archive/2026-07-10-siri-app-intents-design.md).
+Plan: [`docs/archive/2026-07-19-siri-app-intents-implementation.md`](../../docs/archive/2026-07-19-siri-app-intents-implementation.md).
 
 ## Xcode target — CREATED 2026-07-19
 

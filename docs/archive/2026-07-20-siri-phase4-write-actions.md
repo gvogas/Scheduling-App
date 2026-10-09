@@ -1,5 +1,7 @@
 # Siri Phase 4 — voice write actions (execution doc)
 
+> **CANCELLED 2026-10-09 (owner): not needed.** Nothing from this doc was ever landed.
+
 Companion to [`2026-07-19-siri-app-intents-implementation.md`](./2026-07-19-siri-app-intents-implementation.md)
 (Phase 4 section) and the design doc. Phases 1–3 are read-only and Firebase-free;
 **Phase 4 is the inflection point** — the first authenticated Firebase client

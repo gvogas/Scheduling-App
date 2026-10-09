@@ -1,5 +1,7 @@
 # Dashboard redesign — Today | Trends
 
+> **CANCELLED 2026-10-09 (owner): not needed.** Never built; the current Dashboard stays. Archived for the record of the decision.
+
 **Status: DESIGN PICKED 2026-09-12 (Option B). NOT STARTED — no code, no
 implementation plan yet** (re-verified 2026-10-01: `dashboard_screen.dart` has no
 Today/Trends switch; `BusinessTrendsSection` predates the design, from July). The owner gives the build go-ahead separately.

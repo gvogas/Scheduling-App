@@ -55,15 +55,16 @@ at the top of each file, not its boxes.
 | `2026-10-06-repeatable-deploys.md` | **BUILT; first workflow deploy 2026-10-07 (`61811650`).** `deploy.yml` (manual dispatch, `production` approval, Workload Identity, never `--force`), deploy checkers, deploy-log PR, and `functions/scripts/run.js` with a fresh-count confirm. Task 1 is owner-only GCP/GitHub setup. |
 | `2026-09-28-admin-password-reset-plan.md` | **EXECUTED 2026-09-29.** Task-by-task TDD plan for the design above; its "Deviations from the spec" section records where the real code forced a different shape. Archive both once 1.63.0+93 ships and S4 is decided. |
 | `2026-09-12-month-end-overdue-review.md` | **BUILT (`ed59a6a5`), functions DEPLOYED 2026-09-19 (`608b817a`), NOT SHIPPED** — rides the next app build (1.63.0+93 is cut; nothing has shipped since 1.61.0+90). Owner steps after it ships: turn the month-end switch on for Paul, register the `count` GA dimension. The plan's banner lists the seven deviations from the design. |
-| `2026-09-12-dashboard-redesign.md` | **DESIGN PICKED 2026-09-12 (Option B), NOT STARTED** (re-verified 2026-10-01: no Today/Trends switch in `dashboard_screen.dart`). A Today / Trends switch under the title. Today: on site now with progress through each job, needs-attention chips, compact next up, crew tiles against `maxJobsPerDay`. Trends: every period number and chart. Unassigned count and banner removed (owner: a job is never unassigned). App-only, no new reads, tour ids unchanged but their copy must be rewritten. Three open questions for the build. No implementation plan yet; waits on the owner's go-ahead. |
 | `2026-09-12-live-map-improvements.md` | **BUILT (`ed59a6a5`, `e544fb01`), DEVICE PASS DONE 2026-09-19 (owner), NOT SHIPPED** — rides the next app build (1.63.0+93). App-only, no backend deploy. Owner steps once the build ships: republish `privacy-policy.html` and `accessibility.html` to `es-pro-legal`, flip the Apple tester's Test account switch. |
 | `2026-09-07-analytics-followups.md` | **Code COMPLETE, device-verified 2026-09-10; every open item is off-repo.** GA is enabled and linked, and all 27 custom dimensions are registered (owner, 2026-09-10) — this row called both outstanding until 2026-09-13 while the plan had them ticked. Left, all unticked and so *unknown* now that 1.61.0+90 has shipped with analytics in it: the App Store Connect privacy answers (Product Interaction, and Analytics added to Device ID) plus owner sign-off on `PrivacyInfo.xcprivacy`; whether the release build used `FIREBASE_ANALYTICS_WITHOUT_ADID=true`; four events never observed in DebugView (`search_used`, `note_added`, `photo_added`, `contact_action`); the optional `FIREBASE_ANALYTICS_COLLECTION_ENABLED=NO` Info.plist key; and the post-release `build_env` and ~48 h Events-page checks. |
-| `2026-07-10-siri-app-intents-design.md` | Design, 6 phases. Phases 5–6 unscoped. |
-| `2026-07-19-siri-app-intents-implementation.md` | Phases 1–3 built; **no device pass ever run** — the one feature here that has never been exercised on hardware at all. (CarPlay has since been driven in the Simulator, so it is no longer in this category; its remaining checks are behavioural, see §4.) Six read intents in `ios/SiriIntents/`, never exercised by voice. |
-| `2026-07-20-siri-phase4-write-actions.md` | **NOT STARTED.** Mac + Apple-portal session. |
 | `2026-09-12-open-followups.md` | **OPEN — three items still blocked** (items 4 and 5 CLOSED; re-verified against the code 2026-10-01): the split container vocabulary on the appointment form (an owner decision — the declined Option B), the street/city address split (a functions deploy — the Places field mask still omits `structuredFormat`), and device verification of both rebuilt dropdowns (macOS Accessibility permission). The plan it came from is archived: `docs/archive/2026-09-12-add-appointment-sheet-structure.md`. |
 | `2026-09-10-wave-validated-contract-phases-2-4.md` | **Phases 2-4 DEPLOYED** (Phase 4 at `608b817a`, 2026-09-19); the design doc is archived. Left: republish privacy + terms to `es-pro-legal`; ship the app build that drops the Settings cadence picker (gone from `lib/`, rides 1.63.0+93); and, as its own §4a deploy once 1.61.0 has aged out — which cannot begin until a newer build ships — delete `waveSetImportSchedule` (still exported as a no-op). |
 | `APP_STORE_SUBMISSION.md` | **The live release runbook**, now for updates rather than a launch — the app shipped. Its unticked boxes have never been reconciled against four shipped submissions, so read one as *unknown*, not *outstanding*. |
+
+**Moved to `docs/archive/` on 2026-10-09.** Cancelled by the owner (not
+needed): `2026-09-12-dashboard-redesign.md` and the three Siri docs
+(`2026-07-10-siri-app-intents-design.md`, `2026-07-19-siri-app-intents-implementation.md`,
+`2026-07-20-siri-phase4-write-actions.md`).
 
 **Moved to `docs/archive/` on 2026-10-01.** Two plans and two audits:
 `2026-09-12-add-appointment-sheet-structure.md` (shipped in 1.61.0+90; its open
@@ -130,18 +131,10 @@ step 6, the app release, is this build. `git diff cc38be5d HEAD` over
 - **Distribution signing with the CarPlay entitlement is proven** by 1.61.0+90
   (closed in §4).
 
-### 2. Siri — the one feature that has never been on a device at all
+### 2. Siri — CANCELLED 2026-10-09
 
-Phases 1–3 are code-complete and have **never been run on a device**; that pass
-is the whole of what stands between them and done. `ios/SiriIntents/` holds
-exactly the six read intents, verified 2026-09-09. It is also the single unticked
-box in `APP_STORE_SUBMISSION.md` Part 6.
-
-**Phase 4 (voice write actions) is specified end to end and nothing is landed.**
-It needs one Mac session doing, in this order: the Apple-portal keychain-sharing
-capability, a second Firebase app for the extension's App Attest, then the
-entitlement XML — landing the XML first breaks signed builds with a provisioning
-mismatch. Phases 5–6 are unscoped.
+Owner: not needed. Phase 4 onward will not be built and the Phase 1–3 device
+pass is dropped. The plans are archived (`docs/archive/2026-07-*-siri-*.md`).
 
 ### 3. Wave — Phases 1–4 DEPLOYED
 

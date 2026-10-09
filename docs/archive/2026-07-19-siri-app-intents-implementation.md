@@ -1,5 +1,7 @@
 # Siri App Intents — Implementation Plan
 
+> **CANCELLED 2026-10-09 (owner): not needed.** No further phases and no device pass; Phases 1-3 remain in `ios/SiriIntents/` as built.
+
 Companion to the design doc [`2026-07-10-siri-app-intents-design.md`](./2026-07-10-siri-app-intents-design.md).
 That doc is the *what/why* (six phases, scope decisions, architecture). This is
 the *how* — files, order, tests, Mac steps — grounded in the code that already

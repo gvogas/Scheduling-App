@@ -1,5 +1,7 @@
 # Siri App Intents — "How many appointments do I have today?"
 
+> **CANCELLED 2026-10-09 (owner): not needed.** Phases 4-6 will not be built and the Phase 1-3 device pass is dropped. The six read intents built in Phases 1-3 are still in `ios/SiriIntents/` and in the shipped app.
+
 **Status: design approved 2026-07-10; scope expanded 2026-07-19 to fold in the
 former out-of-scope surfaces. Phases 1–3 are BUILT and none has had a device
 pass — see [`2026-07-19-siri-app-intents-implementation.md`](./2026-07-19-siri-app-intents-implementation.md)

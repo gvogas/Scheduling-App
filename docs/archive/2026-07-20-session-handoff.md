@@ -35,7 +35,7 @@ Resume-here doc. Read this first, then the linked plans for detail.
 
 ## Resume point: Siri Phase 4 (the real remaining work)
 
-Full runbook: [`2026-07-20-siri-phase4-write-actions.md`](../plans/2026-07-20-siri-phase4-write-actions.md).
+Full runbook: [`2026-07-20-siri-phase4-write-actions.md`](./2026-07-20-siri-phase4-write-actions.md).
 Architecture chosen: **direct writes from the extension** (hands-free).
 
 **Do these in order on the Mac (this is a console/portal-heavy session):**

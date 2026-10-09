@@ -146,6 +146,17 @@ this one".
   `docs/plans/redesign-subdocs/2026-08-11-p7-dashboard-history.md`, which stays
   active-adjacent with the rest of the redesign sub-docs.
 
+### Cancelled by the owner 2026-10-09 (not needed)
+
+Not shipped work: the owner dropped them.
+
+- `2026-09-12-dashboard-redesign.md` — the Today | Trends Dashboard (Option B).
+  Design picked 2026-09-12, never built.
+- `2026-07-10-siri-app-intents-design.md`, `2026-07-19-siri-app-intents-implementation.md`,
+  `2026-07-20-siri-phase4-write-actions.md` — Siri App Intents. Phases 1–3 (six
+  read intents in `ios/SiriIntents/`) were built and are in the app; their device
+  pass, Phase 4 (voice write actions) and Phases 5–6 are cancelled.
+
 ### Added by the 2026-10-01 sweep
 
 Two plans whose work had shipped and deployed, each with its leftover items
@@ -325,7 +336,7 @@ row; each is the companion design or task-list half of a document listed above.
 ## Superseded session snapshots
 - `2026-07-20-session-handoff.md` — a point-in-time "resume here" snapshot; its
   live next-action (the Siri Phase 4 write-actions runbook) lives in the active
-  `docs/plans/2026-07-20-siri-phase4-write-actions.md`. Kept for history only.
+  `docs/archive/2026-07-20-siri-phase4-write-actions.md`. Kept for history only.
 - `WORKFLOW.md` — the user-side UI map of the **pre-redesign** app (~2026-07-29),
   written as the brief the redesign was specified against. Archived 2026-08-11
   now that P1–P5 and P7 have shipped: the nav rail, `table_calendar`,
