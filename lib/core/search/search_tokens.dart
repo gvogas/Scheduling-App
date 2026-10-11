@@ -1,3 +1,4 @@
+import 'package:scheduling/core/utils/firestore_parsing.dart';
 import 'package:scheduling/features/clients/domain/policies/client_search_policy.dart';
 
 const int kSearchTokenQueryLimit = 10;
@@ -60,4 +61,16 @@ List<String> searchIndexTokens({
     if (out.length < limit && i < phone.length) out.add(phone[i]);
   }
   return out;
+}
+
+/// Hand-mirrored by `appointmentHistoryScopes` in `functions/search_tokens.js`.
+List<String> appointmentHistoryScopes(Map<String, dynamic> data) {
+  final tokens = searchIndexTokens(
+    texts: [
+      (data['clientName'] ?? '').toString(),
+      ...firestoreStringList(data['employeeNames']),
+    ],
+    phones: [(data['clientPhone'] ?? '').toString()],
+  );
+  return [for (final token in tokens) 'all:$token'];
 }

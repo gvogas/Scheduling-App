@@ -101,12 +101,7 @@ class PresenceRepository {
         // Bounded: this is a live listener over a collection group that grows
         // with the roster, and the map only ever renders one pin per user.
         .limit(_presenceStreamLimit)
-        // NEEDS the COLLECTION_GROUP-scoped `presence.updatedAt` override in
-        // `firestore.indexes.json` — a collection-group order is not served by
-        // the automatic single-field index, so this query fails with
-        // FAILED_PRECONDITION until `firestore:indexes` is deployed. Every
-        // write path stamps `updatedAt` (see `upsertLocation`), so no doc is
-        // excluded by the ordering.
+        // Needs the COLLECTION_GROUP `presence.updatedAt` override in `firestore.indexes.json`.
         .orderBy('updatedAt', descending: true)
         .snapshots()
         .map(_toFixes),

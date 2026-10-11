@@ -88,12 +88,7 @@ final splashDestinationProvider = FutureProvider<SplashDestination>((
 
   final authCache = ref.read(authCacheProvider);
   final employee = EmployeeRecord.fromMap(match.id, match.data);
-  // An `invited` account is mid-setup, not unauthorized: the admin created it
-  // and handed over the generated starting password, and this person is
-  // signing in for the first time. Signing them out here would make setup
-  // unreachable — the credential is exactly the one they need. Everything
-  // else non-active is still booted, so `isDisabled` is deliberately NOT the
-  // test: a doc with an empty or unknown status keeps the old sign-out.
+  // `invited` keeps the session for setup; test exact `isInvited`, never `isDisabled` (ADR-0013).
   if (employee.isInvited) {
     return SplashGoToAccountSetup(
       firstName: employee.firstName,

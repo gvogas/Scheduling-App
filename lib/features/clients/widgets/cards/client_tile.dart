@@ -62,66 +62,84 @@ class ClientTile extends StatelessWidget {
               AppAvatar(name: displayName),
               const SizedBox(width: AppSpacing.sp12),
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            displayName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleMedium,
-                          ),
-                        ),
-                        if (client.type != ClientType.unset) ...[
-                          const SizedBox(width: AppSpacing.sp8),
-                          _TypePill(type: client.type),
-                        ],
-                      ],
-                    ),
-                    if (address.isNotEmpty) ...[
-                      const SizedBox(height: AppSpacing.sp4),
-                      Text(
-                        address,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                      ),
-                    ],
-                    if (phone.isNotEmpty || count != null) ...[
-                      const SizedBox(height: AppSpacing.sp4),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              phone,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: theme.monoType.data,
-                            ),
-                          ),
-                          // Null until the recount trigger has run for this
-                          // client — unknown renders nothing, never a zero.
-                          if (count != null) _JobCount(count: count),
-                        ],
-                      ),
-                    ],
-                    if (client.archived) ...[
-                      const SizedBox(height: AppSpacing.sp8),
-                      const _ArchivedPill(),
-                    ],
-                  ],
+                child: _buildDetails(
+                  theme,
+                  scheme,
+                  displayName,
+                  address,
+                  phone,
+                  count,
                 ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildDetails(
+    ThemeData theme,
+    ColorScheme scheme,
+    String displayName,
+    String address,
+    String phone,
+    int? count,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                displayName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleMedium,
+              ),
+            ),
+            if (client.type != ClientType.unset) ...[
+              const SizedBox(width: AppSpacing.sp8),
+              _TypePill(type: client.type),
+            ],
+          ],
+        ),
+        if (address.isNotEmpty) ...[
+          const SizedBox(height: AppSpacing.sp4),
+          Text(
+            address,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        if (phone.isNotEmpty || count != null) ...[
+          const SizedBox(height: AppSpacing.sp4),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  phone,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.monoType.data,
+                ),
+              ),
+              // Null until the recount trigger has run for this
+              // client — unknown renders nothing, never a zero.
+              if (count != null) _JobCount(count: count),
+            ],
+          ),
+        ],
+        if (client.archived) ...[
+          const SizedBox(height: AppSpacing.sp8),
+          const _ArchivedPill(),
+        ],
+      ],
     );
   }
 }

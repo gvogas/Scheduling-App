@@ -2,7 +2,7 @@
 
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
-refreshed 2026-10-07 (release 1.64.0+94 — still **32 exports**; source changes NOT yet deployed: `resetEmployeePassword` gained a fresh-reauth gate and refuses admin targets, the kill-switch parsers became strict, `endLiveActivity` keeps tokens while paused, and the FCM message dropped its Android block). Previously refreshed 2026-09-29 (release 1.63.0+93 — **32 exports, all 32 deployed**:
+refreshed 2026-10-09 (release 1.64.1+95 — **31 exports**; `placesAutocomplete` adds `structuredFormat` to its field mask and passes suggestions through untouched; `waveSetImportSchedule` removed from `index.js` but still live until the owner deletes it — ADR-0184; `completeEmployeeSetup` now requires `newPassword` — ADR-0185; neither deployed yet). Previously refreshed 2026-10-07 (release 1.64.0+94 — still **32 exports**; source changes NOT yet deployed: `resetEmployeePassword` gained a fresh-reauth gate and refuses admin targets, the kill-switch parsers became strict, `endLiveActivity` keeps tokens while paused, and the FCM message dropped its Android block). Previously refreshed 2026-09-29 (release 1.63.0+93 — **32 exports, all 32 deployed**:
 `resetEmployeePassword` and `completePasswordReset` went live at `306ed848`, and
 the release's review fixes to both bodies at `cc38be5d` the same day — see the
 deploy log; re-checked 2026-10-01, nothing in `functions/` has changed since). Earlier 2026-09-29: `syncClientBuilding` went live at `e70b494d`. Previously refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
@@ -165,6 +165,10 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
   *count* never moved (25 throughout, `index.js` untouched), so a count check
   looked clean for three days while prod ran older bodies — check the deploy
   log, not the count.
+- **31 functions defined, 32 DEPLOYED** (2026-10-09): `waveSetImportSchedule`
+  left `index.js` (ADR-0184) and stays live until the owner runs
+  `firebase functions:delete waveSetImportSchedule --region us-central1`; the
+  workflow's export diff refuses to deploy until then.
 - **32 functions defined, 32 DEPLOYED** (2026-09-29, `306ed848`). Release
   1.63.0+93 then changed the bodies of `resetEmployeePassword` (a failed revoke
   no longer rethrows) and `completePasswordReset` (transactional flag clear) in
@@ -217,7 +221,7 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
 - The 4 **push-notification functions** (`notifyAppointmentChanges`,
   `sendUpcomingJobReminders`, `sendDailyJobDigest`, `sendOverdueJobPrompts`)
   and the 2 **Wave auto-import cadence functions** (`waveSetImportSchedule`,
-  `waveScheduledImport`) were **deployed 2026-07-11** together with the updated
+  `waveScheduledImport`, both since deleted) were **deployed 2026-07-11** together with the updated
   `firestore.rules`. The one-time Firestore **TTL policy** on `expiresAt` for
   the `appointmentReminders` / `appointmentOverduePrompts` ledgers was
   **enabled in the console 2026-07-11** — this list previously said it was still
@@ -289,18 +293,17 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
 | `placesGetDetails` | callable | `onCall` | `places.js` | `google_places_repository.dart` (address selected) | `GOOGLE_MAP_API_KEY` | App Check ✓ · admin · durable 40/15min |
 | `placesReverseGeocode` | callable | `onCall` | `places.js` | live staff-location map (admin) | `GOOGLE_MAP_API_KEY` | App Check ✓ · admin · durable 120/hr |
 | `deleteAccount` | callable | `onCall` | `account.js` | `account_deletion_service.dart` | — | App Check ✓ · reauth ≤5min · durable 5/15min |
-| `createEmployeeAccount` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (invite sheet, roster row Reset password) | — | App Check ✓ · admin · durable 20/hr·uid · `accountOperations` locks (email hash + uid) |
-| `completeEmployeeSetup` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` → `auth_service.dart` (account setup screen) | — | App Check ✓ · authed (own doc) · durable 5/15min·uid · `accountOperations` lock · optional `newPassword` |
-| `deleteEmployeeAccount` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (pending-account row) | — | App Check ✓ · admin · durable 20/hr·uid |
-| `changeEmployeeEmail` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (inside `updateEmployee`, when the email changed on a doc with a `uid`); `self_email_service.dart` (a person changing their own) | — | App Check ✓ · admin **or self** · non-admin also needs re-auth <5 min · durable 5/hr·uid |
-| `resetEmployeePassword` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` (edit-person sheet, Reset password on an active person) | — | App Check ✓ · admin · fresh re-auth (5 min) · durable 20/hr·uid · `accountOperations` lock (uid) · refuses self, non-active and admin targets |
-| `completePasswordReset` | callable | `onCall` | `employee_accounts.js` | `firebase_employees_repository.dart` → `auth_service.dart` (Change password screen) | — | App Check ✓ · active caller (`assertActiveCall`) · durable 5/15min·uid · `accountOperations` lock · requires `passwordResetRequired` |
+| `createEmployeeAccount` | callable | `onCall` | `employee_accounts_admin.js` | `firebase_employees_repository.dart` (invite sheet, roster row Reset password) | — | App Check ✓ · admin · durable 20/hr·uid · `accountOperations` locks (email hash + uid) |
+| `completeEmployeeSetup` | callable | `onCall` | `employee_accounts_self.js` | `firebase_employees_repository.dart` → `auth_service.dart` (account setup screen) | — | App Check ✓ · authed (own doc) · durable 5/15min·uid · `accountOperations` lock · requires `newPassword` |
+| `deleteEmployeeAccount` | callable | `onCall` | `employee_accounts_admin.js` | `firebase_employees_repository.dart` (pending-account row) | — | App Check ✓ · admin · durable 20/hr·uid |
+| `changeEmployeeEmail` | callable | `onCall` | `employee_accounts_self.js` | `firebase_employees_repository.dart` (inside `updateEmployee`, when the email changed on a doc with a `uid`); `self_email_service.dart` (a person changing their own) | — | App Check ✓ · admin **or self** · non-admin also needs re-auth <5 min · durable 5/hr·uid |
+| `resetEmployeePassword` | callable | `onCall` | `employee_accounts_admin.js` | `firebase_employees_repository.dart` (edit-person sheet, Reset password on an active person) | — | App Check ✓ · admin · fresh re-auth (5 min) · durable 20/hr·uid · `accountOperations` lock (uid) · refuses self, non-active and admin targets |
+| `completePasswordReset` | callable | `onCall` | `employee_accounts_self.js` | `firebase_employees_repository.dart` → `auth_service.dart` (Change password screen) | — | App Check ✓ · active caller (`assertActiveCall`) · durable 5/15min·uid · `accountOperations` lock · requires `passwordResetRequired` |
 | `waveBootstrap` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` | `WAVE_FULL_ACCESS_TOKEN`, `WAVE_BUSINESS_NAME` | App Check ✓ · admin · durable 10/hr |
 | `waveGetConnection` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (Settings mount) | — | App Check ✓ · admin · durable 60/hr |
-| `waveSetImportSchedule` | callable | `onCall` | `wave/callables.js` | none in the current app; builds ≤ 1.61.0 (Settings cadence picker) | — | App Check ✓ · admin · RETIRED no-op, `#compat-1.61.0` |
 | `waveImportCustomers` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (`syncCustomers`, Settings "Sync with Wave") | `WAVE_FULL_ACCESS_TOKEN` | App Check ✓ · admin · durable 5/hr · 300s |
 | `searchClients` | callable | `onCall` | `indexed_search.js` | `firebase_clients_repository.dart` (`searchClients`, the debounced clients/history search bar) | — | App Check ✓ · `assertAdminCall` (clients are PII) · optional `archived`/`type`/`buildingKey` filters |
-| `searchHistory` | callable | `onCall` | `indexed_search.js` | `firebase_appointments_repository.dart` (`searchHistory`, History screen + the technician's own History) | — | App Check ✓ · `assertActiveCall` · scope from role: `all:` for admin, own doc id for an employee |
+| `searchHistory` | callable | `onCall` | `indexed_search.js` | `firebase_appointments_repository.dart` (`searchHistory`, admin History screen) | — | App Check ✓ · `assertAdminCall` · `all:` scope only; `employeeId` accepted and ignored (`#compat-1.63.0`) |
 | `findAppointmentConflicts` | callable | `onCall` | `indexed_search.js` | `firebase_appointments_repository.dart` (`findClashingAppointments`/`findBusyEmployees`, pre-save clash check + assignee picker) | — | App Check ✓ · `assertActiveCall` · a non-admin is narrowed to their own doc id |
 | `restoreAppointmentStatus` | callable | `onCall` | `appointment_actions.js` | `firebase_appointments_repository.dart` (`restoreAppointmentStatus`, the mark-complete Undo) | — | App Check ✓ · `assertActiveCall` · admin **or assigned** · target must be `pending`/`in_progress` |
 | `deleteClient` | callable | `onCall` | `clients.js` | `firebase_clients_repository.dart` | — | App Check ✓ · admin · durable 20/hr · deletion-token barrier |
@@ -417,7 +420,7 @@ a plain `employee` now, and `firestore.rules` grants an `invited` user
 creating the account at the moment they hand the credentials over, not weeks
 ahead.
 
-### `createEmployeeAccount` — `employee_accounts.js`
+### `createEmployeeAccount` — `employee_accounts_admin.js`
 Admin-only. Mints a Firebase Auth account on a **random per-account starting
 password** plus an `invited` `users` doc that **already carries the real `uid`**,
 and returns `{email, password}` (no `docId` — the client already has the row it
@@ -476,8 +479,7 @@ Auth, so an email-only check can clear a doc that is not the account Auth hands
 back). The rotation itself is deferred to `resetProvisionedPassword`, which runs
 only after the transaction has claimed the person as still-`invited`. Both
 re-provisioning and setup hold the same durable per-UID operation lock across
-Firestore and Auth calls. Re-provisioning marks `setupRequiresPassword` before
-resetting Auth, preventing an older setup client from activating afterward.
+Firestore and Auth calls.
 
 
 If the Firestore write fails after the Auth account was created, the Auth
@@ -493,7 +495,7 @@ allowlists — this Admin SDK write bypasses rules, so those checks ARE the
 enforcement) **before** the limiter, while `assertAdmin` stays above it.
 Transactional core exported as `performCreateAccount` for jest.
 
-### `completeEmployeeSetup` — `employee_accounts.js`
+### `completeEmployeeSetup` — `employee_accounts_self.js`
 The employee's own activation — authed, but **not** admin: it resolves the
 caller's doc by `where("uid", "==", req.auth.uid)` and can only ever touch that
 one. Flips `status` to `active` and stamps the setup profile. Refuses
@@ -502,31 +504,24 @@ replayed call (or two devices finishing at once) can't rewrite a consent record;
 `not-found / account-not-found` when there's no doc for the uid.
 
 **It no longer checks `email_verified`** (guard removed 2026-08-21, along with
-the `failed-precondition / email-not-verified` error it raised). **The CLIENT
-still maps that error**, deliberately: `AuthService._mapSetupError` turns it
-into `AuthFailureSetupNotAvailableYet` so that a backend rolled back under a
-shipped app build (§3 below) tells the person setup is unavailable instead of
-"Something went wrong", and stops filing a Crashlytics non-fatal on every
-retry by someone who cannot succeed. That mapping is old-backend
-compatibility only — retire it once no pre-simplified-auth backend can be
-live — and its presence is NOT evidence this callable still raises the error. That check
+the `failed-precondition / email-not-verified` error it raised; the client's
+mapping of that error was deleted 2026-10-09, ADR-0185). That check
 existed to price the shared-`Welcome123!` window — knowing the address was enough
 to sign in, so finishing setup was made to require the MAILBOX — and it was
 removed only because the starting password became a random per-account secret in
 the same change. Don't re-derive it from an old copy of this page, and don't drop
 a comparable check elsewhere on the strength of this precedent alone.
 
-**The current app sends `newPassword` to the callable** (optional key, at most
-128 chars). It validates the password (8+ chars with an uppercase, a lowercase
+**`newPassword` is REQUIRED** (at most 128 chars; missing is
+`invalid-argument / invalid-newPassword`, since 2026-10-09, ADR-0185). It validates the password (8+ chars with an uppercase, a lowercase
 and a digit, else `invalid-argument / invalid-newPassword`), writes it through Auth while holding `accountOperations/{uid}`, then
 activates the invitation. The app subsequently reauthenticates to renew its
 refresh credential. Passwords are neither persisted in Firestore nor logged.
 The existing client check still refuses reusing the current credential.
 
-Legacy requests without `newPassword` remain accepted for untouched invitations.
-After re-provisioning sets `setupRequiresPassword`, they fail with
-`setup-upgrade-required`. This closes the race with an older app's direct Auth
-password update without making the new payload universally required.
+The legacy no-password path and its `setupRequiresPassword` /
+`setup-upgrade-required` guard were retired 2026-10-09 once every phone ran
+1.63.0+93 or newer; the field stays on the `/users` denylists for old docs.
 
 The patch is built by the pure `buildActivationPatch`: it stamps
 `termsAcceptedAt`/`locationConsentAt` **only when the flags are actually sent
@@ -537,7 +532,7 @@ by `name` and Firestore excludes docs missing the orderBy field. Rate-limited
 5 per 15 min per uid: setup runs once per person, and a handful of retries
 covers a fumbled password.
 
-### `deleteEmployeeAccount` — `employee_accounts.js`
+### `deleteEmployeeAccount` — `employee_accounts_admin.js`
 Admin-only. Removes an account that has never been set up — the `users` doc and
 the Firebase Auth account both. **Transactional, and refuses once the person has
 set up** (`failed-precondition / account-not-pending`): from that point the
@@ -562,7 +557,7 @@ able to delete a users doc (orphaning its crew links) was retired 2026-08-08;
 see docs/DEPLOYMENT.md. Transactional core exported as `performDeleteAccount`
 for jest.
 
-### `changeEmployeeEmail` — `employee_accounts.js`
+### `changeEmployeeEmail` — `employee_accounts_self.js`
 Admin **or the person themselves** (the `self` branch landed with P5,
 2026-08-10). Moves an employee's **sign-in identity** in Firebase Auth and on
 their `users` doc together. It exists because nothing else joined those two:
@@ -626,7 +621,7 @@ IS the target, independent of role, so an admin editing their own row counts as
 self. An admin edit pushes the EMPLOYEE (`notifyEmailChanged`); a self edit
 pushes the ACTIVE ADMINS (`notifyAdminsOfSelfEmailChange` → the shared
 `sendToActiveAdmins` in `notification_utils.js`, excluding the person who made
-the change). **The admin notice carries the NAME, never the address** — it lands
+the change; bounded by `ADMIN_FANOUT_MAX` (100) with a warn at the cap). **The admin notice carries the NAME, never the address** — it lands
 on every admin's Lock Screen and an email is PII. Both are best-effort and run
 after the commit: the change is already durable in both stores, so a push
 failure must not hand the caller an error for something that worked.
@@ -644,7 +639,7 @@ too. Tapping it just opens the calendar (`_handlePushTap` treats a missing
 guarantee**: an employee with no live FCM token learns when their old address
 stops signing them in, so the admin should still tell them directly.
 
-### `resetEmployeePassword` — `employee_accounts.js`
+### `resetEmployeePassword` — `employee_accounts_admin.js`
 Admin-only. Resets an ACTIVE employee's password (their email is not a real
 inbox, so Forgot password cannot help). Guard order auth → `assertAdmin` →
 payload (`docId` only, `/` rejected) → `assertFreshReauth` (5 min, shared
@@ -664,7 +659,7 @@ password that did not change; a revoke failure after the password changed logs
 and `updateUser` with a password already invalidates sessions). Returns `{email, password}` in
 `createEmployeeAccount`'s shape; logs only `shortHash(uid)`, never the password.
 
-### `completePasswordReset` — `employee_accounts.js`
+### `completePasswordReset` — `employee_accounts_self.js`
 Self-service. Opens with `assertActiveCall(req, {newPassword})`, then
 `requireString(newPassword, 128)` and the shared `isStrongPassword` (8+, `\p{Lu}`,
 `\p{Ll}`, a digit) BEFORE the durable 5/15 min limiter, so a malformed payload
@@ -700,14 +695,11 @@ token matches strictly more than the query does, so returning the raw token hits
 would widen the answer.
 
 ### `searchHistory` — `indexed_search.js`
-The same shape for terminal-status appointments, but **scoped by role in the
-query rather than after it**. `assertActiveCall` resolves the caller;
-`historyScope` picks a token prefix — `all:` for an admin (optionally narrowed
-to a named employee), `emp:<their own doc id>:` for an employee — and refuses an
-employee who asks for someone else's scope. That is why
-`appointments.historySearchScopes` stores every token once per scope instead of
-storing plain tokens plus an `employeeIds` filter: the scope is baked into the
-token, so the query itself cannot return another person's jobs.
+The same shape for terminal-status appointments. **Admin-only** via
+`assertAdminCall` since 2026-10-09 (ADR-0187): technician History and its
+`emp:<id>:` token scopes are retired, so the query reads the `all:` scope only.
+`employeeId` stays in the allowlist, accepted and ignored (`#compat-1.63.0`) —
+1.63.0+93 never sends it, and it must never narrow or widen the answer.
 
 ### `findAppointmentConflicts` — `indexed_search.js`
 The pre-save clash check and the assignee picker's dimming. Chunks
@@ -748,6 +740,11 @@ documented 20/min was really up to 200/min for one caller, and the cap on the
 highest-cost function in the project was not a cap. The trade is one Firestore
 transaction per lookup where there were none; keep the GCP Maps Platform billing
 alert regardless.
+
+Returns `{suggestions: [...]}`: each upstream entry passed through untouched
+(field mask `placeId`, `text`, `structuredFormat`, added 2026-10-09). The app
+reads the street/city lines from `structuredFormat.mainText`/`secondaryText`;
+a build that predates them renders the flat `placePrediction.text.text`.
 
 Refuses with `failed-precondition` / `feature-disabled` while `feature_address_autocomplete` is off (before the rate limiter).
 
@@ -832,9 +829,7 @@ server-side to `role == 'employee' && status == 'active'`; tokens live in
 so the send path needs no uid translation), and stale tokens are deleted on
 send failure. Text is localized per token doc (`locale: 'en'|'fr'`) from an
 inline EN/FR table; every message sets an APNs `sound` so delivery isn't
-silent, plus a now-inert `android: {priority: 'high'}` (kept because it costs
-nothing and FCM ignores it for an APNs-only fleet — the app has been iOS-only
-since `android/` was deleted on 2026-08-05). **Deployed 2026-07-11**
+silent. **Deployed 2026-07-11**
 — see Deployment status. Design: `docs/archive/2026-07-08-push-notifications.md`.
 
 ### `notifyAppointmentChanges` — `notifications.js`
@@ -1067,8 +1062,12 @@ retry loop. Without this the rules' `status == 'active'` gates would still be
 reachable with a stale credential. Auth writes cannot join the transaction, so
 `reconcileAuthAccess` re-reads the profile after each one and repeats (up to 3
 attempts, then throws so the event retries) when `uid` or `status` moved
-meanwhile; it skips an `invited` profile and a uid whose bridge row belongs to
-another profile.
+meanwhile; it returns early only when the profile's `uid` changed or the uid's
+bridge row belongs to another profile. **An `invited` profile is not skipped
+(2026-09-28):** only an `active` profile restores, so active → invited revokes
+the credential again, while a newly created invited doc is never disabled
+because the reconcile runs only when `authAccessChange(before, after)` is
+non-null.
 
 Deactivation used to additionally **rotate the Storage download tokens** on
 every photo of every appointment the person was assigned to
@@ -1097,9 +1096,9 @@ The bridge's pure rules live in `bridge_policy.js` (`shouldHaveBridge`,
 `scripts/backfill.js` — the only script here that deletes, and until 2026-08-16
 the only one with no test.
 
-### The shared `functions/scripts/_*.js` trio
+### The shared `functions/scripts/_*.js` modules
 Every one-off script in that directory runs under `applicationDefault()`, so
-nothing on the command line says which project it will write to. Three shared
+nothing on the command line says which project it will write to. The shared
 modules exist because each of them prevents a specific way a bulk run goes
 wrong, and each was hand-copied (and had drifted) before it was extracted:
 
@@ -1117,7 +1116,17 @@ wrong, and each was hand-copied (and had drifted) before it was extracted:
   pointing at a service-account JSON, whose project `applicationDefault()`
   reads internally and never exposes on `app.options`). The banner goes blank
   precisely when credentials were supplied properly, which is the worst
-  possible time. All ten scripts now print it.
+  possible time. Every script prints it.
+- **`bootstrapScript(argv, {assertFlags})`** (`_project.js`, 2026-08-31) — the
+  preamble wiring the two together: resolve `dryRun` once and hand the same
+  value to both. Pass the script's own `assertFlags` wrapper, not a flag list.
+  `scripts/backfill.js` deliberately does not use it (it branches on
+  `FIRESTORE_EMULATOR_HOST` and hard-fails on missing credentials).
+- **`scanByName`** (`_scan.js`) — the document-id paging loop,
+  `for await (const doc of scanByName(collection, {pageSize}))`; it was
+  hand-written six times before extraction.
+- A script that is also a module guards `main()` behind
+  `require.main === module`, so jest can load it.
 
 ## Client → appointment propagation
 
@@ -1139,7 +1148,7 @@ excludes docs missing the field. **Early-returns with no transaction** when
 `buildingKey`/`deletionToken`, and the membership collection has no grant (Admin
 SDK only). Needs the nine new `clients` composites READY, and
 `scripts/backfill-client-buildings.js` (rerunnable; `--dry-run` reads only) for
-existing docs. **NOT YET DEPLOYED**; see
+existing docs. **Deployed 2026-09-29** (`e70b494d`); deploy ordering is in
 [audit rollout](audits/AUDIT_ROLLOUT_2026-09-23.md).
 
 ### `propagateClientEdits` — `client_propagation.js`
@@ -1147,7 +1156,13 @@ existing docs. **NOT YET DEPLOYED**; see
 `clientPhone` / `address` to that client's **future** appointments (history is
 left as it was at visit time). `address` follows the client only when the
 appointment's stored address equals the client's *previous* address (a differing
-one is treated as a per-appointment custom address). Requires the composite index
+one is treated as a per-appointment custom address). **Both sides of that
+comparison are the COMPOSED address** (`composeFullAddress`,
+`client_address_utils.js`), never the stored field: `clients/{id}.address` is
+the street line with separate locality fields, while an appointment holds one
+composed string, so fanning a raw street line onto it would strip the city off
+a live job — and comparing raw fields meant an apt-bearing client never took an
+address correction at all. Requires the composite index
 `(clientId ASC, startTime ASC)` on `appointments`. `retry: true` — writes are
 absolute values. The page loop runs to **exhaustion on purpose and must not
 gain a total cap** (truncating would leave stale denormalized `clientName` on
@@ -1335,15 +1350,6 @@ secret. **Durably rate-limited at 60/hour per admin uid** (`wave-connection`) �
 a higher ceiling than the write callables because this one is called on every
 Settings mount, but it is a limiter like all the rest, so don't "fix the gap"
 by adding a second one.
-
-### `waveSetImportSchedule` — `wave/callables.js` (RETIRED, `#compat-1.61.0`)
-The automatic-import cadence was deleted 2026-09-13 (Wave Phase 4, Task 12).
-This stays deployed only because the 1.61.0 app still calls it from its Settings
-picker: it opens with `assertAdminCall` over the `schedule` key, ignores the
-value, logs `WAVE-SCHED ignored a retired cadence call` and returns
-`{schedule: "off"}` — no read, no write, no rate limit. Removing it is a
-callable deletion under `docs/DEPLOYMENT.md` §4a, due once that log line has
-gone quiet and no build at or below 1.61.0 remains.
 
 ### `waveImportCustomers` — `wave/callables.js`
 
@@ -1548,7 +1554,7 @@ data or the outage has passed.
 Guard order is the standard one — auth → `assertAdmin` → `assertPayloadShape`
 (empty key set; it takes no payload) → `enforceDurableRateLimit`
 (`wave-retry`, **10/hour per admin uid**) → work. Refuses with
-`failed-precondition / wave/not-connected` when no business id is stored.
+`failed-precondition / wave/not-bootstrapped` when no business id is stored.
 
 `requeueDeadJobs()` is the durable part; the `drainQueue` that follows is
 **best-effort and must not fail the call**, so the press has a visible effect

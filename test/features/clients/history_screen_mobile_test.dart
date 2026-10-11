@@ -94,8 +94,6 @@ void main() {
       () => repo.fetchHistoryPage(
         limit: any(named: 'limit'),
         after: any(named: 'after'),
-        // A technician's screen scopes the page to their own doc id.
-        employeeId: any(named: 'employeeId'),
       ),
     ).thenAnswer((_) async => _history);
 

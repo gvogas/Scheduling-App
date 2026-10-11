@@ -1419,10 +1419,6 @@
   "@error_yourAccountIsAlreadySetUp": {
     "description": "Shown when completeEmployeeSetup refuses because the account is already active"
   },
-  "error_setupNotAvailableYet": "Account setup isn't available just yet. Try again in a few minutes — if it keeps happening, ask your administrator.",
-  "@error_setupNotAvailableYet": {
-    "description": "Setup was refused by a backend that predates the simplified-auth deploy. The person cannot act on it beyond retrying, so the message does not mention email verification."
-  },
   "error_noAccountRecordContactAdmin": "We couldn't find your employee record. Ask your admin to check your account.",
   "@error_noAccountRecordContactAdmin": {
     "description": "Shown when the signed-in uid resolves to no users doc during setup"

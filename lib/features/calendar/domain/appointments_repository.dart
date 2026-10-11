@@ -51,9 +51,6 @@ abstract class AppointmentsRepository {
   /// This appointment's photos.
   Future<List<AppointmentImage>> fetchAppointmentPictures(String id);
 
-  /// Writes what the CREW recorded on site.
-  Future<void> updateFieldNotes({required String id, required String notes});
-
   /// Appends one crew note to `appointments/{id}/fieldNotes`.
   ///
   /// [authorId] must be the caller's own users-doc id — `firestore.rules`
@@ -103,15 +100,11 @@ abstract class AppointmentsRepository {
   Future<List<AppointmentRecord>> fetchHistoryPage({
     required int limit,
     AppointmentRecord? after,
-    String? employeeId,
   });
 
   /// Search terminal appointments by client/employee name or phone,
   /// newest-first.
-  Future<List<AppointmentRecord>> searchHistory(
-    String query, {
-    String? employeeId,
-  });
+  Future<List<AppointmentRecord>> searchHistory(String query);
 
   /// This client's appointments in any status, newest-first.
   ///

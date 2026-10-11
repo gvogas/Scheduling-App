@@ -14,9 +14,7 @@ Loaded when working under `lib/core/navigation/`. Root context: `../../../CLAUDE
   never collapse it back to one enum plus a list or an `isHubTab` flag.
   `implements Enum` keeps `.name`/`.values` on the union type, and `.name` is
   load-bearing: it is the showcase scope name AND the key the FROZEN
-  `kLegacyTourSteps` migration snapshot is written in (seen flags moved from
-  per-scope `tour_seen_tabs` to per-STEP `tour_seen_steps` on 2026-09-04, and
-  `tour_seen_tabs` is now read exactly once, by that migration), so
+  `kLegacyTourSteps` migration snapshot is written in (ADR-0179), so
   **renaming a member silently replays or orphans a tour** (that is
   why the member stayed `employees` while its label became "Team" via
   `nav_team`). `navigateToDestination` is the one nav action; a hub tab reached
@@ -54,4 +52,9 @@ Loaded when working under `lib/core/navigation/`. Root context: `../../../CLAUDE
   `initialTab` appeared nowhere under `test/`, so a push landing on the
   calendar instead of the requested tab (a push-notification tap, or a drawer
   entry taken before the shell exists) would not have failed anything.
+- **Guard `TopRouteObserver.didRemove` by `identical` on the `Route`, never the
+  name** — `pushNamedAndRemoveUntil` pushes before it removes, so a name test lets
+  a removed same-named route overwrite the top; `hub_shell.dart` removes its
+  `HubTabRedirectRoute` while it is top. Pinned by `top_route_observer_test.dart`.
+  (ADR-0070)
 

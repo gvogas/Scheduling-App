@@ -26,6 +26,7 @@ import 'package:scheduling/features/calendar/widgets/sections/photo_picker_secti
 import 'package:scheduling/features/calendar/widgets/sheets/image_source_picker.dart';
 import 'package:scheduling/features/calendar/widgets/sheets/inline_add_client_host.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
+import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_steps.dart';
@@ -285,16 +286,91 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final state = ref.watch(_provider);
-    // Crew only; dispatchers are not assignable.
-    final roster = ref.watch(assignableEmployeesProvider);
+  Widget _buildFormFields(
+    BuildContext context,
+    AddEventState state,
+    AsyncValue<List<EmployeeRecord>> roster,
+    ClientBookingContext bookingContext,
+  ) {
     // An assignee is REQUIRED to save, so "still loading" and "the read failed"
     // must not both render as "this business has no staff".
     final allEmployees = roster.asData?.value ?? const [];
     // One span length feeds both the flag and label.
     final spanLength = _spanLength(state);
+    return AppointmentFormFields(
+      controllers: _controllers,
+      tourWrap: _tour.stepIf,
+      allEmployees: allEmployees,
+      rosterStatus: rosterStatusOf(roster),
+      onRetryRoster: () => ref.invalidate(assignableEmployeesProvider),
+      // Nothing is stored yet, so the live selection is the whole of
+      // "already on this job".
+      assigneeAvailability: watchAssigneeAvailability(
+        ref,
+        date: state.selectedDate,
+        endDate: state.endDate,
+        isAllDay: state.isAllDay,
+        isPersonal: state.isPersonal,
+        startTime: state.selectedStartTime,
+        endTime: state.selectedEndTime,
+        alreadyAssignedIds: const {},
+      ),
+      selectedClient: state.selectedClient,
+      clientResults: state.clientResults,
+      isSearchingClient: state.isSearchingClient,
+      clientSearchStatus: state.clientSearchStatus,
+      previousAddresses: bookingContext.previousAddresses,
+      lastVisitLabel: bookingContext.lastVisitLabel,
+      selectedEmployees: state.selectedEmployees,
+      repeat: state.repeat,
+      useCustomAddress: state.useCustomAddress,
+      selectedDate: state.selectedDate,
+      endDate: state.endDate,
+      isPersonal: state.isPersonal,
+      isDayOff: state.isDayOff,
+      onPersonalChanged: (value) => _notifier.setPersonal(value: value),
+      isAllDay: state.isAllDay,
+      errors: state.errors,
+      employeeLabel: context.l10n.calendar_assignEmployee,
+      employeeRequired: true,
+      materialsHint: context.l10n.calendar_typeTheMaterialsHere,
+      onApplyTemplate: _applyTemplate,
+      onRequestAddClient: requestAddClient,
+      isMultiDay: spanLength > 1,
+      isOvernight: _isOvernight(state),
+      spanLength: spanLength,
+      callbacks: AppointmentFormCallbacks(
+        onSearchClients: _onClientSearchChanged,
+        onRetryClientSearch: _onRetryClientSearch,
+        onSelectClient: _notifier.selectClient,
+        onClearClient: _notifier.clearClient,
+        onToggleEmployee: _notifier.toggleEmployee,
+        onSelectStartDate: _onStartDateSelected,
+        onSelectEndDate: _onEndDateSelected,
+        onPickStartTime: _pickStartTime,
+        onPickEndTime: _pickEndTime,
+        onSelectRepeat: _notifier.selectRepeat,
+        onUseCustomAddress: (value) =>
+            _notifier.setUseCustomAddress(value: value),
+        onDayOffChanged: (value) => _notifier.setDayOff(value: value),
+        onAllDayChanged: (value) => _notifier.setAllDay(value: value),
+      ),
+      photosSection: PhotoPickerSection(
+        existingImages: const [],
+        newImages: state.selectedImages,
+        isEditing: true,
+        onPickImages: _pickImages,
+        onRemoveExisting: (_) {},
+        onRemoveNew: _notifier.removeImage,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(_provider);
+    // Crew only; dispatchers are not assignable.
+    final roster = ref.watch(assignableEmployeesProvider);
     final bookingContext = watchClientBookingContext(
       ref,
       client: state.selectedClient,
@@ -319,73 +395,7 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
           // submit controller already fails fast, and the app's global offline
           // banner is drawn under the page, behind this sheet.
           const OfflineFormNotice(),
-          AppointmentFormFields(
-            controllers: _controllers,
-            tourWrap: _tour.stepIf,
-            allEmployees: allEmployees,
-            rosterStatus: rosterStatusOf(roster),
-            onRetryRoster: () => ref.invalidate(assignableEmployeesProvider),
-            // Nothing is stored yet, so the live selection is the whole of
-            // "already on this job".
-            assigneeAvailability: watchAssigneeAvailability(
-              ref,
-              date: state.selectedDate,
-              endDate: state.endDate,
-              isAllDay: state.isAllDay,
-              isPersonal: state.isPersonal,
-              startTime: state.selectedStartTime,
-              endTime: state.selectedEndTime,
-              alreadyAssignedIds: const {},
-            ),
-            selectedClient: state.selectedClient,
-            clientResults: state.clientResults,
-            isSearchingClient: state.isSearchingClient,
-            clientSearchStatus: state.clientSearchStatus,
-            previousAddresses: bookingContext.previousAddresses,
-            lastVisitLabel: bookingContext.lastVisitLabel,
-            selectedEmployees: state.selectedEmployees,
-            repeat: state.repeat,
-            useCustomAddress: state.useCustomAddress,
-            selectedDate: state.selectedDate,
-            endDate: state.endDate,
-            isPersonal: state.isPersonal,
-            isDayOff: state.isDayOff,
-            onPersonalChanged: (value) => _notifier.setPersonal(value: value),
-            isAllDay: state.isAllDay,
-            errors: state.errors,
-            employeeLabel: context.l10n.calendar_assignEmployee,
-            employeeRequired: true,
-            materialsHint: context.l10n.calendar_typeTheMaterialsHere,
-            onApplyTemplate: _applyTemplate,
-            onRequestAddClient: requestAddClient,
-            isMultiDay: spanLength > 1,
-            isOvernight: _isOvernight(state),
-            spanLength: spanLength,
-            callbacks: AppointmentFormCallbacks(
-              onSearchClients: _onClientSearchChanged,
-              onRetryClientSearch: _onRetryClientSearch,
-              onSelectClient: _notifier.selectClient,
-              onClearClient: _notifier.clearClient,
-              onToggleEmployee: _notifier.toggleEmployee,
-              onSelectStartDate: _onStartDateSelected,
-              onSelectEndDate: _onEndDateSelected,
-              onPickStartTime: _pickStartTime,
-              onPickEndTime: _pickEndTime,
-              onSelectRepeat: _notifier.selectRepeat,
-              onUseCustomAddress: (value) =>
-                  _notifier.setUseCustomAddress(value: value),
-              onDayOffChanged: (value) => _notifier.setDayOff(value: value),
-              onAllDayChanged: (value) => _notifier.setAllDay(value: value),
-            ),
-            photosSection: PhotoPickerSection(
-              existingImages: const [],
-              newImages: state.selectedImages,
-              isEditing: true,
-              onPickImages: _pickImages,
-              onRemoveExisting: (_) {},
-              onRemoveNew: _notifier.removeImage,
-            ),
-          ),
+          _buildFormFields(context, state, roster, bookingContext),
         ],
       ),
     );

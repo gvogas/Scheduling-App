@@ -151,54 +151,60 @@ class _ScopeOption extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Padding(
-                padding: const EdgeInsets.only(top: 2),
-                child: Container(
-                  width: 18,
-                  height: 18,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: selected
-                          ? scheme.primary
-                          : theme.palette.textMuted,
-                      width: 1.5,
-                    ),
-                  ),
-                  child: selected
-                      ? Container(
-                          width: 9,
-                          height: 9,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: scheme.primary,
-                          ),
-                        )
-                      : null,
-                ),
-              ),
+              _buildRadio(theme, scheme),
               const SizedBox(width: AppSpacing.sp12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label, style: theme.textTheme.titleMedium),
-                    if (detail != null) ...[
-                      const SizedBox(height: AppSpacing.sp4),
-                      Text(
-                        detail!,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.palette.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
+              _buildLabels(theme),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildRadio(ThemeData theme, ColorScheme scheme) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Container(
+        width: 18,
+        height: 18,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: selected ? scheme.primary : theme.palette.textMuted,
+            width: 1.5,
+          ),
+        ),
+        child: selected
+            ? Container(
+                width: 9,
+                height: 9,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: scheme.primary,
+                ),
+              )
+            : null,
+      ),
+    );
+  }
+
+  Widget _buildLabels(ThemeData theme) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: theme.textTheme.titleMedium),
+          if (detail != null) ...[
+            const SizedBox(height: AppSpacing.sp4),
+            Text(
+              detail!,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.palette.textTertiary,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

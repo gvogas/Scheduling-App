@@ -28,8 +28,8 @@ extension ResponsiveContext on BuildContext {
   bool get isLandscape =>
       MediaQuery.orientationOf(this) == Orientation.landscape;
 
-  /// Use a side nav rail with multi-pane layout on tablets or any landscape
-  /// device. Portrait phones stay single-column.
+  /// Tablets or any landscape device get the calendar's split layout; portrait
+  /// phones stay single-column.
   bool get isSplitLayout => isWide || isLandscape;
 
   /// Two-pane master-detail is only for tablet-class devices. Landscape

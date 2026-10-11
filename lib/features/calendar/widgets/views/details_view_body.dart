@@ -65,28 +65,12 @@ class DetailsViewBody extends ConsumerWidget {
   Widget _tour(TourStepId id, Widget child) =>
       tourWrap?.call(id, child) ?? child;
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final provider = eventDetailsControllerProvider(
-      EventDetailsKey(appointment),
-    );
-    final client = ref.watch(provider.select((s) => s.client));
-    final isSaving = ref.watch(provider.select((s) => s.isSaving));
-    final notifier = ref.read(provider.notifier);
-
-    final data = _DetailsViewData.from(appointment, client);
-    final compactHeader = context.isCompact;
-    final displayAddress = data.displayAddress;
-    final onCall = data.phone.isNotEmpty
-        ? () => launchPhoneCall(context, ref, data.phone)
-        : null;
-    final onDirections = appointment.address.isNotEmpty
-        ? () => AddressMapLauncher.showMapChoices(
-            context,
-            ref,
-            address: appointment.address,
-          )
-        : null;
+  Widget _buildClientSection(
+    BuildContext context,
+    WidgetRef ref,
+    _DetailsViewData data,
+    EventDetailsController notifier,
+  ) {
     final pushBackOptions = pushBackOptionsFor(appointment.startTime);
     final onPushBack =
         offersPushBack(
@@ -97,21 +81,148 @@ class DetailsViewBody extends ConsumerWidget {
         )
         ? () => _onPushBack(context, ref, notifier, pushBackOptions)
         : null;
+    return _ClientSection(
+      isPersonal: appointment.isPersonal,
+      clientName: data.clientName,
+      phone: data.phone,
+      displayAddress: data.displayAddress,
+      notes: data.notes,
+      onCall: data.phone.isNotEmpty
+          ? () => launchPhoneCall(context, ref, data.phone)
+          : null,
+      onDirections: appointment.address.isNotEmpty
+          ? () => AddressMapLauncher.showMapChoices(
+              context,
+              ref,
+              address: appointment.address,
+            )
+          : null,
+      onPushBack: onPushBack,
+      tourWrap: tourWrap,
+    );
+  }
+
+  VoidCallback? _bookAgainCallback(ClientRecord? client) =>
+      offersBookAgain(
+        appointment,
+        showActions: showActions,
+        hasHandler: onBookAgain != null,
+      )
+      ? () => onBookAgain!(
+          AppointmentPrefill.bookAgain(
+            appointment,
+            client: client ?? placeholderClient(appointment),
+          ),
+        )
+      : null;
+
+  List<Widget> _buildHeaderBlock(
+    BuildContext context,
+    _DetailsViewData data,
+    EventDetailsController notifier,
+  ) {
+    final compactHeader = context.isCompact;
+    return [
+      // Cancelled visits still show the edit affordance — `showActions` is
+      // the only thing that gates it.
+      if (showActions && !data.isDone)
+        Align(
+          alignment: compactHeader
+              ? Alignment.centerLeft
+              : Alignment.centerRight,
+          child: DetailsEditChip(onTap: notifier.enterEditing),
+        ),
+      DetailsHeader(
+        appointment: appointment,
+        status: data.displayStatus,
+        compact: compactHeader,
+      ),
+      // The time record outlives the job; a cancelled one has no work to
+      // time.
+      if (data.hasTimeRecord && !data.isCancelled)
+        DetailsTimeRecordRow(
+          startedAt: appointment.startedAt,
+          completedAt: appointment.completedAt,
+        ),
+      const SizedBox(height: AppSpacing.sp16),
+      const Divider(height: 1),
+      const SizedBox(height: AppSpacing.sp16),
+    ];
+  }
+
+  Widget _buildActionBar(
+    BuildContext context,
+    WidgetRef ref,
+    _DetailsViewData data,
+    EventDetailsController notifier, {
+    required bool isSaving,
+    required bool canRecordFieldWork,
+    required ClientRecord? client,
+  }) {
+    return DetailsActionBar(
+      isDone: data.isDone,
+      isCancelled: data.isCancelled,
+      isInProgress: data.isInProgress,
+      isSaving: isSaving,
+      showCancel: showActions,
+      onEdit: showActions ? notifier.enterEditing : null,
+      // Anyone who may close the job may start it; a personal block has no
+      // arrival to record.
+      onStart: (showActions || canRecordFieldWork) && !appointment.isPersonal
+          ? () => _onStart(context, ref, notifier)
+          : null,
+      onMarkDone: () => _onMarkDone(context, ref, notifier),
+      onCancel: () => _onCancel(context, ref, notifier),
+      onBookAgain: _bookAgainCallback(client),
+      tourWrap: tourWrap,
+    );
+  }
+
+  List<Widget> _buildSections(
+    _DetailsViewData data,
+    EventDetailsController notifier, {
+    required bool canRecordFieldWork,
+  }) {
+    return [
+      if (data.materials.isNotEmpty) ...[
+        const SizedBox(height: AppSpacing.sp16),
+        DetailsMaterialsRow(items: data.materials),
+      ],
+      DetailsEmployeesView(appointment: appointment),
+      DetailsPhotosView(
+        appointment: appointment,
+        isCancelled: data.isCancelled,
+        // Only the editor can act on a retry. The crew re-add through the
+        // field record's own picker below, and a Retry that merely cleared
+        // the failure record destroyed their one trace of the loss.
+        onRetry: showActions ? notifier.enterEditing : null,
+      ),
+      // Anyone who may READ the job may read its crew notes — the same set
+      // the rules admit. The compose box below stays crew-only.
+      DetailsFieldNotesView(appointment: appointment),
+      // Offered to a NON-ADMIN ASSIGNEE only — exactly the set the crew
+      // branches of `firestore.rules` admit, so the surface and the rule
+      // cannot disagree about who may write.
+      if (canRecordFieldWork)
+        _tour(
+          TourStepId.jobFieldRecord,
+          DetailsFieldRecordView(appointment: appointment),
+        ),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final provider = eventDetailsControllerProvider(
+      EventDetailsKey(appointment),
+    );
+    final client = ref.watch(provider.select((s) => s.client));
+    final isSaving = ref.watch(provider.select((s) => s.isSaving));
+    final notifier = ref.read(provider.notifier);
+
+    final data = _DetailsViewData.from(appointment, client);
     // Resolved once: it gates the field record below AND the Start button.
     final canRecordFieldWork = _canRecordFieldWork(ref, appointment);
-    final bookAgain =
-        offersBookAgain(
-          appointment,
-          showActions: showActions,
-          hasHandler: onBookAgain != null,
-        )
-        ? () => onBookAgain!(
-            AppointmentPrefill.bookAgain(
-              appointment,
-              client: client ?? placeholderClient(appointment),
-            ),
-          )
-        : null;
 
     // TIME OFF is its own body: it has no client, no address, no materials and
     // no photos, and no lifecycle to act on — so it renders who it is for,
@@ -128,83 +239,22 @@ class DetailsViewBody extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Cancelled visits still show the edit affordance — `showActions` is
-        // the only thing that gates it.
-        if (showActions && !data.isDone)
-          Align(
-            alignment: compactHeader
-                ? Alignment.centerLeft
-                : Alignment.centerRight,
-            child: DetailsEditChip(onTap: notifier.enterEditing),
-          ),
-        DetailsHeader(
-          appointment: appointment,
-          status: data.displayStatus,
-          compact: compactHeader,
-        ),
-        // The time record outlives the job; a cancelled one has no work to
-        // time.
-        if (data.hasTimeRecord && !data.isCancelled)
-          DetailsTimeRecordRow(
-            startedAt: appointment.startedAt,
-            completedAt: appointment.completedAt,
-          ),
-        const SizedBox(height: AppSpacing.sp16),
-        const Divider(height: 1),
-        const SizedBox(height: AppSpacing.sp16),
-        _ClientSection(
-          isPersonal: appointment.isPersonal,
-          clientName: data.clientName,
-          phone: data.phone,
-          displayAddress: displayAddress,
-          notes: data.notes,
-          onCall: onCall,
-          onDirections: onDirections,
-          onPushBack: onPushBack,
-          tourWrap: tourWrap,
-        ),
+        ..._buildHeaderBlock(context, data, notifier),
+        _buildClientSection(context, ref, data, notifier),
         ClientContactsCards(contacts: data.extraContacts, collapsible: true),
-        if (data.materials.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.sp16),
-          DetailsMaterialsRow(items: data.materials),
-        ],
-        DetailsEmployeesView(appointment: appointment),
-        DetailsPhotosView(
-          appointment: appointment,
-          isCancelled: data.isCancelled,
-          // Only the editor can act on a retry. The crew re-add through the
-          // field record's own picker below, and a Retry that merely cleared
-          // the failure record destroyed their one trace of the loss.
-          onRetry: showActions ? notifier.enterEditing : null,
+        ..._buildSections(
+          data,
+          notifier,
+          canRecordFieldWork: canRecordFieldWork,
         ),
-        // Anyone who may READ the job may read its crew notes — the same set
-        // the rules admit. The compose box below stays crew-only.
-        DetailsFieldNotesView(appointment: appointment),
-        // Offered to a NON-ADMIN ASSIGNEE only — exactly the set the crew
-        // branches of `firestore.rules` admit, so the surface and the rule
-        // cannot disagree about who may write.
-        if (canRecordFieldWork)
-          _tour(
-            TourStepId.jobFieldRecord,
-            DetailsFieldRecordView(appointment: appointment),
-          ),
-        DetailsActionBar(
-          isDone: data.isDone,
-          isCancelled: data.isCancelled,
-          isInProgress: data.isInProgress,
+        _buildActionBar(
+          context,
+          ref,
+          data,
+          notifier,
           isSaving: isSaving,
-          showCancel: showActions,
-          onEdit: showActions ? notifier.enterEditing : null,
-          // Anyone who may close the job may start it; a personal block has no
-          // arrival to record.
-          onStart:
-              (showActions || canRecordFieldWork) && !appointment.isPersonal
-              ? () => _onStart(context, ref, notifier)
-              : null,
-          onMarkDone: () => _onMarkDone(context, ref, notifier),
-          onCancel: () => _onCancel(context, ref, notifier),
-          onBookAgain: bookAgain,
-          tourWrap: tourWrap,
+          canRecordFieldWork: canRecordFieldWork,
+          client: client,
         ),
       ],
     );
@@ -220,8 +270,7 @@ class DetailsViewBody extends ConsumerWidget {
     required bool showActions,
     required bool isClosed,
     required bool hasOptions,
-  }) =>
-      showActions && !isClosed && !appointment.isAllDay && hasOptions;
+  }) => showActions && !isClosed && !appointment.isAllDay && hasOptions;
 
   /// Whether Book again is offered.
   ///
@@ -255,11 +304,7 @@ class DetailsViewBody extends ConsumerWidget {
     EventDetailsController notifier,
   ) async {
     final previousStatus = AppointmentStatus.storedRaw(appointment.status);
-    // Everything the Undo needs, resolved BEFORE the sheet closes. The action
-    // runs after `onClose()` has dropped the last listener on the autoDispose
-    // controller, so touching `notifier`, `ref` or `context` in there is a
-    // use-after-dispose — and it runs from a timer callback with no caller
-    // left to catch the StateError.
+    // Resolved BEFORE the sheet closes: the Undo runs from a timer after the controller is disposed (ADR-0033).
     final l10n = context.l10n;
     final id = appointment.id;
     final notices = ref.read(noticeServiceProvider);
@@ -368,9 +413,9 @@ class DetailsViewBody extends ConsumerWidget {
     if (outcome == null || !context.mounted) return;
     switch (outcome) {
       case EventDetailsSaved():
-        ref.read(analyticsServiceProvider).logAppointmentDelayed(
-          minutes: minutes,
-        );
+        ref
+            .read(analyticsServiceProvider)
+            .logAppointmentDelayed(minutes: minutes);
         notices.success(l10n.calendar_pushedBack(minutes));
         onClose();
       case EventDetailsFailed(:final error):
@@ -486,50 +531,63 @@ class _DayOffBody extends StatelessWidget {
                 : Alignment.centerRight,
             child: DetailsEditChip(onTap: onEdit),
           ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sp4),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(reason ?? subject, style: theme.textTheme.headlineLarge),
-              if (reason != null) ...[
-                const SizedBox(height: AppSpacing.sp4),
-                Text(
-                  subject,
-                  style: theme.textTheme.bodyLarge?.copyWith(
-                    color: theme.palette.textTertiary,
-                  ),
-                ),
-              ],
-              const SizedBox(height: AppSpacing.sp8),
-              Text(
-                DateUtilsHelper.formatWhenLine(
-                  appointment.startTime,
-                  appointment.endTime,
-                  allDayLabel: l10n.calendar_dayOff,
-                  lastDay: appointment.endTime,
-                ),
-                style: theme.monoType.data,
-              ),
-            ],
-          ),
-        ),
+        _buildHeading(theme, l10n, subject: subject, reason: reason),
         const SizedBox(height: AppSpacing.sp16),
         const Divider(height: 1),
         const SizedBox(height: AppSpacing.sp16),
-        KeyValuePanel(
-          rows: [
-            KeyValueRow(
-              label: l10n.calendar_dayOff.toUpperCase(),
-              value: l10n.calendar_dayOffLength(days),
-            ),
-            if (notes.trim().isNotEmpty)
-              KeyValueRow(
-                label: l10n.calendar_notes.toUpperCase(),
-                value: notes.trim(),
+        _buildPanel(l10n, days),
+      ],
+    );
+  }
+
+  Widget _buildHeading(
+    ThemeData theme,
+    AppLocalizations l10n, {
+    required String subject,
+    required String? reason,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sp4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(reason ?? subject, style: theme.textTheme.headlineLarge),
+          if (reason != null) ...[
+            const SizedBox(height: AppSpacing.sp4),
+            Text(
+              subject,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                color: theme.palette.textTertiary,
               ),
+            ),
           ],
+          const SizedBox(height: AppSpacing.sp8),
+          Text(
+            DateUtilsHelper.formatWhenLine(
+              appointment.startTime,
+              appointment.endTime,
+              allDayLabel: l10n.calendar_dayOff,
+              lastDay: appointment.endTime,
+            ),
+            style: theme.monoType.data,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPanel(AppLocalizations l10n, int days) {
+    return KeyValuePanel(
+      rows: [
+        KeyValueRow(
+          label: l10n.calendar_dayOff.toUpperCase(),
+          value: l10n.calendar_dayOffLength(days),
         ),
+        if (notes.trim().isNotEmpty)
+          KeyValueRow(
+            label: l10n.calendar_notes.toUpperCase(),
+            value: notes.trim(),
+          ),
       ],
     );
   }
@@ -638,64 +696,72 @@ class _ClientSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (onCall != null || onDirections != null || onPushBack != null) ...[
-          QuickActionsRow(
-            buttons: [
-              if (onCall != null)
-                QuickActionButton(
-                  icon: Icons.phone_outlined,
-                  label: context.l10n.clients_call,
-                  onTap: onCall!,
-                ),
-              if (onDirections != null)
-                QuickActionButton(
-                  icon: Icons.directions_outlined,
-                  label: context.l10n.clients_directions,
-                  onTap: onDirections!,
-                ),
-              if (onPushBack != null)
-                _tour(
-                  TourStepId.jobPushBack,
-                  QuickActionButton(
-                    icon: Icons.update_rounded,
-                    label: context.l10n.calendar_pushBack,
-                    onTap: onPushBack!,
-                  ),
-                ),
-            ],
-          ),
+          _buildQuickActions(context),
           const SizedBox(height: AppSpacing.sp24),
         ],
         // The mono key column labels the content, so this panel needs no
         // SectionLabel above it.
-        KeyValuePanel(
-          rows: [
-            KeyValueRow(
-              label: context.l10n.calendar_client.toUpperCase(),
-              value: isPersonal ? context.l10n.calendar_personal : clientName,
+        _buildPanel(context),
+      ],
+    );
+  }
+
+  Widget _buildQuickActions(BuildContext context) {
+    return QuickActionsRow(
+      buttons: [
+        if (onCall != null)
+          QuickActionButton(
+            icon: Icons.phone_outlined,
+            label: context.l10n.clients_call,
+            onTap: onCall!,
+          ),
+        if (onDirections != null)
+          QuickActionButton(
+            icon: Icons.directions_outlined,
+            label: context.l10n.clients_directions,
+            onTap: onDirections!,
+          ),
+        if (onPushBack != null)
+          _tour(
+            TourStepId.jobPushBack,
+            QuickActionButton(
+              icon: Icons.update_rounded,
+              label: context.l10n.calendar_pushBack,
+              onTap: onPushBack!,
             ),
-            if (phone.isNotEmpty)
-              KeyValueRow(
-                label: context.l10n.clients_phone.toUpperCase(),
-                value: phone,
-                emphasize: true,
-                onTap: onCall,
-              ),
-            if (displayAddress.isNotEmpty)
-              KeyValueRow(
-                label: context.l10n.common_address.toUpperCase(),
-                value: displayAddress,
-                emphasize: true,
-                onTap: onDirections,
-                semanticLabel:
-                    '$displayAddress, ${context.l10n.maps_openAddressWith}',
-              ),
-            if (notes.isNotEmpty)
-              KeyValueRow(
-                label: context.l10n.calendar_notes.toUpperCase(),
-                value: notes,
-              ),
-          ],
+          ),
+      ],
+    );
+  }
+
+  Widget _buildPanel(BuildContext context) {
+    return KeyValuePanel(
+      rows: [
+        KeyValueRow(
+          label: context.l10n.calendar_client.toUpperCase(),
+          value: isPersonal ? context.l10n.calendar_personal : clientName,
         ),
+        if (phone.isNotEmpty)
+          KeyValueRow(
+            label: context.l10n.clients_phone.toUpperCase(),
+            value: phone,
+            emphasize: true,
+            onTap: onCall,
+          ),
+        if (displayAddress.isNotEmpty)
+          KeyValueRow(
+            label: context.l10n.common_address.toUpperCase(),
+            value: displayAddress,
+            emphasize: true,
+            onTap: onDirections,
+            semanticLabel:
+                '$displayAddress, ${context.l10n.maps_openAddressWith}',
+          ),
+        if (notes.isNotEmpty)
+          KeyValueRow(
+            label: context.l10n.calendar_notes.toUpperCase(),
+            value: notes,
+          ),
       ],
     );
   }

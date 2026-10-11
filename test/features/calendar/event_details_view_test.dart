@@ -9,6 +9,7 @@ import 'package:scheduling/features/calendar/application/appointments_providers.
 import 'package:scheduling/features/calendar/application/photo_upload_notifier.dart';
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
+import 'package:scheduling/features/calendar/widgets/views/details_action_bar.dart';
 import 'package:scheduling/features/calendar/widgets/views/event_details_view.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
@@ -16,7 +17,11 @@ import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/employees_repository.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
+import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
+import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:showcaseview/showcaseview.dart';
 
 import '../../support/tour_test_support.dart';
 
@@ -98,8 +103,10 @@ void main() {
     WidgetTester tester, {
     void Function(Object? result)? onClose,
     AppointmentRecord? appointment,
+    Size size = const Size(800, 2600),
+    bool settle = true,
   }) async {
-    tester.view.physicalSize = const Size(800, 2600);
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
@@ -130,7 +137,7 @@ void main() {
         ),
       ),
     );
-    await tester.pumpAndSettle();
+    if (settle) await tester.pumpAndSettle();
   }
 
   testWidgets('view mode shows details with no editable text fields', (
@@ -297,5 +304,44 @@ void main() {
     expect(find.text('Start time'), findsOneWidget);
     expect(find.text('End time'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the tour includes the below-fold action bar steps on a phone', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({'tour_seen_steps': <String>[]});
+    // Long notes push the action bar past the viewport AND the list's default
+    // 250 px cache extent.
+    await pumpDetails(
+      tester,
+      appointment: _appointment.copyWith(
+        notes: List.filled(30, 'Bring the long ladder.').join('\n'),
+      ),
+      size: const Size(375, 667),
+      settle: false,
+    );
+    // Fixed pumps: a running showcase animates forever.
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
+
+    final scope = const FormTour(TourForm.jobDetails).storageKey;
+    final actionBar = find.byType(DetailsActionBar, skipOffstage: false);
+    expect(actionBar, findsOneWidget);
+    expect(tester.getRect(actionBar).top, greaterThan(667 + 250));
+    expect(ShowcaseView.getNamed(scope).isShowcaseRunning, isTrue);
+
+    ShowcaseView.getNamed(scope).dismiss();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final prefs = await SharedPreferences.getInstance();
+    expect(
+      prefs.getStringList('tour_seen_steps'),
+      containsAll([
+        TourStepId.jobPushBack.name,
+        TourStepId.jobMarkDone.name,
+        TourStepId.jobBookAgain.name,
+      ]),
+    );
   });
 }

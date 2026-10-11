@@ -71,13 +71,7 @@ class _AppLockState extends ConsumerState<AppLock> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final controller = ref.read(appLockEnabledProvider.notifier);
     if (state == AppLifecycleState.resumed) {
-      // A read that threw at launch leaves the flag unresolved, and a
-      // resolved-looking `false` used to disable the lock for the WHOLE
-      // session — one transient keychain error (the pre-first-unlock window
-      // -25308 lives in) and the app opened straight into a signed-in session
-      // with no prompt and no sign anything was wrong. Retry BEFORE deciding,
-      // so an unresolved flag can still settle on `true`; fail-open applies
-      // only to a resolved `false`.
+      // Retry BEFORE deciding: an unresolved flag can still settle on `true` (ADR-0016).
       if (!controller.isResolved) {
         unawaited(controller.retryIfUnresolved().then((_) => _afterRetry()));
         return;
@@ -143,11 +137,7 @@ class _AppLockState extends ConsumerState<AppLock> with WidgetsBindingObserver {
       final available = await service.isAvailable();
       if (!mounted) return;
       if (!available) {
-        // Release the gate for THIS SESSION only, and say so. Never persist it:
-        // `isAvailable()` is `try { isDeviceSupported() } catch { false }`, so
-        // it returns false for the pre-first-unlock `local_auth` channel window
-        // this whole subsystem exists to handle — and writing the flag there
-        // turns the user's app lock off forever, silently, on one hiccup.
+        // Session-only release, never persisted: `isAvailable()` is false in the pre-first-unlock window.
         logger.warn(
           'APPLOCK unavailable after lock engaged; opening for this session',
         );

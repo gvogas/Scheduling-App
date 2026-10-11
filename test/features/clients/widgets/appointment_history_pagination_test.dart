@@ -34,7 +34,6 @@ class _FakeHistoryRepo implements AppointmentsRepository {
   Future<List<AppointmentRecord>> fetchHistoryPage({
     required int limit,
     AppointmentRecord? after,
-    String? employeeId,
   }) async {
     calls += 1;
     cursors.add(after);

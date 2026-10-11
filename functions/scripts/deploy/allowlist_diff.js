@@ -109,25 +109,44 @@ function removedKeys(base, head) {
  *     missingOwners: !Array<{file: string, owner: string}>}} Findings.
  */
 function compareTrees(base, head) {
-  const files = new Set([...base.list(), ...head.list()]);
+  const files = [...new Set([...base.list(), ...head.list()])].sort()
+      .filter((file) => file.endsWith(".js") &&
+        !EXCLUDED_DIR.test(file) && !EXCLUDED_FILE.test(file));
+  const headLists = new Map();
   const removed = [];
-  const missingOwners = [];
-  for (const file of [...files].sort()) {
-    if (!file.endsWith(".js")) continue;
-    if (EXCLUDED_DIR.test(file) || EXCLUDED_FILE.test(file)) continue;
-    const baseSource = base.read(file);
-    if (baseSource === null) continue;
+  const vanished = [];
+  for (const file of files) {
     const headSource = head.read(file);
-    let result;
+    const baseSource = base.read(file);
+    let baseLists;
     try {
-      result = removedKeys(
-          extractAllowlists(baseSource),
+      headLists.set(file,
           extractAllowlists(headSource === null ? "" : headSource));
+      if (baseSource === null) continue;
+      baseLists = extractAllowlists(baseSource);
     } catch (err) {
       throw new Error(`${file}: ${err.message}`);
     }
+    const result = removedKeys(baseLists, headLists.get(file));
     result.removed.forEach((r) => removed.push({file, ...r}));
-    result.missingOwners.forEach((owner) => missingOwners.push({file, owner}));
+    result.missingOwners.forEach((owner) =>
+      vanished.push({file, owner, keys: baseLists.get(owner)}));
+  }
+  // An owner that moved files (a module split) is matched by name, but only
+  // when exactly one HEAD file defines it.
+  const missingOwners = [];
+  for (const {file, owner, keys} of vanished) {
+    const homes = [...headLists].filter(([, lists]) => lists.has(owner));
+    if (homes.length !== 1) {
+      missingOwners.push({file, owner});
+      continue;
+    }
+    const [newFile, lists] = homes[0];
+    for (const key of keys) {
+      if (!lists.get(owner).has(key)) {
+        removed.push({file: newFile, owner, key});
+      }
+    }
   }
   return {removed, missingOwners};
 }

@@ -71,11 +71,7 @@ abstract class EmployeeRecord with _$EmployeeRecord {
       role: (data['role'] ?? 'employee').toString(),
       status: (data['status'] ?? '').toString(),
       uid: (data['uid'] ?? '').toString(),
-      // Lenient like every other field here, and for a sharper reason: this
-      // factory runs inside three `users` snapshot streams AND on the sign-in
-      // path, so one console-edited doc holding a numeric jobTitle or a string
-      // "480" would throw app-wide — crew picker, day route, live-map roster
-      // and calendar dots at once — and lock that person out of signing in.
+      // Lenient: one malformed doc would otherwise throw in three `users` streams and at sign-in.
       jobTitle: JobTitle.fromRaw(data['jobTitle']?.toString()),
       workingDays: normalizeWorkingDays(storedDays),
       workStartMinutes:
@@ -111,11 +107,7 @@ abstract class EmployeeRecord with _$EmployeeRecord {
     'onCall': onCall,
     'isTestAccount': isTestAccount,
     'monthEndReviewPush': monthEndReviewPush,
-    // NOTE: `travelAlertsEnabled` is deliberately NOT emitted. It is the
-    // person's own notification preference, written only by `updateSelfDetails`
-    // — an admin save must leave it exactly as it was, and emitting it here
-    // would let a future whole-record write flip somebody else's push setting.
-    // `locationSharingEnabled` follows the same self-service-only contract.
+    // NOTE: `travelAlertsEnabled` and `locationSharingEnabled` are self-service-only, never emitted (ADR-0079).
   };
 
   /// The name every in-app surface renders — the split halves first, then the

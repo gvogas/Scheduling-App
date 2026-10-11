@@ -1,0 +1,68 @@
+import 'package:flutter/material.dart';
+import 'package:scheduling/core/layout/breakpoints.dart';
+import 'package:scheduling/core/theme/design_tokens.dart';
+
+/// Tooltip action pill; text scale is capped (1× on a narrow phone) because
+/// the package lays the actions out in a non-flexing Row.
+class TourActionButton extends StatelessWidget {
+  const TourActionButton({
+    required this.label,
+    required this.style,
+    required this.onTap,
+    this.fill,
+    this.compactIcon,
+    super.key,
+  });
+
+  final String label;
+  final TextStyle? style;
+  final VoidCallback onTap;
+  final Color? fill;
+
+  /// Shown instead of [label] on a narrow phone; [label] stays the semantic
+  /// name.
+  final IconData? compactIcon;
+
+  @override
+  Widget build(BuildContext context) {
+    // Width alone: the capped scale means large text can't widen the row.
+    final compact = context.isNarrowWidth;
+    return MediaQuery.withClampedTextScaling(
+      maxScaleFactor: compact ? 1 : kTourActionMaxTextScale,
+      child: Material(
+        color: fill ?? Colors.transparent,
+        borderRadius: BorderRadius.circular(AppRadius.rFull),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.rFull),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              minWidth: kMinInteractiveDimension,
+              minHeight: kMinInteractiveDimension,
+            ),
+            child: Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: compact ? AppSpacing.sp8 : AppSpacing.sp16,
+                vertical: AppSpacing.sp8,
+              ),
+              child: Center(
+                widthFactor: 1,
+                heightFactor: 1,
+                child: compact && compactIcon != null
+                    ? Semantics(
+                        label: label,
+                        button: true,
+                        excludeSemantics: true,
+                        child: Icon(compactIcon, color: style?.color),
+                      )
+                    : Text(label, style: style),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+const kTourActionMaxTextScale = 1.2;

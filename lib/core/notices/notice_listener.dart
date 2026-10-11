@@ -191,6 +191,84 @@ class _TopNoticeState extends State<_TopNotice>
     });
   }
 
+  Widget _buildCard(BuildContext context, ThemeData theme) {
+    final scheme = theme.colorScheme;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppRadius.r16),
+        boxShadow: theme.cardStyle.noticeShadow,
+      ),
+      child: Material(
+        color: scheme.inverseSurface,
+        borderRadius: BorderRadius.circular(AppRadius.r16),
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(
+            15,
+            13,
+            widget.showClose ? AppSpacing.sp4 : 15,
+            13,
+          ),
+          child: _buildRow(context, scheme),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRow(BuildContext context, ColorScheme scheme) {
+    return Row(
+      children: [
+        Container(
+          key: const ValueKey('notice-dot'),
+          width: 9,
+          height: 9,
+          decoration: BoxDecoration(color: widget.dot, shape: BoxShape.circle),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            widget.message,
+            style: TextStyle(
+              fontFamily: kFontSans,
+              color: scheme.onInverseSurface,
+              fontSize: 13.5,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        if (widget.action != null) ...[
+          const SizedBox(width: AppSpacing.sp8),
+          TextButton(
+            onPressed: () {
+              final action = widget.action!;
+              _dismiss();
+              unawaited(Future<void>.sync(action.onPressed));
+            },
+            style: TextButton.styleFrom(
+              foregroundColor: scheme.onInverseSurface,
+              minimumSize: const Size(48, 48),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sp8),
+            ),
+            child: Text(
+              widget.action!.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+        if (widget.showClose) ...[
+          const SizedBox(width: AppSpacing.sp4),
+          // A real IconButton for the 48px tap target plus
+          // tooltip/semantics, not a bare gesture icon.
+          IconButton(
+            onPressed: _dismiss,
+            tooltip: context.l10n.common_close,
+            icon: Icon(Icons.close, color: scheme.onInverseSurface, size: 20),
+          ),
+        ],
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // Pad left/right too so a landscape notch/camera cutout doesn't cover the text.
@@ -202,7 +280,6 @@ class _TopNoticeState extends State<_TopNotice>
         ? Alignment.centerLeft
         : Alignment.center;
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
     return Positioned(
       // padding.top already supplies the real status bar — never a literal 56.
       top: padding.top + AppSpacing.sp16,
@@ -225,89 +302,7 @@ class _TopNoticeState extends State<_TopNotice>
                   key: const ValueKey('app-notice-banner'),
                   direction: DismissDirection.up,
                   onDismissed: (_) => widget.onDismiss(),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(AppRadius.r16),
-                      boxShadow: theme.cardStyle.noticeShadow,
-                    ),
-                    child: Material(
-                      color: scheme.inverseSurface,
-                      borderRadius: BorderRadius.circular(AppRadius.r16),
-                      child: Padding(
-                        padding: EdgeInsets.fromLTRB(
-                          15,
-                          13,
-                          widget.showClose ? AppSpacing.sp4 : 15,
-                          13,
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              key: const ValueKey('notice-dot'),
-                              width: 9,
-                              height: 9,
-                              decoration: BoxDecoration(
-                                color: widget.dot,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                widget.message,
-                                style: TextStyle(
-                                  fontFamily: kFontSans,
-                                  color: scheme.onInverseSurface,
-                                  fontSize: 13.5,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                            if (widget.action != null) ...[
-                              const SizedBox(width: AppSpacing.sp8),
-                              TextButton(
-                                onPressed: () {
-                                  final action = widget.action!;
-                                  _dismiss();
-                                  unawaited(
-                                    Future<void>.sync(
-                                      action.onPressed,
-                                    ),
-                                  );
-                                },
-                                style: TextButton.styleFrom(
-                                  foregroundColor: scheme.onInverseSurface,
-                                  minimumSize: const Size(48, 48),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.sp8,
-                                  ),
-                                ),
-                                child: Text(
-                                  widget.action!.label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                            if (widget.showClose) ...[
-                              const SizedBox(width: AppSpacing.sp4),
-                              // A real IconButton for the 48px tap target plus
-                              // tooltip/semantics, not a bare gesture icon.
-                              IconButton(
-                                onPressed: _dismiss,
-                                tooltip: context.l10n.common_close,
-                                icon: Icon(
-                                  Icons.close,
-                                  color: scheme.onInverseSurface,
-                                  size: 20,
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
+                  child: _buildCard(context, theme),
                 ),
               ),
             ),

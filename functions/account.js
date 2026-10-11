@@ -4,6 +4,7 @@ const {getAuth} = require("firebase-admin/auth");
 const {getFirestore} = require("firebase-admin/firestore");
 
 const {
+  APP_CHECK,
   assertPayloadShape,
   enforceDurableRateLimit,
   assertFreshReauth,
@@ -29,7 +30,7 @@ const AUTH_RATE_WINDOW_MS = 15 * 60 * 1000;
 // syncUsersByUid) and the Firebase Auth user. Shared business data
 // (appointments, clients, images) is left untouched.
 const deleteAccount = onCall(
-    {enforceAppCheck: true},
+    APP_CHECK,
     async (req) => {
       if (!req.auth || !req.auth.uid) {
         throw new HttpsError("unauthenticated", "auth-required");

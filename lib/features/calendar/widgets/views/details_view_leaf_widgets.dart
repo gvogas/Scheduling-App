@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
@@ -5,6 +7,7 @@ import 'package:scheduling/core/utils/date_utils_helper.dart';
 import 'package:scheduling/features/calendar/application/event_details_controller.dart';
 import 'package:scheduling/features/calendar/application/photo_upload_notifier.dart';
 import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
+import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/domain/models/repeat_interval.dart';
 import 'package:scheduling/features/calendar/widgets/fields/repeat_interval_picker.dart';
@@ -98,40 +101,46 @@ class DetailsHeader extends StatelessWidget {
             ),
           const SizedBox(height: AppSpacing.sp8),
           // One mono line replaces the old calendar/clock icon rows.
-          Text(
-            DateUtilsHelper.formatWhenLine(
-              appointment.startTime,
-              appointment.endTime,
-              allDayLabel: appointment.isAllDay
-                  ? context.l10n.calendar_allDay
-                  : null,
-              // The sheet is not day-scoped, so it names the whole run rather
-              // than a "Day N of M" counter — otherwise a 5-day job opened from
-              // its day 3 card still read as day 1 with no hint it ran on.
-              lastDay: lastWorkDayOf(appointment),
-            ),
-            style: theme.monoType.data,
-          ),
+          _buildWhenLine(context, theme),
           if (appointment.repeat != RepeatInterval.none) ...[
             const SizedBox(height: AppSpacing.sp4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.repeat, size: 13, color: theme.palette.textTertiary),
-                const SizedBox(width: AppSpacing.sp4),
-                Flexible(
-                  child: Text(
-                    repeatIntervalLabel(context.l10n, appointment.repeat),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.palette.textTertiary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            _buildRepeatRow(context, theme),
           ],
         ],
       ),
+    );
+  }
+
+  Widget _buildWhenLine(BuildContext context, ThemeData theme) {
+    return Text(
+      DateUtilsHelper.formatWhenLine(
+        appointment.startTime,
+        appointment.endTime,
+        allDayLabel: appointment.isAllDay ? context.l10n.calendar_allDay : null,
+        // The sheet is not day-scoped, so it names the whole run rather
+        // than a "Day N of M" counter — otherwise a 5-day job opened from
+        // its day 3 card still read as day 1 with no hint it ran on.
+        lastDay: lastWorkDayOf(appointment),
+      ),
+      style: theme.monoType.data,
+    );
+  }
+
+  Widget _buildRepeatRow(BuildContext context, ThemeData theme) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.repeat, size: 13, color: theme.palette.textTertiary),
+        const SizedBox(width: AppSpacing.sp4),
+        Flexible(
+          child: Text(
+            repeatIntervalLabel(context.l10n, appointment.repeat),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.palette.textTertiary,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -291,16 +300,7 @@ class DetailsPhotosView extends ConsumerWidget {
     final loading = ref.watch(provider.select((s) => s.isLoadingPictures));
     final notifier = ref.watch(photoUploadNotifierProvider);
     final appointmentId = appointment.id;
-    // The GATE itself must watch the queue, not just read it once: a
-    // background upload can be started from view mode
-    // (DetailsFieldRecordView.uploadInBackground) with no remount of this
-    // widget, and none of the other watches above (existingImages, newImages,
-    // the notifier singleton) fire when only the pending count changes.
-    // Without this outer listener the FIRST photo on a job with none left the
-    // whole section a SizedBox.shrink for the entire upload, so the crew saw
-    // no sign their photo existed. This also now supplies the value the old
-    // inner listener read, so there is only one — the per-drain rebuild stays
-    // scoped to this row rather than the whole detail body.
+    // The gate must WATCH the queue: a view-mode background upload changes only the pending count (ADR-0010).
     return ListenableBuilder(
       listenable: Listenable.merge([notifier.pending, notifier.failures]),
       builder: (context, _) {
@@ -318,36 +318,58 @@ class DetailsPhotosView extends ConsumerWidget {
             pendingCount > 0 ||
             loading;
         if (!hasPhotos) return const SizedBox.shrink();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const SizedBox(height: AppSpacing.sp16),
-            DetailsSectionRow(
-              label: context.l10n.calendar_photosLabel,
-              value: '',
-              customValue: PhotoPickerSection(
-                existingImages: existingImages,
-                newImages: newImages,
-                isEditing: false,
-                onPickImages: () {},
-                onRemoveExisting: (_) {},
-                onRemoveNew: (_) {},
-                failedCount: failedCount,
-                pendingCount: pendingCount,
-                tooLargeFileNames: failure?.tooLargeFileNames ?? const [],
-                onRetry: failedCount > 0 && !isCancelled && onRetry != null
-                    ? () {
-                        if (appointmentId != null) {
-                          notifier.clearFailure(appointmentId);
-                        }
-                        onRetry!();
-                      }
-                    : null,
-              ),
-            ),
-          ],
+        return _buildSection(
+          context,
+          notifier: notifier,
+          appointmentId: appointmentId,
+          existingImages: existingImages,
+          newImages: newImages,
+          pendingCount: pendingCount,
+          failedCount: failedCount,
+          failure: failure,
         );
       },
+    );
+  }
+
+  Widget _buildSection(
+    BuildContext context, {
+    required PhotoUploadNotifier notifier,
+    required String? appointmentId,
+    required List<AppointmentImage> existingImages,
+    required List<File> newImages,
+    required int pendingCount,
+    required int failedCount,
+    required PhotoUploadFailure? failure,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: AppSpacing.sp16),
+        DetailsSectionRow(
+          label: context.l10n.calendar_photosLabel,
+          value: '',
+          customValue: PhotoPickerSection(
+            existingImages: existingImages,
+            newImages: newImages,
+            isEditing: false,
+            onPickImages: () {},
+            onRemoveExisting: (_) {},
+            onRemoveNew: (_) {},
+            failedCount: failedCount,
+            pendingCount: pendingCount,
+            tooLargeFileNames: failure?.tooLargeFileNames ?? const [],
+            onRetry: failedCount > 0 && !isCancelled && onRetry != null
+                ? () {
+                    if (appointmentId != null) {
+                      notifier.clearFailure(appointmentId);
+                    }
+                    onRetry!();
+                  }
+                : null,
+          ),
+        ),
+      ],
     );
   }
 }

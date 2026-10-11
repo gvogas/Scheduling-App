@@ -54,7 +54,6 @@ const EXPECTED_EXPORTS = [
   "waveGetConnection",
   "waveImportCustomers",
   "waveRetryFailedJobs",
-  "waveSetImportSchedule",
   "waveUpsertCustomer",
 ];
 

@@ -337,9 +337,7 @@ function assertFreshReauth(auth, route, maxAgeSeconds) {
 // The App Check option block every callable spreads.
 const APP_CHECK = {enforceAppCheck: true};
 
-// Keep guards inline per callable — a shared helper here would close over the
-// real assertAdmin and break the guard-order mocks in
-// __tests__/places_admin_gate.test.js.
+// Callables open with assertAdminCall / assertActiveCall (ADR-0040).
 
 module.exports = {
   APP_CHECK,

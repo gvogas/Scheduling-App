@@ -92,11 +92,7 @@ class ClientNamePolicy {
     final base = stripPhone(baseName, phone: phone, mobile: mobile);
     final number = phone.trim().isNotEmpty ? phone.trim() : mobile.trim();
 
-    // `base.isNotEmpty` guards the business branch because composing a name
-    // AWAY is never right: `name` IS the Wave customer identity and Wave
-    // refuses a blank one, so the doc dead-letters on every push forever.
-    // A business named by nothing but its own number strips to '' here and has
-    // no first/last to fall back on, so it takes the person's number instead.
+    // Never compose a business name AWAY: `name` is the Wave identity, and a blank one dead-letters forever.
     if (base.isNotEmpty &&
         (isBusiness(type: type, businessName: businessName) ||
             looksLikeBusinessName(base))) {

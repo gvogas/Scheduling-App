@@ -176,11 +176,7 @@ class AppointmentImageUploadService {
     // Previously uploaded images are retried append-only.
     final uploaded = <AppointmentImage>[...entry.uploaded];
 
-    // Chunked at the same bound the read path uses: a 10-photo batch on field
-    // LTE was ten sequential PUTs, and it drains in the background where iOS
-    // suspends a slow pass and re-queues it. Collected per chunk so `uploaded`
-    // keeps list order, and the per-file try/catch stays INSIDE the mapped
-    // function so the survivors/failures classification is unchanged.
+    // Chunked like the read path; the per-file try/catch stays INSIDE the mapped function.
     for (var i = 0; i < files.length; i += _maxConcurrentUploads) {
       final chunk = files.skip(i).take(_maxConcurrentUploads);
       final results = await Future.wait([

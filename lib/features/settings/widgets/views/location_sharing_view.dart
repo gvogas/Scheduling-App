@@ -107,32 +107,13 @@ class _LocationSharingViewState extends ConsumerState<LocationSharingView> {
       children: [
         if (paused)
           FeaturePausedNotice(message: context.l10n.common_featurePaused),
-        _Panel(
-          child: Column(
-            children: [
-              _StatusRow(
-                icon: Icons.location_on_rounded,
-                label: context.l10n.settings_locationSharing,
-                value: enabled
-                    ? context.l10n.settings_notificationsOn
-                    : context.l10n.settings_notificationsOff,
-                trailing: Switch.adaptive(
-                  key: const Key('locationSharingPrivacySwitch'),
-                  value: enabled,
-                  onChanged: isBusy || paused
-                      ? null
-                      : (value) => _setLocationSharing(value: value),
-                  activeTrackColor: scheme.primary,
-                ),
-              ),
-              const Divider(height: 1, indent: 52),
-              _StatusRow(
-                icon: Icons.update_rounded,
-                label: context.l10n.settings_locationLastUploaded,
-                value: lastUploaded,
-              ),
-            ],
-          ),
+        _buildStatusPanel(
+          context,
+          scheme,
+          enabled,
+          isBusy,
+          paused,
+          lastUploaded,
         ),
         const SizedBox(height: AppSpacing.sp12),
         Text(
@@ -162,6 +143,43 @@ class _LocationSharingViewState extends ConsumerState<LocationSharingView> {
           label: Text(context.l10n.settings_clearMyLocation),
         ),
       ],
+    );
+  }
+
+  Widget _buildStatusPanel(
+    BuildContext context,
+    ColorScheme scheme,
+    bool enabled,
+    bool isBusy,
+    bool paused,
+    String lastUploaded,
+  ) {
+    return _Panel(
+      child: Column(
+        children: [
+          _StatusRow(
+            icon: Icons.location_on_rounded,
+            label: context.l10n.settings_locationSharing,
+            value: enabled
+                ? context.l10n.settings_notificationsOn
+                : context.l10n.settings_notificationsOff,
+            trailing: Switch.adaptive(
+              key: const Key('locationSharingPrivacySwitch'),
+              value: enabled,
+              onChanged: isBusy || paused
+                  ? null
+                  : (value) => _setLocationSharing(value: value),
+              activeTrackColor: scheme.primary,
+            ),
+          ),
+          const Divider(height: 1, indent: 52),
+          _StatusRow(
+            icon: Icons.update_rounded,
+            label: context.l10n.settings_locationLastUploaded,
+            value: lastUploaded,
+          ),
+        ],
+      ),
     );
   }
 

@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
+import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/core/utils/debouncer.dart';
 import 'package:scheduling/features/maps/application/maps_providers.dart';
@@ -391,4 +392,114 @@ void main() {
     await type(tester, '2 Main St');
     expect(logger.lines, ['ADDR-AUTO autocomplete failed']);
   });
+
+  group('suggestion rows', () {
+    const split = AddressSuggestion(
+      placeId: 'p1',
+      description: '1 Main St, Montreal, QC, Canada',
+      mainText: '1 Main St',
+      secondaryText: 'Montreal, QC, Canada',
+    );
+
+    Future<void> showSuggestions(
+      WidgetTester tester,
+      List<AddressSuggestion> suggestions, {
+      double textScale = 1,
+    }) async {
+      places.suggestions = suggestions;
+      await tester.pumpWidget(
+        _harness(places: places, controller: controller, textScale: textScale),
+      );
+      await tester.pump();
+      await type(tester, '1 Main');
+    }
+
+    testWidgets('renders a bold street line over a muted city line', (
+      tester,
+    ) async {
+      await showSuggestions(tester, const [split]);
+
+      final theme = Theme.of(tester.element(find.byType(TextField)));
+      final street = tester.widget<Text>(find.text('1 Main St'));
+      final city = tester.widget<Text>(find.text('Montreal, QC, Canada'));
+      expect(
+        (street.style?.fontWeight, city.style?.color, street.maxLines),
+        (FontWeight.w600, theme.palette.textTertiary, 1),
+      );
+    });
+
+    testWidgets('falls back to the flat description without a street line', (
+      tester,
+    ) async {
+      await showSuggestions(tester, const [
+        AddressSuggestion(placeId: 'p1', description: '1 Main St, Montreal'),
+      ]);
+
+      final row = tester.widget<Text>(find.text('1 Main St, Montreal'));
+      expect(row.maxLines, 2);
+    });
+
+    testWidgets('the split row still reads the full address', (tester) async {
+      final handle = tester.ensureSemantics();
+      await showSuggestions(tester, const [split]);
+
+      expect(
+        find.bySemanticsLabel('1 Main St, Montreal, QC, Canada'),
+        findsOneWidget,
+      );
+      handle.dispose();
+    });
+
+    testWidgets('does not overflow at 260 px with 2x text', (tester) async {
+      tester.view
+        ..physicalSize = const Size(260, 900)
+        ..devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await showSuggestions(tester, const [
+        AddressSuggestion(
+          placeId: 'p1',
+          description: '12345 Boulevard Saint-Laurent, Montreal, QC, Canada',
+          mainText: '12345 Boulevard Saint-Laurent',
+          secondaryText: 'Montreal, QC H2X 2V1, Canada',
+        ),
+        AddressSuggestion(
+          placeId: 'p2',
+          description: '9876 Rue Sainte-Catherine Ouest, Montreal, QC',
+        ),
+      ], textScale: 2);
+
+      expect(find.text('12345 Boulevard Saint-Laurent'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+}
+
+Widget _harness({
+  required PlacesRepository places,
+  required TextEditingController controller,
+  double textScale = 1,
+}) {
+  return ProviderScope(
+    overrides: [placesRepositoryProvider.overrideWithValue(places)],
+    child: MaterialApp(
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ],
+      supportedLocales: AppLocalizations.supportedLocales,
+      theme: lightTheme(),
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: AddressAutocompleteField(controller: controller),
+        ),
+      ),
+    ),
+  );
 }

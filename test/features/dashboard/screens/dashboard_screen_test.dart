@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/navigation/app_destination.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
@@ -12,9 +14,14 @@ import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/dashboard/application/dashboard_providers.dart';
 import 'package:scheduling/features/dashboard/screens/dashboard_screen.dart';
+import 'package:scheduling/features/dashboard/widgets/sections/attention_flags_section.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
+import 'package:scheduling/features/feature_tour/domain/tour_definitions.dart';
+import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:showcaseview/showcaseview.dart';
 
 import '../../../support/tour_test_support.dart';
 
@@ -50,6 +57,9 @@ Widget _wrap({
   Object? appointmentsError,
   Stream<List<AppointmentRecord>> Function()? appointmentsStream,
   List<EmployeeRecord> users = const [_jane],
+  double textScale = 1,
+  Locale locale = const Locale('en'),
+  ThemeData? theme,
 }) {
   return ProviderScope(
     // Production disables Riverpod's automatic retry; Retry must do the work.
@@ -80,9 +90,16 @@ Widget _wrap({
       setTextScale: (_) {},
       setLanguage: (_) {},
       child: MaterialApp(
+        locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        theme: lightTheme(),
+        theme: theme ?? lightTheme(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
         home: const DashboardScreen(isAdmin: true, employeeId: 'admin1'),
       ),
     ),
@@ -349,5 +366,138 @@ void main() {
     expect(subscriptions, 2);
     expect(find.text("Couldn't load the dashboard"), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  group('2x text on a narrow phone', () {
+    void narrow(WidgetTester tester) {
+      tester.view.physicalSize = const Size(260, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+    }
+
+    testWidgets('workload rows do not overflow', (tester) async {
+      narrow(tester);
+      await tester.pumpWidget(
+        _wrap(
+          appointments: [_appt(id: 'up', start: DateTime(2026, 7, 8, 14))],
+          clientsRepo: clientsRepo,
+          textScale: 2,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Jane Doe'), findsWidgets);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  // The test font draws every glyph as a full em box, so a tooltip row it
+  // overflows can fit on a device; this group measures with the app's font.
+  group('tour tooltip actions with real glyph widths', () {
+    const family = 'TourMetricsSans';
+    setUpAll(() async {
+      final loader = FontLoader(family);
+      for (final weight in ['Regular', 'Medium', 'SemiBold', 'Bold']) {
+        loader.addFont(
+          rootBundle.load('assets/fonts/InstrumentSans-$weight.ttf'),
+        );
+      }
+      await loader.load();
+    });
+
+    for (final width in [260.0, 360.0]) {
+      for (final locale in AppLocalizations.supportedLocales) {
+        testWidgets('fit at 2x text in ${locale.languageCode} at $width px', (
+          tester,
+        ) async {
+          SharedPreferences.setMockInitialValues({
+            'tour_seen_steps': <String>[],
+          });
+          tester.view.physicalSize = Size(width, 800);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          final base = lightTheme();
+          await tester.pumpWidget(
+            _wrap(
+              appointments: [_appt(id: 'up', start: DateTime(2026, 7, 8, 14))],
+              clientsRepo: clientsRepo,
+              textScale: 2,
+              locale: locale,
+              theme: base.copyWith(
+                textTheme: base.textTheme.apply(fontFamily: family),
+              ),
+            ),
+          );
+          for (var i = 0; i < 10; i++) {
+            await tester.pump(const Duration(milliseconds: 100));
+          }
+
+          final scope = const DestinationTour(
+            PushedDestination.dashboard,
+          ).storageKey;
+          expect(ShowcaseView.getNamed(scope).isShowcaseRunning, isTrue);
+          expect(tester.takeException(), isNull);
+          // Only a narrow phone swaps Skip for an icon; large text alone
+          // doesn't, since the actions cap their own scale.
+          expect(
+            find.byIcon(Icons.close),
+            width < 360 ? findsOneWidget : findsNothing,
+          );
+
+          ShowcaseView.getNamed(scope).dismiss();
+          await tester.pump(const Duration(milliseconds: 500));
+        });
+      }
+    }
+  });
+
+  group('tour on a phone viewport', () {
+    for (final size in [const Size(375, 667), const Size(667, 375)]) {
+      testWidgets('includes the below-fold attention step at $size', (
+        tester,
+      ) async {
+        SharedPreferences.setMockInitialValues({'tour_seen_steps': <String>[]});
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(
+          _wrap(
+            appointments: [_appt(id: 'up', start: DateTime(2026, 7, 8, 14))],
+            clientsRepo: clientsRepo,
+          ),
+        );
+        // Fixed pumps: a running showcase animates forever.
+        for (var i = 0; i < 10; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+
+        final scope = const DestinationTour(
+          PushedDestination.dashboard,
+        ).storageKey;
+        final attention = find.byType(
+          AttentionFlagsSection,
+          skipOffstage: false,
+        );
+        expect(attention, findsOneWidget);
+        expect(tester.getRect(attention).top, greaterThan(size.height + 250));
+        expect(ShowcaseView.getNamed(scope).isShowcaseRunning, isTrue);
+
+        ShowcaseView.getNamed(scope).dismiss();
+        await tester.pump(const Duration(milliseconds: 500));
+
+        final prefs = await SharedPreferences.getInstance();
+        expect(
+          prefs.getStringList('tour_seen_steps'),
+          containsAll([
+            for (final id in tourStepsFor(
+              const DestinationTour(PushedDestination.dashboard),
+              isAdmin: true,
+            ))
+              id.name,
+          ]),
+        );
+      });
+    }
   });
 }

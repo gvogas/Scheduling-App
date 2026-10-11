@@ -15,9 +15,10 @@ import 'package:scheduling/features/clients/domain/policies/client_name_policy.d
 /// Wired to the name field's `onChanged` in BOTH client sheets, so it fires on
 /// a paste and on the tenth typed digit alike. It is quiet in the common case:
 /// [ClientNamePolicy.liftPhoneFromName] returns null unless the phone field is
-/// empty AND the name holds a clean 10-digit number, and once it has fired the
-/// phone field is no longer empty, so it cannot fire twice or fight the admin
-/// mid-edit.
+/// empty AND the name is nothing but a dialable number (any length), or embeds
+/// exactly ten digits (a candidate containing `+` stays in the name). Once it
+/// has fired the phone field is no longer empty, so it cannot fire twice or
+/// fight the admin mid-edit.
 ///
 /// Returns whether anything moved, so a caller can `setState`.
 bool liftPhoneFromNameField({

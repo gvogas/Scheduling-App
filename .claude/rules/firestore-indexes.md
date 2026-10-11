@@ -21,7 +21,9 @@ Keep real single-field indexes on those entries rather than the Firebase docs'
 `"indexes": []` example — `live_activity_registry.js` `_pruneExpired` queries
 `.where("expiresAt", "<=", now)`, and the token sweep is a **collection-group**
 query, so `liveActivityTokens.expiresAt` needs a `COLLECTION_GROUP`-scoped index
-or the reaper fails `FAILED_PRECONDITION` into a swallowed no-op.
+or the reaper fails `FAILED_PRECONDITION` into a swallowed no-op. The live
+map's admin `presence` collection-group read orders by `updatedAt`, so the
+`COLLECTION_GROUP`-scoped `presence.updatedAt` override stays too.
 
 **`fieldOverrides` also carries the single-field index EXEMPTIONS** (added
 2026-08-13, entries with `"indexes": []`). Firestore indexes every field of
@@ -31,9 +33,9 @@ meant `pictures` alone generating four indexed subfields per photo per doc,
 forever, for a field nothing has ever queried; the free-text and denormalized
 fields (`title`, `notes`, `materialsNeeded`, `address`, `clientName`,
 `clientPhone`, `employeeNames`, `seriesOpId`) and the `clients` name/address
-family plus `contacts` are the same shape. Entity search is matched in **Dart**
-over a bounded window by design (see the root `CLAUDE.md`), so none of these is
-ever a query constraint — the exemptions cut index storage and shorten every
+family plus `contacts` are the same shape. Entity search queries the `searchTokens` /
+`historySearchScopes` token arrays (see `.claude/rules/search.md`), never these
+fields, so none of these is ever a query constraint — the exemptions cut index storage and shorten every
 write without changing a single query. **Adding a `where`/`orderBy` on an
 exempted field means removing its override first**, and the rebuild is not
 instant; check this list before writing a new query rather than debugging a
@@ -65,7 +67,7 @@ these is also swept in-code, so a missing policy is never a correctness bug.
 **A composite index is NOT redundant just because another index starts with the
 same fields — Firestore appends `__name__` to the ordered fields, and that
 lands at the END.** `appointments (employeeIds CONTAINS, endTime ASC)` was
-deleted on 2026-08-29 as a "redundant prefix" of
+deleted on 2026-08-28 as a "redundant prefix" of
 `(employeeIds CONTAINS, endTime ASC, startTime ASC)`. It is not one: the
 surviving index really reads `(employeeIds, endTime, startTime, __name__)`, so
 no prefix of it ever puts `__name__` directly after `endTime` — which is

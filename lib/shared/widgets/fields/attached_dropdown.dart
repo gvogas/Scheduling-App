@@ -68,6 +68,7 @@ class AttachedDropdownRow extends StatelessWidget {
     this.detail,
     this.headlineStyle,
     this.headlineMaxLines = 1,
+    this.semanticLabel,
   });
 
   /// Avatar or glyph. Null indents the text to the panel edge.
@@ -80,6 +81,9 @@ class AttachedDropdownRow extends StatelessWidget {
 
   /// An address runs long and is the whole answer, so it gets two lines.
   final int headlineMaxLines;
+
+  /// Replaces the lines' own reading. Null reads them as shown.
+  final String? semanticLabel;
   final VoidCallback onTap;
 
   static const double _tapFloor = 48;
@@ -87,7 +91,6 @@ class AttachedDropdownRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final hasDetail = detail != null && detail!.trim().isNotEmpty;
     return InkWell(
       onTap: onTap,
       child: ConstrainedBox(
@@ -103,36 +106,7 @@ class AttachedDropdownRow extends StatelessWidget {
                 leading!,
                 const SizedBox(width: AppSpacing.sp12),
               ],
-              Expanded(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      headline,
-                      maxLines: headlineMaxLines,
-                      overflow: TextOverflow.ellipsis,
-                      style:
-                          headlineStyle ??
-                          theme.textTheme.bodyMedium?.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    if (hasDetail)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          detail!,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.palette.textTertiary,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
+              Expanded(child: _buildText(theme)),
               const SizedBox(width: AppSpacing.sp8),
               Icon(
                 Icons.chevron_right,
@@ -142,6 +116,42 @@ class AttachedDropdownRow extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildText(ThemeData theme) {
+    final hasDetail = detail != null && detail!.trim().isNotEmpty;
+    return Semantics(
+      label: semanticLabel,
+      excludeSemantics: semanticLabel != null,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            headline,
+            maxLines: headlineMaxLines,
+            overflow: TextOverflow.ellipsis,
+            style:
+                headlineStyle ??
+                theme.textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+          ),
+          if (hasDetail)
+            Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                detail!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.palette.textTertiary,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

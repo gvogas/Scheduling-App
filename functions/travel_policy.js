@@ -21,72 +21,35 @@ const MINUTE_MS = 60 * 1000;
 // Extra lead on top of the computed drive time.
 const BUFFER_MINUTES = 10;
 
-// Lead cap; a >80-min drive fires at the first sweep inside the 90-min
-// window (accepted).
+// Lead cap; a >80-min drive fires at the first sweep in the window (accepted).
 const MAX_LEAD_MINUTES = 90;
 
-// Lead when no origin / no address / Routes failed — matches the push plan's
-// original fixed reminder.
+// Lead when there is no origin, no address or Routes failed.
 const FALLBACK_LEAD_MINUTES = 30;
 
-// A presence doc older than this means tracking died (force-quit, permission
-// revoked); fall back to the address chain.
+// An older presence doc means tracking died; fall back to the address chain.
 const PRESENCE_STALE_MINUTES = 25;
 
-// How far back a previous appointment's address still counts as "where the
-// employee just was".
+// How far back a previous job's address still counts as where they were.
 const PREV_APPOINTMENT_LOOKBACK_HOURS = 4;
 
-// Caps the per-employee context read. Ordered by endTime ASC, so the cap
-// keeps the earliest-ending jobs decideOrigin actually needs, instead of
-// every future appointment in a pre-booked series.
+// Context read cap; endTime ASC keeps the earliest-ending jobs it needs.
 const CONTEXT_QUERY_MAX = 50;
 
-// Longest single-day visit. The context query's upper bound has to clear the
-// travel window plus one full visit, or a long intervening job drops out of
-// decideOrigin.
-//
-// Deliberately NOT widened to MAX_APPOINTMENT_SPAN_MS (tried and reverted
-// 2026-08-04). Widening it does pull a multi-day run into the context — but
-// `decideOrigin`'s intervening prong tests the RAW instants
-// (`startMs < candidateStartMs && endMs > nowMs`), which a 10-day run
-// satisfies at every hour of every one of its days. A tech with an 08:00
-// one-off during an Aug 1-10 run then departs "from" that run's address at
-// 07:00, when they are at home and its window doesn't open until 09:00 —
-// a NEW wrong origin, traded for an old missing one.
-// Scoping that prong needs the daily-window model, which Plan 2 has since
-// mirrored into JS (`./day_slice_utils`, 2026-08-10) — so the blocker is now
-// that nobody has applied it here, not that the mirror is missing. Until then
-// a long run stays out of the context, exactly as before multi-day booking
-// existed — a known gap, not a regression.
+// Longest single-day visit; deliberately NOT the span cap (ADR-0104).
 const MAX_BOOKING_MS = 24 * 60 * MINUTE_MS;
 
-// Sweep candidate window: MAX_LEAD_MINUTES ahead, so the longest computable
-// lead is already in range when it becomes due.
+// Candidate window: MAX_LEAD_MINUTES ahead, so the longest lead is in range.
 const TRAVEL_WINDOW_MS = MAX_LEAD_MINUTES * MINUTE_MS;
 
-// Caps the candidate read, mirroring OVERDUE_SWEEP_MAX on the sweep that runs
-// beside this one. The 90-minute window keeps this small in practice, so the
-// cap is a tail guard, not a steady-state bound: a bulk import or a wide
-// series landing in one window is otherwise an unbounded fan-out that then
-// makes a BILLABLE Routes call per candidate assignee. Ordered `startTime`
-// ASC — which is the order Firestore already returns for this query, since it
-// is the inequality field — so the cap keeps the most imminent departures,
-// i.e. the ones that would be wrong to defer. A deferred candidate self-heals
-// on the next 5-minute run; its ledger claim is what keeps that from
-// double-sending.
+// Candidate read cap; startTime ASC keeps the most imminent (ADR-0104).
 const TRAVEL_SWEEP_MAX = 500;
 
-// A recent cached estimate lets a clearly-not-due pair skip the metered
-// Routes call. This can only DEFER a send, never trigger one — the fire
-// decision always uses a fresh Routes response.
+// A cached estimate may only DEFER a Routes call, never trigger a send.
 const ESTIMATE_TTL_MS = 10 * MINUTE_MS;
 const SKIP_MARGIN_MS = 15 * MINUTE_MS;
 
-// On-site flips run at once. Sized like `PRUNE_CHUNK` in
-// `live_activity_registry.js`, against the same `PRUNE_MAX` (400) ceiling on
-// the marker list — each flip is a read + a token query + an APNs push, so
-// the flat fan-out this replaced was the heaviest one in the push stack.
+// On-site flips per chunk, sized like PRUNE_CHUNK in live_activity_registry.js.
 const ON_SITE_FLIP_CHUNK = 25;
 
 /**
@@ -133,17 +96,11 @@ function canDeferRoutes({seconds, startTimeMillis, nowMillis}) {
   return nowMillis < startTimeMillis - leadMs - SKIP_MARGIN_MS;
 }
 
-// Statuses that still expect the visit to happen. `confirmed` is the
-// retired legacy alias, kept so pre-retirement docs still earn reminders.
+// Statuses expecting the visit; `confirmed` is the retired legacy alias.
 const PENDING_LIKE = new Set(["pending", "confirmed"]);
 
-// Same allowlist as an array for the candidate query's `where("status", "in",
-// ...)`; deliberately narrower than notification_utils' OPEN_STATUSES since
-// `in_progress` has no "time to leave" left to remind about.
+// Array form for the candidate query; narrower than OPEN_STATUSES on purpose.
 const PENDING_STATUSES = [...PENDING_LIKE];
-
-// "No longer occupies the employee" comes from `time_utils`' one owner — see
-// isTerminalStatus. This module used to carry its own copy of the set.
 
 /**
  * Trimmed address or "".
@@ -223,11 +180,8 @@ function decideOrigin({presence, employeeAppointments, candidate, now}) {
  * starting within (now, now + TRAVEL_WINDOW_MS]. `in_progress` is excluded
  * (visit already started). Pure — unit-testable.
  *
- * All-day blocks are skipped: they store a real midnight start, so the sweep
- * would fire a "time to leave" push around 23:30 the night before for a block
- * that has no departure time at all. A *timed* personal job keeps its reminder
- * — that one is genuinely useful. Same class of skip as `isPersonal` in
- * `selectOverdueCandidates` (notification_utils.js).
+ * All-day blocks are skipped (no departure time, ADR-0048); a timed personal
+ * job keeps its reminder.
  * @param {!Array<!Object>} records
  * @param {(Date|number)} now
  * @return {!Array<!Object>}

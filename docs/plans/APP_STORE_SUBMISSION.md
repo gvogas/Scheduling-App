@@ -253,8 +253,8 @@ Open `ios/Runner.xcworkspace`.
 > ticked and was reported passing again on hardware that day. Recorded on the
 > owner's word, with no console capture behind any individual box, so a later
 > contradiction means "re-run that check" rather than "a regression against a
-> known-good baseline". Siri Phases 1–3 are code-complete and have never been
-> exercised by voice — see `2026-07-19-siri-app-intents-implementation.md`.
+> known-good baseline". The Siri box was dropped 2026-10-09 (owner: Siri work
+> not needed; `docs/archive/2026-07-19-siri-app-intents-implementation.md`).
 
 - [x] `flutter run --release` on a physical iPhone.
 - [x] Sign in, then **exercise a callable end-to-end** to prove attestation —
@@ -300,7 +300,7 @@ Open `ios/Runner.xcworkspace`.
   indexes it needs were **verified `READY` 2026-07-20** — while they were still
   building the sweep logged `liveActivity: on-site query failed`; that stopped
   once they finished, so the server side is ready for this test.
-- [ ] **Siri phrases** (Phase 1) — "what's on my schedule today", "what's my
+- [ ] ~~**Siri phrases** (Phase 1)~~ — dropped 2026-10-09, owner: not needed. — "what's on my schedule today", "what's my
   next appointment", and the job-count phrase, per
   `ios/SiriIntents/README.md`.
 - [x] **Time Sensitive Notifications entitlement** — needed for the `leaveNow`

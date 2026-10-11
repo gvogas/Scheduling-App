@@ -31,7 +31,35 @@ class AnimatedLoadingButton extends StatelessWidget {
     final shape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(AppRadius.r12),
     );
-    final child = AnimatedSwitcher(
+    final child = _buildContent(colour, textTheme);
+
+    return TapScale(
+      enabled: effectiveOnPressed != null,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(minHeight: height),
+        child: variant == AnimatedLoadingButtonVariant.filled
+            ? FilledButton(
+                onPressed: effectiveOnPressed,
+                style: FilledButton.styleFrom(
+                  shape: shape,
+                  minimumSize: Size.fromHeight(height),
+                ),
+                child: child,
+              )
+            : OutlinedButton(
+                onPressed: effectiveOnPressed,
+                style: OutlinedButton.styleFrom(
+                  shape: shape,
+                  minimumSize: Size.fromHeight(height),
+                ),
+                child: child,
+              ),
+      ),
+    );
+  }
+
+  Widget _buildContent(ColorScheme colour, TextTheme textTheme) {
+    return AnimatedSwitcher(
       duration: AppAnimationDurations.switcher,
       transitionBuilder: (child, animation) => FadeTransition(
         opacity: animation,
@@ -61,30 +89,6 @@ class AnimatedLoadingButton extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
             ),
-    );
-
-    return TapScale(
-      enabled: effectiveOnPressed != null,
-      child: ConstrainedBox(
-        constraints: BoxConstraints(minHeight: height),
-        child: variant == AnimatedLoadingButtonVariant.filled
-            ? FilledButton(
-                onPressed: effectiveOnPressed,
-                style: FilledButton.styleFrom(
-                  shape: shape,
-                  minimumSize: Size.fromHeight(height),
-                ),
-                child: child,
-              )
-            : OutlinedButton(
-                onPressed: effectiveOnPressed,
-                style: OutlinedButton.styleFrom(
-                  shape: shape,
-                  minimumSize: Size.fromHeight(height),
-                ),
-                child: child,
-              ),
-      ),
     );
   }
 }

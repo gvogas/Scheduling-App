@@ -135,6 +135,97 @@ class _ListInformationState extends ConsumerState<ListInformation> {
     message: context.l10n.clients_selectAClientToViewDetails,
   );
 
+  Widget _buildHeader(int? total) {
+    // One row: Filter, what the list is showing, and the order.
+    return ListenableBuilder(
+      listenable: _searchController,
+      builder: (context, _) => ClientsListHeader(
+        leading: _tour.stepIf(
+          TourStepId.clientsFilter,
+          ClientsFilterBar(selected: _filter, onOpen: _openFilterSheet),
+        ),
+        sortWrap: (child) => _tour.stepIf(TourStepId.clientsSort, child),
+        onClearFilter: () => _applyFilter(const ClientsFilterAll()),
+        count: _visibleCount,
+        isSearching: _searchController.text.trim().isNotEmpty,
+        total: total,
+        filter: _filter,
+        sort: _sort,
+        onSortChanged: (next) {
+          ref
+              .read(analyticsServiceProvider)
+              .logFilterUsed(
+                surface: AnalyticsSurfaces.clients,
+                filterName: AnalyticsFilters.sort,
+                filterValue: next.name,
+              );
+          setState(() => _sort = next);
+        },
+      ),
+    );
+  }
+
+  Widget _buildListArea() {
+    return Expanded(
+      // The floating controls and the list's bottom clearance are
+      // both measured from here, so this has to end ABOVE the home
+      // indicator — the same wrap the calendar's agenda uses.
+      child: SafeArea(
+        top: false,
+        child: Stack(
+          children: [
+            ListenableBuilder(
+              listenable: _searchController,
+              builder: (context, _) => ClientsListView(
+                searchQuery: _searchController.text,
+                isAdmin: widget.isAdmin,
+                filter: _filter,
+                grouped: true,
+                buildingLabel: _activeBuildingLabel,
+                // Only highlight the selected row when the detail pane is shown (two-pane).
+                selectedClientId: context.isTwoPane
+                    ? _selectedClient?.id
+                    : null,
+                onClientTap: _onClientTap,
+                firstRowTourWrap: (child) =>
+                    _tour.stepIf(TourStepId.clientsRow, child),
+                onFirstPageSettled: _onListSettled,
+                sort: _sort,
+                onCountChanged: (count) {
+                  if (_visibleCount == count) return;
+                  setState(() => _visibleCount = count);
+                },
+              ),
+            ),
+            // Bottom LEFT: the add FAB owns the right corner, the same
+            // split the calendar's Today pill keeps.
+            const Positioned(
+              left: AppSpacing.sp16,
+              bottom: AppSpacing.sp16,
+              child: ScrollToTopButton(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget? _buildAddFab() {
+    return widget.isAdmin
+        ? _tour.step(
+            TourStepId.clientsAdd,
+            targetBorderRadius: BorderRadius.circular(AppRadius.r16),
+            child: FloatingActionButton(
+              // Needs to be unique across tabs, since IndexedStack keeps every tab's FAB mounted at the same time.
+              heroTag: 'clientsAddFab',
+              onPressed: () => runAddClientFlow(context),
+              tooltip: context.l10n.clients_addClient,
+              child: const Icon(Icons.add),
+            ),
+          )
+        : null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final searchBar = AppSearchBar(
@@ -169,98 +260,10 @@ class _ListInformationState extends ConsumerState<ListInformation> {
           isAdmin: widget.isAdmin,
           employeeId: widget.employeeId,
         ),
-        floatingActionButton: widget.isAdmin
-            ? _tour.step(
-                TourStepId.clientsAdd,
-                targetBorderRadius: BorderRadius.circular(AppRadius.r16),
-                child: FloatingActionButton(
-                  // Needs to be unique across tabs, since IndexedStack keeps every tab's FAB mounted at the same time.
-                  heroTag: 'clientsAddFab',
-                  onPressed: () => runAddClientFlow(context),
-                  tooltip: context.l10n.clients_addClient,
-                  child: const Icon(Icons.add),
-                ),
-              )
-            : null,
+        floatingActionButton: _buildAddFab(),
         // Only the master list listens to the search controller, so typing rebuilds just the list.
         body: MasterDetailScaffold(
-          master: Column(
-            children: [
-              // One row: Filter, what the list is showing, and the order.
-              ListenableBuilder(
-                listenable: _searchController,
-                builder: (context, _) => ClientsListHeader(
-                  leading: _tour.stepIf(
-                    TourStepId.clientsFilter,
-                    ClientsFilterBar(
-                      selected: _filter,
-                      onOpen: _openFilterSheet,
-                    ),
-                  ),
-                  sortWrap: (child) =>
-                      _tour.stepIf(TourStepId.clientsSort, child),
-                  onClearFilter: () => _applyFilter(const ClientsFilterAll()),
-                  count: _visibleCount,
-                  isSearching: _searchController.text.trim().isNotEmpty,
-                  total: total,
-                  filter: _filter,
-                  sort: _sort,
-                  onSortChanged: (next) {
-                    ref
-                        .read(analyticsServiceProvider)
-                        .logFilterUsed(
-                          surface: AnalyticsSurfaces.clients,
-                          filterName: AnalyticsFilters.sort,
-                          filterValue: next.name,
-                        );
-                    setState(() => _sort = next);
-                  },
-                ),
-              ),
-              Expanded(
-                // The floating controls and the list's bottom clearance are
-                // both measured from here, so this has to end ABOVE the home
-                // indicator — the same wrap the calendar's agenda uses.
-                child: SafeArea(
-                  top: false,
-                  child: Stack(
-                    children: [
-                      ListenableBuilder(
-                        listenable: _searchController,
-                        builder: (context, _) => ClientsListView(
-                          searchQuery: _searchController.text,
-                          isAdmin: widget.isAdmin,
-                          filter: _filter,
-                          grouped: true,
-                          buildingLabel: _activeBuildingLabel,
-                          // Only highlight the selected row when the detail pane is shown (two-pane).
-                          selectedClientId: context.isTwoPane
-                              ? _selectedClient?.id
-                              : null,
-                          onClientTap: _onClientTap,
-                          firstRowTourWrap: (child) =>
-                              _tour.stepIf(TourStepId.clientsRow, child),
-                          onFirstPageSettled: _onListSettled,
-                          sort: _sort,
-                          onCountChanged: (count) {
-                            if (_visibleCount == count) return;
-                            setState(() => _visibleCount = count);
-                          },
-                        ),
-                      ),
-                      // Bottom LEFT: the add FAB owns the right corner, the same
-                      // split the calendar's Today pill keeps.
-                      const Positioned(
-                        left: AppSpacing.sp16,
-                        bottom: AppSpacing.sp16,
-                        child: ScrollToTopButton(),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
+          master: Column(children: [_buildHeader(total), _buildListArea()]),
           detail: _selectedClient != null
               ? ClientDetailView(
                   key: ValueKey(_selectedClient!.id),

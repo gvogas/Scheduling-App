@@ -44,32 +44,7 @@ class _TextSizeViewState extends State<TextSizeView> {
       children: [
         _PreviewCard(selected: _selected),
         const SizedBox(height: AppSpacing.sp12),
-        Builder(
-          builder: (context) {
-            final options = _buildOptions(context.l10n);
-            return _Card(
-              padding: const EdgeInsets.symmetric(
-                vertical: AppSpacing.sp4,
-                horizontal: AppSpacing.sp8,
-              ),
-              child: Column(
-                children: [
-                  for (int i = 0; i < options.length; i++) ...[
-                    _SizeRow(
-                      label: options[i].$1,
-                      scale: options[i].$2,
-                      isSelected: (_selected - options[i].$2).abs() < 0.01,
-                      compact: compact,
-                      onTap: () => setState(() => _selected = options[i].$2),
-                    ),
-                    if (i < options.length - 1)
-                      const Divider(height: 1, indent: 52),
-                  ],
-                ],
-              ),
-            );
-          },
-        ),
+        _buildOptionsCard(compact),
         const SizedBox(height: AppSpacing.sp8),
         Text(
           context.l10n.settings_textSizeAppliesAppWide,
@@ -79,25 +54,58 @@ class _TextSizeViewState extends State<TextSizeView> {
           ),
         ),
         const SizedBox(height: AppSpacing.sp24),
-        FilledButton(
-          style: FilledButton.styleFrom(
-            backgroundColor: scheme.primary,
-            foregroundColor: scheme.onPrimary,
-            minimumSize: const Size.fromHeight(48),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.r12),
-            ),
-          ),
-          onPressed: () {
-            ThemeNotifier.of(context).setTextScale(_selected);
-            widget.onApplied?.call();
-          },
-          child: Text(
-            context.l10n.settings_apply,
-            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-          ),
-        ),
+        _buildApplyButton(context, scheme),
       ],
+    );
+  }
+
+  Widget _buildOptionsCard(bool compact) {
+    return Builder(
+      builder: (context) {
+        final options = _buildOptions(context.l10n);
+        return _Card(
+          padding: const EdgeInsets.symmetric(
+            vertical: AppSpacing.sp4,
+            horizontal: AppSpacing.sp8,
+          ),
+          child: Column(
+            children: [
+              for (int i = 0; i < options.length; i++) ...[
+                _SizeRow(
+                  label: options[i].$1,
+                  scale: options[i].$2,
+                  isSelected: (_selected - options[i].$2).abs() < 0.01,
+                  compact: compact,
+                  onTap: () => setState(() => _selected = options[i].$2),
+                ),
+                if (i < options.length - 1)
+                  const Divider(height: 1, indent: 52),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildApplyButton(BuildContext context, ColorScheme scheme) {
+    return FilledButton(
+      style: FilledButton.styleFrom(
+        backgroundColor: scheme.primary,
+        foregroundColor: scheme.onPrimary,
+        minimumSize: const Size.fromHeight(48),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.r12),
+        ),
+      ),
+      onPressed: () {
+        ThemeNotifier.of(context).setTextScale(_selected);
+        widget.onApplied?.call();
+      },
+      child: Text(
+        context.l10n.settings_apply,
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+      ),
     );
   }
 }
@@ -207,79 +215,79 @@ class _SizeRow extends StatelessWidget {
             horizontal: AppSpacing.sp8,
           ),
           child: compact
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        _ScaleGlyph(
-                          scale: scale,
-                          isSelected: isSelected,
-                          primary: scheme.primary,
-                          muted: scheme.onSurfaceVariant,
-                        ),
-                        const Spacer(),
-                        Icon(
-                          isSelected
-                              ? Icons.radio_button_checked_rounded
-                              : Icons.radio_button_unchecked_rounded,
-                          size: 20,
-                          color: isSelected
-                              ? scheme.primary
-                              : scheme.onSurfaceVariant,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.sp8),
-                    Padding(
-                      padding: const EdgeInsets.only(left: 48),
-                      child: Text(
-                        label,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          fontWeight: isSelected
-                              ? FontWeight.w600
-                              : FontWeight.w500,
-                          color: isSelected ? scheme.primary : null,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                  ],
-                )
-              : Row(
-                  children: [
-                    _ScaleGlyph(
-                      scale: scale,
-                      isSelected: isSelected,
-                      primary: scheme.primary,
-                      muted: scheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: AppSpacing.sp8),
-                    Expanded(
-                      child: Text(
-                        label,
-                        style: theme.textTheme.bodyLarge?.copyWith(
-                          fontWeight: isSelected
-                              ? FontWeight.w600
-                              : FontWeight.w500,
-                          color: isSelected ? scheme.primary : null,
-                          fontSize: 15,
-                        ),
-                      ),
-                    ),
-                    Icon(
-                      isSelected
-                          ? Icons.radio_button_checked_rounded
-                          : Icons.radio_button_unchecked_rounded,
-                      size: 20,
-                      color: isSelected
-                          ? scheme.primary
-                          : scheme.onSurfaceVariant,
-                    ),
-                  ],
-                ),
+              ? _buildStacked(theme, scheme)
+              : _buildInline(theme, scheme),
         ),
       ),
+    );
+  }
+
+  Widget _buildStacked(ThemeData theme, ColorScheme scheme) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            _ScaleGlyph(
+              scale: scale,
+              isSelected: isSelected,
+              primary: scheme.primary,
+              muted: scheme.onSurfaceVariant,
+            ),
+            const Spacer(),
+            Icon(
+              isSelected
+                  ? Icons.radio_button_checked_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              size: 20,
+              color: isSelected ? scheme.primary : scheme.onSurfaceVariant,
+            ),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.sp8),
+        Padding(
+          padding: const EdgeInsets.only(left: 48),
+          child: Text(
+            label,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+              color: isSelected ? scheme.primary : null,
+              fontSize: 15,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInline(ThemeData theme, ColorScheme scheme) {
+    return Row(
+      children: [
+        _ScaleGlyph(
+          scale: scale,
+          isSelected: isSelected,
+          primary: scheme.primary,
+          muted: scheme.onSurfaceVariant,
+        ),
+        const SizedBox(width: AppSpacing.sp8),
+        Expanded(
+          child: Text(
+            label,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+              color: isSelected ? scheme.primary : null,
+              fontSize: 15,
+            ),
+          ),
+        ),
+        Icon(
+          isSelected
+              ? Icons.radio_button_checked_rounded
+              : Icons.radio_button_unchecked_rounded,
+          size: 20,
+          color: isSelected ? scheme.primary : scheme.onSurfaceVariant,
+        ),
+      ],
     );
   }
 }

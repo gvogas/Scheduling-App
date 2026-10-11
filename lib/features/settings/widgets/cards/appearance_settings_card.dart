@@ -45,28 +45,7 @@ class AppearanceSettingsCard extends StatelessWidget {
             ),
           ),
           const SettingsTileDivider(),
-          SettingsTile(
-            iconBg: scheme.tertiaryContainer,
-            icon: Icons.text_fields_rounded,
-            iconColor: scheme.tertiary,
-            label: context.l10n.settings_textSize,
-            trailing: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              spacing: AppSpacing.sp4,
-              runSpacing: AppSpacing.sp4,
-              children: [
-                SettingsTrailingPill(
-                  label: _textScaleLabel(context, notifier.textScale),
-                ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 18,
-                  color: scheme.onSurfaceVariant,
-                ),
-              ],
-            ),
-            onTap: onTextSizeTap,
-          ),
+          _buildTextSizeTile(context, scheme, notifier),
           const SettingsTileDivider(),
           SettingsTile(
             iconBg: scheme.secondaryContainer,
@@ -80,6 +59,35 @@ class AppearanceSettingsCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildTextSizeTile(
+    BuildContext context,
+    ColorScheme scheme,
+    ThemeNotifier notifier,
+  ) {
+    return SettingsTile(
+      iconBg: scheme.tertiaryContainer,
+      icon: Icons.text_fields_rounded,
+      iconColor: scheme.tertiary,
+      label: context.l10n.settings_textSize,
+      trailing: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: AppSpacing.sp4,
+        runSpacing: AppSpacing.sp4,
+        children: [
+          SettingsTrailingPill(
+            label: _textScaleLabel(context, notifier.textScale),
+          ),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 18,
+            color: scheme.onSurfaceVariant,
+          ),
+        ],
+      ),
+      onTap: onTextSizeTap,
     );
   }
 }

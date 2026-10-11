@@ -134,62 +134,20 @@ const searchClients = onCall(APP_CHECK, async (req) => {
 });
 
 /**
- * Chooses the history-search token scope allowed for the caller.
- * @param {!Object} profile usersByUid row.
- * @param {string} requestedEmployeeId Optional employeeId payload.
- * @return {string}
- */
-function historyScope(profile, requestedEmployeeId) {
-  const callerDocId = String(profile.docId || "");
-  if (profile.role === "admin") {
-    return requestedEmployeeId ? `emp:${requestedEmployeeId}` : "all";
-  }
-  if (profile.role === "employee" && callerDocId) {
-    if (requestedEmployeeId && requestedEmployeeId !== callerDocId) {
-      throw new HttpsError("permission-denied", "scope-denied");
-    }
-    return `emp:${callerDocId}`;
-  }
-  throw new HttpsError("permission-denied", "role-denied");
-}
-
-/**
- * Whether this caller may see one history document.
- *
- * `historySearchScopes` is a denormalized mirror of `employeeIds` written by
- * the CLIENT app, so a doc whose scopes drift from `employeeIds` would be
- * readable by a technician `firestore.rules` would refuse. The module already
- * treats a token hit as a PREFILTER rather than the answer; this applies the
- * same rule to the scope. Deliberately NOT `mayRestore` from
- * `appointment_actions.js`: that one additionally requires `role === employee`
- * because it authorizes a WRITE. Reading your own job is assignment alone.
- * @param {!Object} profile usersByUid row.
- * @param {!Object} data Stored appointment.
- * @return {boolean}
- */
-function mayReadHistoryDoc(profile, data) {
-  if (profile.role === "admin") return true;
-  const callerDocId = String(profile.docId || "");
-  if (!callerDocId) return false;
-  const assigned = Array.isArray(data.employeeIds) ? data.employeeIds : [];
-  return assigned.map(String).includes(callerDocId);
-}
-
-/**
- * Server-side terminal-appointment search, scoped by caller role.
+ * Server-side terminal-appointment search over the business-wide archive.
  */
 const searchHistory = onCall(APP_CHECK, async (req) => {
-  const profile = await assertActiveCall(
-      req, new Set(["query", "employeeId"]));
+  const uid = await assertAdminCall(req, new Set([
+    "query",
+    "employeeId", // #compat-1.63.0
+  ]));
   const query = optionalString(req.data, "query", SEARCH_QUERY_MAX);
-  const employeeId = optionalString(req.data, "employeeId", APPOINTMENT_ID_MAX);
   const tokens = searchQueryTokens(query);
   if (tokens.length === 0) return {appointments: []};
   await enforceDurableRateLimit(
-      "searchHistory", profile.uid, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_MS);
+      "searchHistory", uid, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_MS);
 
-  const scope = historyScope(profile, employeeId);
-  const scoped = tokens.map((token) => `${scope}:${token}`);
+  const scoped = tokens.map((token) => `all:${token}`);
   const snap = await getFirestore()
       .collection("appointments")
       .where("historySearchScopes", "array-contains-any", scoped)
@@ -200,16 +158,12 @@ const searchHistory = onCall(APP_CHECK, async (req) => {
       .get();
   if (snap.docs.length >= SEARCH_READ_LIMIT) {
     logger.warn("searchHistory: read cap hit", {
-      uidHash: shortHash(profile.uid),
+      uidHash: shortHash(uid),
       count: snap.docs.length,
     });
   }
   const appointments = snap.docs
-      .filter((doc) => {
-        const data = doc.data() || {};
-        return mayReadHistoryDoc(profile, data) &&
-            recordMatchesQuery(data, query);
-      })
+      .filter((doc) => recordMatchesQuery(doc.data() || {}, query))
       .slice(0, SEARCH_RESULT_LIMIT)
       .map(callableRecord);
   return {appointments};
@@ -340,8 +294,6 @@ module.exports = {
   searchClients,
   searchHistory,
   findAppointmentConflicts,
-  historyScope,
-  mayReadHistoryDoc,
   blocksProposedWindow,
   serializeValue,
 };

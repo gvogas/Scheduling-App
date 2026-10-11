@@ -68,51 +68,12 @@ class NotificationsSettingsCard extends ConsumerWidget {
     final showLocationSharing = locationSharingEnabled != null;
     // Held as a local so the tour's wrap can be applied to it by name.
     final locationTile = showLocationSharing
-        ? SettingsSwitchTile(
-            switchKey: const Key('locationSharingSwitch'),
-            icon: Icons.location_on_rounded,
-            label: context.l10n.settings_locationSharing,
-            value: locationSharingEnabled!,
-            isBusy: isTogglingLocationSharing,
-            onChanged: onToggleLocationSharing,
-            // The row opens the detail screen; only the switch flips sharing.
-            onTap: onLocationSharingTap,
-            trailing: Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: scheme.onSurfaceVariant,
-            ),
-          )
+        ? _buildLocationTile(context, scheme)
         : null;
     // Dividers are indexed off this list, so a new row never has to be
     // threaded through every earlier row's "am I last" condition.
     final tiles = <Widget>[
-      SettingsTile(
-        iconBg: granted ? scheme.primaryContainer : scheme.errorContainer,
-        icon: granted
-            ? Icons.notifications_active_rounded
-            : Icons.notifications_off_rounded,
-        iconColor: granted ? scheme.primary : scheme.error,
-        label: context.l10n.settings_notifications,
-        trailing: Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: AppSpacing.sp4,
-          runSpacing: AppSpacing.sp4,
-          children: [
-            SettingsTrailingPill(
-              label: granted
-                  ? context.l10n.settings_notificationsOn
-                  : context.l10n.settings_notificationsOff,
-            ),
-            Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: scheme.onSurfaceVariant,
-            ),
-          ],
-        ),
-        onTap: () => onNotificationsTap(status),
-      ),
+      _buildNotificationsTile(context, scheme, status, granted),
       if (showLiveActivity)
         SettingsSwitchTile(
           icon: Icons.directions_car_rounded,
@@ -144,6 +105,61 @@ class NotificationsSettingsCard extends ConsumerWidget {
           ],
         ],
       ),
+    );
+  }
+
+  SettingsSwitchTile _buildLocationTile(
+    BuildContext context,
+    ColorScheme scheme,
+  ) {
+    return SettingsSwitchTile(
+      switchKey: const Key('locationSharingSwitch'),
+      icon: Icons.location_on_rounded,
+      label: context.l10n.settings_locationSharing,
+      value: locationSharingEnabled!,
+      isBusy: isTogglingLocationSharing,
+      onChanged: onToggleLocationSharing,
+      // The row opens the detail screen; only the switch flips sharing.
+      onTap: onLocationSharingTap,
+      trailing: Icon(
+        Icons.chevron_right_rounded,
+        size: 18,
+        color: scheme.onSurfaceVariant,
+      ),
+    );
+  }
+
+  Widget _buildNotificationsTile(
+    BuildContext context,
+    ColorScheme scheme,
+    AuthorizationStatus status,
+    bool granted,
+  ) {
+    return SettingsTile(
+      iconBg: granted ? scheme.primaryContainer : scheme.errorContainer,
+      icon: granted
+          ? Icons.notifications_active_rounded
+          : Icons.notifications_off_rounded,
+      iconColor: granted ? scheme.primary : scheme.error,
+      label: context.l10n.settings_notifications,
+      trailing: Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: AppSpacing.sp4,
+        runSpacing: AppSpacing.sp4,
+        children: [
+          SettingsTrailingPill(
+            label: granted
+                ? context.l10n.settings_notificationsOn
+                : context.l10n.settings_notificationsOff,
+          ),
+          Icon(
+            Icons.chevron_right_rounded,
+            size: 18,
+            color: scheme.onSurfaceVariant,
+          ),
+        ],
+      ),
+      onTap: () => onNotificationsTap(status),
     );
   }
 }

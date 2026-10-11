@@ -300,7 +300,6 @@
   "error_somethingWentWrongPleaseTryAgain": "Une erreur s’est produite. Veuillez réessayer",
   "error_thatAccountIsNoLongerPending": "Ce compte n'est plus en attente — la personne l'a peut-être déjà configuré.",
   "error_yourAccountIsAlreadySetUp": "Votre compte est déjà configuré. Connectez-vous avec votre nouveau mot de passe.",
-  "error_setupNotAvailableYet": "La configuration du compte n'est pas encore disponible. Réessayez dans quelques minutes — si le problème persiste, communiquez avec votre administrateur.",
   "error_noAccountRecordContactAdmin": "Nous n'avons pas trouvé votre fiche d'employé. Demandez à votre admin de vérifier votre compte.",
   "error_sessionExpiredSignInAgain": "Votre session a expiré. Reconnectez-vous pour terminer la configuration.",
   "error_thisAccountHasBeenDisabled": "Ce compte a été désactivé",

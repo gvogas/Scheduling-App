@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import 'package:scheduling/core/layout/breakpoints.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/widgets/sheets/client_detail_sheet.dart';
@@ -281,6 +282,13 @@ class _NewClientRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final compact = context.isCompact;
+    final date = Text(
+      dateFormat.format(client.createdAt!),
+      style: theme.monoType.data.copyWith(
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
     return InkWell(
       onTap: () => showClientDetailSheet(context, client),
       borderRadius: BorderRadius.circular(AppRadius.r8),
@@ -291,20 +299,20 @@ class _NewClientRow extends StatelessWidget {
             AppAvatar(name: client.displayName, size: AvatarSize.sm),
             const SizedBox(width: AppSpacing.sp12),
             Expanded(
-              child: Text(
-                client.displayName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    client.displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyMedium,
+                  ),
+                  if (compact) date,
+                ],
               ),
             ),
-            const SizedBox(width: AppSpacing.sp8),
-            Text(
-              dateFormat.format(client.createdAt!),
-              style: theme.monoType.data.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
+            if (!compact) ...[const SizedBox(width: AppSpacing.sp8), date],
           ],
         ),
       ),

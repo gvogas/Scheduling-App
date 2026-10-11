@@ -25,13 +25,7 @@ final allUsersStreamProvider = StreamProvider<List<EmployeeRecord>>((ref) {
   return streamForUid(ref, (uid) {
     if (uid == null) return Stream.value(const <EmployeeRecord>[]);
 
-    // The ROLE picks the query, so it has to settle too: an admin resolved as
-    // an employee gets `watchAssignableUsers`, which hides invited and
-    // disabled accounts from the roster that exists to manage them.
-    //
-    // Projected down to the role STRING, never the raw doc: a `Map` compares
-    // by identity, so every own-doc write would otherwise rebuild this
-    // provider and re-read the whole `users` collection.
+    // Waits for the ROLE, selected as a string: a raw `Map` compares by identity and re-reads `users` on every write.
     final roleState = ref.watch(
       currentUserDocProvider.select(
         (s) => s.whenData((doc) => (doc['role'] ?? '').toString().trim()),

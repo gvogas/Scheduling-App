@@ -56,6 +56,38 @@ class AuthScaffold extends StatelessWidget {
     final statusBarSurface = hero == null ? scheme.surface : heroInk;
     final overlay = overlayStyleFor(statusBarSurface);
 
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: overlay,
+      child: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Scaffold(
+          backgroundColor: scheme.surface,
+          body: SafeArea(
+            // The hero paints behind the status bar and pads itself instead.
+            top: hero == null,
+            child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (hero != null)
+                    _AuthHeroBlock(hero: hero, bottomGap: _cardLift),
+                  _buildBody(context, theme, scheme, hero),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme scheme,
+    AuthHero? hero,
+  ) {
     var card = child;
     if (hero != null) {
       card = DecoratedBox(
@@ -110,31 +142,7 @@ class AuthScaffold extends StatelessWidget {
         child: body,
       );
     }
-
-    return AnnotatedRegion<SystemUiOverlayStyle>(
-      value: overlay,
-      child: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: Scaffold(
-          backgroundColor: scheme.surface,
-          body: SafeArea(
-            // The hero paints behind the status bar and pads itself instead.
-            top: hero == null,
-            child: SingleChildScrollView(
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  if (hero != null)
-                    _AuthHeroBlock(hero: hero, bottomGap: _cardLift),
-                  body,
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
+    return body;
   }
 }
 

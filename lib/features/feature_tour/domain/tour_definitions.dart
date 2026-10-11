@@ -43,12 +43,12 @@ List<TourStepId> _destinationSteps(
       TourStepId.employeesRow,
     ],
   ],
-  // Not admin-gated: a technician reaches History too (their own jobs), and the
-  // three targets — search bar, filter row, first row — render for them.
   PushedDestination.history => [
-    TourStepId.historySearch,
-    TourStepId.historyFilter,
-    TourStepId.historyRow,
+    if (isAdmin) ...[
+      TourStepId.historySearch,
+      TourStepId.historyFilter,
+      TourStepId.historyRow,
+    ],
   ],
   HubTab.liveMap => [
     if (isAdmin) ...[

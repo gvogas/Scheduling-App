@@ -33,7 +33,6 @@ const {
   selectBusiness,
   waveBootstrap,
   waveGetConnection,
-  waveSetImportSchedule,
   waveImportCustomers,
   waveRetryFailedJobs,
 } = require("../wave/callables");
@@ -175,43 +174,31 @@ beforeEach(() => {
   getFirestore.mockReturnValue(fakeFirestore(null).db);
 });
 
-// Each admin callable and whether it consumes a rate-limit slot on the happy
-// path. `waveSetImportSchedule` is the one `false`: it is a retired no-op kept
-// for shipped builds (#compat-1.61.0), and it writes nothing to cap.
+// Each admin callable; every one consumes a rate-limit slot on the happy path.
 const CALLABLES = [
   {
     name: "waveBootstrap",
     fn: () => waveBootstrap,
-    rateLimited: true,
     keys: [],
   },
   {
     name: "waveGetConnection",
     fn: () => waveGetConnection,
-    rateLimited: true,
     keys: [],
-  },
-  {
-    name: "waveSetImportSchedule",
-    fn: () => waveSetImportSchedule,
-    rateLimited: false,
-    keys: ["schedule"],
   },
   {
     name: "waveImportCustomers",
     fn: () => waveImportCustomers,
-    rateLimited: true,
     keys: [],
   },
   {
     name: "waveRetryFailedJobs",
     fn: () => waveRetryFailedJobs,
-    rateLimited: true,
     keys: [],
   },
 ];
 
-describe.each(CALLABLES)("$name guard order", ({fn, rateLimited, keys}) => {
+describe.each(CALLABLES)("$name guard order", ({fn, keys}) => {
   test("opens with the composed assertAdminCall, not a hand-spelled gate",
       async () => {
         // Five copies of the composer's body lived here, and one of them had
@@ -288,26 +275,19 @@ describe.each(CALLABLES)("$name guard order", ({fn, rateLimited, keys}) => {
         expect(security.enforceDurableRateLimit).not.toHaveBeenCalled();
       });
 
-  if (!rateLimited) {
-    test("is not rate limited on the happy path", async () => {
-      await fn().run(req(ADMIN_UID, {})).catch(() => {});
-      expect(security.enforceDurableRateLimit).not.toHaveBeenCalled();
-    });
-  } else {
-    test("consumes a rate-limit slot keyed on the caller uid", async () => {
-      // The positive half. Without it a callable that silently LOST its
-      // limiter would still satisfy this table, since the only other
-      // assertions are "not called" ones on the rejection paths.
-      await fn().run(req(ADMIN_UID, {})).catch(() => {});
-      const calls = security.enforceDurableRateLimit.mock.calls;
-      // Some callables reject the `{}` payload before the limiter; those are
-      // covered by the malformed-payload case above. Where it IS reached, it
-      // must be keyed on the caller.
-      if (calls.length > 0) {
-        expect(calls[0][1]).toBe(ADMIN_UID);
-      }
-    });
-  }
+  test("consumes a rate-limit slot keyed on the caller uid", async () => {
+    // The positive half. Without it a callable that silently LOST its
+    // limiter would still satisfy this table, since the only other
+    // assertions are "not called" ones on the rejection paths.
+    await fn().run(req(ADMIN_UID, {})).catch(() => {});
+    const calls = security.enforceDurableRateLimit.mock.calls;
+    // Some callables reject the `{}` payload before the limiter; those are
+    // covered by the malformed-payload case above. Where it IS reached, it
+    // must be keyed on the caller.
+    if (calls.length > 0) {
+      expect(calls[0][1]).toBe(ADMIN_UID);
+    }
+  });
 });
 
 describe("waveBootstrap", () => {
@@ -648,44 +628,11 @@ describe("waveGetConnection", () => {
   });
 
   test("no longer reports a cadence, even one still stored", async () => {
-    // #compat-1.61.0: that build reads an absent `importSchedule` as off.
     getFirestore.mockReturnValue(
         fakeFirestore({businessId: "b", importSchedule: "weekly"}).db);
 
     const out = await waveGetConnection.run(req(ADMIN_UID, {}));
     expect(out).not.toHaveProperty("importSchedule");
-  });
-});
-
-describe("waveSetImportSchedule (retired, #compat-1.61.0)", () => {
-  test("still accepts the `schedule` key a shipped build sends", async () => {
-    // Removing it would throw `unexpected-field` at every 1.61.0 admin who
-    // touches the picker still on their Settings screen.
-    await waveSetImportSchedule.run(req(ADMIN_UID, {schedule: "weekly"}));
-
-    const allowed = security.assertPayloadShape.mock.calls[0][1];
-    expect([...allowed]).toEqual(["schedule"]);
-  });
-
-  test("accepts a cadence and reads and writes nothing", async () => {
-    const fake = fakeFirestore({businessId: "b"});
-    getFirestore.mockReturnValue(fake.db);
-
-    expect(await waveSetImportSchedule.run(req(ADMIN_UID, {
-      schedule: "monthly",
-    }))).toEqual({schedule: "off"});
-    expect(fake.updates).toEqual([]);
-    expect(fake.ref.get).not.toHaveBeenCalled();
-  });
-
-  test("never refuses a value, so an old picker cannot error", async () => {
-    expect(await waveSetImportSchedule.run(
-        req(ADMIN_UID, {schedule: "hourly"}))).toEqual({schedule: "off"});
-  });
-
-  test("consumes no rate-limit slot", async () => {
-    await waveSetImportSchedule.run(req(ADMIN_UID, {schedule: "weekly"}));
-    expect(security.enforceDurableRateLimit).not.toHaveBeenCalled();
   });
 });
 
@@ -1032,9 +979,7 @@ describe("waveRetryFailedJobs", () => {
         const err = await expectThrows(waveRetryFailedJobs, req(ADMIN_UID, {}));
 
         expect(err.code).toBe("failed-precondition");
-        // Canonical across all three connection gates. This threw
-        // `wave/not-connected`, which no shipped Flutter mapper knows, so the
-        // admin saw a generic error instead of "Wave isn't connected".
+        // Canonical across all three connection gates.
         expect(err.message).toBe("wave/not-bootstrapped");
         expect(waveWorker.requeueDeadJobs).not.toHaveBeenCalled();
       });

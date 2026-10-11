@@ -38,6 +38,18 @@ void main() {
     });
   });
 
+  group('appointmentHistoryScopes', () {
+    for (final c in sharedCases(fixture, 'historyScopes')) {
+      test(c['name'] as String, () {
+        final record = (c['record'] as Map).cast<String, dynamic>();
+        final scopes = appointmentHistoryScopes(record);
+        _expectTokens(scopes, c);
+        expect(scopes.every((t) => t.startsWith('all:')), isTrue);
+        expect(scopes.length, lessThanOrEqualTo(kSearchTokenFieldLimit));
+      });
+    }
+  });
+
   group('normalize', () {
     for (final c in sharedCases(fixture, 'normalize')) {
       test(c['input'] as String, () {

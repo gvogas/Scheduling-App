@@ -78,11 +78,7 @@ class WaveService {
   /// Runs a two-way sync: pending app edits are pushed to Wave first, then
   /// Wave customers are pulled back into `clients`.
   ///
-  /// The callable keeps its inaccurate `waveImportCustomers` name because
-  /// renaming it server-side deletes the old name, and every shipped build
-  /// calls it. This was once tagged `#compat-1.37.1`, but that shim's
-  /// retirement (2026-08-08) did not unblock the rename — the constraint is
-  /// every build, not that one. A rename needs both names deployed at once.
+  /// Keeps the `waveImportCustomers` name: never rename in place; every build calls it.
   ///
   /// A callable cannot be cancelled, so this timeout is not a limit on the
   /// server — it is the point at which the admin is told the sync failed

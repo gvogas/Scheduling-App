@@ -75,49 +75,58 @@ class _WorkloadRow extends StatelessWidget {
           size: AvatarSize.sm,
         ),
         const SizedBox(width: AppSpacing.sp12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                row.employee.name,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sp4),
-              Container(
-                height: 6,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(AppRadius.rFull),
-                ),
-                alignment: Alignment.centerLeft,
-                child: FractionallySizedBox(
-                  widthFactor: fillFraction,
-                  heightFactor: 1,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: row.employee.color,
-                      borderRadius: BorderRadius.circular(AppRadius.rFull),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+        Expanded(flex: 2, child: _buildNameAndBar(theme, scheme, fillFraction)),
+        const SizedBox(width: AppSpacing.sp12),
+        Flexible(
+          child: Text(
+            context.l10n.dashboard_workloadCounts(
+              row.todayCount,
+              row.weekCount,
+            ),
+            textAlign: TextAlign.end,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
           ),
         ),
-        const SizedBox(width: AppSpacing.sp12),
+      ],
+    );
+  }
+
+  Widget _buildNameAndBar(
+    ThemeData theme,
+    ColorScheme scheme,
+    double fillFraction,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
         Text(
-          context.l10n.dashboard_workloadCounts(
-            row.todayCount,
-            row.weekCount,
+          row.employee.name,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: theme.textTheme.bodyMedium?.copyWith(
+            fontWeight: FontWeight.w600,
           ),
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: scheme.onSurfaceVariant,
+        ),
+        const SizedBox(height: AppSpacing.sp4),
+        Container(
+          height: 6,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(AppRadius.rFull),
+          ),
+          alignment: Alignment.centerLeft,
+          child: FractionallySizedBox(
+            widthFactor: fillFraction,
+            heightFactor: 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: row.employee.color,
+                borderRadius: BorderRadius.circular(AppRadius.rFull),
+              ),
+            ),
           ),
         ),
       ],

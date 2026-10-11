@@ -58,8 +58,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   /// Lets tests inject a fake clock so the search-cache TTL is testable.
   final DateTime Function() _clock;
 
-  /// Generates a fresh id for each write op, so all the notifications a single
-  /// write triggers collapse into one per employee.
+  /// A fresh `seriesOpId` per write op, so one write notifies each employee once.
   String _newSeriesOpId() => const Uuid().v4();
 
   /// Ceiling on the live business-wide range listeners.
@@ -68,12 +67,10 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   /// Ceiling on one client's paged job history.
   static const int _clientHistoryScanLimit = 1000;
 
-  /// Page size for that scan. Kept off the caller's `limit` so a busy client
-  /// costs two round-trips to reach the ceiling, not twenty.
+  /// Page size for that scan, deliberately not the caller's display `limit`.
   static const int _clientHistoryPageSize = 500;
 
-  /// Raw rows the overdue review's live query reads; mirrors the server's
-  /// `MONTH_END_SCAN_MAX`, since personal blocks and days off never close.
+  /// Raw rows the overdue review's live query reads; mirrors `MONTH_END_SCAN_MAX`.
   static const int _overdueScanLimit = 5000;
 
   /// Overdue jobs the review lists; mirrors `MONTH_END_REVIEW_MAX`.
@@ -83,37 +80,25 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   late final SearchResultCache<AppointmentRecord> _searchCache =
       SearchResultCache(clock: _clock);
 
-  final Map<String, _CachedHistoryScanWindow> _historyWindows = {};
-  final Map<String, Future<_CachedHistoryScanWindow>> _pendingHistoryScans = {};
+  _CachedHistoryScanWindow? _historyWindow;
+  Future<_CachedHistoryScanWindow>? _pendingHistoryScan;
 
-  /// The map key for a scope: `''` for the admin archive, `'emp:<id>'` for one
-  /// person's.
-  static String _scopeKey(String? employeeId) =>
-      employeeId == null ? '' : 'emp:$employeeId';
-
-  /// Patches cached search answers and scan windows after a local write.
-  void _patchWindow(
-    Map<String, Map<String, dynamic>?> changes, {
-    bool isRecordWrite = true,
-  }) {
+  /// Patches cached search answers and the scan window after a local write.
+  void _patchWindow(Map<String, Map<String, dynamic>?> changes) {
     _searchCache.patchAll(
-      (key, results) => _patchSearchResults(key, results, changes),
+      (_, results) => _patchSearchResults(results, changes),
     );
-    _pendingHistoryScans.clear();
-    // EVERY scope's window: a technician's is the same archive narrowed, so a
-    // write that changes what history holds changes it for them too.
-    for (final scope in _historyWindows.keys.toList()) {
-      final window = _historyWindows[scope]!;
-      if (!_searchCache.isFresh(window.fetchedAt)) {
-        _historyWindows.remove(scope);
-        continue;
-      }
-      _historyWindows[scope] = _CachedHistoryScanWindow(
-        _patchHistoryDocs(window.docs, changes, scope: scope),
-        _clock(),
-      );
+    _pendingHistoryScan = null;
+    final window = _historyWindow;
+    if (window != null) {
+      _historyWindow = _searchCache.isFresh(window.fetchedAt)
+          ? _CachedHistoryScanWindow(
+              _patchHistoryDocs(window.docs, changes),
+              _clock(),
+            )
+          : null;
     }
-    if (isRecordWrite && !_recordWrites.isClosed) _recordWrites.add(null);
+    if (!_recordWrites.isClosed) _recordWrites.add(null);
     if (!_localWrites.isClosed) _localWrites.add(null);
   }
 
@@ -126,8 +111,8 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   @override
   void clearCaches() {
     _searchCache.clear();
-    _historyWindows.clear();
-    _pendingHistoryScans.clear();
+    _historyWindow = null;
+    _pendingHistoryScan = null;
   }
 
   final StreamController<void> _localWrites = StreamController.broadcast();
@@ -198,10 +183,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       written[doc.id] = _toFirestoreMap(appointment);
       batch.set(doc, {
         ..._toFirestoreMap(appointment),
-        // The one client write of this counter the rules allow, and the reason
-        // "absent" is not a state anything downstream has to interpret: the
-        // recount trigger only fires on a photo write, so a job created without
-        // it would read as count-unknown until its first photo.
+        // The one client write of this counter the rules allow (see images.md).
         'pictureCount': 0,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
@@ -252,8 +234,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     for (final copy in copies) {
       batch.set(_appointments.doc(copy.id), {
         ..._toFirestoreMap(copy),
-        // A copied occurrence is a new document — same reasoning as
-        // `addAppointments`, and photos never come along with one.
+        // A copied occurrence is a new document with no photos.
         'pictureCount': 0,
         'seriesOpId': opId,
         'createdAt': FieldValue.serverTimestamp(),
@@ -287,8 +268,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     await _appointments.firestore.runTransaction((txn) async {
       final refs = [for (final r in records) _appointments.doc(r.id)];
       final snaps = await Future.wait([for (final ref in refs) txn.get(ref)]);
-      // Rebuilt per attempt: a transaction can re-run, and a set carried over
-      // from an abandoned attempt would name docs this commit never touched.
+      // Rebuilt per attempt: a transaction body can re-run.
       written.clear();
       for (var i = 0; i < records.length; i++) {
         if (!snaps[i].exists) continue;
@@ -338,8 +318,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       authorId: authorId,
       authorName: authorName,
     );
-    // The narrow poke: a note changes no field matchHistoryDocs reads, so the
-    // window is woken rather than rebuilt.
+    // A note changes no field matchHistoryDocs reads.
     _notifyLocalWrite();
   }
 
@@ -354,25 +333,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     'cancelled',
   };
 
-  // NOT delegated to `updateAppointmentStatuses([id])`, though the bodies look
-  // duplicated: this writes the document DIRECTLY while the plural commits a
-  // WriteBatch.
-  @override
-  Future<void> updateFieldNotes({
-    required String id,
-    required String notes,
-  }) async {
-    // EXACTLY the two keys the assignee rules branch allows.
-    await _appointments.doc(id).update({
-      'fieldNotes': notes,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
-    // Crew notes are not shown in Job history, so no record event.
-    _patchWindow({
-      id: {'fieldNotes': notes},
-    }, isRecordWrite: false);
-  }
-
+  // Not delegated to the plural: see appointments.md, mark-complete.
   @override
   Future<void> updateAppointmentStatus({
     required String id,
@@ -528,22 +489,16 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     return _mapRangeSnapshot(snapshot);
   }
 
-  /// The terminal archive, business-wide or narrowed to one assignee.
-  Query<Map<String, dynamic>> _historyQuery(String? employeeId) {
-    Query<Map<String, dynamic>> query = _appointments;
-    if (employeeId != null) {
-      query = query.where('employeeIds', arrayContains: employeeId);
-    }
-    return query.where('status', whereIn: terminalStatusQueryValues);
-  }
+  /// The business-wide terminal archive.
+  Query<Map<String, dynamic>> get _historyQuery =>
+      _appointments.where('status', whereIn: terminalStatusQueryValues);
 
   @override
   Future<List<AppointmentRecord>> fetchHistoryPage({
     required int limit,
     AppointmentRecord? after,
-    String? employeeId,
   }) async {
-    var query = _historyQuery(employeeId)
+    var query = _historyQuery
         .orderBy('startTime', descending: true)
         .orderBy(FieldPath.documentId, descending: true);
     final afterId = after?.id;
@@ -573,11 +528,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
         isLessThan: Timestamp.fromDate(_clock()),
       );
     }
-    // The warn belongs to the DEFAULT cap, which is a silent truncation of a
-    // list meant to be complete. An explicit cap is a deliberate window — the
-    // booking form asks for the newest 20 — and reaching it is the normal case
-    // for exactly the repeat clients it serves, so warning there files a
-    // Crashlytics non-fatal on every form open and buries the real one.
+    // Only the DEFAULT cap warns; an explicit cap is a deliberate window and breadcrumbs.
     final docs = await pageToCap(
       query.orderBy('startTime', descending: true),
       pageSize: limit,
@@ -592,9 +543,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
         _logger.warn('$message ($scanCap)');
       },
     );
-    // A multi-day run is ONE visit stored as one document per work day, so
-    // listing every document rendered a Monday-to-Friday job as five identical
-    // rows — and burned five of the section's 50-row render bound.
+    // A multi-day run is one job: list only its first day.
     return docs
         .map((doc) => _recordFrom(doc.id, doc.data()))
         .where((record) => record.dayIndex <= 1)
@@ -605,42 +554,27 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   static const int _seriesScanLimit = RepeatInterval.maxOccurrences + 1;
 
   @override
-  Future<List<AppointmentRecord>> searchHistory(
-    String query, {
-    String? employeeId,
-  }) async {
+  Future<List<AppointmentRecord>> searchHistory(String query) async {
     final q = query.trim();
     if (!ClientSearchPolicy.shouldSearch(q)) return const [];
-
-    // Scope is part of the key: the same words searched by an admin and by a
-    // technician are two different answers.
-    final scope = _scopeKey(employeeId);
-    final cacheKey = '$scope|${ClientSearchPolicy.cacheKey(q)}';
     return await _searchCache.getOrLoad(
-      cacheKey,
-      () => _searchHistory(q, employeeId: employeeId, scope: scope),
+      ClientSearchPolicy.cacheKey(q),
+      () => _searchHistory(q),
     );
   }
 
-  Future<List<AppointmentRecord>> _searchHistory(
-    String query, {
-    required String? employeeId,
-    required String scope,
-  }) async {
+  Future<List<AppointmentRecord>> _searchHistory(String query) async {
     final functions = _functions;
     if (functions == null) {
-      final window = await _historyScanWindow(employeeId, scope: scope);
+      final window = await _historyScanWindow();
       return matchHistoryDocs(
         HistorySearchScan(docs: window.docs, query: query),
       );
     }
 
-    final payload = <String, Object>{'query': query};
-    if (employeeId != null) payload['employeeId'] = employeeId;
-
     final response = await functions
         .httpsCallable('searchHistory')
-        .call<Map<String, dynamic>>(payload);
+        .call<Map<String, dynamic>>({'query': query});
     return _appointmentsFromCallable(response.data);
   }
 
@@ -666,8 +600,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   }) async {
     if (candidates.isEmpty) return const [];
 
-    // The busy PEOPLE are the clashing records' assignees: same query, same
-    // rule, one owner.
+    // The busy people are the clashing records' assignees.
     final clashes = await findClashingAppointments(
       employeeIds: candidates.map((e) => e.id).toList(),
       start: start,
@@ -720,34 +653,10 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     final base = Map<String, dynamic>.from(appointment.toMap());
     base['startTime'] = Timestamp.fromDate(appointment.startTime);
     base['endTime'] = Timestamp.fromDate(appointment.endTime);
-    base['historySearchScopes'] = _historySearchScopes(base);
+    base['historySearchScopes'] = appointmentHistoryScopes(base);
     return base;
   }
 
-  /// Hand-mirrored by `appointmentHistoryScopes` in
-  /// `functions/search_tokens.js`; change both together.
-  List<String> _historySearchScopes(Map<String, dynamic> map) {
-    final employeeIds = firestoreStringList(map['employeeIds']);
-    // The field carries every token once per scope, so the per-scope budget is
-    // the field cap divided by the scope count — NOT the query-side limit.
-    final scopeCount = 1 + employeeIds.length;
-    final tokens = searchIndexTokens(
-      texts: [
-        (map['clientName'] ?? '').toString(),
-        for (final name in firestoreStringList(map['employeeNames'])) name,
-      ],
-      phones: [(map['clientPhone'] ?? '').toString()],
-      limit: (kSearchTokenFieldLimit / scopeCount).floor().clamp(
-        1,
-        kSearchTokenFieldLimit,
-      ),
-    );
-    return [
-      for (final token in tokens) 'all:$token',
-      for (final employeeId in employeeIds)
-        for (final token in tokens) 'emp:$employeeId:$token',
-    ].take(kSearchTokenFieldLimit).toList();
-  }
 
   @override
   Future<void> restoreAppointmentStatus({
@@ -780,38 +689,29 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   static const int _historySearchScanLimit = 5000;
   static const int _conflictScanLimit = 1000;
 
-  Future<_CachedHistoryScanWindow> _historyScanWindow(
-    String? employeeId, {
-    required String scope,
-  }) async {
-    final cached = _historyWindows[scope];
+  Future<_CachedHistoryScanWindow> _historyScanWindow() async {
+    final cached = _historyWindow;
     if (cached != null && _searchCache.isFresh(cached.fetchedAt)) {
       return cached;
     }
-    final existing = _pendingHistoryScans[scope];
+    final existing = _pendingHistoryScan;
     if (existing != null) return await existing;
     final pending = _loadHistoryScanWindow(
-      employeeId,
-      scope: scope,
       generation: _searchCache.generation,
     );
-    _pendingHistoryScans[scope] = pending;
+    _pendingHistoryScan = pending;
     try {
       return await pending;
     } finally {
-      if (identical(_pendingHistoryScans[scope], pending)) {
-        unawaited(_pendingHistoryScans.remove(scope));
-      }
+      if (identical(_pendingHistoryScan, pending)) _pendingHistoryScan = null;
     }
   }
 
-  Future<_CachedHistoryScanWindow> _loadHistoryScanWindow(
-    String? employeeId, {
-    required String scope,
+  Future<_CachedHistoryScanWindow> _loadHistoryScanWindow({
     required int generation,
   }) async {
     final docs = await pageToCap(
-      _historyQuery(employeeId).orderBy('startTime', descending: true),
+      _historyQuery.orderBy('startTime', descending: true),
       pageSize: _historySearchPageSize,
       cap: _historySearchScanLimit,
       onCapReached: () => _logger.warn(
@@ -822,18 +722,15 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     final window = _CachedHistoryScanWindow([
       for (final doc in docs) (id: doc.id, data: doc.data()),
     ], _clock());
-    if (generation == _searchCache.generation) _historyWindows[scope] = window;
+    if (generation == _searchCache.generation) _historyWindow = window;
     return window;
   }
 
-  /// One pass over the window: every change is merged in place, and a doc the
-  /// window has not seen is inserted at its `startTime` position rather than
-  /// appended, because the window is `startTime` DESC.
+  /// Merges changes in place; a new doc is inserted at its `startTime` DESC position.
   List<RawHistoryDoc> _patchHistoryDocs(
     List<RawHistoryDoc> docs,
-    Map<String, Map<String, dynamic>?> changes, {
-    required String scope,
-  }) {
+    Map<String, Map<String, dynamic>?> changes,
+  ) {
     final merged = <String, Map<String, dynamic>?>{};
     final next = <RawHistoryDoc>[];
     for (final doc in docs) {
@@ -850,7 +747,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
                 if (e.value is! FieldValue) e.key: e.value,
             };
       merged[doc.id] = data;
-      if (data != null && _belongsInHistoryScope(data, scope)) {
+      if (data != null && _belongsInHistory(data)) {
         next.add((id: doc.id, data: data));
       }
     }
@@ -861,7 +758,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       if (data == null || firestoreDateTime(data['startTime']) == null) {
         continue;
       }
-      if (!_belongsInHistoryScope(data, scope)) continue;
+      if (!_belongsInHistory(data)) continue;
       next.insert(_insertIndexFor(next, data), (id: entry.key, data: data));
     }
     return next;
@@ -869,11 +766,9 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
 
   /// A cached answer patched like the window; null when it may now be short.
   List<AppointmentRecord>? _patchSearchResults(
-    String cacheKey,
     List<AppointmentRecord> results,
     Map<String, Map<String, dynamic>?> changes,
   ) {
-    final scope = cacheKey.substring(0, cacheKey.indexOf('|'));
     final seen = <String>{};
     final next = <AppointmentRecord>[];
     for (final record in results) {
@@ -890,7 +785,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
         for (final e in patch.entries)
           if (e.value is! FieldValue) e.key: e.value,
       };
-      if (!_belongsInHistoryScope(data, scope)) continue;
+      if (!_belongsInHistory(data)) continue;
       // A renamed client or crew may no longer match the query.
       if (_movesSearchFields(record, patch)) return null;
       next.add(AppointmentRecord.fromMap(id, data));
@@ -900,7 +795,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       if (seen.contains(entry.key) || data == null) continue;
       // Only the query knows whether a newly terminal doc matches it.
       final mayJoin = firestoreDateTime(data['startTime']) != null
-          ? _belongsInHistoryScope(data, scope)
+          ? _belongsInHistory(data)
           : isTerminalStatusRaw((data['status'] ?? '').toString());
       if (mayJoin) return null;
     }
@@ -944,12 +839,8 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     return docs.length;
   }
 
-  bool _belongsInHistoryScope(Map<String, dynamic> data, String scope) {
-    if (!isTerminalStatusRaw((data['status'] ?? '').toString())) return false;
-    if (scope.isEmpty) return true;
-    final employeeId = scope.startsWith('emp:') ? scope.substring(4) : scope;
-    return firestoreStringList(data['employeeIds']).contains(employeeId);
-  }
+  static bool _belongsInHistory(Map<String, dynamic> data) =>
+      isTerminalStatusRaw((data['status'] ?? '').toString());
 
   Future<List<AppointmentRecord>> _findClashingAppointmentsLocal({
     required List<String> employeeIds,

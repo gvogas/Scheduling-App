@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:scheduling/core/layout/breakpoints.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
+import 'package:scheduling/features/feature_tour/widgets/tour_action_button.dart';
 import 'package:scheduling/features/feature_tour/widgets/tour_step_text.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:showcaseview/showcaseview.dart';
@@ -35,6 +37,8 @@ class TourShowcase extends StatelessWidget {
     final scheme = theme.colorScheme;
     final text = tourStepText(context.l10n, id);
     final noMotion = MediaQuery.disableAnimationsOf(context);
+    // showcaseview's action Row can't flex; drop the counter when it won't fit.
+    final showCounter = !context.isNarrowWidth;
     return Showcase(
       key: showcaseKey,
       scope: scope.storageKey,
@@ -58,41 +62,54 @@ class TourShowcase extends StatelessWidget {
       disableMovingAnimation: noMotion,
       disableScaleAnimation: noMotion,
       // Package defaults already give position: inside + spaceBetween.
-      tooltipActionConfig: const TooltipActionConfig(
-        actionGap: AppSpacing.sp8,
-      ),
-      tooltipActions: [
+      tooltipActionConfig: const TooltipActionConfig(actionGap: AppSpacing.sp8),
+      tooltipActions: _buildActions(context, theme, scheme, showCounter),
+      child: child,
+    );
+  }
+
+  List<TooltipActionButton> _buildActions(
+    BuildContext context,
+    ThemeData theme,
+    ColorScheme scheme,
+    bool showCounter,
+  ) {
+    return [
+      if (showCounter)
         TooltipActionButton.custom(
-          button: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sp8),
-            child: Text(
-              context.l10n.tour_stepCounter(index + 1, count),
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: scheme.onSurfaceVariant,
+          button: MediaQuery.withClampedTextScaling(
+            maxScaleFactor: kTourActionMaxTextScale,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: AppSpacing.sp8),
+              child: Text(
+                context.l10n.tour_stepCounter(index + 1, count),
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
               ),
             ),
           ),
         ),
-        TooltipActionButton(
-          type: TooltipDefaultActionType.skip,
-          name: context.l10n.tour_skip,
-          backgroundColor: Colors.transparent,
-          textStyle: theme.textTheme.labelLarge?.copyWith(
+      TooltipActionButton.custom(
+        button: TourActionButton(
+          label: context.l10n.tour_skip,
+          style: theme.textTheme.labelLarge?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
+          compactIcon: Icons.close,
+          onTap: () => ShowcaseView.getNamed(scope.storageKey).dismiss(),
         ),
-        TooltipActionButton(
-          type: TooltipDefaultActionType.next,
-          name: context.l10n.tour_next,
-          backgroundColor: scheme.primary,
-          borderRadius: BorderRadius.circular(AppRadius.rFull),
-          textStyle: theme.textTheme.labelLarge?.copyWith(
-            color: scheme.onPrimary,
-          ),
+      ),
+      TooltipActionButton.custom(
+        button: TourActionButton(
+          label: context.l10n.tour_next,
+          style: theme.textTheme.labelLarge?.copyWith(color: scheme.onPrimary),
+          fill: scheme.primary,
+          onTap: () =>
+              ShowcaseView.getNamed(scope.storageKey).next(force: true),
         ),
-      ],
-      child: child,
-    );
+      ),
+    ];
   }
 }
 

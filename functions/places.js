@@ -172,7 +172,8 @@ const placesAutocomplete = onCall(
               "Content-Type": "application/json",
               "X-Goog-Api-Key": GOOGLE_MAP_API_KEY.value().trim(),
               "X-Goog-FieldMask": "suggestions.placePrediction.placeId," +
-                "suggestions.placePrediction.text",
+                "suggestions.placePrediction.text," +
+                "suggestions.placePrediction.structuredFormat",
             },
             body: JSON.stringify(body),
           },

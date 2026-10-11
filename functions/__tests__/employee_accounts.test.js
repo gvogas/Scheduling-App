@@ -12,12 +12,14 @@ const {
   resetProvisionedPassword,
   performCreateAccount,
   performDeleteAccount,
+  generateStartingPassword,
+} = require("../employee_accounts_admin");
+const {
   performChangeEmail,
   notifyEmailChanged,
   buildActivationPatch,
-  generateStartingPassword,
   isStrongPassword,
-} = require("../employee_accounts");
+} = require("../employee_accounts_self");
 const {buildEmailChangedMessage, buildSelfEmailChangedMessage} =
   require("../notification_messages");
 const crypto = require("node:crypto");

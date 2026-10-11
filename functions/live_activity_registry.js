@@ -351,7 +351,7 @@ module.exports = {
   CARDS_COLLECTION,
   // The three below are exported for unit tests, which assert against the
   // constants rather than restating their literals — same convention as
-  // employee_accounts.js.
+  // employee_accounts_admin.js.
   IN_QUERY_MAX,
   PRUNE_MAX,
   CARD_TTL_MS,

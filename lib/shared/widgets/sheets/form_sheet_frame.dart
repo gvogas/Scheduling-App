@@ -64,59 +64,72 @@ class FormSheetFrame extends StatelessWidget {
       minChildSize: heightFactor,
       maxChildSize: heightFactor,
       expand: false,
-      builder: (sheetContext, scrollController) => GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => FocusScope.of(sheetContext).unfocus(),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerLowest,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(AppRadius.rSheet),
-            ),
-            boxShadow: theme.cardStyle.sheetShadow,
+      builder: (sheetContext, scrollController) =>
+          _buildSheet(sheetContext, scrollController, theme, scheme),
+    );
+  }
+
+  Widget _buildSheet(
+    BuildContext sheetContext,
+    ScrollController scrollController,
+    ThemeData theme,
+    ColorScheme scheme,
+  ) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => FocusScope.of(sheetContext).unfocus(),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: scheme.surfaceContainerLowest,
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppRadius.rSheet),
           ),
-          child: ClipRRect(
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(AppRadius.rSheet),
-            ),
-            child: Material(
-              type: MaterialType.transparency,
-              child: Column(
-                children: [
-                  _wrapHeader(
-                    SheetHeaderBar(
-                      title: title,
-                      primaryLabel: primaryLabel,
-                      onPrimary: onPrimary,
-                      // Defaulting the dismiss here rather than in the bar
-                      // keeps SheetHeaderBar free of any assumption about how
-                      // the surface hosting it is closed.
-                      onCancel:
-                          onCancel ?? () => Navigator.maybePop(sheetContext),
-                      isBusy: isBusy,
-                    ),
+          boxShadow: theme.cardStyle.sheetShadow,
+        ),
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(AppRadius.rSheet),
+          ),
+          child: Material(
+            type: MaterialType.transparency,
+            child: Column(
+              children: [
+                _wrapHeader(
+                  SheetHeaderBar(
+                    title: title,
+                    primaryLabel: primaryLabel,
+                    onPrimary: onPrimary,
+                    // Defaulting the dismiss here rather than in the bar
+                    // keeps SheetHeaderBar free of any assumption about how
+                    // the surface hosting it is closed.
+                    onCancel:
+                        onCancel ?? () => Navigator.maybePop(sheetContext),
+                    isBusy: isBusy,
                   ),
-                  Expanded(
-                    child: ListView(
-                      controller: scrollController,
-                      scrollCacheExtent: scrollCacheExtent,
-                      padding: EdgeInsets.only(
-                        left: 18,
-                        right: 18,
-                        top: AppSpacing.sp16,
-                        // Keyboard-inset aware, so the focused field is never
-                        // hidden behind the keyboard.
-                        bottom:
-                            MediaQuery.viewInsetsOf(sheetContext).bottom + 30,
-                      ),
-                      children: children,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+                _buildList(sheetContext, scrollController),
+              ],
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildList(BuildContext sheetContext, ScrollController controller) {
+    return Expanded(
+      child: ListView(
+        controller: controller,
+        scrollCacheExtent: scrollCacheExtent,
+        padding: EdgeInsets.only(
+          left: 18,
+          right: 18,
+          top: AppSpacing.sp16,
+          // Keyboard-inset aware, so the focused field is never
+          // hidden behind the keyboard.
+          bottom: MediaQuery.viewInsetsOf(sheetContext).bottom + 30,
+        ),
+        children: children,
       ),
     );
   }

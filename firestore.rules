@@ -138,7 +138,7 @@ service cloud.firestore {
             && !request.resource.data.keys()
                  .hasAny(['uid', 'termsAcceptedAt', 'locationConsentAt',
                           'emergencyContact', 'emergencyPhone',
-                          'passwordResetRequired'])
+                          'setupRequiresPassword', 'passwordResetRequired'])
             && isValidUserData(request.resource.data);
 
       // Rejects a colorValue write that isn't a valid integer string — otherwise a bad
@@ -346,8 +346,7 @@ service cloud.firestore {
     }
 
     // ── appointments ──────────────────────────────────────────────────────────
-    // The lifecycle goes pending -> in_progress -> done, plus cancelled. Employees
-    // can only ever write 'done' (see below).
+    // Lifecycle: pending -> in_progress -> done, plus cancelled (ADR-0044).
     function isValidAppointmentStatus(s) {
       return s in ['pending', 'in_progress', 'done', 'cancelled'];
     }
@@ -356,8 +355,7 @@ service cloud.firestore {
       return v is string && v.size() <= 128 && !v.matches('.*/.*');
     }
 
-    // Empty client links are used by personal jobs. Existing history remains
-    // editable; only creating or changing a link needs an available client.
+    // An empty link is a personal job; only a new or changed link needs a client.
     function canLinkClient(d) {
       let id = d.get('clientId', '');
       return id == '' || (isValidDocIdField(id)
@@ -388,8 +386,7 @@ service cloud.firestore {
 
     function isValidAppointmentData(d) {
       return (!('title' in d.keys()) || isBoundedString(d.title, 200))
-        // The one string `toMap()` emits that had no cap. It is an enum name
-        // client-side, so this is far above anything legitimate.
+        // An enum name client-side; the one `toMap()` string that had no cap.
         && (!('repeat' in d.keys()) || isBoundedString(d.repeat, 32))
         && (!('address' in d.keys()) || isBoundedString(d.address, 500))
         && (!('notes' in d.keys()) || isBoundedString(d.notes, 4000))
@@ -404,8 +401,7 @@ service cloud.firestore {
         && (!('clientPhone' in d.keys()) || isBoundedString(d.clientPhone, 40))
         && (!('clientId' in d.keys()) || isValidDocIdField(d.clientId))
         && (!('seriesId' in d.keys()) || isValidDocIdField(d.seriesId))
-        // Same reasoning as the ids above: `seriesOpId` is interpolated into
-        // the `appointmentSeriesNotices/op_<opId>_<kind>_<emp>` doc id.
+        // Interpolated into an `appointmentSeriesNotices` doc id, like the ids.
         && (!('seriesOpId' in d.keys()) || isValidDocIdField(d.seriesOpId))
 
         && (!('pictures' in d.keys())
@@ -440,8 +436,7 @@ service cloud.firestore {
         && !request.resource.data.keys().hasAny(['startedAt', 'completedAt'])
         && isValidAppointmentStatus(request.resource.data.status)
         && isValidAppointmentData(request.resource.data)
-        // No existing doc to strand, so the span bound and the per-instant
-        // type checks are both outright here.
+        // Create has no existing doc to strand, so both checks are outright.
         && hasValidAppointmentInstants(request.resource.data)
         && isValidAppointmentSpan(request.resource.data);
 
@@ -464,22 +459,13 @@ service cloud.firestore {
             && request.resource.data.updatedAt == request.time
             && resource.data.status != 'cancelled')
 
+        // The photo batch's parent touch (ADR-0188).
         || (isAssignedEmployee(resource.data)
             && request.resource.data.diff(resource.data)
                .affectedKeys()
-               .hasOnly(['fieldNotes', 'updatedAt'])
-            && (!('fieldNotes' in request.resource.data)
-                || isBoundedString(request.resource.data.fieldNotes, 4000))
+               .hasOnly(['updatedAt'])
             && request.resource.data.updatedAt == request.time)
-        // "Start job": the assignee moves an open job FORWARD into
-        // `in_progress`, and nothing else. Its own branch, not a widening of
-        // the mark-done one: that branch's `status == 'done'` is its whole
-        // guarantee, and admitting a second value there would let one write
-        // do either. This one can only ever go from an open status into
-        // in-progress — never backwards, never out of a closed state, and
-        // never twice (a re-tap is refused rather than re-stamped). The
-        // `startedAt` instant itself is stamped SERVER-SIDE by the write
-        // trigger (`lifecycleStamps`), so no client may write it here.
+        // "Start job": its own branch, never a widening of mark-done (ADR-0055).
         || (isAssignedEmployee(resource.data)
             && request.resource.data.diff(resource.data)
                .affectedKeys()
@@ -614,13 +600,7 @@ service cloud.firestore {
         && !request.resource.data.diff(resource.data)
              .affectedKeys()
              .hasAny(['waveCustomerId', 'wave', 'jobCount', 'deletionToken', 'buildingKey']);
-      // No delete grant, deliberately. Delete belongs to the `deleteClient`
-      // callable, which refuses a client that still has appointments. Rules
-      // cannot express "only when this client has no appointments" — there is
-      // no cheap way to count a foreign collection here — so the callable is
-      // the only place that guarantee can live, and nothing may delete a client
-      // directly. The 1.37.1 compat grant that kept this open (for that build's
-      // ungated Delete button) retired 2026-08-08; don't restore it.
+      // No delete grant: only the `deleteClient` callable deletes (it refuses a client with history).
     }
 
     match /clientBuildings/{buildingId} {

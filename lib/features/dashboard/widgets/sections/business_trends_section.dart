@@ -35,37 +35,7 @@ class BusinessTrendsSection extends StatelessWidget {
       children: [
         SectionLabel(l10n.dashboard_businessTrends),
         const SizedBox(height: AppSpacing.sp8),
-        Container(
-          decoration: appCardDecoration(theme, color: scheme.surface),
-          padding: const EdgeInsets.all(AppSpacing.sp16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l10n.dashboard_completedVsCancelled,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.sp12),
-              WeeklyBarChart(
-                weekStarts: [for (final b in buckets) b.weekStart],
-                series: [
-                  WeeklyBarSeries(
-                    values: [for (final b in buckets) b.completed],
-                    color: statusColors.success,
-                    label: statusLabel(l10n, AppointmentStatus.done),
-                  ),
-                  WeeklyBarSeries(
-                    values: [for (final b in buckets) b.cancelled],
-                    color: scheme.error,
-                    label: statusLabel(l10n, AppointmentStatus.cancelled),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
+        _buildChartCard(theme, scheme, statusColors, l10n),
         if (busiest != null) ...[
           const SizedBox(height: AppSpacing.sp16),
           Row(
@@ -86,6 +56,45 @@ class BusinessTrendsSection extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+
+  Widget _buildChartCard(
+    ThemeData theme,
+    ColorScheme scheme,
+    AppStatusColors statusColors,
+    AppLocalizations l10n,
+  ) {
+    return Container(
+      decoration: appCardDecoration(theme, color: scheme.surface),
+      padding: const EdgeInsets.all(AppSpacing.sp16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            l10n.dashboard_completedVsCancelled,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sp12),
+          WeeklyBarChart(
+            weekStarts: [for (final b in buckets) b.weekStart],
+            series: [
+              WeeklyBarSeries(
+                values: [for (final b in buckets) b.completed],
+                color: statusColors.success,
+                label: statusLabel(l10n, AppointmentStatus.done),
+              ),
+              WeeklyBarSeries(
+                values: [for (final b in buckets) b.cancelled],
+                color: scheme.error,
+                label: statusLabel(l10n, AppointmentStatus.cancelled),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 

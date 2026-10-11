@@ -143,11 +143,7 @@ class ClientsListHeader extends StatelessWidget {
                   color: theme.colorScheme.onSurfaceVariant,
                   icon: const Icon(Icons.close),
                 ),
-              // Bounded rather than flexible: a Flexible here splits the free
-              // space with the sentence's Expanded 50/50, which both truncated the
-              // sentence and left the control floating mid-row instead of pinned
-              // to the end. The cap is what keeps a long label from taking the
-              // whole row at large text.
+              // Bounded, never `Flexible`, which splits the row 50/50 with the sentence's `Expanded`.
               ConstrainedBox(
                 constraints: BoxConstraints(maxWidth: width * 0.55),
                 child: _wrapSort(
@@ -197,45 +193,49 @@ class _SortPill extends StatelessWidget {
       // The Filter button's vocabulary, painted rather than built
       // from GhostControl: the popup owns the tap, and a second
       // InkWell inside it would fight for the same gesture.
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: kGhostTapTarget),
-        child: Center(
-          widthFactor: 1,
-          child: Container(
-            constraints: const BoxConstraints(minHeight: kGhostTile),
-            decoration: BoxDecoration(
-              color: theme.colorScheme.surface,
-              borderRadius: BorderRadius.circular(AppRadius.rFull),
-              border: Border.all(color: theme.colorScheme.outlineVariant),
-            ),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: AppSpacing.sp8,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              spacing: 6,
-              children: [
-                Icon(
-                  Icons.sort_rounded,
-                  size: 15,
-                  color: theme.colorScheme.onSurface,
-                ),
-                Flexible(
-                  child: Text(
-                    ClientsListHeader.sortLabel(l10n, sort),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontFamily: kFontSans,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: theme.colorScheme.onSurface,
-                    ),
+      child: _buildTrigger(theme, l10n),
+    );
+  }
+
+  Widget _buildTrigger(ThemeData theme, AppLocalizations l10n) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: kGhostTapTarget),
+      child: Center(
+        widthFactor: 1,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: kGhostTile),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.surface,
+            borderRadius: BorderRadius.circular(AppRadius.rFull),
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+          padding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: AppSpacing.sp8,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            spacing: 6,
+            children: [
+              Icon(
+                Icons.sort_rounded,
+                size: 15,
+                color: theme.colorScheme.onSurface,
+              ),
+              Flexible(
+                child: Text(
+                  ClientsListHeader.sortLabel(l10n, sort),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontFamily: kFontSans,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: theme.colorScheme.onSurface,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

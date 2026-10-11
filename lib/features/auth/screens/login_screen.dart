@@ -202,11 +202,7 @@ class _LoginState extends ConsumerState<Login> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Error-only: this screen has no success message to show - it
-          // navigates away on success. The `_bannerSuccess` field it used to
-          // read here was assigned `null` at all four sites and nothing else,
-          // so the success branch was unreachable (the same dead state the
-          // audit found on `AccountSetupScreen`, in a file it did not name).
+          // Error-only: this screen navigates away on success.
           AuthBanner(message: _bannerError),
           const SizedBox(height: AppSpacing.sp16),
           AuthEmailField(

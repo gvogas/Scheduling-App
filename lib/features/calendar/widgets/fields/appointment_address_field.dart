@@ -81,10 +81,6 @@ class _AddressPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final address = client.address.isNotEmpty
-        ? client.fullAddress
-        : context.l10n.calendar_noAddress;
-
     return Container(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.sp8,
@@ -99,61 +95,71 @@ class _AddressPill extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Container(
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: scheme.primary,
-              borderRadius: BorderRadius.circular(AppRadius.r8),
-            ),
-            child: Icon(
-              Icons.location_on_outlined,
-              color: scheme.onPrimary,
-              size: 16,
-            ),
-          ),
+          _buildPinTile(scheme),
           const SizedBox(width: AppSpacing.sp8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  context.l10n.calendar_clientSAddress,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.sp4),
-                Text(
-                  address,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: scheme.onSurface),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: onChange,
-            style: TextButton.styleFrom(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AppSpacing.sp8,
-                vertical: AppSpacing.sp4,
-              ),
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-            ),
-            child: Text(
-              context.l10n.calendar_changeAddress,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: scheme.primary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
+          Expanded(child: _buildAddressText(context, scheme)),
+          _buildChangeButton(context, scheme),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPinTile(ColorScheme scheme) {
+    return Container(
+      width: 30,
+      height: 30,
+      decoration: BoxDecoration(
+        color: scheme.primary,
+        borderRadius: BorderRadius.circular(AppRadius.r8),
+      ),
+      child: Icon(
+        Icons.location_on_outlined,
+        color: scheme.onPrimary,
+        size: 16,
+      ),
+    );
+  }
+
+  Widget _buildAddressText(BuildContext context, ColorScheme scheme) {
+    final textTheme = Theme.of(context).textTheme;
+    final address = client.address.isNotEmpty
+        ? client.fullAddress
+        : context.l10n.calendar_noAddress;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.l10n.calendar_clientSAddress,
+          style: textTheme.labelSmall?.copyWith(color: scheme.onSurfaceVariant),
+        ),
+        const SizedBox(height: AppSpacing.sp4),
+        Text(
+          address,
+          style: textTheme.bodySmall?.copyWith(color: scheme.onSurface),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildChangeButton(BuildContext context, ColorScheme scheme) {
+    return TextButton(
+      onPressed: onChange,
+      style: TextButton.styleFrom(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sp8,
+          vertical: AppSpacing.sp4,
+        ),
+        minimumSize: Size.zero,
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      ),
+      child: Text(
+        context.l10n.calendar_changeAddress,
+        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+          color: scheme.primary,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }

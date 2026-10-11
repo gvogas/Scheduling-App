@@ -64,37 +64,11 @@ describe("clientSearchTokens", () => {
 });
 
 describe("appointmentHistoryScopes", () => {
-  test("carries every token under all and each assignee scope", () => {
-    const scopes = appointmentHistoryScopes({
-      clientName: "Tremblay",
-      clientPhone: "5145554321",
-      employeeIds: ["emp1"],
-      employeeNames: ["Marc"],
-    });
-    expect(scopes).toContain("all:t:tremblay");
-    expect(scopes).toContain("emp:emp1:t:tremblay");
-    expect(scopes).toContain("all:t:marc");
-    // Reachable in every scope; appending it last silently lost it.
-    expect(scopes).toContain("all:p:5145554321");
-    expect(scopes).toContain("emp:emp1:p:5145554321");
+  test.each(fixture.historyScopes)("$name", (c) => {
+    const scopes = appointmentHistoryScopes(c.record);
+    expectTokens(scopes, c);
+    expect(scopes.every((t) => t.startsWith("all:"))).toBe(true);
     expect(scopes.length).toBeLessThanOrEqual(TOKEN_FIELD_LIMIT);
-  });
-
-  test("stays inside the field cap for a large crew", () => {
-    const employeeIds = [];
-    const employeeNames = [];
-    for (let i = 0; i < 20; i++) {
-      employeeIds.push(`emp${i}`);
-      employeeNames.push(`Technicien${i}`);
-    }
-    const scopes = appointmentHistoryScopes({
-      clientName: "Tremblay",
-      clientPhone: "5145554321",
-      employeeIds,
-      employeeNames,
-    });
-    expect(scopes.length).toBeLessThanOrEqual(TOKEN_FIELD_LIMIT);
-    expect(scopes).toContain("all:p:5145554321");
   });
 });
 

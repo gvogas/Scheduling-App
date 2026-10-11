@@ -3,6 +3,7 @@ import 'package:scheduling/core/navigation/app_destination.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_definitions.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
+import 'package:scheduling/features/navigation/domain/drawer_catalog.dart';
 
 /// Destinations that mount a FeatureTourHost.
 const toured = <AppDestination>{
@@ -16,16 +17,15 @@ const toured = <AppDestination>{
   PushedDestination.dayRoute,
 };
 
-/// The destinations an employee can actually reach — exactly the drawer rows
-/// `drawerGroups(isAdmin: false)` offers.
-const employeeToured = <AppDestination>{
-  HubTab.calendar,
-  PushedDestination.dayRoute,
-  PushedDestination.history,
-  PushedDestination.settings,
-};
-
 void main() {
+  final employeeToured = {
+    for (final group in drawerGroups(isAdmin: false)) ...group.rows,
+  };
+
+  test('the employee drawer still offers a toured destination', () {
+    expect(employeeToured, isNotEmpty);
+  });
+
   test(
     'employee tours exist only for the destinations employees can reach',
     () {

@@ -151,8 +151,8 @@ async function importWithWatermark({
   // window it just covered is incomplete — advancing past it would hide any
   // Wave-side change to those customers until the next full pass. Holding the
   // watermark makes the next run re-query the same span; that is idempotent
-  // and free, and it self-heals as soon as the outbox drains (a dead-lettered
-  // job leaves `queued`/`inflight`, so it stops being protected).
+  // and free, and it self-heals as soon as the outbox drains (a `dead` job
+  // stays outstanding, so it keeps its client protected until requeued).
   // Unknown counts as NOT covered on purpose: holding the watermark is free
   // (the next run redoes an idempotent window), advancing it wrongly loses
   // changes.

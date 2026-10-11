@@ -8,10 +8,12 @@ const {performDeleteClient} = require("../../clients");
 const {withAccountOperation} = require("../../account_operation");
 const {
   createEmployeeAccount,
-  completeEmployeeSetup,
   resetEmployeePassword,
+} = require("../../employee_accounts_admin");
+const {
+  completeEmployeeSetup,
   completePasswordReset,
-} = require("../../employee_accounts");
+} = require("../../employee_accounts_self");
 const {reconcileClientBuilding} = require("../../client_buildings");
 const {backfillBuildings} = require("../../scripts/backfill-client-buildings");
 
@@ -120,11 +122,11 @@ async function verifySafety(project, firestore, auth, admin) {
         auth: {uid: admin.uid}, data: fields,
       }), /operation-in-progress/);
     });
-    // Reissue a starting password, then exercise the legacy setup request.
+    // Reissue a starting password, then send a setup with no newPassword.
     await createEmployeeAccount.run({auth: {uid: admin.uid}, data: fields});
     await assert.rejects(completeEmployeeSetup.run({
       auth: {uid}, data: {termsAccepted: true},
-    }), /setup-upgrade-required/);
+    }), /invalid-newPassword/);
     assert.equal((await person.ref.get()).data().status, "invited");
     await completeEmployeeSetup.run(setup);
     assert.equal((await person.ref.get()).data().status, "active");
@@ -161,6 +163,10 @@ async function verifySafety(project, firestore, auth, admin) {
     assert.equal(await write(`users/${prefix}-flagged`, {
       name: {stringValue: "Flagged"},
       passwordResetRequired: {booleanValue: true},
+    }), 403);
+    assert.equal(await write(`users/${prefix}-setup-flagged`, {
+      name: {stringValue: "Setup flagged"},
+      setupRequiresPassword: {booleanValue: true},
     }), 403);
     assert.equal(await write(`users/${prefix}-plain`, {
       name: {stringValue: "Plain"},

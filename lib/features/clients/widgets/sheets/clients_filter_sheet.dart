@@ -5,6 +5,7 @@ import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
+import 'package:scheduling/features/clients/domain/policies/client_building.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/primitives/app_back_button.dart';
 import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
@@ -51,31 +52,7 @@ class ClientsFilterSheet extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AppSpacing.sp8,
-                AppSpacing.sp4,
-                AppSpacing.sp16,
-                AppSpacing.sp8,
-              ),
-              child: Row(
-                spacing: AppSpacing.sp8,
-                children: [
-                  _GhostBack(onTap: onBack),
-                  Expanded(
-                    child: Text(
-                      l10n.clients_filterTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.headlineLarge
-                          ?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurface,
-                          ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _buildHeader(context, l10n),
             _Option(
               label: l10n.clients_filterAll,
               value: const ClientsFilterAll(),
@@ -99,38 +76,70 @@ class ClientsFilterSheet extends ConsumerWidget {
               selected: selected,
               onChanged: onChanged,
             ),
-            ...buildings.when(
-              // The sheet opens immediately; the scan fills this section in.
-              loading: () => [
-                _SectionHeading(l10n.clients_filterSectionAddress),
-                const Padding(
-                  padding: EdgeInsets.all(AppSpacing.sp16),
-                  child: Center(child: CircularProgressIndicator.adaptive()),
-                ),
-              ],
-              // A failed scan hides the section rather than showing a broken
-              // control — the type options above still work.
-              error: (_, _) => const <Widget>[],
-              data: (list) => list.isEmpty
-                  ? const <Widget>[]
-                  : [
-                      _SectionHeading(l10n.clients_filterSectionAddress),
-                      for (final building in list)
-                        _Option(
-                          label: building.street,
-                          secondary: building.city.isEmpty
-                              ? null
-                              : building.city,
-                          trailing: '${building.clientCount}',
-                          value: ClientsFilterBuilding(building.key),
-                          selected: selected,
-                          onChanged: onChanged,
-                        ),
-                    ],
-            ),
+            ..._buildAddressSection(l10n, buildings),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildHeader(BuildContext context, AppLocalizations l10n) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppSpacing.sp8,
+        AppSpacing.sp4,
+        AppSpacing.sp16,
+        AppSpacing.sp8,
+      ),
+      child: Row(
+        spacing: AppSpacing.sp8,
+        children: [
+          _GhostBack(onTap: onBack),
+          Expanded(
+            child: Text(
+              l10n.clients_filterTitle,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                color: Theme.of(context).colorScheme.onSurface,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildAddressSection(
+    AppLocalizations l10n,
+    AsyncValue<List<ClientBuilding>> buildings,
+  ) {
+    return buildings.when(
+      // The sheet opens immediately; the scan fills this section in.
+      loading: () => [
+        _SectionHeading(l10n.clients_filterSectionAddress),
+        const Padding(
+          padding: EdgeInsets.all(AppSpacing.sp16),
+          child: Center(child: CircularProgressIndicator.adaptive()),
+        ),
+      ],
+      // A failed scan hides the section rather than showing a broken
+      // control — the type options above still work.
+      error: (_, _) => const <Widget>[],
+      data: (list) => list.isEmpty
+          ? const <Widget>[]
+          : [
+              _SectionHeading(l10n.clients_filterSectionAddress),
+              for (final building in list)
+                _Option(
+                  label: building.street,
+                  secondary: building.city.isEmpty ? null : building.city,
+                  trailing: '${building.clientCount}',
+                  value: ClientsFilterBuilding(building.key),
+                  selected: selected,
+                  onChanged: onChanged,
+                ),
+            ],
     );
   }
 }
@@ -231,57 +240,66 @@ class _Option extends StatelessWidget {
                 horizontal: 14,
                 vertical: AppSpacing.sp8,
               ),
-              child: Row(
-                spacing: AppSpacing.sp12,
-                children: [
-                  Icon(
-                    isSelected
-                        ? Icons.radio_button_checked
-                        : Icons.radio_button_unchecked,
-                    size: 20,
-                    color: isSelected ? ink : theme.palette.textMuted,
-                  ),
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          label,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontFamily: kFontSans,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: ink,
-                          ),
-                        ),
-                        if (secondary != null)
-                          Text(
-                            secondary!,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: isSelected ? ink : scheme.onSurfaceVariant,
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                  if (trailing != null)
-                    Text(
-                      trailing!,
-                      style: theme.monoType.data.copyWith(
-                        color: isSelected ? ink : theme.palette.textMuted,
-                      ),
-                    ),
-                ],
-              ),
+              child: _buildRow(theme, scheme, isSelected, ink),
             ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildRow(
+    ThemeData theme,
+    ColorScheme scheme,
+    bool isSelected,
+    Color ink,
+  ) {
+    return Row(
+      spacing: AppSpacing.sp12,
+      children: [
+        Icon(
+          isSelected
+              ? Icons.radio_button_checked
+              : Icons.radio_button_unchecked,
+          size: 20,
+          color: isSelected ? ink : theme.palette.textMuted,
+        ),
+        Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontFamily: kFontSans,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: ink,
+                ),
+              ),
+              if (secondary != null)
+                Text(
+                  secondary!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: isSelected ? ink : scheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (trailing != null)
+          Text(
+            trailing!,
+            style: theme.monoType.data.copyWith(
+              color: isSelected ? ink : theme.palette.textMuted,
+            ),
+          ),
+      ],
     );
   }
 }

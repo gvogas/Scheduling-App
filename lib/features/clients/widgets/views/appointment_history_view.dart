@@ -389,7 +389,7 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
     }
 
     return ref
-        .watch(historySearchProvider(_searchKey(query)))
+        .watch(historySearchProvider(query))
         .when(
           data: (results) => list(
             // Provider identity holds until it refetches.
@@ -407,12 +407,10 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
         );
   }
 
-  HistorySearchKey _searchKey(String query) => (query: query, employeeId: null);
-
   // Retry invalidates the watched search provider.
   Widget _searchError(Object error, String query) => _errorState(
     error,
-    onRetry: () => ref.invalidate(historySearchProvider(_searchKey(query))),
+    onRetry: () => ref.invalidate(historySearchProvider(query)),
   );
 
   Widget _errorState(Object error, {required VoidCallback onRetry}) =>

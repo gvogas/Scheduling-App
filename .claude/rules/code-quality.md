@@ -13,10 +13,13 @@ alwaysApply: true
   **This is enforced, not aspirational** (owner call, 2026-09-03). The rationale
   comments in `firestore.rules` were deleted deliberately and the same trim was
   applied across the codebase; a comment block explaining WHY a guard has its
-  shape belongs in these rules files, which is where an audit and a new session
-  actually read it. Don't restore a deleted block, and don't file its absence
-  as a finding — check whether the fact is recorded here first, and add it here
-  if it is not.
+  shape belongs in these rules files as the invariant plus at most ONE inline
+  clause of reason (kept wherever the obvious "fix" is wrong), because that is
+  what a new session reads. Dates, incidents and longer rationale go in an ADR
+  under `docs/decisions/`, cited from the rule as `(ADR-NNNN)` (owner call,
+  2026-10-07). Don't restore a deleted block, and don't file its absence as a
+  finding — check whether the fact is recorded in the rules or an ADR first,
+  and add it if it is not.
 - **Two exceptions, both mechanical.** Analyzer and linter directives
   (`// ignore:`, `// ignore_for_file:`, `// eslint-disable*`, `@pragma`) are
   code, not commentary. And `functions/` runs eslint's `require-jsdoc` +

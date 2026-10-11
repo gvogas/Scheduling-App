@@ -82,16 +82,7 @@ class _EditClientSheetState extends ConsumerState<EditClientSheet>
 
   void _initControllers() {
     final c = widget.client;
-    // The STORED name with its number stripped — never `displayName`. On a
-    // BUSINESS that field is the business, and it is what Wave shows; on a
-    // person it is now the phone number, and `_save` re-derives it.
-    //
-    // `displayName` is the wrong cure: on anything it reads as a person it
-    // returns the first/last halves and ignores the stored name entirely — and
-    // the Wave import sets no `type`, so EVERY imported business reads as a
-    // person. Seeding the contact person here and saving would rename the
-    // customer on live Wave invoices. `baseNameFor` strips the number without
-    // ever substituting a different name.
+    // The STORED name via `baseNameFor`, never `displayName`, which renames imported Wave customers (ADR-0095).
     _nameController = TextEditingController(
       text: ClientNamePolicy.baseNameFor(
         name: c.name,

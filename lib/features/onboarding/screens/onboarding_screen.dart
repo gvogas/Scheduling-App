@@ -90,10 +90,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            _OnboardingTopBar(
-              showSkip: !isLast,
-              onSkip: widget.onFinish,
-            ),
+            _OnboardingTopBar(showSkip: !isLast, onSkip: widget.onFinish),
             Expanded(
               child: PageView.builder(
                 controller: _controller,
@@ -113,30 +110,34 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                 dotColor: scheme.outlineVariant,
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.sp24),
-              child: Row(
-                children: [
-                  if (_index > 0) ...[
-                    TextButton(
-                      onPressed: _back,
-                      child: Text(context.l10n.onboarding_back),
-                    ),
-                    const SizedBox(width: AppSpacing.sp8),
-                  ],
-                  Expanded(
-                    child: AnimatedLoadingButton(
-                      label: isLast
-                          ? context.l10n.onboarding_getStarted
-                          : context.l10n.onboarding_next,
-                      onPressed: () => _advance(slides.length),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+            _buildActions(context, isLast, slides.length),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildActions(BuildContext context, bool isLast, int slideCount) {
+    return Padding(
+      padding: const EdgeInsets.all(AppSpacing.sp24),
+      child: Row(
+        children: [
+          if (_index > 0) ...[
+            TextButton(
+              onPressed: _back,
+              child: Text(context.l10n.onboarding_back),
+            ),
+            const SizedBox(width: AppSpacing.sp8),
+          ],
+          Expanded(
+            child: AnimatedLoadingButton(
+              label: isLast
+                  ? context.l10n.onboarding_getStarted
+                  : context.l10n.onboarding_next,
+              onPressed: () => _advance(slideCount),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -146,28 +146,18 @@ function clientSearchTokens(data) {
 }
 
 /**
- * Tokenizes one appointment document into all/employee history scopes.
+ * Tokenizes one appointment document under the single `all:` history scope.
  * @param {!Object} data Appointment fields.
  * @return {!Array<string>}
  */
 function appointmentHistoryScopes(data) {
   const d = data || {};
-  const employeeIds = Array.isArray(d.employeeIds) ? d.employeeIds : [];
   const employeeNames = Array.isArray(d.employeeNames) ? d.employeeNames : [];
-  // The field carries every token once per scope, so the per-scope budget is
-  // the field cap divided by the scope count — NOT the query-side limit.
-  const scopeCount = 1 + employeeIds.length;
   const tokens = searchIndexTokens({
     texts: [d.clientName, ...employeeNames],
     phones: [d.clientPhone],
-    limit: Math.max(1, Math.floor(TOKEN_FIELD_LIMIT / scopeCount)),
   });
-  const scoped = [];
-  for (const token of tokens) scoped.push(`all:${token}`);
-  for (const employeeId of employeeIds) {
-    for (const token of tokens) scoped.push(`emp:${employeeId}:${token}`);
-  }
-  return scoped.slice(0, TOKEN_FIELD_LIMIT);
+  return tokens.map((token) => `all:${token}`);
 }
 
 /**

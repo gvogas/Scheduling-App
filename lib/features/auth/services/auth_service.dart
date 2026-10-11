@@ -183,11 +183,9 @@ class AuthService {
   static const _setupFailuresByMessage = <String, AuthFailure>{
     'invalid-newPassword': AuthFailureWeakPassword(),
     'account-operation-in-progress': AuthFailureTooManyRequests(),
-    'setup-upgrade-required': AuthFailureSetupNotAvailableYet(),
     'setup-not-pending': AuthFailureSetupAlreadyComplete(),
     'not-required': AuthFailureSetupAlreadyComplete(),
     'account-not-found': AuthFailureNoAccountRecord(),
-    'email-not-verified': AuthFailureSetupNotAvailableYet(),
   };
 
   /// Maps setup-only auth failures before falling back to the shared mapper.

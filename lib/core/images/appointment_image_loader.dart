@@ -63,11 +63,7 @@ class AppointmentImageLoader {
 
   /// Reads disk first, then Storage, and writes successful network bytes back.
   Future<Uint8List> _resolve(AppointmentImage image, String key) async {
-    // FIRST line, above the disk read too: `deregisterThisDevice` calls
-    // `clear()` before `signOut()`, so a load whose disk read is in flight
-    // resumes and would read the ALREADY-BUMPED generation — the write then
-    // matches and one user's job photo lands on disk after sign-out, outliving
-    // the process on a shared handset.
+    // FIRST, above the disk read too: `clear()` bumps the generation before `signOut()` (ADR-0004).
     final generation = _disk.generation;
 
     final onDisk = await _disk.read(key);

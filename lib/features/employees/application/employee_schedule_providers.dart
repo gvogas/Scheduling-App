@@ -50,11 +50,7 @@ final employeeJobsTodayProvider = Provider.autoDispose<Map<String, int>>((ref) {
   );
   final counts = <String, int>{};
   for (final job in jobs) {
-    // Cancelled visits and time off are not load — `countsAsLoadOn` owns that,
-    // shared with the drawer badge. The detail's TODAY panel below deliberately
-    // still LISTS a day off: a card wearing a "Day off" chip under a row
-    // reading "0 jobs today" says something true, where hiding it would leave
-    // an admin wondering where the person is.
+    // `countsAsLoadOn` owns what counts; the TODAY panel still LISTS a day off (ADR-0047).
     if (!countsAsLoadOn(job, range.start)) continue;
     for (final id in job.employeeIds) {
       counts[id] = (counts[id] ?? 0) + 1;
@@ -119,21 +115,7 @@ final employeeTodayJobsProvider = Provider.autoDispose
         ref.watch(appointmentsInRangeProvider(range)),
         'EMP-TODAY today-panel range stream failed',
       );
-      // Sorted by THIS DAY's window start, not the stored instant. The stream
-      // arrives in `orderBy('startTime')` order, so a run that began days ago
-      // sorted ahead of everything — a 5-day 17:00 job listed above today's
-      // 08:00 one. `notification_policy.js` sorts by the day's clock time for
-      // exactly this reason; this is the Dart mirror of that rule.
-      //
-      // Decorate-sort-undecorate: the key is built ONCE per record, not on
-      // both operands of every comparison — `fetchClientsByType` documents
-      // avoiding the same pattern. Inside the comparator a 20-job day cost
-      // ~170 slice constructions instead of 20, on every stream emission.
-      //
-      // The slice is ALSO the day-scoping test, so it is resolved once and
-      // used for both: a null slice is precisely `!runsOn`, and asking
-      // `runsOn` first and then `sliceFor` re-ran the whole day-index
-      // computation on every surviving record.
+      // Sorted by THIS DAY's window start, mirroring `notification_policy.js`; the slice is resolved once per record.
       final keyed = <({AppointmentRecord job, DateTime start})>[];
       for (final job in jobs) {
         if (isCancelledStatusRaw(job.status) ||
