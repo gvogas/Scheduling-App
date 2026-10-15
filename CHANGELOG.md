@@ -10,6 +10,14 @@ All notable changes to this project are documented here.
 The `+N` build number after the version (e.g. `1.1.0+5`) is the store version
 code; it increments by one on every store upload regardless of the semver part.
 
+## [1.64.2+96] - 2026-10-14
+
+Maintenance release.
+
+### Changed
+- **No visible changes.** This build re-ships 1.64.1 with an updated build
+  number; everything works as before.
+
 ## [1.64.1+95] - 2026-10-09
 
 Easier-to-scan address suggestions, plus layout fixes for large text.
