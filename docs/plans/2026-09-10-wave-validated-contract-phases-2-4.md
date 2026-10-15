@@ -11,7 +11,7 @@ day. Left (verified 2026-10-01): republish privacy + terms to `es-pro-legal`; sh
 app build that drops the Settings cadence picker (gone from `lib/`, rides 1.63.0+93,
 unshipped); and — its own §4a deploy, once 1.61.0 has aged out of the fleet,
 which cannot start until a newer build ships — delete `waveSetImportSchedule`
-(still exported as a no-op).** The "nothing deployed" paragraph below is the
+(DONE 2026-10-11, ADR-0184, `0ab3f05c`).** The "nothing deployed" paragraph below is the
 build-time state. Phase 1 was complete, deployed (`fe9edc51`, report-only) and
 prod-replayed 2026-09-09 (**724 clients, 0 blocking, 1 advisory**). Design:
 `docs/archive/2026-08-30-wave-validated-contract-design.md` §3-§7. Phase 1 plan:

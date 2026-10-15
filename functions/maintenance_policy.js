@@ -140,7 +140,8 @@ async function runHistoryPurge(deps) {
   const col = db.collection("appointments");
 
   let purged = 0;
-  let imageFailures = 0;
+  // A kept doc is refetched on every later page, so count it by id.
+  const failedIds = new Set();
   // A plain limit loop advances without a cursor, since cleared docs are
   // deleted. The loop stops when a page makes no progress — meaning all image
   // cleanups failed, so retrying would just repeat them.
@@ -166,7 +167,7 @@ async function runHistoryPurge(deps) {
         batch.delete(doc.ref);
         deletable += 1;
       } else {
-        imageFailures += 1;
+        failedIds.add(doc.id);
       }
     });
     if (deletable > 0) await batch.commit();
@@ -178,7 +179,7 @@ async function runHistoryPurge(deps) {
     if (snap.size < PURGE_BATCH_SIZE) break;
   }
 
-  return {purged, imageFailures, cutoff};
+  return {purged, imageFailures: failedIds.size, cutoff};
 }
 
 module.exports = {
