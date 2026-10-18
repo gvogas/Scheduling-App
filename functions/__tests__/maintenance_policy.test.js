@@ -195,6 +195,21 @@ describe("loop termination", () => {
     expect(db.state.queries).toBe(2);
     expect(res.purged).toBe(PURGE_BATCH_SIZE + 1);
   });
+
+  test("counts a stuck doc refetched on a later page once", async () => {
+    const full = [doc("bad")].concat(
+        Array.from({length: PURGE_BATCH_SIZE - 1}, (_, i) => doc(`a${i}`)),
+    );
+    const db = fakeDb([full, [doc("bad"), doc("last")]]);
+    const res = await runHistoryPurge({
+      db,
+      deleteImages: async (id) => id !== "bad",
+      logger: silentLogger,
+      now: NOW,
+    });
+    expect(db.state.queries).toBe(2);
+    expect(res).toMatchObject({purged: PURGE_BATCH_SIZE, imageFailures: 1});
+  });
 });
 
 describe("isAppointmentImagePath", () => {
