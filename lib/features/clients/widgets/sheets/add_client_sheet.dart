@@ -98,6 +98,8 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
   final _postalCodeController = TextEditingController();
   final _countryController = TextEditingController();
 
+  final _phoneLift = NamePhoneLift();
+
   ClientType _type = ClientType.unset;
 
   // Admin-only surface: reached from the Clients FAB and the appointment form's
@@ -110,7 +112,7 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
     _nameController.text = widget.initialName ?? '';
     // The seed is a programmatic write, which never fires the name field's
     // `onChanged` — so the lift below has to be run by hand here.
-    liftPhoneFromNameField(name: _nameController, phone: _phoneController);
+    _phoneLift.apply(name: _nameController, phone: _phoneController);
     // A sheet route has no name, so the observer skips it.
     ref
         .read(analyticsServiceProvider)
@@ -178,6 +180,7 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
   }
 
   Future<void> _save({required AddClientNext next}) async {
+    _phoneLift.restoreOnSave(name: _nameController, phone: _phoneController);
     // The EXISTING validator, not a fast-capture variant: address is required
     // unless noFixedAddress is on, which is what makes that toggle meaningful.
     final nextErrors = ClientFormValidator.validate(
@@ -292,7 +295,7 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
             clearError('name');
             // Pulls a phone number out of what was just typed or pasted — quiet
             // unless the phone field is still empty.
-            if (liftPhoneFromNameField(
+            if (_phoneLift.apply(
               name: _nameController,
               phone: _phoneController,
             )) {

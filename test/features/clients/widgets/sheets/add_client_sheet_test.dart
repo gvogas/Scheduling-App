@@ -209,6 +209,80 @@ void main() {
     expect(repo.added!.phone, '(514) 555-1234');
   });
 
+  testWidgets('a number typed digit by digit lands whole in the phone field', (
+    tester,
+  ) async {
+    await pumpSheet(tester);
+
+    const number = '5145551234';
+    for (var i = 1; i <= number.length; i++) {
+      await tester.enterText(
+        find.byType(TextField).first,
+        number.substring(0, i),
+      );
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+
+    final phone = tester.widget<TextField>(
+      find.widgetWithText(TextField, 'Phone'),
+    );
+    expect(phone.controller!.text, '(514) 555-1234');
+    await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('a number cleared from the phone comes back on save', (
+    tester,
+  ) async {
+    final repo = await pumpSheet(tester);
+
+    await tester.enterText(find.byType(TextField).first, '5145551234');
+    await tester.enterText(find.widgetWithText(TextField, 'Phone'), '');
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    expect(repo.added!.phone, '(514) 555-1234');
+  });
+
+  // The number already left the name, so only the lift's memory has it.
+  testWidgets('a number lifted out of a name comes back on save', (
+    tester,
+  ) async {
+    final repo = await pumpSheet(tester);
+
+    await tester.enterText(
+      find.byType(TextField).first,
+      'Marc Tremblay 5145551234',
+    );
+    await tester.enterText(find.widgetWithText(TextField, 'Phone'), '');
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    expect(repo.added!.phone, '(514) 555-1234');
+  });
+
+  testWidgets('a phone the admin typed is never overwritten by the name', (
+    tester,
+  ) async {
+    await pumpSheet(tester);
+
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Phone'),
+      '4385550000',
+    );
+    await tester.enterText(find.byType(TextField).first, '5145551234');
+    await tester.pumpAndSettle();
+
+    final phone = tester.widget<TextField>(
+      find.widgetWithText(TextField, 'Phone'),
+    );
+    expect(phone.controller!.text, '(438) 555-0000');
+  });
+
   testWidgets('a seeded name and number lands the name in the halves', (
     tester,
   ) async {
@@ -417,9 +491,7 @@ AddClientResult? _lastResult;
 /// LabeledTextField renders its label outside the TextField, so match on the
 /// wrapper and descend — the same shape clients_screen_test uses.
 Finder _fieldLabelled(String label) => find.descendant(
-  of: find.byWidgetPredicate(
-    (w) => w is LabeledTextField && w.label == label,
-  ),
+  of: find.byWidgetPredicate((w) => w is LabeledTextField && w.label == label),
   matching: find.byType(TextField),
 );
 

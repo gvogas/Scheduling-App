@@ -16,7 +16,7 @@ deleted 2026-09-28. The `name` rules cap was sized to the old "<typed name> <pho
 ## Decision
 `ClientNamePolicy.composeSave` returns the stored name and both halves, passing through only when the name came
 back unchanged, a half is already populated, or there is no base name. `splitPersonName` is mirrored once in
-JS, as `splitName` in `backfill-client-name-with-phone.js`. `liftPhoneFromNameField` runs on both sheets'
+JS, as `splitName` in `backfill-client-name-with-phone.js`. `NamePhoneLift.apply` (formerly `liftPhoneFromNameField`) runs on both sheets'
 `onChanged` and on the seeded name in `AddClientSheet.initState`; it trims brackets at the seam via
 `_openSeam`/`_closeSeam` (`OPEN_SEAM`/`CLOSE_SEAM` in JS). The `name` cap stays 225
 (`TextLimits.personName` 200 + 1 + `TextLimits.phone` 24), pinned by `text_limits_test.dart`.

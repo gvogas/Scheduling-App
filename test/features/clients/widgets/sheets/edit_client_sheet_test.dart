@@ -130,6 +130,23 @@ void main() {
     expect(_savedFrom(repo).jobCount, 12);
   });
 
+  testWidgets('a lifted number cleared from the phone comes back on save', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      repo,
+      const ClientRecord(id: 'c1', name: 'Acme', noFixedAddress: true),
+    );
+
+    await tester.enterText(_fieldFor('Name or business'), 'Acme 5145551234');
+    await tester.enterText(_fieldFor('Phone'), '');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(_savedFrom(repo).phone, '(514) 555-1234');
+  });
+
   // I4: these tests asserted `saved.phone` heavily and never once asserted
   // `saved.name` — the field that IS the Wave customer name, and the one an
   // ordinary save can silently rename on live invoices.

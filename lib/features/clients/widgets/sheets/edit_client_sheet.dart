@@ -68,6 +68,8 @@ class _EditClientSheetState extends ConsumerState<EditClientSheet>
   late final TextEditingController _countryController;
   late final TextEditingController _postalCodeController;
 
+  final _phoneLift = NamePhoneLift();
+
   late ClientType _type;
   late bool _autoInvoice;
 
@@ -227,6 +229,7 @@ class _EditClientSheetState extends ConsumerState<EditClientSheet>
     // Guards against a double-tap firing two concurrent writes.
     if (ref.read(clientFormControllerProvider)) return;
 
+    _phoneLift.restoreOnSave(name: _nameController, phone: _phoneController);
     final resolvedPhone = _resolvedPhone;
 
     final nextErrors = ClientFormValidator.validate(
@@ -320,7 +323,7 @@ class _EditClientSheetState extends ConsumerState<EditClientSheet>
             clearError('name');
             // Pulls a phone number out of what was just typed or pasted —
             // quiet unless the phone field is still empty.
-            if (liftPhoneFromNameField(
+            if (_phoneLift.apply(
               name: _nameController,
               phone: _phoneController,
             )) {
