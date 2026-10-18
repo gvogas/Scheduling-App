@@ -150,7 +150,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
 
   @override
   Future<int> countFutureAssignments(String employeeId) async {
-    final now = DateTime.now();
+    final now = _clock();
     final snapshot = await _appointments
         .where('employeeIds', arrayContains: employeeId)
         .where('endTime', isGreaterThanOrEqualTo: Timestamp.fromDate(now))
@@ -657,7 +657,6 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     return base;
   }
 
-
   @override
   Future<void> restoreAppointmentStatus({
     required String id,
@@ -696,9 +695,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     }
     final existing = _pendingHistoryScan;
     if (existing != null) return await existing;
-    final pending = _loadHistoryScanWindow(
-      generation: _searchCache.generation,
-    );
+    final pending = _loadHistoryScanWindow(generation: _searchCache.generation);
     _pendingHistoryScan = pending;
     try {
       return await pending;

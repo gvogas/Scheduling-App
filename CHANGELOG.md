@@ -14,9 +14,9 @@ code; it increments by one on every store upload regardless of the semver part.
 
 Maintenance release.
 
-### Changed
-- **No visible changes.** This build re-ships 1.64.1 with an updated build
-  number; everything works as before.
+### Fixed
+- **Today stays today.** Reopening the app after midnight now moves the
+  calendar to the new day, instead of waiting for a restart.
 
 ## [1.64.1+95] - 2026-10-09
 

@@ -73,7 +73,7 @@ void main() {
   });
 
   FirebaseAppointmentsRepository repo() =>
-      FirebaseAppointmentsRepository(firestore);
+      FirebaseAppointmentsRepository(firestore, clock: () => now);
 
   test('counts a run already under way, not just one starting later', () async {
     // Day 3 of a 10-day job: a `startTime >= now` query reported 0 and the
@@ -108,8 +108,7 @@ void main() {
 
       expect(captured, isA<Timestamp>());
       final floor = (captured as Timestamp).toDate();
-      // Sampled inside the call, so it is `now` to within the test's runtime.
-      expect(floor.difference(now).abs(), lessThan(const Duration(minutes: 1)));
+      expect(floor, now);
     });
 
     test(
