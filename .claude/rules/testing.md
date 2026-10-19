@@ -34,6 +34,9 @@ before each file; nothing else is reset. The leaks found when sharding landed
 - **Override `isOfflineProvider` in a bare `ProviderContainer`** whose code
   reads it. Once another file has initialised the test binding, the real
   connectivity channel is called and throws `MissingPluginException`.
+- Give every `overrideWith` that builds a push / presence / live-activity
+  controller `ref.onDispose(controller.dispose)` — its `AppLifecycleListener`
+  outlives the container and a later file's resume drives it.
 - Set a global mock in `setUp`/`setUpAll`, never directly in `main()`: every
   file's `main()` runs at load, so the last file loaded wins.
 

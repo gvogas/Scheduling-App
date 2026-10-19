@@ -388,6 +388,7 @@ class FirebaseClientsRepository implements ClientsRepository {
       examinedCount: firestoreInt(raw['examinedCount']) ?? records.length,
       matchedCount: firestoreInt(raw['matchedCount']) ?? records.length,
       truncated: raw['truncated'] == true,
+      matchedCountIsLowerBound: raw['matchedCountIsLowerBound'] == true,
     );
   }
 

@@ -55,6 +55,24 @@ class DashboardAggregator {
   static AppointmentDateRange historyRangeAround(DateTime now) =>
       AppointmentDateRange(start: _windowStart(now), end: mondayOf(now));
 
+  /// A held doc, or a new start in [history]; null [heldIds] means in flight.
+  static bool writeTouchesHistory(
+    Map<String, DateTime?> written,
+    AppointmentDateRange history,
+    Set<String>? heldIds,
+  ) {
+    if (heldIds == null) return true;
+    for (final MapEntry(key: id, value: start) in written.entries) {
+      if (heldIds.contains(id)) return true;
+      if (start != null &&
+          !start.isBefore(history.fetchStart) &&
+          start.isBefore(history.end)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static DateTime _windowStart(DateTime now) {
     final monday = mondayOf(now);
     return DateTime(

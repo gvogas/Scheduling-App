@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
-/// One photo's accessible position, state and enabled viewer action.
-/// Removal controls stay outside this node so they remain independently usable.
+/// One photo's accessible position, state and viewer action; removal stays outside.
 class AppointmentPhotoSemantics extends StatelessWidget {
   const AppointmentPhotoSemantics({
     required this.index,

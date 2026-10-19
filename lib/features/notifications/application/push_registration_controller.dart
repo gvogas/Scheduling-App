@@ -12,6 +12,7 @@ import 'package:scheduling/core/notifications/push_notification_service.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/utils/app_language.dart';
 import 'package:scheduling/core/utils/reentrant_sync.dart';
+import 'package:scheduling/core/utils/session_fenced_sync.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/notifications/data/fcm_token_repository.dart';
@@ -54,7 +55,7 @@ bool shouldRegisterPush({
 /// Registers this device's FCM token for the signed-in active employee and
 /// tears it down on sign-out; driven by `main.dart` on every
 /// `currentUserDocProvider` emission and on app-language change.
-class PushRegistrationController with ReentrantSync {
+class PushRegistrationController with ReentrantSync, SessionFencedSync {
   PushRegistrationController(Ref ref, {FirebaseAuth? auth})
     : _ref = ref,
       _auth = auth ?? ref.read(firebaseAuthProvider),
@@ -75,7 +76,6 @@ class PushRegistrationController with ReentrantSync {
   Timer? _retryTimer;
   int _retryAttempts = 0;
   int _tokenRevision = 0;
-  bool _disposed = false;
   bool _rotationRequired = false;
   Future<String?>? _tokenRotation;
   bool _rotationResyncRequested = false;
@@ -94,7 +94,7 @@ class PushRegistrationController with ReentrantSync {
   }
 
   void _scheduleRetry(SessionLease lease) {
-    if (_disposed ||
+    if (isDisposed ||
         !lease.isCurrent ||
         _retryTimer != null ||
         _retryAttempts >= 5) {
@@ -103,7 +103,7 @@ class PushRegistrationController with ReentrantSync {
     final seconds = 5 * (1 << _retryAttempts++);
     _retryTimer = Timer(Duration(seconds: seconds > 60 ? 60 : seconds), () {
       _retryTimer = null;
-      if (!_disposed && lease.isCurrent) unawaited(sync());
+      if (!isDisposed && lease.isCurrent) unawaited(sync());
     });
   }
 
@@ -121,7 +121,7 @@ class PushRegistrationController with ReentrantSync {
     try {
       final lease = _session.capture();
       attemptLease = lease;
-      if (lease == null || _disposed) return;
+      if (lease == null || isDisposed) return;
       if (_rotationRequired || _tokenRotation != null) {
         _rotationResyncRequested = true;
         unawaited(
@@ -129,7 +129,7 @@ class PushRegistrationController with ReentrantSync {
         );
         return;
       }
-      bool stale() => isSyncStale(generation) || !lease.isCurrent;
+      bool stale() => isAttemptStale(generation, lease);
       final gate = readAccountGateInputs(_ref, _auth);
       // Null is "we don't know yet" — leave the registration as it is.
       if (gate == null) return;
@@ -232,7 +232,7 @@ class PushRegistrationController with ReentrantSync {
         .onTokenRefresh
         .listen(
           (token) {
-            if (isSyncStale(generation) || !lease.isCurrent) return;
+            if (isAttemptStale(generation, lease)) return;
             final revision = ++_tokenRevision;
             final locale = _currentLocale();
             _registeredLocale = null;
@@ -263,10 +263,7 @@ class PushRegistrationController with ReentrantSync {
     int revision,
   ) async {
     bool current() =>
-        !_disposed &&
-        lease.isCurrent &&
-        !isSyncStale(generation) &&
-        revision == _tokenRevision;
+        !isAttemptStale(generation, lease) && revision == _tokenRevision;
     try {
       await _upsert(docId, token, uid, locale);
       if (!current()) return;
@@ -310,8 +307,8 @@ class PushRegistrationController with ReentrantSync {
         knownToken: registeredUid == lease.uid ? registeredToken : null,
       );
       await _cancelRefresh(refreshSub);
-      if (isSyncStale(generation) || !lease.isCurrent) return;
-      bool stale() => isSyncStale(generation) || !lease.isCurrent;
+      bool stale() => isAttemptStale(generation, lease);
+      if (stale()) return;
       // The token comes from FCM, never a kind/platform sweep, which would de-register the user's other phones.
       final token = await rotation;
       if (stale()) return;
@@ -347,7 +344,7 @@ class PushRegistrationController with ReentrantSync {
     }();
     return _tokenRotation = rotation.whenComplete(() {
       _tokenRotation = null;
-      if (_disposed || !_rotationResyncRequested) return;
+      if (isDisposed || !_rotationResyncRequested) return;
       final lease = _session.capture();
       if (lease == null) return;
       if (_rotationRequired) {
@@ -362,9 +359,8 @@ class PushRegistrationController with ReentrantSync {
   /// Container-teardown cleanup — cancels the token-refresh subscription
   /// without the network delete that [unregisterCurrentDevice] does on sign-out.
   void dispose() {
-    _disposed = true;
+    disposeSync();
     _retryTimer?.cancel();
-    invalidateSync();
     unawaited(
       _refreshSub?.cancel().catchError((Object error, StackTrace stack) {
         _logger.warn('PUSH cancel token refresh failed', error, stack);

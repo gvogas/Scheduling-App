@@ -69,7 +69,8 @@ function main(argv, describe) {
   const declared = declaredExports(readFileSync(index, "utf8"));
   const report = {project, sourceSha, runId: runId ? Number(runId) : null,
     expectedCount: declared.length, complete: false, results: []};
-  const save = () => writeFileSync(output, JSON.stringify(report, null, 2) + "\n");
+  const save = () =>
+    writeFileSync(output, JSON.stringify(report, null, 2) + "\n");
   save();
   for (const name of declared) {
     try {
@@ -89,4 +90,4 @@ function main(argv, describe) {
 }
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2));
-module.exports = {inspectConfig, main, regionFor};
+module.exports = {inspectConfig, main};

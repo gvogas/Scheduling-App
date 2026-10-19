@@ -82,7 +82,7 @@ class AccountExitController {
       final message = [
         selectMessage(l10n),
         if ((_pendingPhotoCount?.call() ?? 0) > 0)
-          l10n.account_forcedExitPhotos,
+          l10n.auth_forcedExitPhotos,
       ].join(' ');
       session = _sessionForExit?.call();
       lease = session?.beginExit();

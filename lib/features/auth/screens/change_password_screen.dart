@@ -18,7 +18,6 @@ import 'package:scheduling/features/auth/widgets/auth_banner.dart';
 import 'package:scheduling/features/auth/widgets/auth_fields.dart';
 import 'package:scheduling/features/auth/widgets/auth_scaffold.dart';
 import 'package:scheduling/features/auth/widgets/password_requirements_checklist.dart';
-import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
 

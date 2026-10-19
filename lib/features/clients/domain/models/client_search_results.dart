@@ -9,9 +9,13 @@ class ClientSearchResults extends UnmodifiableListView<ClientRecord> {
     required this.examinedCount,
     required this.matchedCount,
     required this.truncated,
+    this.matchedCountIsLowerBound = false,
   });
 
   final int examinedCount;
   final int matchedCount;
   final bool truncated;
+
+  /// The server stopped at its read cap, so more may match than [matchedCount].
+  final bool matchedCountIsLowerBound;
 }

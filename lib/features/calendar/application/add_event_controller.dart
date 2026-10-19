@@ -418,7 +418,7 @@ class AddEventController extends Notifier<AddEventState>
           candidates: selectedEmployees,
           bookings: toWrite,
         );
-        if (ownsWrite?.call() == false) return const AddEventBusy();
+        if (ownsWrite?.call() == false) return _releaseStale();
         if (conflict != null) {
           // Conflicts return to the sheet for a force-through choice.
           if (ref.mounted) state = state.copyWith(isSubmitting: false);
@@ -430,7 +430,7 @@ class AddEventController extends Notifier<AddEventState>
         }
       }
 
-      if (ownsWrite?.call() == false) return const AddEventBusy();
+      if (ownsWrite?.call() == false) return _releaseStale();
       if (toWrite.length == 1) {
         await repo.addAppointment(toWrite.single);
       } else {
@@ -438,7 +438,7 @@ class AddEventController extends Notifier<AddEventState>
       }
 
       // Draft photos attach to day one.
-      if (ownsWrite?.call() == false) return const AddEventBusy();
+      if (ownsWrite?.call() == false) return _releaseStale();
       if (images.isNotEmpty) {
         await uploader.enqueuePhotos(appointmentId: docId, newImages: images);
       }
@@ -453,6 +453,12 @@ class AddEventController extends Notifier<AddEventState>
       if (ref.mounted) state = state.copyWith(isSubmitting: false);
       return AddEventFailed(e);
     }
+  }
+
+  /// A stale session lease still frees Save, or the sheet sticks disabled.
+  AddEventBusy _releaseStale() {
+    if (ref.mounted) state = state.copyWith(isSubmitting: false);
+    return const AddEventBusy();
   }
 }
 

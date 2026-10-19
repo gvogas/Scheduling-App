@@ -39,7 +39,7 @@ const SEARCH_QUERY_MAX = 80;
 // decides the answer; at 50 the client being looked for was usually outside it.
 const SEARCH_READ_LIMIT = 200;
 const SEARCH_RESULT_LIMIT = 25;
-const CLIENT_SEARCH_SCAN_LIMIT = 5000;
+const EXACT_PROBE_LIMIT = 5;
 const CONFLICT_READ_LIMIT = 500;
 const CONFLICT_SCAN_LIMIT = 5000;
 const CONFLICT_EMPLOYEE_LIMIT = 500;
@@ -82,6 +82,19 @@ function callableRecord(doc) {
 }
 
 /**
+ * The most selective query token, for the exact-match probe.
+ * @param {!Array<string>} tokens Non-empty `searchQueryTokens` output.
+ * @return {string}
+ */
+function exactProbeToken(tokens) {
+  // Ties go to the phone token, which every stored number carries.
+  const longest = tokens.reduce((a, b) => b.length > a.length ||
+    (b.length === a.length && b.startsWith("p:")) ? b : a);
+  // Stored phone tokens stop at 12 digits.
+  return longest.startsWith("p:") ? longest.slice(0, 14) : longest;
+}
+
+/**
  * Server-side client search, admin-only because clients are PII.
  */
 const searchClients = onCall(APP_CHECK, async (req) => {
@@ -102,33 +115,29 @@ const searchClients = onCall(APP_CHECK, async (req) => {
   await enforceDurableRateLimit(
       "searchClients", uid, SEARCH_RATE_MAX, SEARCH_RATE_WINDOW_MS);
 
-  let source = getFirestore()
-      .collection("clients")
-      .where("searchTokens", "array-contains-any", tokens);
+  let source = getFirestore().collection("clients");
   if (archived !== undefined) source = source.where("archived", "==", archived);
   if (type) source = source.where("type", "==", type);
   if (buildingKey) source = source.where("buildingKey", "==", buildingKey);
-  let cursor = source.orderBy("name");
-  const candidates = [];
-  let finished = false;
-  while (!finished) {
-    const limit = Math.min(SEARCH_READ_LIMIT,
-        CLIENT_SEARCH_SCAN_LIMIT + 1 - candidates.length);
-    const snap = await cursor.limit(limit).get();
-    candidates.push(...snap.docs);
-    if (candidates.length > CLIENT_SEARCH_SCAN_LIMIT) {
-      logger.warn("searchClients: incomplete scan", {
-        uidHash: shortHash(uid), count: candidates.length,
-      });
-      throw new HttpsError("resource-exhausted", "client-search-incomplete");
-    }
-    finished = snap.docs.length < limit;
-    if (!finished) cursor = cursor.startAfter(snap.docs.at(-1));
+  const [windowSnap, probeSnap] = await Promise.all([
+    source.where("searchTokens", "array-contains-any", tokens)
+        .orderBy("name").limit(SEARCH_READ_LIMIT).get(),
+    source.where("searchTokens", "array-contains", exactProbeToken(tokens))
+        .orderBy("name").limit(EXACT_PROBE_LIMIT).get(),
+  ]);
+  const readCapHit = windowSnap.docs.length >= SEARCH_READ_LIMIT;
+  if (readCapHit) {
+    logger.warn("searchClients: read cap hit", {
+      uidHash: shortHash(uid), count: windowSnap.docs.length,
+    });
   }
   const queryText = normalize(query);
   const queryDigits = query.replace(/\D/g, "");
   const scored = [];
-  for (const doc of candidates) {
+  const seen = new Set();
+  for (const doc of [...probeSnap.docs, ...windowSnap.docs]) {
+    if (seen.has(doc.id)) continue;
+    seen.add(doc.id);
     const data = doc.data() || {};
     if (!recordMatchesQuery(data, query)) continue;
     const exactPhone = queryDigits && [data.phone, data.mobile].some((value) =>
@@ -144,9 +153,10 @@ const searchClients = onCall(APP_CHECK, async (req) => {
     a.sortKey.localeCompare(b.sortKey));
   return {
     clients: scored.slice(0, SEARCH_RESULT_LIMIT).map((e) => e.record),
-    examinedCount: candidates.length,
+    examinedCount: seen.size,
     matchedCount: scored.length,
-    truncated: scored.length > SEARCH_RESULT_LIMIT,
+    matchedCountIsLowerBound: readCapHit,
+    truncated: readCapHit || scored.length > SEARCH_RESULT_LIMIT,
   };
 });
 
@@ -214,7 +224,7 @@ function readEmployeeIds(raw) {
  * True when a stored appointment blocks the proposed window.
  *
  * The clash rule is the shared DAILY-window overlap (`day_slice_utils`), not a
- * raw instant test â€” a 9-5 run across a week does not block a 7 pm job inside
+ * raw instant test — a 9-5 run across a week does not block a 7 pm job inside
  * it. A record whose stored times do not parse clashes UNCONDITIONALLY: a
  * legacy or console-written row with no usable window must never quietly
  * disappear from a booking check.
@@ -233,7 +243,7 @@ function blocksProposedWindow(data, proposed) {
  * Server-side conflict validation for appointment writes.
  */
 const findAppointmentConflicts = onCall(
-    {...APP_CHECK, timeoutSeconds: 120}, async (req) => {
+    {enforceAppCheck: true, timeoutSeconds: 120}, async (req) => {
       const profile = await assertActiveCall(req, new Set([
         "employeeIds",
         "startMillis",

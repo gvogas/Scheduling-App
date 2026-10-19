@@ -136,8 +136,9 @@ abstract class AppointmentsRepository {
   /// Fires after every local write, including photo and crew-note appends.
   Stream<void> get onLocalWrite;
 
-  /// Fires only after a local write that changed appointment fields.
-  Stream<void> get onRecordWrite;
+  /// Fires only after a local write that changed appointment fields: each
+  /// written doc id to its new `startTime`, null for a delete or a status-only write.
+  Stream<Map<String, DateTime?>> get onRecordWrite;
 
   Stream<List<AppointmentRecord>> watchForEmployeeInRange(
     String employeeId,

@@ -530,6 +530,26 @@ void main() {
       );
     });
 
+    test('a stale session lease returns SaveBusy and frees isSaving', () async {
+      when(() => appointments.captureWriteOwner()).thenReturn(() => false);
+      readNotifier();
+      await waitForSeed();
+
+      final outcome = await readNotifier().save(
+        _appointment,
+        title: 'Leak fix',
+        address: '1 First St',
+        notes: '',
+        materialsNeeded: '',
+      );
+
+      expect(outcome, isA<EventDetailsSaveBusy>());
+      expect(readState().isSaving, isFalse);
+      verifyNever(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      );
+    });
+
     test('a double-tapped save returns SaveBusy, not Invalid', () async {
       // The save family's sibling of `EventDetailsActionBusy`, which the status
       // setters and the delete already return.

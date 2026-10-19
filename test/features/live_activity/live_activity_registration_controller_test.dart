@@ -96,13 +96,15 @@ void main() {
           currentUserDocProvider.overrideWith(
             (ref) => Stream<Map<String, dynamic>>.value(accountDoc),
           ),
-        liveActivityRegistrationControllerProvider.overrideWith(
-          (ref) => LiveActivityRegistrationController(
+        liveActivityRegistrationControllerProvider.overrideWith((ref) {
+          final controller = LiveActivityRegistrationController(
             ref,
             auth: auth,
             isIosPlatform: () => onIos,
-          ),
-        ),
+          );
+          ref.onDispose(controller.dispose);
+          return controller;
+        }),
       ],
     );
     addTearDown(container.dispose);
@@ -298,14 +300,16 @@ void main() {
               'status': 'active',
             }),
           ),
-          liveActivityRegistrationControllerProvider.overrideWith(
-            (ref) => LiveActivityRegistrationController(
+          liveActivityRegistrationControllerProvider.overrideWith((ref) {
+            final controller = LiveActivityRegistrationController(
               ref,
               auth: auth,
               plugin: plugin,
               isIosPlatform: () => true,
-            ),
-          ),
+            );
+            ref.onDispose(controller.dispose);
+            return controller;
+          }),
         ],
       );
       addTearDown(container.dispose);

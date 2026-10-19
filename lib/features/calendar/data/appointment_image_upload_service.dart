@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:scheduling/core/app/pending_photo_exit.dart';
 import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/images/image_storage_service.dart';
 import 'package:scheduling/core/images/image_upload_failure.dart';
@@ -28,22 +29,6 @@ typedef _UploadFilesResult = ({
   int permanentFailures,
   bool transientFailure,
 });
-
-class PendingPhotoExit {
-  const PendingPhotoExit({
-    required this.pendingCount,
-    this.onResume,
-    this.readCurrent,
-  });
-
-  final int pendingCount;
-  final void Function()? onResume;
-  final bool Function()? readCurrent;
-
-  bool get isCurrent => readCurrent?.call() ?? true;
-
-  void resume() => onResume?.call();
-}
 
 class AppointmentImageUploadService {
   AppointmentImageUploadService({
@@ -167,25 +152,46 @@ class AppointmentImageUploadService {
     }
   }
 
-  Future<PendingUpload?> _finishStaging(
+  /// A source already gone (iOS tmp purge) is dropped and counted as lost.
+  Future<({PendingUpload entry, int lostCount})?> _finishStaging(
     PendingUpload entry,
     bool Function() current,
   ) async {
+    final lost = <String>[];
     for (final item in entry.stagingSources.entries) {
       if (!current()) return null;
       final target = File(item.key);
       if (target.existsSync()) continue;
+      final source = File(item.value);
+      if (!source.existsSync()) {
+        lost.add(target.path);
+        continue;
+      }
       final partial = File('${target.path}.part');
-      await File(item.value).copy(partial.path);
+      await source.copy(partial.path);
       if (!current()) return null;
       await partial.rename(target.path);
     }
+    if (lost.isNotEmpty) {
+      _logger.warn(
+        'IMG-UPLOAD staging source missing for ${entry.appointmentId}: '
+        '${lost.length} photo(s) lost',
+      );
+    }
     final staged = entry.copyWith(
+      paths: [
+        for (final path in entry.paths)
+          if (!lost.contains(path)) path,
+      ],
       stagingSources: const {},
-      cleanupPaths: [...entry.cleanupPaths, ...entry.stagingSources.values],
+      cleanupPaths: [
+        ...entry.cleanupPaths,
+        ...entry.stagingSources.values,
+        for (final path in lost) '$path.part',
+      ],
     );
     if (!current() || !await _store.checkpoint(entry.id, staged)) return null;
-    return current() ? staged : null;
+    return current() ? (entry: staged, lostCount: lost.length) : null;
   }
 
   Future<void> _recoverStagingJournals(
@@ -214,9 +220,10 @@ class AppointmentImageUploadService {
     }
   }
 
-  Future<PendingPhotoExit> prepareForExit() async {
+  /// Null when the session ended or a newer exit superseded this one.
+  Future<PendingPhotoExit?> prepareForExit() async {
     final lease = _session.capture();
-    if (lease == null) throw StateError('photo exit session ended');
+    if (lease == null) return null;
     final hold = Object();
     _exitHold = hold;
     _exitHoldLease = lease;
@@ -232,7 +239,8 @@ class AppointmentImageUploadService {
         await Future.wait(List.of(_stagingJobs));
       }
       if (!lease.isCurrent || !identical(_exitHold, hold)) {
-        throw StateError('photo exit session changed');
+        resume();
+        return null;
       }
       _queueGeneration++;
       await _recoverStagingJournals(
@@ -241,7 +249,8 @@ class AppointmentImageUploadService {
       );
       final entries = await _store.load();
       if (!lease.isCurrent || !identical(_exitHold, hold)) {
-        throw StateError('photo exit session changed');
+        resume();
+        return null;
       }
       final count = entries
           .where((entry) => entry.hasOwner && entry.ownerUid == lease.uid)
@@ -404,11 +413,13 @@ class AppointmentImageUploadService {
       return;
     }
     if (!current()) return;
+    var lostCount = 0;
     if (entry.stagingSources.isNotEmpty) {
       try {
         final staged = await _finishStaging(entry, current);
         if (staged == null) return;
-        entry = staged;
+        entry = staged.entry;
+        lostCount = staged.lostCount;
       } catch (error, stack) {
         if (current()) {
           _notifier.reportFailure(
@@ -416,8 +427,9 @@ class AppointmentImageUploadService {
             failedCount: entry.paths.length,
           );
         }
+        // Originals stay for the next drain; later batches still run.
         _logger.warn('IMG-UPLOAD staged copy failed', error, stack);
-        rethrow;
+        return;
       }
     }
     for (final path in entry.cleanupPaths) {
@@ -430,6 +442,9 @@ class AppointmentImageUploadService {
         .toList();
     if (files.isEmpty && entry.uploaded.isEmpty) {
       await _store.remove(entry.id);
+      if (current()) {
+        _notifier.reportFailure(entry.appointmentId, failedCount: lostCount);
+      }
       return;
     }
 
@@ -448,9 +463,26 @@ class AppointmentImageUploadService {
     if (!current()) return;
     final appendThrew = await _appendLinks(entry, upload.uploaded);
     if (!current()) return;
-    final tooLargeNames = upload.tooLargeNames;
-    final survivors = upload.survivors;
+    await _settle(
+      entry,
+      files,
+      upload,
+      appendThrew: appendThrew,
+      lostCount: lostCount,
+      current: current,
+    );
+  }
 
+  /// Requeues the unsent remainder or settles the batch, then reports it.
+  Future<void> _settle(
+    PendingUpload entry,
+    List<File> files,
+    _UploadFilesResult upload, {
+    required bool appendThrew,
+    required int lostCount,
+    required bool Function() current,
+  }) async {
+    final survivors = upload.survivors;
     final outcome = AttemptOutcome.from(
       permanentFailures: upload.permanentFailures,
       transientFailure: upload.transientFailure,
@@ -458,6 +490,7 @@ class AppointmentImageUploadService {
       appendThrew: appendThrew,
       uploaded: upload.uploaded,
     );
+    final failedCount = outcome.failedCount + lostCount;
 
     if (outcome.requeue) {
       // Replace atomically so failed requeues leave the original entry intact.
@@ -466,7 +499,7 @@ class AppointmentImageUploadService {
         entry.copyWith(
           paths: survivors,
           uploaded: outcome.uploadedToCarry,
-          intents: {for (final path in survivors) path: intents[path]!},
+          intents: {for (final path in survivors) path: entry.intents[path]!},
           cleanupPaths: [
             ...entry.cleanupPaths,
             for (final file in files)
@@ -478,37 +511,37 @@ class AppointmentImageUploadService {
       if (!current()) return;
       _notifier.reportFailure(
         entry.appointmentId,
-        failedCount: outcome.failedCount,
-        tooLargeFileNames: tooLargeNames,
+        failedCount: failedCount,
+        tooLargeFileNames: upload.tooLargeNames,
+      );
+      return;
+    }
+    final cleanupPaths = [
+      for (final file in files)
+        if (!survivors.contains(file.path) && file.existsSync()) file.path,
+    ];
+    if (cleanupPaths.isEmpty) {
+      await _store.remove(entry.id);
+    } else {
+      await _store.checkpoint(
+        entry.id,
+        entry.copyWith(
+          paths: const [],
+          uploaded: const [],
+          intents: const {},
+          cleanupPaths: cleanupPaths,
+        ),
+      );
+    }
+    if (!current()) return;
+    if (failedCount > 0) {
+      _notifier.reportFailure(
+        entry.appointmentId,
+        failedCount: failedCount,
+        tooLargeFileNames: upload.tooLargeNames,
       );
     } else {
-      final cleanupPaths = [
-        for (final file in files)
-          if (!survivors.contains(file.path) && file.existsSync()) file.path,
-      ];
-      if (cleanupPaths.isEmpty) {
-        await _store.remove(entry.id);
-      } else {
-        await _store.checkpoint(
-          entry.id,
-          entry.copyWith(
-            paths: const [],
-            uploaded: const [],
-            intents: const {},
-            cleanupPaths: cleanupPaths,
-          ),
-        );
-      }
-      if (!current()) return;
-      if (outcome.failedCount > 0) {
-        _notifier.reportFailure(
-          entry.appointmentId,
-          failedCount: outcome.failedCount,
-          tooLargeFileNames: tooLargeNames,
-        );
-      } else {
-        _notifier.clearFailure(entry.appointmentId);
-      }
+      _notifier.clearFailure(entry.appointmentId);
     }
   }
 
@@ -552,7 +585,16 @@ class AppointmentImageUploadService {
           }
           for (final entry in await _store.load()) {
             if (!current()) break;
-            await _attempt(entry, current);
+            try {
+              await _attempt(entry, current);
+            } catch (e, st) {
+              // One bad batch must not strand every batch queued after it.
+              _logger.warn(
+                'IMG-UPLOAD queue entry failed for ${entry.appointmentId}',
+                e,
+                st,
+              );
+            }
             if (!current()) break;
             // Per entry, not per drain: a long queue should visibly shrink.
             await _publishPending();

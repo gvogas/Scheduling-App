@@ -22,7 +22,7 @@ import 'package:scheduling/features/calendar/domain/models/appointment_record.da
 /// read, or iOS throws `AppGroupId not set`.
 const widgetAppGroupId = mirrorAppGroup;
 const _iosWidgetName = 'ScheduleWidget';
-const _payloadKey = 'schedulePayload';
+const _payloadKey = mirrorWidgetKey;
 
 /// One job as the widget renders it, scoped to the day it appears on.
 ///
@@ -138,63 +138,61 @@ Future<void> writeWidgetPayloadJson(String payloadJson) async {
   }
 }
 
-/// The App Group write itself. A null [payloadJson] wipes the key.
-typedef WidgetPayloadWriter = Future<void> Function(String? payloadJson);
-
-Future<void> _writeToAppGroup(String? payloadJson) async {
-  await HomeWidget.setAppGroupId(widgetAppGroupId);
-  await HomeWidget.saveWidgetData<String>(_payloadKey, payloadJson);
+Future<void> _reloadScheduleWidget() async {
   await HomeWidget.updateWidget(iOSName: _iosWidgetName);
 }
 
 /// Writes the widget payload into the App Group and refreshes the widget.
-/// iOS-only; the actual App Group write is verified on-device, but the dedup
-/// bookkeeping around it is injectable and covered by tests.
+/// iOS-only; the store and the WidgetKit reload are injectable for tests.
 class WidgetSyncService {
   WidgetSyncService({
+    required SessionFence session,
     AppLogger? logger,
     bool Function()? isIosPlatform,
-    WidgetPayloadWriter? write,
-    SessionFence? session,
-  }) : _logger = logger ?? AppLogger(),
+    AppGroupMirrorStore? store,
+    Future<void> Function()? reloadWidget,
+  }) : _session = session,
+       _logger = logger ?? AppLogger(),
        _isIos = isIosPlatform ?? defaultIsIosPlatform,
-       _write = write ?? _writeToAppGroup,
-       _session = session;
+       _store = store ?? appGroupMirrorStore,
+       _reloadWidget = reloadWidget ?? _reloadScheduleWidget;
 
+  final SessionFence _session;
   final AppLogger _logger;
   final bool Function() _isIos;
-  final WidgetPayloadWriter _write;
-  final SessionFence? _session;
+  final AppGroupMirrorStore _store;
+  final Future<void> Function() _reloadWidget;
 
-  /// Signature of the last successful write, used to dedup repeat syncs.
-  /// Null means nothing's been written yet; [_clearedState] means we cleared it.
-  static const _clearedState = '__cleared__';
-  String? _lastState;
+  /// The last landed write, used to skip a repeat while the App Group still holds it.
+  String? _lastUid;
+  String? _lastSignature;
+  String? _lastWritten;
 
   Future<void> sync(Map<String, dynamic> payload) async {
     if (!_isIos()) return;
     final signature = _signatureOf(payload);
-    final lease = _session?.capture();
-    if (_session != null && lease == null) return;
-    if (_session == null && signature == _lastState) return;
+    final lease = _session.capture();
+    if (lease == null) return;
     try {
-      if (_session == null) {
-        await _write(jsonEncode(payload));
-      } else {
-        await appGroupMirrorStore.foreground(
-          _payloadKey,
-          payload,
-          lease!.uid,
-          () => lease.isCurrent,
-        );
-        if (!lease.isCurrent) return;
-        await HomeWidget.updateWidget(iOSName: _iosWidgetName);
+      final written = _lastWritten;
+      if (written != null &&
+          lease.uid == _lastUid &&
+          signature == _lastSignature &&
+          await _store.stillHolds(_payloadKey, written)) {
+        return;
       }
-      // Stamped only AFTER the write lands. Set it first and a failed write is
-      // remembered as the current state, so the next identical payload dedupes
-      // away and the home screen is frozen on stale jobs until the schedule
-      // itself changes.
-      _lastState = signature;
+      final saved = await _store.foreground(
+        _payloadKey,
+        payload,
+        lease.uid,
+        () => lease.isCurrent,
+      );
+      if (saved == null || !lease.isCurrent) return;
+      await _reloadWidget();
+      // Stamped only after the reload, so a failed write stays retryable.
+      _lastUid = lease.uid;
+      _lastSignature = signature;
+      _lastWritten = saved;
     } catch (e, st) {
       _logger.warn('WIDGET sync failed', e, st);
     }
@@ -202,19 +200,12 @@ class WidgetSyncService {
 
   Future<void> clear() async {
     if (!_isIos()) return;
-    final current = _session?.captureBoundary() ?? () => true;
-    if (_session == null && _lastState == _clearedState) return;
+    final current = _session.captureBoundary();
+    _lastUid = _lastSignature = _lastWritten = null;
     try {
-      if (_session == null) {
-        await _write(null);
-      } else {
-        await appGroupMirrorStore.foreground(_payloadKey, null, null, current);
-        if (!current()) return;
-        await HomeWidget.updateWidget(iOSName: _iosWidgetName);
-      }
-      // Same ordering rule as [sync]: a failed clear must stay retryable, or a
-      // signed-out user's jobs sit in the App Group until something else writes.
-      _lastState = _clearedState;
+      await _store.foreground(_payloadKey, null, null, current);
+      if (!current()) return;
+      await _reloadWidget();
     } catch (e, st) {
       _logger.warn('WIDGET clear failed', e, st);
     }
@@ -235,8 +226,8 @@ class WidgetSyncService {
 
 final widgetSyncServiceProvider = Provider<WidgetSyncService>(
   (ref) => WidgetSyncService(
-    logger: ref.watch(loggerProvider),
     session: ref.watch(sessionFenceProvider),
+    logger: ref.watch(loggerProvider),
   ),
 );
 
@@ -247,9 +238,7 @@ final widgetPayloadProvider = Provider.autoDispose<AsyncValue<Map<String, dynami
 ) {
   final identityAsync = ref.watch(activeUserIdentityProvider);
   if (identityAsync.isLoading) return const AsyncValue.loading();
-  // An identity read that FAILED is propagated as an error, never collapsed
-  // into a settled null: null means "signed out, clear the widget", and a
-  // Firestore failure is not that. See `AppSyncListeners.isUnsettled`.
+  // Propagate a failed read as an error: a settled null means "signed out" and clears the widget.
   if (identityAsync.hasError) {
     return AsyncValue<Map<String, dynamic>?>.error(
       identityAsync.error!,

@@ -2,14 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'package:scheduling/features/clients/domain/policies/client_name_policy.dart';
 
-/// Moves a phone number typed or pasted into the NAME field over into the
-/// phone field, formatted, and takes it back out of the name.
-///
-/// Wired to the name field's `onChanged` in BOTH client sheets (one instance
-/// per State). [ClientNamePolicy.liftPhoneFromName] fires only into an empty
-/// phone field — or one still holding what this lift last wrote, so a number
-/// typed digit by digit keeps following the name instead of freezing at its
-/// seventh digit. Once the admin edits the phone, it is theirs.
+/// Lifts a phone typed into the NAME field into the phone field (ADR-0095).
 class NamePhoneLift {
   String? _lifted;
 
@@ -26,7 +19,7 @@ class NamePhoneLift {
     if (lifted == null) return false;
 
     if (lifted.name != name.text) {
-      // Parked at the end, as `PhoneInputFormatter` does when its mask rewrites.
+      // Cursor parked at the end, as `PhoneInputFormatter` does.
       name.value = TextEditingValue(
         text: lifted.name,
         selection: TextSelection.collapsed(offset: lifted.name.length),
@@ -38,8 +31,7 @@ class NamePhoneLift {
     return true;
   }
 
-  /// Run first in a save: refills an emptied phone from the name, or else from
-  /// the last lifted number (an embedded one has already left the name).
+  /// Run first in a save: refills an emptied phone from the name or last lift.
   void restoreOnSave({
     required TextEditingController name,
     required TextEditingController phone,

@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
+import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/utils/date_utils_helper.dart';
+import 'package:scheduling/core/utils/debouncer.dart';
 import 'package:scheduling/core/utils/presentation_time_provider.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
@@ -49,22 +51,42 @@ final dashboardHistoryRangeProvider =
       ),
     );
 
+/// Coalesces a write burst (an overdue review commits per 450-doc chunk).
+const Duration kDashboardHistoryRefreshDebounce = Duration(seconds: 2);
+
 /// One-shot read of the settled weeks, kept warm like the live half.
 final dashboardHistoryProvider =
-    FutureProvider.autoDispose<List<AppointmentRecord>>((ref) {
+    FutureProvider.autoDispose<List<AppointmentRecord>>((ref) async {
       keepWarmWithGrace(ref);
       final range = ref.watch(dashboardHistoryRangeProvider);
-      ref.watch(_dashboardRecordWritesProvider);
-      return ref.watch(appointmentsRepositoryProvider).fetchInRange(range);
+      final repo = ref.watch(appointmentsRepositoryProvider);
+      final logger = ref.read(loggerProvider);
+      final refresh = Debouncer.tagged(
+        kDashboardHistoryRefreshDebounce,
+        logger: logger,
+        tag: 'DASH-LOAD history refresh failed',
+      );
+      ref.onDispose(refresh.dispose);
+      Set<String>? heldIds;
+      // The live listener already covers writes outside the history bounds.
+      final sub = repo.onRecordWrite.listen(
+        (written) {
+          if (DashboardAggregator.writeTouchesHistory(
+            written,
+            range,
+            heldIds,
+          )) {
+            refresh.run(ref.invalidateSelf);
+          }
+        },
+        onError: (Object e, StackTrace st) =>
+            logger.warn('DASH-LOAD history write listener failed', e, st),
+      );
+      ref.onDispose(sub.cancel);
+      final records = await repo.fetchInRange(range);
+      heldIds = {for (final record in records) ?record.id};
+      return records;
     });
-
-final _dashboardRecordWritesProvider = StreamProvider.autoDispose<int>((ref) {
-  var revision = 0;
-  return ref
-      .watch(appointmentsRepositoryProvider)
-      .onRecordWrite
-      .map((_) => ++revision);
-});
 
 /// Clients created within the window, newest first, archived excluded.
 final newClientsProvider = FutureProvider.autoDispose<List<ClientRecord>>((

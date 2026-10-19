@@ -1,6 +1,6 @@
 "use strict";
 
-const {Timestamp} = require("firebase-admin/firestore");
+const {Timestamp, FieldValue} = require("firebase-admin/firestore");
 const {commitAppointmentEdits} = require("../appointment_edits");
 const {readEditableRecord, appointmentEditPatch,
   validateEditedAppointment} = require("../appointment_edit_policy");
@@ -88,6 +88,35 @@ describe("dirty appointment edits", () => {
             .toThrow("invalid-appointment-span");
         expect(() => validateEditedAppointment(legacy, legacy)).not.toThrow();
       });
+
+  test.each([0, 15, 1.5, "2"])("a day label of %j is refused", (value) => {
+    expect(() => readEditableRecord(form({dayIndex: value})))
+        .toThrow("invalid-appointment-day");
+    expect(() => readEditableRecord(form({dayCount: value})))
+        .toThrow("invalid-appointment-day");
+  });
+
+  test("run labels inside 1..14 with dayIndex <= dayCount are accepted",
+      () => {
+        for (const [dayIndex, dayCount] of [[1, 1], [3, 5], [14, 14]]) {
+          expect(() => validateEditedAppointment(
+              stored({dayIndex, dayCount}), null)).not.toThrow();
+        }
+      });
+
+  test("a dayIndex past its dayCount is refused", () => {
+    expect(() => validateEditedAppointment(
+        stored({dayIndex: 4, dayCount: 3}), null))
+        .toThrow("invalid-appointment-day");
+    expect(() => validateEditedAppointment(stored({dayIndex: 4,
+      dayCount: 3}), stored({dayIndex: 3, dayCount: 3})))
+        .toThrow("invalid-appointment-day");
+  });
+
+  test("an unchanged legacy run label stays editable", () => {
+    const legacy = {...stored(), dayIndex: 4, dayCount: 3};
+    expect(() => validateEditedAppointment(legacy, legacy)).not.toThrow();
+  });
 });
 
 describe("server appointment transaction", () => {
@@ -154,4 +183,25 @@ describe("server appointment transaction", () => {
         expect(result.appointments[0].data.completedAt)
             .toEqual({millisecondsSinceEpoch: 1234});
       });
+
+  test.each(["done", "completed"])(
+      "reopening a %s job deletes its server-owned completedAt",
+      async (status) => {
+        const db = database({"appointments/a": {...stored(), status,
+          completedAt: Timestamp.fromMillis(1234)}});
+        const result = await commitAppointmentEdits(db, {edits: [{id: "a",
+          base: form({status}), data: form()}]});
+        expect(db.writes[0].data.status).toBe("pending");
+        expect(db.writes[0].data.completedAt).toBe(FieldValue.delete());
+        expect(result.appointments[0].data).not.toHaveProperty("completedAt");
+      });
+
+  test("an edit that keeps a job complete keeps its completedAt", async () => {
+    const db = database({"appointments/a": {...stored({status: "done"}),
+      completedAt: Timestamp.fromMillis(1234)}});
+    await commitAppointmentEdits(db, {edits: [{id: "a",
+      base: form({status: "done"}), data: form({status: "done",
+        notes: "mine"})}]});
+    expect(db.writes[0].data).not.toHaveProperty("completedAt");
+  });
 });

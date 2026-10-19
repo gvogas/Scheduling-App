@@ -12,6 +12,7 @@ import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/features/clients/data/firebase_clients_repository.dart';
 import 'package:scheduling/features/clients/domain/clients_failure.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
+import 'package:scheduling/features/clients/domain/models/client_search_results.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
@@ -67,6 +68,9 @@ class _MockFunctions extends Mock implements FirebaseFunctions {}
 class _MockCallable extends Mock implements HttpsCallable {}
 
 class _MockCallableResult extends Mock implements HttpsCallableResult<void> {}
+
+class _MockMapCallableResult extends Mock
+    implements HttpsCallableResult<Map<String, dynamic>> {}
 
 void main() {
   late _MockFirestore firestore;
@@ -480,6 +484,37 @@ void main() {
 
       expect(results, isEmpty);
       verify(() => query.get()).called(1);
+    });
+
+    test('a read-capped callable answer carries a lower-bound count', () async {
+      final result = _MockMapCallableResult();
+      when(() => result.data).thenReturn({
+        'clients': [
+          {
+            'id': 'c1',
+            'data': {'name': 'Smith', 'lastName': 'Smith'},
+          },
+        ],
+        'examinedCount': 200,
+        'matchedCount': 1,
+        'matchedCountIsLowerBound': true,
+        'truncated': true,
+      });
+      when(
+        () => callable.call<Map<String, dynamic>>(any<Object?>()),
+      ).thenAnswer((_) async => result);
+      final r = FirebaseClientsRepository(
+        firestore,
+        functions: functions,
+        logger: logger,
+      );
+
+      final results = await r.searchClients('smith') as ClientSearchResults;
+
+      expect(
+        (results.truncated, results.matchedCountIsLowerBound),
+        (true, true),
+      );
     });
 
     test('returns cached result on second call with same query', () async {

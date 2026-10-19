@@ -2,7 +2,7 @@
 
 const {HttpsError} = require("firebase-functions/v2/https");
 const {Timestamp} = require("firebase-admin/firestore");
-const {toMillis} = require("./time_utils");
+const {toMillis, MAX_APPOINTMENT_SPAN_DAYS} = require("./time_utils");
 
 const TEXT_CAPS = {title: 200, clientId: 128, clientName: 401,
   clientPhone: 40, address: 500, notes: 4000, fieldNotes: 4000,
@@ -63,7 +63,7 @@ function readEditableRecord(raw) {
       out[field] = list;
     } else {
       if (value !== undefined && (!Number.isInteger(value) ||
-          value < 0 || value > 120)) {
+          value < 1 || value > MAX_APPOINTMENT_SPAN_DAYS)) {
         throw new HttpsError("invalid-argument", "invalid-appointment-day");
       }
       if (value !== undefined) out[field] = value;
@@ -109,7 +109,7 @@ function appointmentEditPatch(base, desired, current) {
 }
 
 /**
- * Validates merged records while allowing an unwidened legacy span.
+ * Validates merged records while allowing an unwidened legacy span or run.
  * @param {!Object} record Merged appointment.
  * @param {?Object} previous Existing appointment, or null for create.
  * @return {void}
@@ -125,6 +125,12 @@ function validateEditedAppointment(record, previous) {
   if (!Number.isFinite(span) || span < 0 ||
       (span > 14 * 86400_000 + 2 * 3600_000 && span > oldSpan)) {
     throw new HttpsError("invalid-argument", "invalid-appointment-span");
+  }
+  const relabelled = !previous ||
+    LABELS.some((field) => record[field] !== previous[field]);
+  if (relabelled && Number.isInteger(record.dayIndex) &&
+      Number.isInteger(record.dayCount) && record.dayIndex > record.dayCount) {
+    throw new HttpsError("invalid-argument", "invalid-appointment-day");
   }
 }
 

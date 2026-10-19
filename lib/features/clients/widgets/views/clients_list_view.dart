@@ -380,10 +380,12 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
         Padding(
           padding: const EdgeInsets.all(AppSpacing.sp12),
           child: WarningNote(
-            message: context.l10n.clients_searchTruncated(
-              results.length,
-              results.matchedCount,
-            ),
+            message: results.matchedCountIsLowerBound
+                ? context.l10n.clients_searchTruncatedAtLeast(results.length)
+                : context.l10n.clients_searchTruncated(
+                    results.length,
+                    results.matchedCount,
+                  ),
           ),
         ),
         Expanded(child: list),

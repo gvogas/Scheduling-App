@@ -223,9 +223,9 @@ class _EditablePhotoStrip extends StatelessWidget {
     MapEntry<int, AppointmentImage> entry,
     int thumbCache,
   ) {
-    return FutureBuilder<Uint8List>(
+    return _BytesFuture(
       key: ValueKey(entry.value.storagePath),
-      future: existingProviders[entry.key].loadBytes(),
+      image: existingProviders[entry.key],
       builder: (context, snapshot) => _loadedExistingThumb(
         context,
         entry,
@@ -338,6 +338,31 @@ class _EditablePhotoStrip extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Holds the byte load in State so a rebuild does not refetch; a changed image refetches.
+class _BytesFuture extends StatefulWidget {
+  const _BytesFuture({required this.image, required this.builder, super.key});
+
+  final AppointmentStorageImage image;
+  final AsyncWidgetBuilder<Uint8List> builder;
+
+  @override
+  State<_BytesFuture> createState() => _BytesFutureState();
+}
+
+class _BytesFutureState extends State<_BytesFuture> {
+  late Future<Uint8List> _bytes = widget.image.loadBytes();
+
+  @override
+  void didUpdateWidget(_BytesFuture oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.image != widget.image) _bytes = widget.image.loadBytes();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      FutureBuilder<Uint8List>(future: _bytes, builder: widget.builder);
 }
 
 class _EditableEmptyPhotoState extends StatelessWidget {

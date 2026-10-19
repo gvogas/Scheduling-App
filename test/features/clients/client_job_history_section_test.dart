@@ -18,7 +18,7 @@ class _FakeAppointmentsRepository extends Fake
   final List<AppointmentRecord> _records;
 
   @override
-  Stream<void> get onRecordWrite => const Stream<void>.empty();
+  Stream<Map<String, DateTime?>> get onRecordWrite => const Stream.empty();
 
   @override
   Future<List<AppointmentRecord>> fetchClientHistory({

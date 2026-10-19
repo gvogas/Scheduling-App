@@ -120,6 +120,25 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a read-capped search shows a lower-bound N+ count', (
+    tester,
+  ) async {
+    when(() => repo.searchClients(any())).thenAnswer(
+      (_) async => ClientSearchResults(
+        [_sophie],
+        examinedCount: 200,
+        matchedCount: 1,
+        truncated: true,
+        matchedCountIsLowerBound: true,
+      ),
+    );
+    await tester.pumpWidget(_wrap(repo, searchQuery: 'sophie'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1+ matches.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('search error offers a Retry that re-runs the search', (
     tester,
   ) async {

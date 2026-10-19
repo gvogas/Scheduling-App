@@ -3,10 +3,10 @@
 const {randomUUID} = require("node:crypto");
 const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const {getFirestore, FieldValue} = require("firebase-admin/firestore");
-const {APP_CHECK, assertAdminCall, enforceDurableRateLimit,
+const {assertAdminCall, enforceDurableRateLimit,
   requireDocId} = require("./security");
 const {appointmentHistoryScopes} = require("./search_tokens");
-const {toMillis} = require("./time_utils");
+const {toMillis, isCompletedStatus} = require("./time_utils");
 const {readEditableRecord, appointmentEditPatch,
   validateEditedAppointment, fieldValue, FIELDS} =
   require("./appointment_edit_policy");
@@ -75,8 +75,11 @@ async function commitAppointmentEdits(
         appointmentEditPatch(command.base, command.desired, current) :
         command.desired;
       const next = {...current, ...patch};
+      const reopened = Boolean(current) && "status" in patch &&
+        isCompletedStatus(current.status) && !isCompletedStatus(patch.status);
+      if (reopened) delete next.completedAt;
       validateEditedAppointment(next, current);
-      return {...command, current, patch, next};
+      return {...command, current, patch, next, reopened};
     });
     const clientIds = [...new Set(planned.filter((c) => c.next?.clientId &&
       c.next.clientId !== c.current?.clientId).map((c) => c.next.clientId))];
@@ -91,7 +94,7 @@ async function commitAppointmentEdits(
         if (command.current) tx.delete(command.ref);
         continue;
       }
-      const {next, patch, current} = command;
+      const {next, patch, current, reopened} = command;
       if (Object.keys(patch).length > 0) {
         const metadata = {seriesOpId: opId, editProtocol: 1,
           editRevision: (Number.isSafeInteger(current?.editRevision) ?
@@ -99,7 +102,8 @@ async function commitAppointmentEdits(
           historySearchScopes: appointmentHistoryScopes(next),
           updatedAt: FieldValue.serverTimestamp()};
         if (current) {
-          tx.update(command.ref, {...patch, ...metadata});
+          tx.update(command.ref, {...patch, ...metadata,
+            ...(reopened ? {completedAt: FieldValue.delete()} : {})});
         } else {
           tx.create(command.ref, {...next, ...metadata, pictureCount: 0,
             createdAt: FieldValue.serverTimestamp()});
@@ -119,8 +123,8 @@ async function commitAppointmentEdits(
 }
 
 /** Transactional dirty-field appointment edits, including series operations. */
-const saveAppointmentEdits = onCall({...APP_CHECK, timeoutSeconds: 120},
-    async (req) => {
+const saveAppointmentEdits = onCall(
+    {enforceAppCheck: true, timeoutSeconds: 120}, async (req) => {
       const uid = await assertAdminCall(req,
           new Set(["edits", "creates", "deletes"]), 4 * 1024 * 1024);
       return commitAppointmentEdits(getFirestore(), req.data,

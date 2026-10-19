@@ -34,7 +34,7 @@ class _AppointmentImageCarouselState extends State<AppointmentImageCarousel> {
     final scheme = Theme.of(context).colorScheme;
     final dpr = MediaQuery.devicePixelRatioOf(context);
     final cacheHeight = (200 * dpr).round();
-    // Bound decoded width to on-screen strip width to avoid over-decoding wide images.
+    // Bound decoded width to the strip width.
     final cacheWidth = (MediaQuery.sizeOf(context).width * dpr).round();
     return Column(
       children: [
@@ -61,37 +61,16 @@ class _AppointmentImageCarouselState extends State<AppointmentImageCarousel> {
                     ),
                   );
                 }
-                // A refused photo is a transparent 1x1, which renders as a
-                // BLANK page — indistinguishable from an empty one.
-                if (isRefusedImage(image)) {
-                  return AppointmentPhotoSemantics(
-                    index: index + 1,
-                    count: widget.images.length,
-                    unavailable: true,
-                    child: const _RefusedSlide(),
-                  );
-                }
-                void open() => ImageViewer.open(
-                  context,
-                  images: widget.images,
-                  initialIndex: index,
-                );
-                return AppointmentPhotoSemantics(
-                  index: index + 1,
+                return _LocalSlide(
+                  image: image,
+                  index: index,
                   count: widget.images.length,
-                  onTap: open,
-                  child: GestureDetector(
-                    onTap: open,
-                    child: Image(
-                      image: ResizeImage(
-                        image,
-                        width: cacheWidth,
-                        height: cacheHeight,
-                        policy: ResizeImagePolicy.fit,
-                      ),
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                    ),
+                  cacheWidth: cacheWidth,
+                  cacheHeight: cacheHeight,
+                  onOpen: () => ImageViewer.open(
+                    context,
+                    images: widget.images,
+                    initialIndex: index,
                   ),
                 );
               },
@@ -116,7 +95,7 @@ class _AppointmentImageCarouselState extends State<AppointmentImageCarousel> {
   }
 }
 
-class _RemoteSlide extends StatelessWidget {
+class _RemoteSlide extends StatefulWidget {
   const _RemoteSlide({
     required this.image,
     required this.index,
@@ -134,16 +113,29 @@ class _RemoteSlide extends StatelessWidget {
   final VoidCallback onOpen;
 
   @override
+  State<_RemoteSlide> createState() => _RemoteSlideState();
+}
+
+class _RemoteSlideState extends State<_RemoteSlide> {
+  late Future<Uint8List> _bytes = widget.image.loadBytes();
+
+  @override
+  void didUpdateWidget(_RemoteSlide oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.image != widget.image) _bytes = widget.image.loadBytes();
+  }
+
+  @override
   Widget build(BuildContext context) => FutureBuilder<Uint8List>(
-    future: image.loadBytes(),
+    future: _bytes,
     builder: (context, snapshot) {
       final bytes = snapshot.data;
       final failed = snapshot.hasError || (bytes != null && bytes.isEmpty);
       final loading = !snapshot.hasError && bytes == null;
-      final open = loading || failed ? null : onOpen;
+      final open = loading || failed ? null : widget.onOpen;
       return AppointmentPhotoSemantics(
-        index: index + 1,
-        count: count,
+        index: widget.index + 1,
+        count: widget.count,
         loading: loading,
         unavailable: failed,
         onTap: open,
@@ -155,8 +147,8 @@ class _RemoteSlide extends StatelessWidget {
                 onTap: open,
                 child: Image.memory(
                   bytes!,
-                  cacheWidth: cacheWidth,
-                  cacheHeight: cacheHeight,
+                  cacheWidth: widget.cacheWidth,
+                  cacheHeight: widget.cacheHeight,
                   fit: BoxFit.cover,
                   width: double.infinity,
                 ),
@@ -164,6 +156,55 @@ class _RemoteSlide extends StatelessWidget {
       );
     },
   );
+}
+
+class _LocalSlide extends StatelessWidget {
+  const _LocalSlide({
+    required this.image,
+    required this.index,
+    required this.count,
+    required this.cacheWidth,
+    required this.cacheHeight,
+    required this.onOpen,
+  });
+
+  final ImageProvider image;
+  final int index;
+  final int count;
+  final int cacheWidth;
+  final int cacheHeight;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    // A refused photo is a transparent 1x1, which renders as a BLANK page.
+    if (isRefusedImage(image)) {
+      return AppointmentPhotoSemantics(
+        index: index + 1,
+        count: count,
+        unavailable: true,
+        child: const _RefusedSlide(),
+      );
+    }
+    return AppointmentPhotoSemantics(
+      index: index + 1,
+      count: count,
+      onTap: onOpen,
+      child: GestureDetector(
+        onTap: onOpen,
+        child: Image(
+          image: ResizeImage(
+            image,
+            width: cacheWidth,
+            height: cacheHeight,
+            policy: ResizeImagePolicy.fit,
+          ),
+          fit: BoxFit.cover,
+          width: double.infinity,
+        ),
+      ),
+    );
+  }
 }
 
 /// What the carousel shows in place of a photo Storage refused.

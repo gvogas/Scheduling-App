@@ -418,5 +418,4 @@ module.exports = {
   assertKnownFlags,
   parseSince,
   patchFor,
-  splitName,
 };

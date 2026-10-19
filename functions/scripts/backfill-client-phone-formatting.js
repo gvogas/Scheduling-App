@@ -229,7 +229,6 @@ if (require.main === module) {
 
 module.exports = {
   assertKnownFlags,
-  explain,
   formatNanpNumber,
   patchFor,
 };

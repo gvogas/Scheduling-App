@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/permissions/location_permission_service.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
@@ -58,6 +59,9 @@ void main() {
         presenceSyncControllerProvider.overrideWithValue(presence),
         locationPermissionServiceProvider.overrideWithValue(permissions),
         isOfflineProvider.overrideWithValue(false),
+        sessionFenceProvider.overrideWithValue(
+          SessionFence(readUid: () => 'test-uid'),
+        ),
       ],
       child: ThemeNotifier(
         themeMode: ThemeMode.light,

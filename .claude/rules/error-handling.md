@@ -12,7 +12,7 @@ alwaysApply: true
 
 ## Cause notices (generic catch sites)
 
-- Typed-`Failure` branches first, else `composeErrorNotice(context, intro:, error:)` (`lib/core/errors/error_cause.dart`): `"{intro}. {cause}"` from 7 sanitized causes. Never `error_somethingWentWrong` at a new site.
+- Typed-`Failure` branches first, else `composeErrorNotice(context, intro:, error:)` (`lib/core/errors/error_cause.dart`): `"{intro}. {cause}"` from 9 sanitized causes. Never `error_somethingWentWrong` at a new site.
 - Never put a support tag in user-facing text; it lives only as the `logger.warn` label prefix, so the label MUST start with it (`'CLI-DEL deleteClient failed'`). (ADR-0031)
 - Call `warn` BEFORE any `if (!mounted) return;` — the log must survive unmount.
 - Read the logger (`loggerProvider`) and any provider a post-await path needs (`noticeServiceProvider`, a repository) BEFORE the first `await` — Riverpod 3 `ref.read` on an unmounted consumer throws a `StateError`, exactly when the mounted guard matters. A `ref.read` in a braced `catch` or `.catchError` body is CI-checked (`tool/check_rules.dart`, `ref-read-in-catch`); the before-await half is not. (ADR-0033)

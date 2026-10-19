@@ -942,22 +942,59 @@
   "employees_monthEndReviewPush": "Rappel des travaux en retard en fin de mois",
   "employees_monthEndReviewPushDescription": "Une notification le dernier jour du mois pour les travaux terminés sans être fermés",
   "clients_searchTruncated": "Affichage de {shown} résultats sur {total}. Précisez le nom, l'adresse ou le numéro de téléphone pour affiner la recherche.",
-  "@clients_searchTruncated": {"description": "Précise que la recherche de clients a trouvé plus de résultats que la limite affichée.", "placeholders": {"shown": {"type": "int"}, "total": {"type": "int"}}},
-  "error_causeEditConflict": "Ce rendez-vous a été modifié ailleurs. Votre brouillon est conservé. Consultez la dernière version avant de réessayer.",
-  "@error_causeEditConflict": {"description": "Explique un conflit de modification de rendez-vous sans effacer le brouillon."},
-  "account_pendingPhotosTitle": "Photos en attente d'enregistrement",
-  "@account_pendingPhotosTitle": {"description": "Titre avant une déconnexion volontaire ou une suppression de compte avec des photos en attente."},
-  "account_pendingPhotosBody": "{count, plural, =1{1 photo attend d'être enregistrée dans un rendez-vous.} other{{count} photos attendent d'être enregistrées dans des rendez-vous.}} Restez connecté pour réessayer, ou abandonnez les photos en attente pour continuer. Les photos déjà enregistrées seront conservées.",
-  "@account_pendingPhotosBody": {"description": "Explique le choix des photos en attente avant de quitter le compte.", "placeholders": {"count": {"type": "int"}}},
-  "account_stayAndRetryPhotos": "Rester et réessayer",
-  "@account_stayAndRetryPhotos": {"description": "Annule la sortie du compte et relance les photos en attente."},
-  "account_discardPhotosAndContinue": "Abandonner les photos et continuer",
-  "@account_discardPhotosAndContinue": {"description": "Abandon explicite des photos en attente avant de quitter le compte."},
+  "@clients_searchTruncated": {
+    "description": "Précise que la recherche de clients a trouvé plus de résultats que la limite affichée.",
+    "placeholders": {
+      "shown": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "clients_searchTruncatedAtLeast": "Plus de {shown} résultats. Précisez le nom, l'adresse ou le numéro de téléphone pour affiner la recherche.",
+  "@clients_searchTruncatedAtLeast": {
+    "description": "Précise que la recherche de clients s'est arrêtée à sa limite de lecture : on sait seulement que plus de résultats que ceux affichés correspondent.",
+    "placeholders": {
+      "shown": {
+        "type": "int"
+      }
+    }
+  },
+  "error_causeEditConflict": "Ce rendez-vous a été modifié ailleurs — consultez la dernière version avant de réessayer; votre brouillon est conservé.",
+  "@error_causeEditConflict": {
+    "description": "Explique un conflit de modification de rendez-vous sans effacer le brouillon."
+  },
+  "auth_pendingPhotosTitle": "Photos en attente d'enregistrement",
+  "@auth_pendingPhotosTitle": {
+    "description": "Titre avant une déconnexion volontaire ou une suppression de compte avec des photos en attente."
+  },
+  "auth_pendingPhotosBody": "{count, plural, =1{1 photo attend d'être enregistrée dans un rendez-vous.} other{{count} photos attendent d'être enregistrées dans des rendez-vous.}} Restez connecté pour réessayer, ou abandonnez les photos en attente pour continuer. Les photos déjà enregistrées seront conservées.",
+  "@auth_pendingPhotosBody": {
+    "description": "Explique le choix des photos en attente avant de quitter le compte.",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "auth_stayAndRetryPhotos": "Rester et réessayer",
+  "@auth_stayAndRetryPhotos": {
+    "description": "Annule la sortie du compte et relance les photos en attente."
+  },
+  "auth_discardPhotosAndContinue": "Abandonner les photos et continuer",
+  "@auth_discardPhotosAndContinue": {
+    "description": "Abandon explicite des photos en attente avant de quitter le compte."
+  },
   "calendar_photoUploadsExpired": "{count, plural, =1{1 photo n'a pas été enregistrée et a été supprimée après sept jours.} other{{count} photos n'ont pas été enregistrées et ont été supprimées après sept jours.}} Ouvrez les rendez-vous pour les ajouter de nouveau.",
-  "@calendar_photoUploadsExpired": {"description": "Signale les photos non enregistrées arrivées à expiration pour ce compte.", "placeholders": {"count": {"type": "int"}}},
-  "account_forcedExitPhotos": "Certaines photos n'étaient pas encore enregistrées. Vérifiez vos rendez-vous avant de les ajouter de nouveau; les photos non envoyées sont effacées de cet appareil à la sortie du compte.",
-  "@account_forcedExitPhotos": {"description": "Explique la perte possible de photos lors d'une sortie forcée du compte."},
-  "error_causeIncompleteCheck": "La vérification n'a pas pu examiner tous les résultats. Réduisez la recherche ou la période avant de confirmer.",
-  "@error_causeIncompleteCheck": {"description": "Explique une recherche ou vérification de conflits incomplète."},
+  "@calendar_photoUploadsExpired": {
+    "description": "Signale les photos non enregistrées arrivées à expiration pour ce compte.",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "auth_forcedExitPhotos": "Certaines photos n'étaient pas encore enregistrées. Vérifiez vos rendez-vous avant de les ajouter de nouveau; les photos non envoyées sont effacées de cet appareil à la sortie du compte.",
+  "@auth_forcedExitPhotos": {
+    "description": "Explique la perte possible de photos lors d'une sortie forcée du compte."
+  },
+  "error_causeIncompleteCheck": "La vérification n'a pas pu examiner tous les résultats — réduisez la recherche ou la période avant de confirmer.",
+  "@error_causeIncompleteCheck": {
+    "description": "Explique une recherche ou vérification de conflits incomplète."
+  },
   "error_introReviewOverdue": "Impossible de mettre à jour les travaux"
 }

@@ -928,6 +928,57 @@ void main() {
       },
     );
 
+    test('a lease gone stale before the write returns Busy and frees '
+        'isSubmitting', () async {
+      var current = true;
+      when(() => appointments.captureWriteOwner()).thenReturn(() => current);
+      when(
+        () => appointments.findBusyEmployees(
+          candidates: any(named: 'candidates'),
+          start: any(named: 'start'),
+          end: any(named: 'end'),
+        ),
+      ).thenAnswer((_) async {
+        current = false;
+        return const [];
+      });
+
+      final c = readNotifier();
+      fillValid(c);
+      final outcome = await c.submit(
+        title: 'Leak fix',
+        address: '999 Maple',
+        notes: '',
+        materialsNeeded: '',
+      );
+
+      expect(outcome, isA<AddEventBusy>());
+      expect(readState().isSubmitting, isFalse);
+      verifyNever(() => appointments.addAppointment(any()));
+    });
+
+    test('a lease gone stale after the write returns Busy and frees '
+        'isSubmitting', () async {
+      var current = true;
+      when(() => appointments.captureWriteOwner()).thenReturn(() => current);
+      when(() => appointments.addAppointment(any())).thenAnswer((_) async {
+        current = false;
+      });
+
+      final c = readNotifier();
+      fillValid(c);
+      final outcome = await c.submit(
+        title: 'Leak fix',
+        address: '999 Maple',
+        notes: '',
+        materialsNeeded: '',
+        forceBusy: true,
+      );
+
+      expect(outcome, isA<AddEventBusy>());
+      expect(readState().isSubmitting, isFalse);
+    });
+
     test(
       'offline fails fast without touching the repo or the busy flag',
       () async {

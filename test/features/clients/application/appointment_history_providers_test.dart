@@ -16,13 +16,13 @@ const _leak = 'leak';
 void main() {
   late _MockAppointmentsRepo repo;
   late StreamController<void> localWrites;
-  late StreamController<void> recordWrites;
+  late StreamController<Map<String, DateTime?>> recordWrites;
   late ProviderContainer container;
 
   setUp(() {
     repo = _MockAppointmentsRepo();
     localWrites = StreamController<void>.broadcast();
-    recordWrites = StreamController<void>.broadcast();
+    recordWrites = StreamController<Map<String, DateTime?>>.broadcast();
     when(() => repo.onLocalWrite).thenAnswer((_) => localWrites.stream);
     when(() => repo.onRecordWrite).thenAnswer((_) => recordWrites.stream);
     when(() => repo.searchHistory(any())).thenAnswer((_) async => const []);
@@ -129,7 +129,7 @@ void main() {
       container.listen(clientJobHistoryProvider('c1'), (_, _) {});
       await container.read(clientJobHistoryProvider('c1').future);
 
-      recordWrites.add(null);
+      recordWrites.add({'a1': null});
       await Future<void>.delayed(Duration.zero);
       await container.read(clientJobHistoryProvider('c1').future);
 

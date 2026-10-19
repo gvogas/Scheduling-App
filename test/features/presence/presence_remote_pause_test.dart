@@ -96,9 +96,11 @@ void main() {
         employeesRepositoryProvider.overrideWithValue(employees),
         presenceRepositoryProvider.overrideWithValue(presence),
         locationPermissionServiceProvider.overrideWithValue(permissions),
-        presenceSyncControllerProvider.overrideWith(
-          (ref) => PresenceSyncController(ref, auth: auth),
-        ),
+        presenceSyncControllerProvider.overrideWith((ref) {
+          final controller = PresenceSyncController(ref, auth: auth);
+          ref.onDispose(controller.dispose);
+          return controller;
+        }),
       ],
     );
     addTearDown(container.dispose);

@@ -610,6 +610,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
         selectedEmployees,
       );
       if (isCurrent != null && !isCurrent()) {
+        if (ref.mounted) state = state.copyWith(isSaving: false);
         return const EventDetailsSaveBusy();
       }
       final updated = pipeline.buildUpdatedRecord(
@@ -650,6 +651,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
       }
 
       if (isCurrent != null && !isCurrent()) {
+        if (ref.mounted) state = state.copyWith(isSaving: false);
         return const EventDetailsSaveBusy();
       }
       await pipeline.applyPhotoChanges(

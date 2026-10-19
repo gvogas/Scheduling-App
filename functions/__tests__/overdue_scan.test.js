@@ -82,3 +82,27 @@ test.each([
   expect((await scanOverduePage(f.db, now)).records).toHaveLength(2);
   expect(f.reads).toEqual([2]);
 });
+
+test("the sweep's ascending order is declared as a composite", async () => {
+  const orders = [];
+  const query = {
+    where: () => query, limit: () => query, startAfter: () => query,
+    orderBy: (field, direction) => {
+      orders.push(`${field}:${direction}`);
+      return query;
+    },
+    get: async () => ({docs: []}),
+  };
+  await scanOverduePage({collection: (name) => name === "appointments" ?
+    query : {doc: () => ({get: async () => ({exists: false})})}}, now);
+  expect(orders).toEqual(["endTime:asc", "__name__:asc"]);
+  const manifest = JSON.parse(require("node:fs").readFileSync(
+      require("node:path").join(__dirname, "..", "..",
+          "firestore.indexes.json"), "utf8"));
+  // Firestore appends `__name__` in the last field's direction itself.
+  const declared = manifest.indexes.filter(
+      (i) => i.collectionGroup === "appointments").map((i) => i.fields.map(
+      (f) => `${f.fieldPath}:${f.arrayConfig || f.order}`).join(","));
+  expect(declared).toContain("status:ASCENDING,endTime:ASCENDING");
+  expect(declared).toContain("status:ASCENDING,endTime:DESCENDING");
+});

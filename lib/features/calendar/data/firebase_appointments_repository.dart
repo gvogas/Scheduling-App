@@ -111,7 +111,12 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
             )
           : null;
     }
-    if (!_recordWrites.isClosed) _recordWrites.add(null);
+    if (!_recordWrites.isClosed) {
+      _recordWrites.add({
+        for (final change in changes.entries)
+          change.key: firestoreDateTime(change.value?['startTime']),
+      });
+    }
     if (!_localWrites.isClosed) _localWrites.add(null);
   }
 
@@ -130,13 +135,14 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   }
 
   final StreamController<void> _localWrites = StreamController.broadcast();
-  final StreamController<void> _recordWrites = StreamController.broadcast();
+  final StreamController<Map<String, DateTime?>> _recordWrites =
+      StreamController.broadcast();
 
   @override
   Stream<void> get onLocalWrite => _localWrites.stream;
 
   @override
-  Stream<void> get onRecordWrite => _recordWrites.stream;
+  Stream<Map<String, DateTime?>> get onRecordWrite => _recordWrites.stream;
 
   void dispose() {
     unawaited(_localWrites.close());

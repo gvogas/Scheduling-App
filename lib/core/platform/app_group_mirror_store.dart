@@ -34,7 +34,7 @@ class AppGroupMirrorStore {
     return value is Map ? value.cast<String, dynamic>() : null;
   }
 
-  static int? revision(Map<String, dynamic> payload) {
+  static int? _revision(Map<String, dynamic> payload) {
     final generated = payload['generatedAt'];
     if (generated is num) return generated.toInt();
     return generated is String
@@ -62,7 +62,8 @@ class AppGroupMirrorStore {
         return current() ? epoch : null;
       });
 
-  Future<void> foreground(
+  /// Returns the JSON saved under [key], or null after a clear or a refusal.
+  Future<String?> foreground(
     String key,
     Map<String, dynamic>? payload,
     String? uid,
@@ -71,8 +72,8 @@ class AppGroupMirrorStore {
     final epoch = payload == null || uid == null
         ? null
         : await ensureOwner(uid, current);
-    await _serial(() async {
-      if (!current()) return;
+    return await _serial(() async {
+      if (!current()) return null;
       if (payload == null) {
         await _save(
           mirrorOwnerKey,
@@ -82,31 +83,40 @@ class AppGroupMirrorStore {
             'validFrom': DateTime.now().millisecondsSinceEpoch,
           }),
         );
-        if (!current()) return;
+        if (!current()) return null;
         await _save(mirrorWidgetKey, null);
-        if (!current()) return;
+        if (!current()) return null;
         await _save(mirrorSnapshotKey, null);
-        return;
+        return null;
       }
-      if (uid == null || epoch == null) return;
+      if (uid == null || epoch == null) return null;
       final binding = _decode(await _read(mirrorOwnerKey));
       if (!current() ||
           binding?['ownerUid'] != uid ||
           binding?['epoch'] != epoch) {
-        return;
+        return null;
       }
-      await _save(
-        key,
-        jsonEncode({
-          ...payload,
-          'ownerUid': uid,
-          'sessionEpoch': epoch,
-          'schema': 1,
-          'sourceRevision': revision(payload),
-        }),
-      );
+      final written = jsonEncode({
+        ...payload,
+        'ownerUid': uid,
+        'sessionEpoch': epoch,
+        'schema': 1,
+        'sourceRevision': _revision(payload),
+      });
+      await _save(key, written);
+      return written;
     });
   }
+
+  /// Whether [key] still holds [written] under the binding it was saved for.
+  Future<bool> stillHolds(String key, String written) => _serial(() async {
+    if (await _read(key) != written) return false;
+    final payload = _decode(written);
+    final binding = _decode(await _read(mirrorOwnerKey));
+    return binding != null &&
+        binding['ownerUid'] == payload?['ownerUid'] &&
+        binding['epoch'] == payload?['sessionEpoch'];
+  });
 
   Future<bool> backgroundWidget(String raw) => _serial(() async {
     final payload = _decode(raw);
@@ -118,11 +128,11 @@ class AppGroupMirrorStore {
         payload['sessionEpoch'] != binding['epoch']) {
       return false;
     }
-    final incoming = revision(payload);
+    final incoming = _revision(payload);
     final cached = _decode(await _read(mirrorWidgetKey));
     if (incoming == null ||
         incoming < (binding['validFrom'] as num).toInt() ||
-        (cached != null && (revision(cached) ?? 0) > incoming)) {
+        (cached != null && (_revision(cached) ?? 0) > incoming)) {
       return false;
     }
     final latest = _decode(await _read(mirrorOwnerKey));

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:scheduling/core/app/pending_photo_exit.dart';
 import 'package:scheduling/core/app/session_fence.dart';
 
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
@@ -15,7 +16,6 @@ import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/auth/domain/auth_failure.dart';
 import 'package:scheduling/features/auth/services/account_deletion_service.dart';
 import 'package:scheduling/features/auth/services/auth_service.dart';
-import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/live_activity/application/live_activity_registration_controller.dart';
 import 'package:scheduling/features/notifications/application/push_registration_controller.dart';
 import 'package:scheduling/features/presence/application/presence_sync_controller.dart';

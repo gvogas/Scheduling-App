@@ -13,6 +13,7 @@ import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/utils/app_language.dart';
 import 'package:scheduling/core/utils/reentrant_sync.dart';
+import 'package:scheduling/core/utils/session_fenced_sync.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
 import 'package:scheduling/features/home_widget/application/widget_sync_service.dart'
     show widgetAppGroupId;
@@ -54,7 +55,7 @@ bool shouldRegisterLiveActivity({
 }) => shouldRegisterPush(role: role, status: status, signedIn: signedIn);
 
 /// Registers this device's Live Activity APNs tokens; iOS-gated and best effort.
-class LiveActivityRegistrationController with ReentrantSync {
+class LiveActivityRegistrationController with ReentrantSync, SessionFencedSync {
   LiveActivityRegistrationController(
     this._ref, {
     FirebaseAuth? auth,
@@ -76,7 +77,6 @@ class LiveActivityRegistrationController with ReentrantSync {
   final AppLogger _logger;
   final SessionFence _session;
   SessionLease? _registrationLease;
-  bool _disposed = false;
   Future<bool>? _endingCards;
   bool _endRequired = false;
   bool _resyncAfterEnd = false;
@@ -123,8 +123,8 @@ class LiveActivityRegistrationController with ReentrantSync {
   Future<void> _syncGuarded() async {
     final generation = syncGeneration;
     final lease = _session.capture();
-    if (lease == null || _disposed) return;
-    bool stale() => isSyncStale(generation) || !lease.isCurrent || _disposed;
+    if (lease == null || isDisposed) return;
+    bool stale() => isAttemptStale(generation, lease);
     if (_endingCards != null) {
       _resyncAfterEnd = true;
       return;
@@ -243,9 +243,7 @@ class LiveActivityRegistrationController with ReentrantSync {
     unawaited(_cancel(_pushToStartSub));
     _pushToStartSub = _plugin.pushToStartTokenUpdateStream.listen(
       (token) {
-        if (!lease.isCurrent ||
-            isSyncStale(generation) ||
-            _disposed ||
+        if (isAttemptStale(generation, lease) ||
             !identical(lease, _registrationLease)) {
           return;
         }
@@ -267,9 +265,7 @@ class LiveActivityRegistrationController with ReentrantSync {
     unawaited(_cancel(_activitySub));
     _activitySub = _plugin.activityUpdateStream.listen(
       (event) {
-        if (!lease.isCurrent ||
-            isSyncStale(generation) ||
-            _disposed ||
+        if (isAttemptStale(generation, lease) ||
             !identical(lease, _registrationLease)) {
           return;
         }
@@ -306,7 +302,7 @@ class LiveActivityRegistrationController with ReentrantSync {
         uid == null ||
         !lease.isCurrent ||
         !identical(lease, _registrationLease) ||
-        _disposed) {
+        isDisposed) {
       return;
     }
     await _ref
@@ -348,7 +344,7 @@ class LiveActivityRegistrationController with ReentrantSync {
     final repository = _ref.read(liveActivityTokenRepositoryProvider);
     final ended = await _endCardsNative();
     for (final activityId in activityIds) {
-      if (lease?.isCurrent != true || docId == null || _disposed) break;
+      if (lease?.isCurrent != true || docId == null || isDisposed) break;
       await repository.deleteToken(userDocId: docId, docId: activityId);
     }
     return ended;
@@ -370,7 +366,7 @@ class LiveActivityRegistrationController with ReentrantSync {
     }();
     return _endingCards = ending.whenComplete(() {
       _endingCards = null;
-      if (_resyncAfterEnd && !_endRequired && !_disposed) {
+      if (_resyncAfterEnd && !_endRequired && !isDisposed) {
         _resyncAfterEnd = false;
         unawaited(sync());
       }
@@ -400,14 +396,9 @@ class LiveActivityRegistrationController with ReentrantSync {
       final repository = _ref.read(liveActivityTokenRepositoryProvider);
       await ending;
       await cancellation;
-      if (lease == null ||
-          !lease.isCurrent ||
-          isSyncStale(generation) ||
-          _disposed) {
-        return;
-      }
+      if (lease == null || isAttemptStale(generation, lease)) return;
       final docId = knownDocId ?? await _resolveUserDocId();
-      if (!lease.isCurrent || isSyncStale(generation) || _disposed) return;
+      if (isAttemptStale(generation, lease)) return;
       if (docId != null) {
         // By kind: the push-to-start doc id IS a token this session may never have seen.
         await repository.deleteTokensOfKind(
@@ -450,8 +441,7 @@ class LiveActivityRegistrationController with ReentrantSync {
 
   /// Cancels the token streams without [unregister]'s network delete.
   void dispose() {
-    _disposed = true;
-    invalidateSync();
+    disposeSync();
     unawaited(_cancelStreams());
   }
 }

@@ -57,38 +57,120 @@ void main() {
     },
   );
 
-  test(
-    'local appointment writes and client mutations refresh one-shot data',
-    () async {
-      final appointments = _Appointments();
-      final clients = _Clients();
-      final writes = StreamController<void>.broadcast(sync: true);
+  test('client mutations refresh the new-clients read', () async {
+    final appointments = _Appointments();
+    final clients = _Clients();
+    when(
+      () => appointments.onRecordWrite,
+    ).thenAnswer((_) => const Stream.empty());
+    when(() => appointments.fetchInRange(any())).thenAnswer((_) async => []);
+    when(
+      () => clients.fetchClientsCreatedSince(any()),
+    ).thenAnswer((_) async => []);
+    final container =
+        ProviderContainer(
+            overrides: [
+              appointmentsRepositoryProvider.overrideWithValue(appointments),
+              clientsRepositoryProvider.overrideWithValue(clients),
+            ],
+          )
+          ..listen(dashboardHistoryProvider, (_, _) {})
+          ..listen(newClientsProvider, (_, _) {});
+    await container.read(newClientsProvider.future);
+    verify(() => clients.fetchClientsCreatedSince(any())).called(1);
+    container.read(clientsRefreshProvider.notifier).bump();
+    await container.read(newClientsProvider.future);
+    verify(() => clients.fetchClientsCreatedSince(any())).called(1);
+    container.dispose();
+  });
+
+  group('local appointment writes and the history read', () {
+    // Wednesday: history runs Aug 24 (fetched from Aug 10) to Mon Oct 12.
+    final now = DateTime(2026, 10, 14, 12);
+    final held = AppointmentRecord(
+      id: 'held',
+      title: 'Old job',
+      startTime: DateTime(2026, 9, 1, 9),
+      endTime: DateTime(2026, 9, 1, 10),
+      status: 'done',
+    );
+    late _Appointments appointments;
+    late StreamController<Map<String, DateTime?>> writes;
+    late ProviderContainer container;
+
+    Future<void> open() async {
+      appointments = _Appointments();
+      writes = StreamController.broadcast(sync: true);
       when(() => appointments.onRecordWrite).thenAnswer((_) => writes.stream);
-      when(() => appointments.fetchInRange(any())).thenAnswer((_) async => []);
       when(
-        () => clients.fetchClientsCreatedSince(any()),
-      ).thenAnswer((_) async => []);
-      final container =
-          ProviderContainer(
-              overrides: [
-                appointmentsRepositoryProvider.overrideWithValue(appointments),
-                clientsRepositoryProvider.overrideWithValue(clients),
-              ],
-            )
-            ..listen(dashboardHistoryProvider, (_, _) {})
-            ..listen(newClientsProvider, (_, _) {});
+        () => appointments.fetchInRange(any()),
+      ).thenAnswer((_) async => [held]);
+      container = ProviderContainer(
+        overrides: [
+          presentationClockProvider.overrideWithValue(() => now),
+          appointmentsRepositoryProvider.overrideWithValue(appointments),
+        ],
+      )..listen(dashboardHistoryProvider, (_, _) {});
       await container.read(dashboardHistoryProvider.future);
-      await container.read(newClientsProvider.future);
       verify(() => appointments.fetchInRange(any())).called(1);
-      verify(() => clients.fetchClientsCreatedSince(any())).called(1);
-      writes.add(null);
-      container.read(clientsRefreshProvider.notifier).bump();
+    }
+
+    Future<void> settle(WidgetTester tester) async {
+      await tester.pump(kDashboardHistoryRefreshDebounce);
       await container.read(dashboardHistoryProvider.future);
-      await container.read(newClientsProvider.future);
-      verify(() => appointments.fetchInRange(any())).called(1);
-      verify(() => clients.fetchClientsCreatedSince(any())).called(1);
+    }
+
+    Future<void> close() async {
       container.dispose();
       await writes.close();
-    },
-  );
+    }
+
+    testWidgets('a write inside the live window does not re-read history', (
+      tester,
+    ) async {
+      await open();
+      writes
+        ..add({'new': DateTime(2026, 10, 14, 15)})
+        ..add({'other': null});
+      await settle(tester);
+      verifyNever(() => appointments.fetchInRange(any()));
+      await close();
+    });
+
+    testWidgets('a write starting inside the history range re-reads it', (
+      tester,
+    ) async {
+      await open();
+      writes.add({'moved': DateTime(2026, 9, 15, 9)});
+      await settle(tester);
+      verify(() => appointments.fetchInRange(any())).called(1);
+      await close();
+    });
+
+    testWidgets('a write to a held doc re-reads history (moved out, status, '
+        'delete)', (tester) async {
+      await open();
+      writes.add({'held': DateTime(2026, 10, 14, 9)});
+      await settle(tester);
+      verify(() => appointments.fetchInRange(any())).called(1);
+      writes.add({'held': null});
+      await settle(tester);
+      verify(() => appointments.fetchInRange(any())).called(1);
+      await close();
+    });
+
+    testWidgets('a burst of history writes coalesces into one re-read', (
+      tester,
+    ) async {
+      await open();
+      for (var chunk = 0; chunk < 3; chunk++) {
+        writes.add({'held': null});
+        await tester.pump(kDashboardHistoryRefreshDebounce ~/ 2);
+      }
+      verifyNever(() => appointments.fetchInRange(any()));
+      await settle(tester);
+      verify(() => appointments.fetchInRange(any())).called(1);
+      await close();
+    });
+  });
 }

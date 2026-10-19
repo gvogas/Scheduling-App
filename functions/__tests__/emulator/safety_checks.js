@@ -100,7 +100,7 @@ async function verifySafety(project, firestore, auth, admin) {
       }
     }
     console.log("Client deletion: both booking commit orders checked.");
-    await verifyAppointmentEdits(db, prefix, write);
+    await verifyAppointmentEdits(db, prefix, write, admin);
 
     const email = `${prefix}@example.test`;
     const fields = {name: "Test Employee", email, colorValue: "1"};

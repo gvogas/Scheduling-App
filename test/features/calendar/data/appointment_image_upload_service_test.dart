@@ -1080,35 +1080,21 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 20));
     });
 
-    test(
-      'a partial staging failure retains originals and resumes after restart',
-      () async {
-        final good = makeSource('good.jpg');
-        final missing = File('${sourceDir.path}/never_existed.jpg');
-
-        makeService().uploadInBackground(
-          appointmentId: 'a1',
-          newImages: [good, missing],
+    PendingUpload unstagedEntry(String appointmentId, Map<String, File> map) =>
+        PendingUpload(
+          appointmentId: appointmentId,
+          paths: [for (final name in map.keys) '${stagingDir.path}/$name'],
+          enqueuedAtMs: DateTime.now().millisecondsSinceEpoch,
+          ownerUid: 'uid-1',
+          ownerEmployeeId: 'doc-1',
+          batchId: 'batch-$appointmentId',
+          stagingSources: {
+            for (final item in map.entries)
+              '${stagingDir.path}/${item.key}': item.value.path,
+          },
         );
 
-        for (var i = 0; i < 50 && notifier.failureFor('a1') == null; i++) {
-          await Future<void>.delayed(const Duration(milliseconds: 5));
-        }
-
-        expect(notifier.failureFor('a1')?.failedCount, 2);
-        final pending = (await store.load()).single;
-        expect(pending.stagingSources.values, contains(good.path));
-        expect(good.existsSync(), isTrue);
-        expect(File(pending.paths.first).existsSync(), isTrue);
-        verifyNever(
-          () => storage.uploadQueuedImage(
-            any(),
-            any(),
-            any(),
-            isCurrent: any(named: 'isCurrent'),
-          ),
-        );
-        missing.writeAsStringSync('data');
+    void uploadsSucceed() =>
         when(
           () => storage.uploadQueuedImage(
             any(),
@@ -1121,11 +1107,80 @@ void main() {
               (call.positionalArguments[2] as ImageUploadIntent).image,
         );
 
+    test(
+      'a missing staging source is reported lost and later batches still upload',
+      () async {
+        await store.add(
+          unstagedEntry('a1', {'gone.jpg': File('${sourceDir.path}/gone.jpg')}),
+        );
+        await stageEntry('a2', ['ok.jpg']);
+        uploadsSucceed();
+
         await makeService().drainPending();
 
         expect(await store.load(), isEmpty);
-        expect(good.existsSync(), isFalse);
-        expect(missing.existsSync(), isFalse);
+        expect(notifier.failureFor('a1')?.failedCount, 1);
+        expect(notifier.failureFor('a2'), isNull);
+        verify(
+          () => appointments.appendAppointmentPictures('a2', any()),
+        ).called(1);
+      },
+    );
+
+    test(
+      'a failed staging copy keeps its originals without blocking later batches',
+      () async {
+        final source = makeSource('blocked.jpg');
+        await store.add(unstagedEntry('a1', {'blocked.jpg': source}));
+        final blocker = Directory('${stagingDir.path}/blocked.jpg.part')
+          ..createSync();
+        await stageEntry('a2', ['ok.jpg']);
+        uploadsSucceed();
+
+        await makeService().drainPending();
+
+        final pending = (await store.load()).single;
+        expect(pending.stagingSources.values, [source.path]);
+        expect(source.existsSync(), isTrue);
+        expect(notifier.failureFor('a1')?.failedCount, 1);
+        verify(
+          () => appointments.appendAppointmentPictures('a2', any()),
+        ).called(1);
+
+        blocker.deleteSync();
+        await makeService().drainPending();
+
+        expect(await store.load(), isEmpty);
+        expect(source.existsSync(), isFalse);
+      },
+    );
+
+    test(
+      'exit inspection yields nothing when the session changes mid-wait',
+      () async {
+        final directory = Completer<Directory>();
+        final session = SessionFence(readUid: () => auth.currentUser?.uid);
+        final service =
+            AppointmentImageUploadService(
+              appointments: appointments,
+              notifier: notifier,
+              storage: storage,
+              store: store,
+              auth: auth,
+              stagingDirProvider: () => directory.future,
+              employeeIdForUid: (_) async => 'doc-1',
+              session: session,
+            )..uploadInBackground(
+              appointmentId: 'a1',
+              newImages: [makeSource('photo.jpg')],
+            );
+        final exit = service.prepareForExit();
+        session
+          ..beginExit()
+          ..resume();
+        directory.complete(stagingDir);
+
+        expect(await exit, isNull);
       },
     );
 
@@ -1153,7 +1208,7 @@ void main() {
 
         final check = await exit;
 
-        expect(check.pendingCount, 1);
+        expect(check?.pendingCount, 1);
         expect(source.existsSync(), isTrue);
         verifyNever(
           () => storage.uploadQueuedImage(
@@ -1184,7 +1239,7 @@ void main() {
         final service = makeService();
         final check = await service.prepareForExit();
 
-        expect(check.pendingCount, 1);
+        expect(check?.pendingCount, 1);
         await service.clearPending();
       },
     );

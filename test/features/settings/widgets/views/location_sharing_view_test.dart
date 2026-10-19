@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/notices/app_notice.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
@@ -61,6 +62,9 @@ void main() {
           myEmployeeRecordProvider.overrideWith((ref) => _me),
           myPresenceFixProvider.overrideWith((ref) => Stream.value(null)),
           isOfflineProvider.overrideWithValue(false),
+          sessionFenceProvider.overrideWithValue(
+            SessionFence(readUid: () => 'test-uid'),
+          ),
           featureFlagsProvider.overrideWithValue(
             FeatureFlags(
               addressAutocomplete: true,

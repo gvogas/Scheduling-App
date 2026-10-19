@@ -10,8 +10,7 @@ final currentDayClockProvider = Provider<DateTime Function()>(
   (ref) => DateTime.now,
 );
 
-/// Current local day, re-emitted just after midnight and on a resume that
-/// crosses it.
+/// Current local day, re-emitted just after midnight and on a resume across it.
 final currentDayProvider = Provider<DateTime>((ref) {
   final clock = ref.watch(currentDayClockProvider);
   final now = clock();

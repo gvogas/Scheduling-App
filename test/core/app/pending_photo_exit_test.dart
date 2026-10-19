@@ -93,6 +93,18 @@ void main() {
     },
   );
 
+  testWidgets('a session change during queue inspection is a quiet no-op', (
+    tester,
+  ) async {
+    when(uploads.prepareForExit).thenAnswer((_) async => null);
+
+    await start(tester);
+
+    expect(result, isNull);
+    expect(find.text('Photos waiting to save'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   for (final language in ['en', 'fr']) {
     testWidgets(
       'stay retries without authorizing exit in $language at 2x text',

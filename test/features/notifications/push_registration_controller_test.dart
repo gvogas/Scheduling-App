@@ -4,6 +4,7 @@
 import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -169,9 +170,11 @@ void main() {
         pushNotificationServiceProvider.overrideWithValue(service),
         employeesRepositoryProvider.overrideWithValue(employees),
         fcmTokenRepositoryProvider.overrideWithValue(fcm),
-        pushRegistrationControllerProvider.overrideWith(
-          (ref) => PushRegistrationController(ref, auth: auth),
-        ),
+        pushRegistrationControllerProvider.overrideWith((ref) {
+          final controller = PushRegistrationController(ref, auth: auth);
+          ref.onDispose(controller.dispose);
+          return controller;
+        }),
       ],
     );
     addTearDown(docs.close);
@@ -275,6 +278,167 @@ void main() {
       expect(writes, 2);
       verifyNever(() => service.requestPermission());
       container.dispose();
+    },
+  );
+
+  group('retry backoff', () {
+    const active = {'role': 'employee', 'status': 'active'};
+
+    // A null native token re-schedules on every attempt: 5, 10, 20, 40, 60 s.
+    int Function() countTokenReads() {
+      var reads = 0;
+      when(() => service.currentToken()).thenAnswer((_) async {
+        reads++;
+        return null;
+      });
+      return () => reads;
+    }
+
+    test('stops after five retries', () {
+      fakeAsync((async) {
+        final reads = countTokenReads();
+        final container = makeContainer(active);
+        final docSub = container.listen(currentUserDocProvider, (_, _) {});
+        async.flushMicrotasks();
+        unawaited(container.read(pushRegistrationControllerProvider).sync());
+        async.elapse(const Duration(minutes: 10));
+        expect(reads(), 6);
+        docSub.close();
+        container.dispose();
+      });
+    });
+
+    test('retryRegistration restarts an exhausted backoff at five seconds', () {
+      fakeAsync((async) {
+        final reads = countTokenReads();
+        final container = makeContainer(active);
+        final docSub = container.listen(currentUserDocProvider, (_, _) {});
+        async.flushMicrotasks();
+        final controller = container.read(pushRegistrationControllerProvider);
+        unawaited(controller.sync());
+        async.elapse(const Duration(minutes: 10));
+        unawaited(controller.retryRegistration());
+        async.elapse(const Duration(seconds: 5));
+        expect(reads(), 8);
+        docSub.close();
+        container.dispose();
+      });
+    });
+  });
+
+  test(
+    'a failed native rotation blocks registration until a retry rotates',
+    () {
+      fakeAsync((async) {
+        var deletes = 0;
+        when(() => service.deleteToken()).thenAnswer((_) async {
+          if (++deletes <= 2) throw Exception('apns');
+        });
+        when(
+          () => fcm.deleteToken(
+            userDocId: any(named: 'userDocId'),
+            token: any(named: 'token'),
+          ),
+        ).thenAnswer((_) async {});
+        final container = makeContainer(const {
+          'role': 'employee',
+          'status': 'active',
+        });
+        final docSub = container.listen(currentUserDocProvider, (_, _) {});
+        async.flushMicrotasks();
+        final controller = container.read(pushRegistrationControllerProvider);
+        unawaited(controller.sync());
+        async.flushMicrotasks();
+        unawaited(controller.unregisterCurrentDevice());
+        async.flushMicrotasks();
+        final nextUser = _MockUser();
+        when(() => nextUser.uid).thenReturn('uid-2');
+        when(() => auth.currentUser).thenReturn(nextUser);
+        when(
+          () => employees.findUserByUid('uid-2'),
+        ).thenAnswer((_) async => const UserUidMatch(id: 'doc-2', data: {}));
+        when(() => service.currentToken()).thenAnswer((_) async => 'tok-2');
+        final upserts = <String>[];
+        when(
+          () => fcm.upsertToken(
+            userDocId: any(named: 'userDocId'),
+            token: any(named: 'token'),
+            platform: any(named: 'platform'),
+            locale: any(named: 'locale'),
+            uid: any(named: 'uid'),
+          ),
+        ).thenAnswer(
+          (call) async => upserts.add(call.namedArguments[#token] as String),
+        );
+        unawaited(controller.sync());
+        async.flushMicrotasks();
+        expect(upserts, isEmpty, reason: 'a failed rotation only re-rotates');
+        async.elapse(const Duration(seconds: 5));
+        expect(upserts, ['tok-2']);
+        docSub.close();
+        container.dispose();
+      });
+    },
+  );
+
+  test(
+    'a token refresh landing mid-upsert keeps the refreshed token registered',
+    () async {
+      when(
+        () => fcm.deleteToken(
+          userDocId: any(named: 'userDocId'),
+          token: any(named: 'token'),
+        ),
+      ).thenAnswer((_) async {});
+      when(() => service.deleteToken()).thenAnswer((_) async {});
+      final refresh = StreamController<String>.broadcast(sync: true);
+      addTearDown(refresh.close);
+      when(() => service.onTokenRefresh).thenAnswer((_) => refresh.stream);
+      final staleWrite = Completer<void>();
+      final staleWriteStarted = Completer<void>();
+      when(
+        () => fcm.upsertToken(
+          userDocId: any(named: 'userDocId'),
+          token: any(named: 'token'),
+          platform: any(named: 'platform'),
+          locale: any(named: 'locale'),
+          uid: any(named: 'uid'),
+        ),
+      ).thenAnswer((call) {
+        switch (call.namedArguments[#token]) {
+          // Fails, so the next sync misses the fast path.
+          case 'tok-2':
+            return Future.error(Exception('network'));
+          case 'tok-stale':
+            staleWriteStarted.complete();
+            return staleWrite.future;
+          default:
+            return Future.value();
+        }
+      });
+      final container = makeContainer(const {
+        'role': 'employee',
+        'status': 'active',
+      });
+      addTearDown(container.dispose);
+      await settleDoc(container);
+      final controller = container.read(pushRegistrationControllerProvider);
+      await controller.sync();
+      refresh.add('tok-2');
+      await pumpEventQueue();
+      when(() => service.currentToken()).thenAnswer((_) async => 'tok-stale');
+      final pending = controller.sync();
+      await staleWriteStarted.future;
+      refresh.add('tok-3');
+      await pumpEventQueue();
+      staleWrite.complete();
+      await pending;
+
+      await controller.unregisterCurrentDevice();
+
+      verify(
+        () => fcm.deleteToken(userDocId: 'doc-1', token: 'tok-3'),
+      ).called(1);
     },
   );
 

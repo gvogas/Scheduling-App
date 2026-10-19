@@ -15,6 +15,7 @@ import 'package:scheduling/core/permissions/location_permission_service.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/utils/reentrant_sync.dart';
+import 'package:scheduling/core/utils/session_fenced_sync.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
@@ -62,7 +63,7 @@ Future<void> applyLocationSharing(
   await ref
       .read(employeesRepositoryProvider)
       .updateSelfDetails(record.copyWith(locationSharingEnabled: enabled));
-  if (!ref.mounted || (lease != null && !lease.isCurrent)) return;
+  if (!ref.context.mounted || (lease != null && !lease.isCurrent)) return;
   if (enabled) {
     await presence.sync();
   } else {
@@ -151,7 +152,7 @@ Duration? trailingFlushDelay({
 }
 
 /// Owns the foreground position stream behind `presence/location`.
-class PresenceSyncController with ReentrantSync {
+class PresenceSyncController with ReentrantSync, SessionFencedSync {
   PresenceSyncController(this._ref, {FirebaseAuth? auth, SessionFence? session})
     : _auth = auth ?? FirebaseAuth.instance,
       _logger = _ref.read(loggerProvider),
@@ -167,7 +168,6 @@ class PresenceSyncController with ReentrantSync {
   final SessionFence _session;
   SessionLease? _trackingLease;
   int _trackingGeneration = 0;
-  bool _disposed = false;
 
   StreamSubscription<Position>? _positionSub;
   Timer? _heartbeat;
@@ -186,8 +186,8 @@ class PresenceSyncController with ReentrantSync {
     final generation = syncGeneration;
     try {
       final lease = _session.capture();
-      if (lease == null || _disposed) return;
-      bool stale() => isSyncStale(generation) || !lease.isCurrent || _disposed;
+      if (lease == null || isDisposed) return;
+      bool stale() => isAttemptStale(generation, lease);
       final gate = readAccountGateInputs(_ref, _auth);
       // Null is "we don't know yet" — leave presence tracking as it is.
       if (gate == null) return;
@@ -254,7 +254,7 @@ class PresenceSyncController with ReentrantSync {
     _stop();
     final generation = _trackingGeneration;
     bool current() =>
-        generation == _trackingGeneration && lease.isCurrent && !_disposed;
+        generation == _trackingGeneration && lease.isCurrent && !isDisposed;
     _trackingLease = lease;
     _trackedUid = uid;
     _docId = docId;
@@ -308,7 +308,7 @@ class PresenceSyncController with ReentrantSync {
     final logger = _logger;
     final generation = _trackingGeneration;
     final lease = _trackingLease;
-    if (lease == null || !lease.isCurrent || _disposed) return;
+    if (lease == null || !lease.isCurrent || isDisposed) return;
     if (!shouldWritePresenceFix(
       lastUploadAt: _lastUploadAt,
       now: DateTime.now(),
@@ -324,7 +324,7 @@ class PresenceSyncController with ReentrantSync {
       if (_positionSub == null ||
           generation != _trackingGeneration ||
           !lease.isCurrent ||
-          _disposed) {
+          isDisposed) {
         return;
       }
       _lastPosition = position;
@@ -353,7 +353,7 @@ class PresenceSyncController with ReentrantSync {
     _trailingFlush = Timer(delay, () {
       if (generation != _trackingGeneration ||
           lease?.isCurrent != true ||
-          _disposed) {
+          isDisposed) {
         return;
       }
       _trailingFlush = null;
@@ -375,7 +375,7 @@ class PresenceSyncController with ReentrantSync {
     bool current() =>
         generation == _trackingGeneration &&
         lease?.isCurrent == true &&
-        !_disposed;
+        !isDisposed;
     if (!current()) return;
     final previous = _lastUploadAt;
     _lastUploadAt = attemptedAt;
@@ -405,7 +405,7 @@ class PresenceSyncController with ReentrantSync {
     if (docId == null ||
         uid == null ||
         _trackingLease?.isCurrent != true ||
-        _disposed) {
+        isDisposed) {
       return Future.value(PresenceWriteResult.failed);
     }
     return _ref
@@ -475,13 +475,11 @@ class PresenceSyncController with ReentrantSync {
     final knownDocId = _trackedUid == lease?.uid ? _docId : null;
     _stop();
     try {
-      if (lease == null || _disposed) return false;
+      if (lease == null || isDisposed) return false;
       final repository = _ref.read(presenceRepositoryProvider);
       // Resolve the doc id even if this session never started tracking.
       final docId = knownDocId ?? await _resolveUserDocId();
-      if (docId == null || !lease.isCurrent || isSyncStale(generation)) {
-        return false;
-      }
+      if (docId == null || isAttemptStale(generation, lease)) return false;
       return await repository.deleteLocation(userDocId: docId);
     } catch (e, st) {
       _logger.warn('PRESENCE unregister failed', e, st);
@@ -499,9 +497,9 @@ class PresenceSyncController with ReentrantSync {
     try {
       final repository = _ref.read(presenceRepositoryProvider);
       final docId = knownDocId ?? await _resolveUserDocId();
-      if (docId == null || isSyncStale(generation) || !lease.isCurrent) return;
+      if (docId == null || isAttemptStale(generation, lease)) return;
       final cleared = await repository.deleteLocation(userDocId: docId);
-      if (isSyncStale(generation) || !lease.isCurrent || _disposed) return;
+      if (isAttemptStale(generation, lease)) return;
       _pauseCleared = cleared;
     } catch (e, st) {
       _logger.warn('PRESENCE pause clear failed', e, st);
@@ -520,8 +518,7 @@ class PresenceSyncController with ReentrantSync {
   /// Container-teardown cleanup — cancels the stream, timers, and lifecycle
   /// listener without the network delete that [unregister] does on sign-out.
   void dispose() {
-    _disposed = true;
-    invalidateSync();
+    disposeSync();
     _stop();
     _lifecycle?.dispose();
     _lifecycle = null;

@@ -10,7 +10,6 @@ import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/features/auth/domain/auth_failure.dart';
 import 'package:scheduling/features/auth/services/account_deletion_service.dart';
 import 'package:scheduling/features/auth/services/auth_service.dart';
-import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/settings/widgets/dialogs/delete_account_dialog.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
