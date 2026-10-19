@@ -597,6 +597,12 @@ function makeDb(config) {
   const existing = new Set(config.ledgerExisting || []);
   const db = {
     collection(name) {
+      if (name === "notificationSweepCursors") {
+        return {doc: () => ({
+          get: async () => ({exists: false}),
+          set: async () => {},
+        })};
+      }
       if (name === "users") {
         return {
           doc(id) {
@@ -615,7 +621,8 @@ function makeDb(config) {
                     return {
                       docs: (config.tokens[id] || []).map((t) => ({
                         id: t.id,
-                        data: () => ({locale: t.locale}),
+                        data: () => ({locale: t.locale, uid: "uid-test",
+                          sessionEpoch: "epoch-test", ...t}),
                         ref: {
                           delete: async () => {
                             deletedTokens.push(t.id);
@@ -1212,6 +1219,7 @@ describe("runOverduePromptSweep", () => {
     expect(messaging.sent[0].data).toEqual({
       appointmentId: "over",
       kind: "doneCheck",
+      validUntil: String(future(-30 * MIN).getTime() + OVERDUE_LOOKBACK_MS),
     });
     expect(messaging.sent[0].notification.body).toContain("Alice");
   });

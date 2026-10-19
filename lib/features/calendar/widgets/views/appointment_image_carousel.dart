@@ -1,6 +1,11 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
+import 'package:scheduling/core/images/appointment_storage_image.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/calendar/widgets/dialogs/image_viewer.dart';
+import 'package:scheduling/features/calendar/widgets/views/appointment_photo_semantics.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
@@ -42,24 +47,51 @@ class _AppointmentImageCarouselState extends State<AppointmentImageCarousel> {
               itemCount: widget.images.length,
               itemBuilder: (context, index) {
                 final image = widget.images[index];
+                if (image is AppointmentStorageImage) {
+                  return _RemoteSlide(
+                    image: image,
+                    index: index,
+                    count: widget.images.length,
+                    cacheWidth: cacheWidth,
+                    cacheHeight: cacheHeight,
+                    onOpen: () => ImageViewer.open(
+                      context,
+                      images: widget.images,
+                      initialIndex: index,
+                    ),
+                  );
+                }
                 // A refused photo is a transparent 1x1, which renders as a
                 // BLANK page — indistinguishable from an empty one.
-                if (isRefusedImage(image)) return const _RefusedSlide();
-                return GestureDetector(
-                  onTap: () => ImageViewer.open(
-                    context,
-                    images: widget.images,
-                    initialIndex: index,
-                  ),
-                  child: Image(
-                    image: ResizeImage(
-                      image,
-                      width: cacheWidth,
-                      height: cacheHeight,
-                      policy: ResizeImagePolicy.fit,
+                if (isRefusedImage(image)) {
+                  return AppointmentPhotoSemantics(
+                    index: index + 1,
+                    count: widget.images.length,
+                    unavailable: true,
+                    child: const _RefusedSlide(),
+                  );
+                }
+                void open() => ImageViewer.open(
+                  context,
+                  images: widget.images,
+                  initialIndex: index,
+                );
+                return AppointmentPhotoSemantics(
+                  index: index + 1,
+                  count: widget.images.length,
+                  onTap: open,
+                  child: GestureDetector(
+                    onTap: open,
+                    child: Image(
+                      image: ResizeImage(
+                        image,
+                        width: cacheWidth,
+                        height: cacheHeight,
+                        policy: ResizeImagePolicy.fit,
+                      ),
+                      fit: BoxFit.cover,
+                      width: double.infinity,
                     ),
-                    fit: BoxFit.cover,
-                    width: double.infinity,
                   ),
                 );
               },
@@ -84,6 +116,56 @@ class _AppointmentImageCarouselState extends State<AppointmentImageCarousel> {
   }
 }
 
+class _RemoteSlide extends StatelessWidget {
+  const _RemoteSlide({
+    required this.image,
+    required this.index,
+    required this.count,
+    required this.cacheWidth,
+    required this.cacheHeight,
+    required this.onOpen,
+  });
+
+  final AppointmentStorageImage image;
+  final int index;
+  final int count;
+  final int cacheWidth;
+  final int cacheHeight;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List>(
+    future: image.loadBytes(),
+    builder: (context, snapshot) {
+      final bytes = snapshot.data;
+      final failed = snapshot.hasError || (bytes != null && bytes.isEmpty);
+      final loading = !snapshot.hasError && bytes == null;
+      final open = loading || failed ? null : onOpen;
+      return AppointmentPhotoSemantics(
+        index: index + 1,
+        count: count,
+        loading: loading,
+        unavailable: failed,
+        onTap: open,
+        child: loading
+            ? const Center(child: AdaptiveProgressIndicator())
+            : failed
+            ? const _RefusedSlide()
+            : GestureDetector(
+                onTap: open,
+                child: Image.memory(
+                  bytes!,
+                  cacheWidth: cacheWidth,
+                  cacheHeight: cacheHeight,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                ),
+              ),
+      );
+    },
+  );
+}
+
 /// What the carousel shows in place of a photo Storage refused.
 class _RefusedSlide extends StatelessWidget {
   const _RefusedSlide();
@@ -106,9 +188,9 @@ class _RefusedSlide extends StatelessWidget {
           Text(
             context.l10n.calendar_photoUnavailable,
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: scheme.onErrorContainer,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: scheme.onErrorContainer),
           ),
         ],
       ),

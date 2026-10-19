@@ -1,6 +1,6 @@
 # Remote Config kill switches — design
 
-**Date:** 2026-10-06 · **Status:** approved design, not implemented
+**Date:** 2026-10-06 · **Status (swept 2026-10-18):** BUILT 2026-10-06. Functions DEPLOYED 2026-10-07 (`29fa4072`, hardened at `364d4812`, live at `0ab3f05c`). App half (`lib/core/remote_config/`) NOT SHIPPED: it rides 1.64.2+96. Left: ship that build, then the owner's device check (plan Task 17 Step 5).
 
 ## Goal
 

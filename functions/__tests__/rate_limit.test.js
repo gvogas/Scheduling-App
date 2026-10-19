@@ -71,6 +71,24 @@ describe("enforceDurableRateLimit", () => {
 
   beforeEach(() => jest.clearAllMocks());
 
+  test("batch units are charged atomically and refunded together", async () => {
+    const {db, stored} = makeDb();
+    getFirestore.mockReturnValue(db);
+    const charged = await enforceDurableRateLimit(ROUTE, KEY, MAX, WINDOW,
+        "uid", 2);
+    expect(attemptCount(stored)).toBe(2);
+    await expect(enforceDurableRateLimit(ROUTE, KEY, MAX, WINDOW, "uid", 2))
+        .rejects.toMatchObject({code: "resource-exhausted"});
+    expect(attemptCount(stored)).toBe(2);
+    await charged.refund();
+    expect(attemptCount(stored)).toBe(0);
+  });
+
+  test.each([0, -1, 1.5, 4])("refuses batch cost %s", async (cost) => {
+    await expect(enforceDurableRateLimit(ROUTE, KEY, MAX, WINDOW, "uid", cost))
+        .rejects.toThrow("invalid-rate-limit-cost");
+  });
+
   test("records an attempt and admits a caller under the cap", async () => {
     const {db, stored} = makeDb();
     getFirestore.mockReturnValue(db);

@@ -269,7 +269,10 @@ service cloud.firestore {
         allow create, update: if isActiveUser()
           && myDocId() == userId
           && request.resource.data.keys().hasOnly(
-              ['platform', 'locale', 'uid', 'createdAt', 'updatedAt'])
+              ['platform', 'locale', 'uid', 'sessionEpoch', 'createdAt', 'updatedAt'])
+          && (!('sessionEpoch' in request.resource.data) ||
+              (request.resource.data.sessionEpoch is string &&
+               request.resource.data.sessionEpoch.size() <= 64))
           && request.resource.data.locale in ['en', 'fr']
           && request.resource.data.platform in ['ios', 'android']
           && request.resource.data.uid == request.auth.uid
@@ -379,6 +382,25 @@ service cloud.firestore {
            <= resource.data.endTime - resource.data.startTime;
     }
 
+    function appointmentClosedStatusPreserved() {
+      let before = resource.data.get('status', 'pending');
+      let after = request.resource.data.get('status', 'pending');
+      return before == 'cancelled' ? after == 'cancelled'
+        : before in ['done', 'completed'] ? after in ['done', 'completed']
+        : true;
+    }
+
+    function appointmentDirectEditAllowed() {
+      let before = resource.data.get('status', 'pending');
+      let after = request.resource.data.get('status', 'pending');
+      return resource.data.get('editProtocol', 0) != 1
+        || (request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'updatedAt', 'seriesOpId'])
+            && (before == after
+                || (before in ['pending', 'in_progress']
+                    && after in ['in_progress', 'done', 'cancelled'])));
+    }
+
     function hasValidAppointmentInstants(d) {
       return (!('startTime' in d.keys()) || d.startTime is timestamp)
         && (!('endTime' in d.keys()) || d.endTime is timestamp);
@@ -430,6 +452,8 @@ service cloud.firestore {
       allow read: if isAdmin() || isAssignedEmployee(resource.data);
 
       allow create: if isAdmin()
+        && request.resource.data.get('editProtocol', 1) == 1
+        && request.resource.data.get('editRevision', 0) == 0
         && canLinkClient(request.resource.data)
         && (!('pictureCount' in request.resource.data.keys())
             || request.resource.data.pictureCount == 0)
@@ -441,11 +465,14 @@ service cloud.firestore {
         && isValidAppointmentSpan(request.resource.data);
 
       allow update: if (isAdmin()
+            && appointmentClosedStatusPreserved()
+            && appointmentDirectEditAllowed()
             && (request.resource.data.get('clientId', '') == resource.data.get('clientId', '')
                 || canLinkClient(request.resource.data))
             && !request.resource.data.diff(resource.data)
                  .affectedKeys()
-                 .hasAny(['pictureCount', 'startedAt', 'completedAt'])
+                 .hasAny(['pictureCount', 'startedAt', 'completedAt',
+                    'editProtocol', 'editRevision', 'clientSourceUpdatedAt'])
             && isValidAppointmentStatus(request.resource.data.status)
             && isValidAppointmentData(request.resource.data)
             && (isValidAppointmentSpan(request.resource.data)

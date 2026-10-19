@@ -91,6 +91,12 @@ void main() {
     clients = _MockClientsRepo();
     employees = _MockEmployeesRepo();
     uploader = _MockUploader();
+    when(
+      () => uploader.enqueuePhotos(
+        appointmentId: any(named: 'appointmentId'),
+        newImages: any(named: 'newImages'),
+      ),
+    ).thenAnswer((_) async {});
     storage = _MockStorage();
 
     when(
@@ -99,7 +105,9 @@ void main() {
     when(
       employees.watchEmployees,
     ).thenAnswer((_) => Stream.value(const [_employeeA, _employeeB]));
-    when(() => appointments.updateAppointment(any())).thenAnswer((_) async {});
+    when(
+      () => appointments.updateAppointment(any(), base: any(named: 'base')),
+    ).thenAnswer((_) async {});
     when(
       () => appointments.updateAppointmentStatus(
         id: any(named: 'id'),
@@ -517,7 +525,9 @@ void main() {
         materialsNeeded: '',
       );
       expect(outcome, isA<EventDetailsInvalid>());
-      verifyNever(() => appointments.updateAppointment(any()));
+      verifyNever(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      );
     });
 
     test('a double-tapped save returns SaveBusy, not Invalid', () async {
@@ -527,7 +537,7 @@ void main() {
       await waitForSeed();
       final gate = Completer<void>();
       when(
-        () => appointments.updateAppointment(any()),
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
       ).thenAnswer((_) => gate.future);
 
       final c = readNotifier();
@@ -549,7 +559,9 @@ void main() {
       expect(second, isA<EventDetailsSaveBusy>());
       gate.complete();
       await first;
-      verify(() => appointments.updateAppointment(any())).called(1);
+      verify(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      ).called(1);
     });
 
     test(
@@ -630,7 +642,9 @@ void main() {
       expect(saved.startTime, DateTime(2026, 5, 10, 14));
       expect(saved.endTime, DateTime(2026, 5, 10, 16));
 
-      verify(() => appointments.updateAppointment(any())).called(1);
+      verify(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      ).called(1);
     });
 
     test('preserves a disabled assignee not in the active list (B1)', () async {
@@ -758,7 +772,9 @@ void main() {
 
       expect(outcome, isA<EventDetailsInvalid>());
       expect(readState().errors, contains('client'));
-      verifyNever(() => appointments.updateAppointment(any()));
+      verifyNever(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      );
     });
 
     test('does not call deleteImages when nothing was removed', () async {
@@ -785,7 +801,7 @@ void main() {
         materialsNeeded: '',
       );
       verifyNever(
-        () => uploader.uploadInBackground(
+        () => uploader.enqueuePhotos(
           appointmentId: any(named: 'appointmentId'),
           newImages: any(named: 'newImages'),
         ),
@@ -800,6 +816,8 @@ void main() {
           updated: any(named: 'updated'),
           deleteIds: any(named: 'deleteIds'),
           copies: any(named: 'copies'),
+          base: any(named: 'base'),
+          deleteBases: any(named: 'deleteBases'),
         ),
       ).thenAnswer((_) async {});
 
@@ -827,6 +845,8 @@ void main() {
           updated: captureAny(named: 'updated'),
           deleteIds: captureAny(named: 'deleteIds'),
           copies: captureAny(named: 'copies'),
+          base: any(named: 'base'),
+          deleteBases: any(named: 'deleteBases'),
         ),
       ).captured;
       expect((captured[1] as List).cast<String>(), isEmpty);
@@ -850,7 +870,9 @@ void main() {
         materialsNeeded: '',
       );
       expect((second as EventDetailsSaved).futureBookings, 0);
-      verify(() => appointments.updateAppointment(any())).called(1);
+      verify(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      ).called(1);
     });
 
     test('deletes the old future visits when replacing a series', () async {
@@ -861,6 +883,8 @@ void main() {
           updated: any(named: 'updated'),
           deleteIds: any(named: 'deleteIds'),
           copies: any(named: 'copies'),
+          base: any(named: 'base'),
+          deleteBases: any(named: 'deleteBases'),
         ),
       ).thenAnswer((_) async {});
 
@@ -908,6 +932,8 @@ void main() {
           updated: captureAny(named: 'updated'),
           deleteIds: captureAny(named: 'deleteIds'),
           copies: captureAny(named: 'copies'),
+          base: any(named: 'base'),
+          deleteBases: any(named: 'deleteBases'),
         ),
       ).captured;
       // The edited doc itself and the done visit are preserved.
@@ -983,6 +1009,8 @@ void main() {
           updated: any(named: 'updated'),
           deleteIds: any(named: 'deleteIds'),
           copies: any(named: 'copies'),
+          base: any(named: 'base'),
+          deleteBases: any(named: 'deleteBases'),
         ),
       );
       expect(
@@ -996,7 +1024,8 @@ void main() {
     test('applyToSeries propagates details + time of day to future visits, '
         'keeping each visit date', () async {
       when(
-        () => appointments.updateAppointments(any()),
+        () =>
+            appointments.updateAppointments(any(), bases: any(named: 'bases')),
       ).thenAnswer((_) async {});
 
       final repeating = _appointment.copyWith(
@@ -1052,7 +1081,10 @@ void main() {
       expect((outcome as EventDetailsSaved).updatedSiblings, 2);
 
       final captured = verify(
-        () => appointments.updateAppointments(captureAny()),
+        () => appointments.updateAppointments(
+          captureAny(),
+          bases: any(named: 'bases'),
+        ),
       ).captured.single;
       final batch = (captured as List).cast<AppointmentRecord>();
       // This visit plus the two future siblings, in order.
@@ -1076,6 +1108,8 @@ void main() {
           updated: any(named: 'updated'),
           deleteIds: any(named: 'deleteIds'),
           copies: any(named: 'copies'),
+          base: any(named: 'base'),
+          deleteBases: any(named: 'deleteBases'),
         ),
       );
     });
@@ -1131,7 +1165,10 @@ void main() {
       final busy = outcome as EventDetailsBusyEmployees;
       expect(busy.start, DateTime(2026, 11, 10, 8));
       expect(busy.end, DateTime(2026, 11, 10, 9));
-      verifyNever(() => appointments.updateAppointments(any()));
+      verifyNever(
+        () =>
+            appointments.updateAppointments(any(), bases: any(named: 'bases')),
+      );
     });
 
     test('applyToSeries false edits only this visit', () async {
@@ -1158,9 +1195,14 @@ void main() {
       );
 
       expect((outcome as EventDetailsSaved).updatedSiblings, 0);
-      verify(() => appointments.updateAppointment(any())).called(1);
+      verify(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      ).called(1);
       verifyNever(() => appointments.getSeries(any()));
-      verifyNever(() => appointments.updateAppointments(any()));
+      verifyNever(
+        () =>
+            appointments.updateAppointments(any(), bases: any(named: 'bases')),
+      );
     });
 
     test('seeds the stored repeat and does not re-book it unchanged', () async {
@@ -1202,6 +1244,8 @@ void main() {
           updated: any(named: 'updated'),
           deleteIds: any(named: 'deleteIds'),
           copies: any(named: 'copies'),
+          base: any(named: 'base'),
+          deleteBases: any(named: 'deleteBases'),
         ),
       );
     });
@@ -1221,6 +1265,8 @@ void main() {
           updated: any(named: 'updated'),
           deleteIds: any(named: 'deleteIds'),
           copies: any(named: 'copies'),
+          base: any(named: 'base'),
+          deleteBases: any(named: 'deleteBases'),
         ),
       );
     });
@@ -1229,7 +1275,7 @@ void main() {
       'returns EventDetailsFailed and resets isSaving when repo throws',
       () async {
         when(
-          () => appointments.updateAppointment(any()),
+          () => appointments.updateAppointment(any(), base: any(named: 'base')),
         ).thenThrow(Exception('boom'));
         readNotifier();
         await waitForSeed();
@@ -1368,7 +1414,9 @@ void main() {
 
         expect(outcome, isA<EventDetailsFailed>());
         expect((outcome as EventDetailsFailed).error, isA<SocketException>());
-        verifyNever(() => appointments.updateAppointment(any()));
+        verifyNever(
+          () => appointments.updateAppointment(any(), base: any(named: 'base')),
+        );
         expect(
           offline.read(eventDetailsControllerProvider(key)).isSaving,
           isFalse,
@@ -1487,7 +1535,9 @@ void main() {
       expect(outcome, isA<EventDetailsBusyEmployees>());
       // The flag must clear or Save stays stuck once the dialog is dismissed.
       expect(readState().isSaving, isFalse);
-      verifyNever(() => appointments.updateAppointment(any()));
+      verifyNever(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      );
     });
 
     test('a PERSONAL save never returns the busy outcome — the clash alert '

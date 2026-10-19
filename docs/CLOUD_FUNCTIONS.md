@@ -2,26 +2,10 @@
 
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
-refreshed 2026-10-09 (release 1.64.1+95 — **31 exports**; `placesAutocomplete` adds `structuredFormat` to its field mask and passes suggestions through untouched; `waveSetImportSchedule` removed from `index.js` but still live until the owner deletes it — ADR-0184; `completeEmployeeSetup` now requires `newPassword` — ADR-0185; neither deployed yet). Previously refreshed 2026-10-07 (release 1.64.0+94 — still **32 exports**; source changes NOT yet deployed: `resetEmployeePassword` gained a fresh-reauth gate and refuses admin targets, the kill-switch parsers became strict, `endLiveActivity` keeps tokens while paused, and the FCM message dropped its Android block). Previously refreshed 2026-09-29 (release 1.63.0+93 — **32 exports, all 32 deployed**:
-`resetEmployeePassword` and `completePasswordReset` went live at `306ed848`, and
-the release's review fixes to both bodies at `cc38be5d` the same day — see the
-deploy log; re-checked 2026-10-01, nothing in `functions/` has changed since). Earlier 2026-09-29: `syncClientBuilding` went live at `e70b494d`. Previously refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
-and NOT YET DEPLOYED; the other 29 are deployed at `bec23b85`**, though five of
-their bodies changed in source and are also undeployed: `createEmployeeAccount`
-and `completeEmployeeSetup` (per-account operation lock, optional `newPassword`),
-`syncUsersByUid` (transactional live reconciliation), `deleteClient` (deletion
-barrier) and `searchClients` (optional `archived`/`type`/`buildingKey` filters).
-Deploy ordering — rules, then the nine new client composites READY, then
-functions, then `functions/scripts/backfill-client-buildings.js` — is in
-[audit rollout](audits/AUDIT_ROLLOUT_2026-09-23.md). Previously refreshed 2026-09-19 (release 1.62.0+91 — **still 29 exports, all DEPLOYED**: the
-month-end overdue rider on `sendDailyJobDigest` and Wave Phase 4 (the `worker.js`
-split, the guarded import updates, the cadence deleted and
-`waveSetImportSchedule` retired to a no-op) went live 2026-09-19 16:37Z
-(`608b817a`), ahead of the app build; the audit's stale-block clear in
-`waveUpsertCustomer` followed at ~19:45Z (`bec23b85`).
-Refresh entries older than 2026-09-19 were moved to
-`docs/archive/CLOUD_FUNCTIONS_refresh_history.md` (2026-09-06, 2026-09-13 and
-2026-10-01).
+refreshed 2026-10-18 (release 1.64.2+96 — **31 exports, all deployed** at `0ab3f05c` on 2026-10-11, the 2026-10-07 and 10-09 entries below included, `waveSetImportSchedule` deleted 32 → 31; one source change since is NOT deployed: `afd68870` makes `purgeExpiredHistory` count image failures by doc id, in `maintenance_policy.js`). Previously refreshed 2026-10-09 (release 1.64.1+95 — **31 exports**; `placesAutocomplete` adds `structuredFormat` to its field mask and passes suggestions through untouched; `waveSetImportSchedule` removed from `index.js` but still live until the owner deletes it — ADR-0184; `completeEmployeeSetup` now requires `newPassword` — ADR-0185; neither deployed yet). Previously refreshed 2026-10-07 (release 1.64.0+94 — still **32 exports**; source changes NOT yet deployed: `resetEmployeePassword` gained a fresh-reauth gate and refuses admin targets, the kill-switch parsers became strict, `endLiveActivity` keeps tokens while paused, and the FCM message dropped its Android block).
+Refresh entries older than 2026-10-07 were moved to
+`docs/archive/CLOUD_FUNCTIONS_refresh_history.md` (2026-09-06, 2026-09-13,
+2026-10-01 and 2026-10-18).
 
 **Every callable now enforces App Check** (`enforceAppCheck: true`); the
 earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
@@ -165,10 +149,11 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
   *count* never moved (25 throughout, `index.js` untouched), so a count check
   looked clean for three days while prod ran older bodies — check the deploy
   log, not the count.
+- **31 functions defined, 31 DEPLOYED** (2026-10-11, `0ab3f05c`): the owner
+  deleted `waveSetImportSchedule` (ADR-0184) and the workflow deployed the
+  rest. `maintenance_policy.js` changed since (`afd68870`) and is undeployed.
 - **31 functions defined, 32 DEPLOYED** (2026-10-09): `waveSetImportSchedule`
-  left `index.js` (ADR-0184) and stays live until the owner runs
-  `firebase functions:delete waveSetImportSchedule --region us-central1`; the
-  workflow's export diff refuses to deploy until then.
+  left `index.js` (ADR-0184) and stayed live until the owner deleted it.
 - **32 functions defined, 32 DEPLOYED** (2026-09-29, `306ed848`). Release
   1.63.0+93 then changed the bodies of `resetEmployeePassword` (a failed revoke
   no longer rethrows) and `completePasswordReset` (transactional flag clear) in
@@ -351,7 +336,7 @@ dot as a field path, so a dotted key there would create a literal
 Replay the contract over production read-only with
 `functions/scripts/audit-wave-contract.js`. Design:
 `docs/archive/2026-08-30-wave-validated-contract-design.md`; Phases 2-4 plan:
-`docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`.
+`docs/archive/2026-09-10-wave-validated-contract-phases-2-4.md`.
 
 **Exactly three Cloud Scheduler jobs, and that is deliberate** — only 3 are free
 per billing account. `sendOverdueJobPrompts` (was `every 15 minutes`) is merged

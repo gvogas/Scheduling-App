@@ -1,5 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
+import 'package:scheduling/core/utils/date_utils_helper.dart';
+import 'package:scheduling/core/utils/presentation_time_provider.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
@@ -14,27 +16,36 @@ import 'package:scheduling/features/employees/domain/policies/availability_confl
 /// Injectable clock for tests. The range below is midnight-aligned, which
 /// keeps it stable and avoids extra listener churn.
 final dashboardClockProvider = Provider<DateTime Function()>(
-  (ref) => DateTime.now,
+  (ref) => ref.watch(presentationClockProvider),
+);
+
+final dashboardNowProvider = Provider.autoDispose<DateTime>((ref) {
+  ref.watch(presentationTimeProvider);
+  return ref.watch(dashboardClockProvider)();
+});
+
+final _dashboardDayProvider = Provider.autoDispose<DateTime>(
+  (ref) => ref.watch(dashboardNowProvider).dateOnly,
 );
 
 /// The whole 8-week window. Only the new-clients read uses it now — the
 /// appointment side is split into a live half and a one-shot half below.
 final dashboardRangeProvider = Provider.autoDispose<AppointmentDateRange>(
-  (ref) => DashboardAggregator.rangeAround(ref.watch(dashboardClockProvider)()),
+  (ref) => DashboardAggregator.rangeAround(ref.watch(_dashboardDayProvider)),
 );
 
 /// The current week onwards — the only part of the window that can change
 /// while the dashboard is open, and therefore the only part worth a listener.
 final dashboardLiveRangeProvider = Provider.autoDispose<AppointmentDateRange>(
   (ref) =>
-      DashboardAggregator.liveRangeAround(ref.watch(dashboardClockProvider)()),
+      DashboardAggregator.liveRangeAround(ref.watch(_dashboardDayProvider)),
 );
 
 /// The seven settled weeks behind it, read ONCE.
 final dashboardHistoryRangeProvider =
     Provider.autoDispose<AppointmentDateRange>(
       (ref) => DashboardAggregator.historyRangeAround(
-        ref.watch(dashboardClockProvider)(),
+        ref.watch(_dashboardDayProvider),
       ),
     );
 
@@ -43,14 +54,24 @@ final dashboardHistoryProvider =
     FutureProvider.autoDispose<List<AppointmentRecord>>((ref) {
       keepWarmWithGrace(ref);
       final range = ref.watch(dashboardHistoryRangeProvider);
+      ref.watch(_dashboardRecordWritesProvider);
       return ref.watch(appointmentsRepositoryProvider).fetchInRange(range);
     });
+
+final _dashboardRecordWritesProvider = StreamProvider.autoDispose<int>((ref) {
+  var revision = 0;
+  return ref
+      .watch(appointmentsRepositoryProvider)
+      .onRecordWrite
+      .map((_) => ++revision);
+});
 
 /// Clients created within the window, newest first, archived excluded.
 final newClientsProvider = FutureProvider.autoDispose<List<ClientRecord>>((
   ref,
 ) async {
   keepWarmWithGrace(ref);
+  ref.watch(clientsRefreshProvider);
   final range = ref.watch(dashboardRangeProvider);
   final clients = await ref
       .watch(clientsRepositoryProvider)
@@ -127,7 +148,7 @@ final dashboardPeriodSummaryProvider =
           clientCreatedDates: clientDates.requireValue,
           window: ref
               .watch(dashboardPeriodProvider)
-              .windowFor(ref.read(dashboardClockProvider)()),
+              .windowFor(ref.watch(dashboardNowProvider)),
         ),
       );
     });
@@ -150,7 +171,7 @@ final dashboardStatsProvider = Provider.autoDispose<AsyncValue<DashboardStats>>(
         appointments: records.requireValue,
         employees: employees.requireValue,
         clientCreatedDates: clientDates.requireValue,
-        now: ref.read(dashboardClockProvider)(),
+        now: ref.watch(dashboardNowProvider),
       ),
     );
   },

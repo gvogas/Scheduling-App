@@ -68,7 +68,9 @@ void main() {
 
   setUp(() {
     repository = _MockRepo();
-    when(() => repository.updateAppointment(any())).thenAnswer((_) async {});
+    when(
+      () => repository.updateAppointment(any(), base: any(named: 'base')),
+    ).thenAnswer((_) async {});
     when(
       () => repository.findBusyEmployees(
         candidates: any(named: 'candidates'),
@@ -192,7 +194,9 @@ void main() {
       await tester.tap(find.text('Leave them'));
       await tester.pumpAndSettle();
 
-      verifyNever(() => repository.updateAppointment(any()));
+      verifyNever(
+        () => repository.updateAppointment(any(), base: any(named: 'base')),
+      );
     });
 
     testWidgets('never offers "Cancel", which would read as cancelling the '
@@ -271,7 +275,12 @@ void main() {
       await tester.pumpAndSettle();
 
       final written =
-          verify(() => repository.updateAppointment(captureAny())).captured.last
+          verify(
+                () => repository.updateAppointment(
+                  captureAny(),
+                  base: any(named: 'base'),
+                ),
+              ).captured.last
               as AppointmentRecord;
       expect(
         written.employeeIds,
@@ -339,7 +348,12 @@ void main() {
       await tester.pumpAndSettle();
 
       final written =
-          verify(() => repository.updateAppointment(captureAny())).captured.last
+          verify(
+                () => repository.updateAppointment(
+                  captureAny(),
+                  base: any(named: 'base'),
+                ),
+              ).captured.last
               as AppointmentRecord;
       expect(
         written.employeeIds,
@@ -373,7 +387,10 @@ void main() {
 
       final written =
           verify(
-                () => repository.updateAppointment(captureAny()),
+                () => repository.updateAppointment(
+                  captureAny(),
+                  base: any(named: 'base'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(written.id, 'job-1', reason: 'this occurrence, never the series');
@@ -395,7 +412,10 @@ void main() {
 
       final written =
           verify(
-                () => repository.updateAppointment(captureAny()),
+                () => repository.updateAppointment(
+                  captureAny(),
+                  base: any(named: 'base'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(written.employeeIds, isNotEmpty);
@@ -411,7 +431,10 @@ void main() {
       await tester.pumpAndSettle();
 
       final writes = verify(
-        () => repository.updateAppointment(captureAny()),
+        () => repository.updateAppointment(
+          captureAny(),
+          base: any(named: 'base'),
+        ),
       ).captured.cast<AppointmentRecord>();
       expect(writes.last.employeeIds, ['e1']);
       expect(writes.last.employeeNames, ['Marc Tremblay']);
@@ -424,7 +447,7 @@ void main() {
       // Each swap writes immediately, so a refused write has to leave the row
       // offering the same replacement rather than claiming it took the job.
       when(
-        () => repository.updateAppointment(any()),
+        () => repository.updateAppointment(any(), base: any(named: 'base')),
       ).thenThrow(Exception('permission-denied'));
 
       await pumpAndOpen(tester, roster: [_marc, _nadia]);
@@ -433,7 +456,9 @@ void main() {
       await tester.tap(find.text('Nadia'));
       await tester.pumpAndSettle();
 
-      verify(() => repository.updateAppointment(any())).called(1);
+      verify(
+        () => repository.updateAppointment(any(), base: any(named: 'base')),
+      ).called(1);
       expect(find.text('Nadia Berger takes this one'), findsNothing);
       expect(
         find.text('Nadia'),
@@ -492,7 +517,10 @@ void main() {
 
       final written =
           verify(
-                () => repository.updateAppointment(captureAny()),
+                () => repository.updateAppointment(
+                  captureAny(),
+                  base: any(named: 'base'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(written.employeeIds, ['e3', 'e2']);

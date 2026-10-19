@@ -23,19 +23,35 @@ Future<AppointmentConflictHit?> findFirstAppointmentConflict({
   // one Save cost that many sequential round-trips; the reported window still
   // has to be the FIRST clashing one, which the ordered read back preserves.
   final planned = bookings.toList();
-  final busyPerBooking = await Future.wait([
-    for (final booking in planned)
-      _findBusyEmployees(
-        repo: repo,
-        candidates: candidates,
-        start: booking.startTime,
-        end: booking.endTime,
-        excludeAppointmentIds: {
-          ...excludeAppointmentIds,
-          if (excludeOwnBookingIds) ?booking.id,
-        },
-      ),
-  ]);
+  final batch = planned.length < 2
+      ? null
+      : repo.findBusyEmployeeIdsForBookings(
+          employeeIds: candidates.map((employee) => employee.id).toList(),
+          bookings: planned,
+          excludeAppointmentIds: excludeAppointmentIds,
+          excludeOwnBookingIds: excludeOwnBookingIds,
+        );
+  final busyPerBooking = batch == null
+      ? await Future.wait([
+          for (final booking in planned)
+            _findBusyEmployees(
+              repo: repo,
+              candidates: candidates,
+              start: booking.startTime,
+              end: booking.endTime,
+              excludeAppointmentIds: {
+                ...excludeAppointmentIds,
+                if (excludeOwnBookingIds) ?booking.id,
+              },
+            ),
+        ])
+      : [
+          for (final ids in await batch)
+            candidates.where((employee) => ids.contains(employee.id)).toList(),
+        ];
+  if (busyPerBooking.length != planned.length) {
+    throw const FormatException('Incomplete conflict batch response');
+  }
   for (var i = 0; i < planned.length; i++) {
     final busy = busyPerBooking[i];
     if (busy.isEmpty) continue;

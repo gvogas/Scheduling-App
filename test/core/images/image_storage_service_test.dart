@@ -16,6 +16,7 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/core/images/image_storage_service.dart';
 import 'package:scheduling/core/images/image_upload_failure.dart';
+import 'package:scheduling/core/images/image_upload_intent.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/validators/text_limits.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
@@ -25,6 +26,8 @@ class _MockStorage extends Mock implements FirebaseStorage {}
 class _MockRef extends Mock implements Reference {}
 
 class _MockSnapshot extends Mock implements TaskSnapshot {}
+
+class _MockMetadata extends Mock implements FullMetadata {}
 
 /// `UploadTask` is a `Future<TaskSnapshot>`, so `await ref.putFile(...)` only
 /// needs `then` to resolve.
@@ -37,9 +40,7 @@ class _FakeUploadTask extends Fake implements UploadTask {
   Future<S> then<S>(
     FutureOr<S> Function(TaskSnapshot) onValue, {
     Function? onError,
-  }) => Future<TaskSnapshot>.value(
-    _snapshot,
-  ).then(onValue, onError: onError);
+  }) => Future<TaskSnapshot>.value(_snapshot).then(onValue, onError: onError);
 }
 
 class _RecordingLogger extends AppLogger {
@@ -96,13 +97,169 @@ void main() {
     final ref = _MockRef();
     final snapshot = _MockSnapshot();
     when(() => snapshot.ref).thenReturn(ref);
-    when(ref.getDownloadURL).thenAnswer((_) async => 'https://storage/x?token=t');
+    when(
+      ref.getDownloadURL,
+    ).thenAnswer((_) async => 'https://storage/x?token=t');
     when(
       () => ref.putFile(any(), any()),
     ).thenAnswer((_) => _FakeUploadTask(snapshot));
     when(() => storage.ref(any())).thenReturn(ref);
     return ref;
   }
+
+  group('queued upload recovery', () {
+    _MockMetadata metadataFor(ImageUploadIntent intent) {
+      final metadata = _MockMetadata();
+      when(() => metadata.size).thenReturn(intent.byteLength);
+      when(() => metadata.customMetadata).thenReturn(intent.metadata);
+      return metadata;
+    }
+
+    test('uploads to the persisted path with recovery metadata', () async {
+      final ref = stubUpload();
+      when(ref.getMetadata).thenThrow(
+        FirebaseException(plugin: 'firebase_storage', code: 'object-not-found'),
+      );
+      final file = fileWith('photo.jpg', _jpegMagic);
+      final intent = await ImageUploadIntent.prepare('j1', 'uid-1', file);
+
+      final image = await service.uploadQueuedImage('j1', file, intent);
+
+      expect(image, intent.image);
+      final metadata =
+          verify(() => ref.putFile(any(), captureAny())).captured.single
+              as SettableMetadata;
+      expect(metadata.customMetadata, intent.metadata);
+      expect(metadata.cacheControl, startsWith('private'));
+      verify(() => storage.ref(intent.image.storagePath)).called(1);
+      verifyNever(ref.getDownloadURL);
+    });
+
+    test('recovers an existing matching object without overwriting', () async {
+      final ref = stubUpload();
+      final file = fileWith('photo.jpg', _jpegMagic);
+      final intent = await ImageUploadIntent.prepare('j1', 'uid-1', file);
+      when(ref.getMetadata).thenAnswer((_) async => metadataFor(intent));
+
+      final recovered = await service.uploadQueuedImage('j1', file, intent);
+
+      expect(recovered, intent.image);
+      verifyNever(() => ref.putFile(any(), any()));
+    });
+
+    test(
+      'retries an ambiguous transfer using the same object and timestamp',
+      () async {
+        final ref = stubUpload();
+        final file = fileWith('photo.jpg', _jpegMagic);
+        final intent = await ImageUploadIntent.prepare('j1', 'uid-1', file);
+        var objectExists = false;
+        when(ref.getMetadata).thenAnswer((_) async {
+          if (objectExists) return metadataFor(intent);
+          throw FirebaseException(
+            plugin: 'firebase_storage',
+            code: 'object-not-found',
+          );
+        });
+        when(() => ref.putFile(any(), any())).thenAnswer((_) {
+          objectExists = true;
+          throw FirebaseException(
+            plugin: 'firebase_storage',
+            code: 'retry-limit-exceeded',
+          );
+        });
+        await expectLater(
+          service.uploadQueuedImage('j1', file, intent),
+          throwsA(isA<FirebaseException>()),
+        );
+
+        final recovered = await service.uploadQueuedImage('j1', file, intent);
+
+        expect(recovered, intent.image);
+        verify(() => ref.putFile(any(), any())).called(1);
+      },
+    );
+
+    for (final mismatch in ['owner', 'digest', 'size', 'timestamp']) {
+      test('refuses an existing object with mismatched $mismatch', () async {
+        final ref = stubUpload();
+        final file = fileWith('photo.jpg', _jpegMagic);
+        final intent = await ImageUploadIntent.prepare('j1', 'uid-1', file);
+        final metadata = metadataFor(intent);
+        if (mismatch == 'size') {
+          when(() => metadata.size).thenReturn(intent.byteLength + 1);
+        } else {
+          when(() => metadata.customMetadata).thenReturn({
+            ...intent.metadata,
+            switch (mismatch) {
+              'owner' => 'ownerUid',
+              'digest' => 'sha256',
+              _ => 'uploadedAt',
+            }: 'different',
+          });
+        }
+        when(ref.getMetadata).thenAnswer((_) async => metadata);
+
+        await expectLater(
+          service.uploadQueuedImage('j1', file, intent),
+          throwsStateError,
+        );
+
+        verifyNever(() => ref.putFile(any(), any()));
+      });
+    }
+
+    test('does not write when metadata access is denied', () async {
+      final ref = stubUpload();
+      final file = fileWith('photo.jpg', _jpegMagic);
+      final intent = await ImageUploadIntent.prepare('j1', 'uid-1', file);
+      when(ref.getMetadata).thenThrow(
+        FirebaseException(plugin: 'firebase_storage', code: 'unauthorized'),
+      );
+
+      await expectLater(
+        service.uploadQueuedImage('j1', file, intent),
+        throwsA(isA<FirebaseException>()),
+      );
+
+      verifyNever(() => ref.putFile(any(), any()));
+    });
+
+    test('does not write after exit during the metadata read', () async {
+      final ref = stubUpload();
+      final file = fileWith('photo.jpg', _jpegMagic);
+      final intent = await ImageUploadIntent.prepare('j1', 'uid-1', file);
+      var current = true;
+      when(ref.getMetadata).thenAnswer((_) async {
+        current = false;
+        throw FirebaseException(
+          plugin: 'firebase_storage',
+          code: 'object-not-found',
+        );
+      });
+
+      await expectLater(
+        service.uploadQueuedImage('j1', file, intent, isCurrent: () => current),
+        throwsStateError,
+      );
+
+      verifyNever(() => ref.putFile(any(), any()));
+    });
+
+    test('does not upload bytes modified after the intent was saved', () async {
+      stubUpload();
+      final file = fileWith('photo.jpg', _jpegMagic);
+      final intent = await ImageUploadIntent.prepare('j1', 'uid-1', file);
+      file.writeAsBytesSync([..._jpegMagic, 1]);
+
+      await expectLater(
+        service.uploadQueuedImage('j1', file, intent),
+        throwsStateError,
+      );
+
+      verifyNever(() => storage.ref(any()));
+    });
+  });
 
   group('the format gate', () {
     test('accepts a JPEG by its magic bytes', () async {
@@ -304,9 +461,7 @@ void main() {
       // Docs written before storagePath existed have nothing else to locate
       // the object by; without this the bytes orphan on every delete.
       final ref = _MockRef();
-      when(
-        () => storage.ref('appointments/j1/images/1_a.jpg'),
-      ).thenReturn(ref);
+      when(() => storage.ref('appointments/j1/images/1_a.jpg')).thenReturn(ref);
       when(ref.delete).thenAnswer((_) async {});
 
       await service.deleteImages(const [

@@ -34,6 +34,7 @@ mixin DebouncedPagedSearch<W extends ConsumerStatefulWidget>
       logger: ref.read(loggerProvider),
       tag: searchDebounceTag,
     );
+    if (searchQueryOf(widget).trim().isNotEmpty) scheduleSearch();
   }
 
   @override
@@ -61,10 +62,7 @@ mixin DebouncedPagedSearch<W extends ConsumerStatefulWidget>
         // sent: a search here is a surname or a phone number by definition.
         ref
             .read(analyticsServiceProvider)
-            .logSearchUsed(
-              surface: analyticsSurface,
-              queryLength: next.length,
-            );
+            .logSearchUsed(surface: analyticsSurface, queryLength: next.length);
         setState(() => committedQuery = next);
       }
     });

@@ -2,9 +2,12 @@
 // for testing repos without fake_cloud_firestore).
 // ignore_for_file: subtype_of_sealed_class
 
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 
 import 'package:scheduling/features/notifications/data/fcm_token_repository.dart';
 
@@ -59,6 +62,44 @@ void main() {
   });
 
   test(
+    'exit during a held token lookup prevents the registration write',
+    () async {
+      final read = Completer<DocumentSnapshot<Map<String, dynamic>>>();
+      final session = SessionFence(readUid: () => 'uid1');
+      when(() => tokenDoc.get()).thenAnswer((_) => read.future);
+      final repo = FcmTokenRepository(firestore: firestore, session: session);
+      final pending = repo.upsertToken(
+        userDocId: 'u1',
+        token: 'tok',
+        platform: 'ios',
+        locale: 'en',
+        uid: 'uid1',
+      );
+      session.beginExit();
+      read.complete(tokenSnap);
+      await pending;
+      expect(setData, isEmpty);
+    },
+  );
+
+  test(
+    'a token refresh with an obsolete owner does not read or write Firestore',
+    () async {
+      final session = SessionFence(readUid: () => 'uid2');
+      final repo = FcmTokenRepository(firestore: firestore, session: session);
+      await repo.upsertToken(
+        userDocId: 'u1',
+        token: 'tok',
+        platform: 'ios',
+        locale: 'en',
+        uid: 'uid1',
+      );
+      expect(setData, isEmpty);
+      verifyNever(() => tokenDoc.get());
+    },
+  );
+
+  test(
     'upsertToken on a new doc stamps createdAt (rule-allowed field set)',
     () async {
       when(() => tokenSnap.exists).thenReturn(false);
@@ -72,10 +113,13 @@ void main() {
       );
 
       final captured = setData.single;
-      expect(
-        captured.keys.toSet(),
-        {'platform', 'locale', 'uid', 'createdAt', 'updatedAt'},
-      );
+      expect(captured.keys.toSet(), {
+        'platform',
+        'locale',
+        'uid',
+        'createdAt',
+        'updatedAt',
+      });
       expect(captured['platform'], 'android');
       expect(captured['locale'], 'fr');
       expect(captured['uid'], 'uid1');
@@ -99,14 +143,11 @@ void main() {
       // A refresh must not re-stamp createdAt, but still refreshes updatedAt and
       // stays within the rule allowlist (subset is permitted by hasOnly).
       expect(captured.containsKey('createdAt'), isFalse);
-      expect(
-        captured.keys.toSet(),
-        {'platform', 'locale', 'uid', 'updatedAt'},
-      );
+      expect(captured.keys.toSet(), {'platform', 'locale', 'uid', 'updatedAt'});
     },
   );
 
-  test('upsertToken swallows a write failure', () async {
+  test('upsertToken reports a write failure to its retrying caller', () async {
     when(() => tokenSnap.exists).thenReturn(false);
     when(() => tokenDoc.set(any(), any())).thenThrow(Exception('offline'));
     final repo = FcmTokenRepository(firestore: firestore);
@@ -118,7 +159,7 @@ void main() {
         locale: 'en',
         uid: 'uid1',
       ),
-      completes,
+      throwsException,
     );
   });
 

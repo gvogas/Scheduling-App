@@ -38,6 +38,9 @@ void main() {
       mockCache = _MockAuthCache();
       when(() => mockCache.save(any())).thenAnswer((_) async {});
       when(() => mockAuth.currentUser).thenReturn(mockUser);
+      when(
+        mockAuth.authStateChanges,
+      ).thenAnswer((_) => Stream.value(mockAuth.currentUser));
       when(() => mockUser.uid).thenReturn('uid1');
       when(() => mockAuth.signOut()).thenAnswer((_) async {});
     });

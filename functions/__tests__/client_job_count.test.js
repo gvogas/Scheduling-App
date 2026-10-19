@@ -186,12 +186,22 @@ function fakeDb({
     }),
   });
   const db = {
+    runTransaction: async (body) => {
+      const writes = [];
+      const result = await body({
+        get: (ref) => ref.get(),
+        update: (ref, patch) => writes.push({ref, patch}),
+      });
+      for (const {ref, patch} of writes) await ref.update(patch);
+      return result;
+    },
     collection(name) {
       if (name === "appointments") return node([]);
       return {
         doc(id) {
           calls.doc = id;
           return {
+            get: async () => ({exists: true}),
             async update(data) {
               calls.update.push(data);
               if (updateError) throw updateError;

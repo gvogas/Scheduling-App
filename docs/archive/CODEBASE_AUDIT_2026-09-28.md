@@ -1,9 +1,6 @@
 # Codebase Audit — 2026-09-28
 
-**Status (verified 2026-10-01):** every finding marked "needs functions deploy"
-below is DEPLOYED — it went live with `306ed848` on 2026-09-29 (`docs/DEPLOYMENT.md`
-log). The app-side fixes ride 1.63.0+93, which has not shipped. S4 was approved and
-built 2026-10-07 and DEPLOYED the same day (`8739e48c`).
+**Status (swept 2026-10-18): superseded, archived.** Functions findings deployed 2026-09-29 (`306ed848`), S4 2026-10-07 (`8739e48c`); the app fixes shipped in 1.63.0+93. Nothing open survives.
 
 Scope: whole repo (`lib/`, `functions/`, `firestore.rules`, `storage.rules`,
 `firestore.indexes.json`, `test/`). Baseline: `dev` @ `cee76f45`, clean tree.

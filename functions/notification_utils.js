@@ -20,6 +20,7 @@ const {
   endLiveActivity,
 } = require("./live_activity_dispatch");
 const {liveActivityCtx} = require("./live_activity_utils");
+const {notificationValidUntil} = require("./notification_validity");
 const {
   toMillis,
   isCancelledStatus,
@@ -126,20 +127,47 @@ function _canReachRecipient(entry, roles) {
  * data keyed by locale ('en'|'fr'), used to attach a locale-correct
  * `widgetPayload`. A non-empty payload also sets APNs `content-available`
  * so iOS applies it even with the app closed.
+ * @param {number=} occurrenceDeadline Last useful delivery instant.
  * @return {!Promise<number>}
  */
 async function sendToEmployee(deps, employeeDocId, data, buildMsg, roles,
-    cache, augmentData) {
+    cache, augmentData, occurrenceDeadline) {
   const {messaging, logger} = deps;
+  const createdAt = deps.deliveryNow ? deps.deliveryNow() :
+    nowMillis(deps.now || new Date());
+  const wallClock = deps.wallClock || Date.now;
+  const started = wallClock();
+  const validUntil = notificationValidUntil(
+      data.kind, createdAt, occurrenceDeadline);
+  if (validUntil <= createdAt) return 0;
 
   const entry = await _loadRecipient(deps, employeeDocId, cache);
   if (!_canReachRecipient(entry, roles)) return 0;
+  if (createdAt + Math.max(0, wallClock() - started) >= validUntil) return 0;
   const {tokenDocs} = entry;
 
   const messages = tokenDocs.map((doc) => {
     const locale = (doc.data() || {}).locale === "fr" ? "fr" : "en";
     const {title, body} = buildMsg(locale);
     let msgData = augmentData ? {...data, ...augmentData(locale)} : data;
+    if (typeof msgData.widgetPayload === "string") {
+      const tokenData = doc.data() || {};
+      msgData = {...msgData};
+      if (typeof tokenData.uid !== "string" ||
+          typeof tokenData.sessionEpoch !== "string") {
+        delete msgData.widgetPayload;
+      } else {
+        try {
+          const payload = JSON.parse(msgData.widgetPayload);
+          const sourceRevision = Date.parse(payload.generatedAt);
+          msgData.widgetPayload = JSON.stringify({...payload, schema: 1,
+            sourceRevision, ownerUid: tokenData.uid,
+            sessionEpoch: tokenData.sessionEpoch});
+        } catch (_) {
+          delete msgData.widgetPayload;
+        }
+      }
+    }
     // Drop widgetPayload if it would push us over the 4 KB FCM data-map cap and
     // lose the whole message.
     if (typeof msgData.widgetPayload === "string" &&
@@ -162,8 +190,10 @@ async function sendToEmployee(deps, employeeDocId, data, buildMsg, roles,
     return {
       token: doc.id,
       notification: {title, body},
-      data: msgData,
-      apns: {payload: {aps}},
+      data: {...msgData, validUntil: String(validUntil)},
+      apns: {payload: {aps}, headers: {
+        "apns-expiration": String(Math.floor(validUntil / 1000)),
+      }},
     };
   });
 
@@ -448,6 +478,8 @@ async function _deliverRecipientOnce(deps, opts) {
         buildMsg,
         roles,
         cache,
+        undefined,
+        opts.validUntil,
     );
   } catch (err) {
     // A transient send failure must not abort the sweep for the remaining

@@ -9,11 +9,12 @@ two releases stale (1.46.0+73, then 1.46.1+74); read `pubspec.yaml` and
 > ## ⚠️ THE APP IS LIVE — this is no longer a launch runbook
 >
 > **Recorded 2026-08-11 on the owner's report:** ES Pro was **accepted by Apple**
-> and is on the App Store; **1.45.0+72 is the 4th update** since that first
-> release. Read every "first store cut" / "first upload" instruction below as
+> and is on the App Store. Since then 1.61.0+90 and 1.63.0+93 have shipped;
+> 1.63.0+93 is on every phone (owner, 2026-10-09) and 1.64.2+96 is cut (swept
+> 2026-10-18). Siri was cancelled 2026-10-09, so Part 13's Siri items are void. Read every "first store cut" / "first upload" instruction below as
 > **history**, not as a pending task.
 >
-> **Part 13's list has not been reconciled against four shipped submissions** —
+> **Part 13's list has not been reconciled against the shipped submissions** —
 > items like "confirm the app record", "pricing = Free", "add the French
 > localization", "upload screenshots" and "attach the reviewed build and submit"
 > were almost certainly done during the first release, but nobody ticked them

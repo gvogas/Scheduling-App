@@ -1,5 +1,7 @@
 # Repeatable Deploys Implementation Plan
 
+> **Status (swept 2026-10-18): COMPLETE, archived.** `deploy.yml`, the checkers and `functions/scripts/run.js` are built; first workflow deploy 2026-10-07 (`61811650`), used for every deploy since (`364d4812`, `0ab3f05c` ×2). Task 1's owner-only Workload Identity / GitHub setup is done.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Backend deploys run from one approved GitHub Actions workflow that encodes the runbook's ordering and safety rules, and every one-off prod script runs through one runner that refuses a stale dry-run count.

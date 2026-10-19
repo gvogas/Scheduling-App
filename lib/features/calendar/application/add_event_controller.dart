@@ -282,10 +282,11 @@ class AddEventController extends Notifier<AddEventState>
       isAllDay: value
           ? state.selectedStartTime == null && state.selectedEndTime == null
           : state.isAllDay,
-      errors: withoutKeys(
-        state.errors,
-        const ['client', 'startTime', 'endTime'],
-      ),
+      errors: withoutKeys(state.errors, const [
+        'client',
+        'startTime',
+        'endTime',
+      ]),
     );
   }
 
@@ -327,6 +328,7 @@ class AddEventController extends Notifier<AddEventState>
     }
 
     final repo = ref.read(appointmentsRepositoryProvider);
+    final ownsWrite = repo.captureWriteOwner();
     // Read dependencies before any await.
     final logger = ref.read(loggerProvider);
     final uploader = ref.read(appointmentImageUploadProvider);
@@ -416,6 +418,7 @@ class AddEventController extends Notifier<AddEventState>
           candidates: selectedEmployees,
           bookings: toWrite,
         );
+        if (ownsWrite?.call() == false) return const AddEventBusy();
         if (conflict != null) {
           // Conflicts return to the sheet for a force-through choice.
           if (ref.mounted) state = state.copyWith(isSubmitting: false);
@@ -427,6 +430,7 @@ class AddEventController extends Notifier<AddEventState>
         }
       }
 
+      if (ownsWrite?.call() == false) return const AddEventBusy();
       if (toWrite.length == 1) {
         await repo.addAppointment(toWrite.single);
       } else {
@@ -434,8 +438,9 @@ class AddEventController extends Notifier<AddEventState>
       }
 
       // Draft photos attach to day one.
+      if (ownsWrite?.call() == false) return const AddEventBusy();
       if (images.isNotEmpty) {
-        uploader.uploadInBackground(appointmentId: docId, newImages: images);
+        await uploader.enqueuePhotos(appointmentId: docId, newImages: images);
       }
 
       return AddEventSubmitted(

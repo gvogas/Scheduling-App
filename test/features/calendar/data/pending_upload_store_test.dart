@@ -1,17 +1,210 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:scheduling/core/images/image_upload_intent.dart';
 import 'package:scheduling/features/calendar/data/pending_upload_store.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+
+class _RejectQueueWrites extends InMemorySharedPreferencesStore {
+  _RejectQueueWrites(super.data) : super.withData();
+  bool reject = true;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) =>
+      reject && key == 'flutter.pending_photo_uploads'
+      ? Future.value(false)
+      : super.setValue(valueType, key, value);
+}
+
+class _RejectingPreferencesStore extends InMemorySharedPreferencesStore {
+  _RejectingPreferencesStore() : super.empty();
+  _RejectingPreferencesStore.withData(super.data) : super.withData();
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async =>
+      false;
+
+  @override
+  Future<bool> remove(String key) async => false;
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
+  test(
+    'expiry recording survives a failed queue save without reporting removal early',
+    () async {
+      const entry = PendingUpload(
+        appointmentId: 'job',
+        batchId: 'batch',
+        paths: ['/staged.jpg'],
+        enqueuedAtMs: 1000,
+        ownerUid: 'A',
+        ownerEmployeeId: 'employee-A',
+      );
+      final prefs = _RejectQueueWrites({
+        'flutter.pending_photo_uploads': jsonEncode([entry.toJson()]),
+      });
+      SharedPreferencesStorePlatform.instance = prefs;
+      final store = PendingUploadStore();
+      await expectLater(store.prune(now: DateTime(2026)), throwsStateError);
+      expect(await store.expiredFor('A'), isEmpty);
+      expect(await store.load(), hasLength(1));
+      prefs.reject = false;
+      await store.prune(now: DateTime(2026));
+      expect((await PendingUploadStore().expiredFor('A')).single.count, 1);
+    },
+  );
+
+  test(
+    'expiry outcomes survive restart, stay owner-bound and acknowledge independently',
+    () async {
+      final store = PendingUploadStore();
+      final now = DateTime(2026, 10, 18);
+      for (final uid in ['A', 'B']) {
+        await store.add(
+          PendingUpload(
+            appointmentId: 'job-$uid',
+            batchId: 'batch-$uid',
+            paths: ['/staged/$uid.jpg'],
+            enqueuedAtMs: now
+                .subtract(const Duration(days: 8))
+                .millisecondsSinceEpoch,
+            ownerUid: uid,
+            ownerEmployeeId: 'employee-$uid',
+          ),
+        );
+      }
+      expect(await store.prune(now: now), hasLength(2));
+      final restarted = PendingUploadStore();
+      expect((await restarted.expiredFor('A')).single.count, 1);
+      expect((await restarted.expiredFor('B')).single.appointmentId, 'job-B');
+      await restarted.prune(now: now);
+      expect(await restarted.expiredFor('A'), hasLength(1));
+      await restarted.acknowledgeExpiry('A', {'batch-A', 'batch-B'});
+      expect(await restarted.expiredFor('A'), isEmpty);
+      expect(await restarted.expiredFor('B'), hasLength(1));
+    },
+  );
+
+  test(
+    'does not read an unpersisted receipt from the preferences cache',
+    () async {
+      const entry = PendingUpload(
+        appointmentId: 'a1',
+        paths: ['/staging/1.jpg'],
+        enqueuedAtMs: 1000,
+        ownerUid: 'uid-1',
+        ownerEmployeeId: 'doc-1',
+      );
+      SharedPreferencesStorePlatform.instance =
+          _RejectingPreferencesStore.withData({
+            'flutter.pending_photo_uploads': jsonEncode([entry.toJson()]),
+          });
+      final store = PendingUploadStore();
+      await expectLater(
+        store.checkpoint(
+          entry.id,
+          const PendingUpload(
+            appointmentId: 'a1',
+            paths: [],
+            enqueuedAtMs: 1000,
+            ownerUid: 'uid-1',
+            ownerEmployeeId: 'doc-1',
+            cleanupPaths: ['/staging/1.jpg'],
+          ),
+        ),
+        throwsStateError,
+      );
+
+      final recovered = (await PendingUploadStore().load()).single;
+
+      expect(recovered.paths, entry.paths);
+      expect(recovered.cleanupPaths, isEmpty);
+    },
+  );
+
+  test('a rejected queue clear keeps the persisted batch reachable', () async {
+    const entry = PendingUpload(
+      appointmentId: 'a1',
+      paths: ['/staging/1.jpg'],
+      enqueuedAtMs: 1000,
+      ownerUid: 'uid-1',
+      ownerEmployeeId: 'doc-1',
+    );
+    SharedPreferencesStorePlatform.instance =
+        _RejectingPreferencesStore.withData({
+          'flutter.pending_photo_uploads': jsonEncode([entry.toJson()]),
+        });
+    final store = PendingUploadStore();
+
+    await expectLater(store.clearAll(), throwsStateError);
+
+    expect((await store.load()).single.paths, entry.paths);
+  });
+
+  test(
+    'rejects a queue write when the preferences backend returns false',
+    () async {
+      SharedPreferencesStorePlatform.instance = _RejectingPreferencesStore();
+
+      await expectLater(
+        PendingUploadStore().add(
+          const PendingUpload(
+            appointmentId: 'a1',
+            paths: ['/staging/1.jpg'],
+            enqueuedAtMs: 1000,
+            ownerUid: 'uid-1',
+            ownerEmployeeId: 'doc-1',
+          ),
+        ),
+        throwsStateError,
+      );
+    },
+  );
+
   test('load returns empty when nothing stored', () async {
     final store = PendingUploadStore();
     expect(await store.load(), isEmpty);
   });
+
+  test(
+    'round-trips upload identities and cleanup paths across store instances',
+    () async {
+      final intent = ImageUploadIntent(
+        uploadId: '00000000-0000-4000-8000-000000000000',
+        ownerUid: 'uid-1',
+        image: AppointmentImage(
+          storagePath:
+              'appointments/a1/images/00000000-0000-4000-8000-000000000000.jpg',
+          fileName: '00000000-0000-4000-8000-000000000000.jpg',
+          uploadedAt: DateTime.utc(2026, 10, 18, 1, 2, 3, 4, 5),
+        ),
+        digest: 'a' * 64,
+        byteLength: 123,
+      );
+      await PendingUploadStore().add(
+        PendingUpload(
+          appointmentId: 'a1',
+          paths: const ['/staging/1.jpg'],
+          enqueuedAtMs: 1000,
+          ownerUid: 'uid-1',
+          ownerEmployeeId: 'doc-1',
+          intents: {'/staging/1.jpg': intent},
+          cleanupPaths: const ['/staging/old.jpg'],
+        ),
+      );
+
+      final recovered = (await PendingUploadStore().load()).single;
+
+      expect(recovered.intents['/staging/1.jpg']?.toJson(), intent.toJson());
+      expect(recovered.cleanupPaths, ['/staging/old.jpg']);
+    },
+  );
 
   test('add then load round-trips an entry', () async {
     final store = PendingUploadStore();

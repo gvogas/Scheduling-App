@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_events.dart';
@@ -6,6 +8,7 @@ import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/application/photo_upload_notifier.dart';
+import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/calendar/utils/sheet_helpers.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/error_snack_bar.dart';
@@ -44,18 +47,46 @@ class PhotoUploadFailureListener extends ConsumerStatefulWidget {
 class _PhotoUploadFailureListenerState
     extends ConsumerState<PhotoUploadFailureListener> {
   late final PhotoUploadNotifier _notifier;
+  final _shownExpiryIds = <String>{};
 
   @override
   void initState() {
     super.initState();
     _notifier = ref.read(photoUploadNotifierProvider)
-      ..latestFailure.addListener(_onFailure);
+      ..latestFailure.addListener(_onFailure)
+      ..expired.addListener(_onExpiry);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _onExpiry());
   }
 
   @override
   void dispose() {
     _notifier.latestFailure.removeListener(_onFailure);
+    _notifier.expired.removeListener(_onExpiry);
     super.dispose();
+  }
+
+  void _onExpiry() {
+    if (!mounted) return;
+    final unseen = _notifier.expired.value
+        .where((entry) => !_shownExpiryIds.contains(entry.id))
+        .toList();
+    if (unseen.isEmpty) return;
+    final ids = unseen.map((entry) => entry.id).toSet();
+    _shownExpiryIds.addAll(ids);
+    final count = unseen.fold<int>(0, (sum, entry) => sum + entry.count);
+    ref
+        .read(noticeServiceProvider)
+        .info(context.l10n.calendar_photoUploadsExpired(count));
+    final uploader = ref.read(appointmentImageUploadProvider);
+    final logger = ref.read(loggerProvider);
+    unawaited(
+      uploader.acknowledgeExpiry(ids).catchError((
+        Object error,
+        StackTrace stack,
+      ) {
+        logger.warn('IMG-UPLOAD expiry acknowledgment failed', error, stack);
+      }),
+    );
   }
 
   void _onFailure() {

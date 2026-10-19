@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-> **Status: COMPLETE 2026-10-07.** All 18 tasks done; see "Progress and handoff" below. The owner decision (moving Flutter-only rules from `appointments.md` to the calendar file) was decided 2026-10-08: moved.
+> **Status (swept 2026-10-18): COMPLETE, archived.** All 18 tasks done 2026-10-07 (`17cc74b3`..`84f91b64`, ADR-0001..0183); the `appointments.md` move decided and done 2026-10-08 (`2f8b3979`). Docs and tooling only — nothing to deploy.
 
 ## Progress and handoff (2026-10-07)
 

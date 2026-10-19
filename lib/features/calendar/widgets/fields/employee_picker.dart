@@ -157,6 +157,7 @@ class EmployeePicker extends StatelessWidget {
                   // the Save-time double-booking prompt asks.
                   onTap:
                       selectable &&
+                          onToggle != null &&
                           offer.state != AssigneeOfferState.unavailable
                       ? () => onToggle?.call(offer.employee)
                       : null,
@@ -197,6 +198,7 @@ class _EmployeeChip extends StatelessWidget {
     return Semantics(
       // Non-null onTap IS selectable — the two cannot disagree.
       button: onTap != null,
+      onTap: onTap,
       selected: isSelected,
       enabled: !isUnavailable,
       label: employee.name,

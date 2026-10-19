@@ -657,7 +657,10 @@ describe("notifyEmailChanged", () => {
     expect(sent).toHaveLength(2);
     expect(sent[0].notification.title).toBe("Sign-in email changed");
     expect(sent[1].notification.title).toBe("Courriel de connexion modifié");
-    expect(sent[0].data).toEqual({kind: "emailChanged"});
+    expect(sent[0].data).toEqual({
+      kind: "emailChanged", validUntil: expect.any(String),
+    });
+    expect(Number(sent[0].data.validUntil)).toBeGreaterThan(Date.now());
   });
 
   test("reaches an admin too, unlike change-driven job pushes", async () => {

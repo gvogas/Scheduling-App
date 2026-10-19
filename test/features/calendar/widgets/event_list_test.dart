@@ -1,7 +1,8 @@
 // The empty state must not tell employees to "Tap +" (only admins have the
-// add FAB) — admins keep the actionable copy, employees get a neutral message.
+// add FAB) â€” admins keep the actionable copy, employees get a neutral message.
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
@@ -13,30 +14,30 @@ Widget _wrap({
   required List<AppointmentRecord> events,
   required bool isAdmin,
   Map<String, String> nameMap = const {},
-}) => MaterialApp(
-  localizationsDelegates: const [
-    AppLocalizations.delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ],
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: Scaffold(
-    body: Column(
-      children: [
-        EventList(
-          // The agenda takes day slices; these single-day jobs each slice on
-          // the day they start.
-          events: [
-            for (final e in events) sliceFor(e, e.startTime)!,
-          ],
-          nameMap: nameMap,
-          colorMap: const {},
-          isAdmin: isAdmin,
-          // An ordinary February day, so no holiday row joins the rows
-          // under test.
-          day: DateTime(2026, 2, 10),
-        ),
-      ],
+}) => ProviderScope(
+  child: MaterialApp(
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+    ],
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Scaffold(
+      body: Column(
+        children: [
+          EventList(
+            // The agenda takes day slices; these single-day jobs each slice on
+            // the day they start.
+            events: [for (final e in events) sliceFor(e, e.startTime)!],
+            nameMap: nameMap,
+            colorMap: const {},
+            isAdmin: isAdmin,
+            // An ordinary February day, so no holiday row joins the rows
+            // under test.
+            day: DateTime(2026, 2, 10),
+          ),
+        ],
+      ),
     ),
   ),
 );
@@ -108,7 +109,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // The card leads with the first assignee and counts the rest, rather than
-    // listing every name — the design's `Theo +1` line.
+    // listing every name â€” the design's `Theo +1` line.
     expect(find.textContaining('Alice +1'), findsOneWidget);
     expect(find.text('Alice, Bob'), findsNothing);
     expect(tester.takeException(), isNull);

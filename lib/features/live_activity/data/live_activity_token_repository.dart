@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/features/live_activity/domain/live_activity_token.dart';
@@ -9,11 +10,14 @@ class LiveActivityTokenRepository {
   LiveActivityTokenRepository({
     required FirebaseFirestore firestore,
     AppLogger? logger,
+    SessionFence? session,
   }) : _firestore = firestore,
-       _logger = logger ?? AppLogger();
+       _logger = logger ?? AppLogger(),
+       _session = session;
 
   final FirebaseFirestore _firestore;
   final AppLogger _logger;
+  final SessionFence? _session;
 
   DocumentReference<Map<String, dynamic>> _tokenDoc(
     String userDocId,
@@ -37,8 +41,11 @@ class LiveActivityTokenRepository {
     required DateTime expiresAt,
   }) async {
     try {
+      final lease = _session?.capture();
+      if (_session != null && (lease == null || lease.uid != uid)) return;
       final ref = _tokenDoc(userDocId, docId);
       final snap = await ref.get();
+      if (lease != null && !lease.isCurrent) return;
       final data = <String, dynamic>{
         'token': token,
         'kind': kind.raw,

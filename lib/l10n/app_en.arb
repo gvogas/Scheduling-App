@@ -1838,6 +1838,22 @@
   "@calendar_photoUploadFailedSnackbar": {
     "description": "Photo upload failed. Open the appointment to retry."
   },
+  "calendar_photoPosition": "Photo {index} of {count}",
+  "@calendar_photoPosition": {
+    "description": "Accessible position of a photo in an appointment gallery, including loading and unavailable entries. Index is one-based.",
+    "placeholders": {
+      "index": {"type": "int"},
+      "count": {"type": "int"}
+    }
+  },
+  "calendar_openPhoto": "Open full screen",
+  "@calendar_openPhoto": {
+    "description": "Screen reader action hint for opening an appointment photo."
+  },
+  "calendar_photoLoading": "Loading photo",
+  "@calendar_photoLoading": {
+    "description": "Accessible state of an appointment photo while its bytes are loading."
+  },
   "calendar_photoUnavailable": "Photo unavailable",
   "@calendar_photoUnavailable": {
     "description": "Shown in place of an appointment photo the app could not load from Storage. The read-only carousel would otherwise render a blank page, which reads as an empty photo rather than a failed one."
@@ -4425,6 +4441,24 @@
   "@employees_monthEndReviewPushDescription": {
     "description": "Caption under the month-end overdue reminder switch."
   },
+  "clients_searchTruncated": "Showing {shown} of {total} matches. Add a name, address, or more phone digits to narrow your search.",
+  "@clients_searchTruncated": {"description": "Explains that the client search found more matches than the displayed result limit.", "placeholders": {"shown": {"type": "int"}, "total": {"type": "int"}}},
+  "error_causeEditConflict": "This appointment changed elsewhere. Your draft is still here. Review the latest appointment before saving again.",
+  "@error_causeEditConflict": {"description": "Explains a rejected conflicting appointment edit without clearing the user's draft."},
+  "account_pendingPhotosTitle": "Photos waiting to save",
+  "@account_pendingPhotosTitle": {"description": "Title before voluntary logout or account deletion with pending photos."},
+  "account_pendingPhotosBody": "{count, plural, =1{1 photo is waiting to be saved to an appointment.} other{{count} photos are waiting to be saved to appointments.}} Stay signed in to retry, or discard pending photos and continue. Photos already saved will stay.",
+  "@account_pendingPhotosBody": {"description": "Explains the pending photo choice before voluntary account exit.", "placeholders": {"count": {"type": "int"}}},
+  "account_stayAndRetryPhotos": "Stay and retry",
+  "@account_stayAndRetryPhotos": {"description": "Cancels account exit and retries pending photo uploads."},
+  "account_discardPhotosAndContinue": "Discard photos and continue",
+  "@account_discardPhotosAndContinue": {"description": "Explicitly discards pending photo work and continues account exit."},
+  "calendar_photoUploadsExpired": "{count, plural, =1{1 photo did not finish saving and was removed after seven days.} other{{count} photos did not finish saving and were removed after seven days.}} Open the appointments to add them again.",
+  "@calendar_photoUploadsExpired": {"description": "Reports durable owner-bound expiry outcomes for unsaved photo work.", "placeholders": {"count": {"type": "int"}}},
+  "account_forcedExitPhotos": "Some photos had not finished saving. Check your appointments before adding them again; unsent photos are cleared from this device when the account exits.",
+  "@account_forcedExitPhotos": {"description": "Explains unsaved photo loss when access revocation forces an account exit."},
+  "error_causeIncompleteCheck": "The check could not examine all matching records. Try a smaller search or date range before confirming.",
+  "@error_causeIncompleteCheck": {"description": "Explains an explicitly incomplete search or appointment conflict scan."},
   "error_introReviewOverdue": "Couldn't update the jobs",
   "@error_introReviewOverdue": {
     "description": "Intro sentence of the failure notice when the overdue review's bulk status write fails (APPT-REVIEW)."

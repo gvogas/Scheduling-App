@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:firebase_auth/firebase_auth.dart';
@@ -6,15 +7,19 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/images/image_storage_service.dart';
 import 'package:scheduling/core/images/image_upload_failure.dart';
+import 'package:scheduling/core/images/image_upload_intent.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/application/photo_upload_notifier.dart';
 import 'package:scheduling/features/calendar/data/pending_upload_store.dart';
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
+import 'package:scheduling/features/calendar/domain/models/photo_upload_expiry.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
+import 'package:uuid/uuid.dart';
 
 typedef _UploadFilesResult = ({
   List<AppointmentImage> uploaded,
@@ -23,6 +28,22 @@ typedef _UploadFilesResult = ({
   int permanentFailures,
   bool transientFailure,
 });
+
+class PendingPhotoExit {
+  const PendingPhotoExit({
+    required this.pendingCount,
+    this.onResume,
+    this.readCurrent,
+  });
+
+  final int pendingCount;
+  final void Function()? onResume;
+  final bool Function()? readCurrent;
+
+  bool get isCurrent => readCurrent?.call() ?? true;
+
+  void resume() => onResume?.call();
+}
 
 class AppointmentImageUploadService {
   AppointmentImageUploadService({
@@ -34,6 +55,7 @@ class AppointmentImageUploadService {
     Future<Directory> Function()? stagingDirProvider,
     FirebaseAuth? auth,
     Future<String?> Function(String uid)? employeeIdForUid,
+    SessionFence? session,
   }) : _appointments = appointments,
        _notifier = notifier,
        _storage = storage ?? ImageStorageService(),
@@ -41,7 +63,9 @@ class AppointmentImageUploadService {
        _store = store ?? PendingUploadStore(),
        _stagingDirProvider = stagingDirProvider ?? _defaultStagingDir,
        _auth = auth ?? FirebaseAuth.instance,
-       _employeeIdForUid = employeeIdForUid;
+       _employeeIdForUid = employeeIdForUid {
+    _session = session ?? SessionFence(readUid: () => _auth.currentUser?.uid);
+  }
 
   final AppointmentsRepository _appointments;
   final PhotoUploadNotifier _notifier;
@@ -52,8 +76,13 @@ class AppointmentImageUploadService {
   final Future<Directory> Function() _stagingDirProvider;
   final FirebaseAuth _auth;
   final Future<String?> Function(String uid)? _employeeIdForUid;
+  late final SessionFence _session;
+  int _queueGeneration = 0;
 
   bool _draining = false;
+  final Set<Future<void>> _stagingJobs = {};
+  Object? _exitHold;
+  SessionLease? _exitHoldLease;
 
   /// Set when an active drain should loop again.
   bool _pendingDrain = false;
@@ -70,70 +99,165 @@ class AppointmentImageUploadService {
     required String appointmentId,
     required List<File> newImages,
   }) {
-    if (newImages.isEmpty) return;
-    unawaited(_stageAndRun(appointmentId, List.of(newImages)));
+    unawaited(
+      enqueuePhotos(appointmentId: appointmentId, newImages: newImages),
+    );
+  }
+
+  /// Waits for the local handoff attempt; network transfer stays in the drain.
+  Future<void> enqueuePhotos({
+    required String appointmentId,
+    required List<File> newImages,
+  }) {
+    if (newImages.isEmpty) return Future<void>.value();
+    final job = _stageAndRun(appointmentId, List.of(newImages));
+    _stagingJobs.add(job);
+    return job.whenComplete(() => _stagingJobs.remove(job));
   }
 
   Future<void> _stageAndRun(String appointmentId, List<File> images) async {
-    // Keep staged files reachable for cleanup until the queue owns them.
-    var staged = <File>[];
+    final lease = _session.capture();
+    final generation = _queueGeneration;
+    bool current() =>
+        lease?.isCurrent == true && generation == _queueGeneration;
     try {
       final dir = await _stagingDirProvider();
-      // Arm the drain memo here: staging, the publish below and the drain all
-      // ask the same question, and each miss is a billed `users` read.
       final owner = await _currentOwner();
-      _drainOwner = owner;
-      _drainOwnerResolved = true;
+      if (!current()) throw StateError('photo staging session ended');
       final enqueuedAtMs = DateTime.now().millisecondsSinceEpoch;
+      final batchId = const Uuid().v4();
+      final sources = <String, String>{};
       for (var i = 0; i < images.length; i++) {
-        staged.add(await _stage(images[i], dir, i, enqueuedAtMs));
+        final name = _fileName(images[i]);
+        final suffix = name.length > 160
+            ? name.substring(name.length - 160)
+            : name;
+        sources[_pathIn(dir.path, '${batchId}_${i}_$suffix')] = images[i].path;
       }
       final entry = PendingUpload(
         appointmentId: appointmentId,
-        paths: staged.map((f) => f.path).toList(),
+        paths: sources.keys.toList(),
         enqueuedAtMs: enqueuedAtMs,
         ownerUid: owner.uid,
         ownerEmployeeId: owner.employeeId,
+        batchId: batchId,
+        stagingSources: sources,
       );
+      final journal = File(_pathIn(dir.path, 'staging_$batchId.json'));
+      final partialJournal = File('${journal.path}.part');
+      await partialJournal.writeAsString(
+        jsonEncode(entry.toJson()),
+        flush: true,
+      );
+      await partialJournal.rename(journal.path);
+      if (!current()) return;
       await _store.add(entry);
-      // Now owned by the queue, so nothing below may delete them.
-      staged = const [];
+      await _deleteQuietly(journal);
+      if (!current()) return;
       // Published BEFORE the drain, so an offline device shows "waiting"
       // immediately rather than only after the attempt has failed.
       await _publishPending();
       // Drains are serialized to avoid duplicate upload passes.
-      await drainPending();
+      unawaited(drainPending());
     } catch (e, st) {
-      for (final file in staged) {
-        await _deleteQuietly(file);
+      if (current()) {
+        _notifier.reportFailure(appointmentId, failedCount: images.length);
       }
-      _notifier.reportFailure(appointmentId, failedCount: images.length);
       _logger.warn('IMG-UPLOAD staging failed for $appointmentId', e, st);
-    } finally {
-      // Scoped to this call. Leaving it armed past a throw would let a LATER
-      // drain match queue entries against a stale identity.
-      _drainOwnerResolved = false;
-      _drainOwner = null;
     }
   }
 
-  /// Moves a temp file into staging, falling back to copy/delete.
-  Future<File> _stage(
-    File source,
-    Directory dir,
-    int i,
-    int enqueuedAtMs,
+  Future<PendingUpload?> _finishStaging(
+    PendingUpload entry,
+    bool Function() current,
   ) async {
-    final name = source.uri.pathSegments.isNotEmpty
-        ? source.uri.pathSegments.last
-        : 'photo.jpg';
-    final target = File(_pathIn(dir.path, '${enqueuedAtMs}_${i}_$name'));
+    for (final item in entry.stagingSources.entries) {
+      if (!current()) return null;
+      final target = File(item.key);
+      if (target.existsSync()) continue;
+      final partial = File('${target.path}.part');
+      await File(item.value).copy(partial.path);
+      if (!current()) return null;
+      await partial.rename(target.path);
+    }
+    final staged = entry.copyWith(
+      stagingSources: const {},
+      cleanupPaths: [...entry.cleanupPaths, ...entry.stagingSources.values],
+    );
+    if (!current() || !await _store.checkpoint(entry.id, staged)) return null;
+    return current() ? staged : null;
+  }
+
+  Future<void> _recoverStagingJournals(
+    String uid,
+    bool Function() current,
+  ) async {
+    final directory = await _stagingDirProvider();
+    if (!current()) return;
+    await for (final entity in directory.list()) {
+      if (!current()) return;
+      if (entity is! File ||
+          !entity.uri.pathSegments.last.startsWith('staging_') ||
+          !entity.path.endsWith('.json')) {
+        continue;
+      }
+      final entry = PendingUpload.fromJson(
+        jsonDecode(await entity.readAsString()),
+      );
+      if (!current()) return;
+      if (entry == null || !entry.hasOwner || entry.ownerUid != uid) continue;
+      await _store.add(entry);
+      if (!current()) return;
+      if (!await _deleteQuietly(entity)) {
+        throw StateError('staging journal cleanup failed');
+      }
+    }
+  }
+
+  Future<PendingPhotoExit> prepareForExit() async {
+    final lease = _session.capture();
+    if (lease == null) throw StateError('photo exit session ended');
+    final hold = Object();
+    _exitHold = hold;
+    _exitHoldLease = lease;
+    void resume() {
+      if (!identical(_exitHold, hold)) return;
+      _exitHold = null;
+      _exitHoldLease = null;
+      if (_auth.currentUser?.uid == lease.uid) unawaited(drainPending());
+    }
+
     try {
-      return await source.rename(target.path);
-    } on FileSystemException {
-      final copied = await source.copy(target.path);
-      await _deleteQuietly(source);
-      return copied;
+      while (_stagingJobs.isNotEmpty) {
+        await Future.wait(List.of(_stagingJobs));
+      }
+      if (!lease.isCurrent || !identical(_exitHold, hold)) {
+        throw StateError('photo exit session changed');
+      }
+      _queueGeneration++;
+      await _recoverStagingJournals(
+        lease.uid,
+        () => lease.isCurrent && identical(_exitHold, hold),
+      );
+      final entries = await _store.load();
+      if (!lease.isCurrent || !identical(_exitHold, hold)) {
+        throw StateError('photo exit session changed');
+      }
+      final count = entries
+          .where((entry) => entry.hasOwner && entry.ownerUid == lease.uid)
+          .fold(
+            0,
+            (count, entry) =>
+                count + entry.paths.length + entry.uploaded.length,
+          );
+      return PendingPhotoExit(
+        pendingCount: count,
+        onResume: resume,
+        readCurrent: () => lease.isCurrent && identical(_exitHold, hold),
+      );
+    } catch (_) {
+      resume();
+      rethrow;
     }
   }
 
@@ -142,14 +266,29 @@ class AppointmentImageUploadService {
 
   /// One file's upload, classified. Never throws — the classification IS the
   /// result, so a chunk's `Future.wait` cannot lose its siblings to one throw.
-  Future<_UploadOneResult> _uploadOne(PendingUpload entry, File file) async {
+  Future<_UploadOneResult> _uploadOne(
+    PendingUpload entry,
+    File file,
+    bool Function() current,
+  ) async {
     try {
-      final image = await _storage.uploadImage(entry.appointmentId, file);
-      await _deleteQuietly(file);
+      final intent = entry.intents[file.path]!;
+      if (intent.ownerUid != entry.ownerUid || !current()) {
+        throw StateError('photo upload owner changed');
+      }
+      final image = await _storage.uploadQueuedImage(
+        entry.appointmentId,
+        file,
+        intent,
+        isCurrent: current,
+      );
       return _UploadedOne(image);
     } on ImageUploadFailure catch (e, st) {
-      _logger.warn('IMG-UPLOAD rejected file for ${entry.appointmentId}', e, st);
-      await _deleteQuietly(file);
+      _logger.warn(
+        'IMG-UPLOAD rejected file for ${entry.appointmentId}',
+        e,
+        st,
+      );
       return _RejectedOne(
         e is ImageUploadFailureTooLarge ? _fileName(file) : null,
       );
@@ -167,6 +306,7 @@ class AppointmentImageUploadService {
   Future<_UploadFilesResult> _uploadFiles(
     PendingUpload entry,
     List<File> files,
+    bool Function() current,
   ) async {
     var permanentFailures = 0;
     var transientFailure = false;
@@ -178,9 +318,9 @@ class AppointmentImageUploadService {
 
     // Chunked like the read path; the per-file try/catch stays INSIDE the mapped function.
     for (var i = 0; i < files.length; i += _maxConcurrentUploads) {
-      final chunk = files.skip(i).take(_maxConcurrentUploads);
+      final chunk = files.skip(i).take(_maxConcurrentUploads).toList();
       final results = await Future.wait([
-        for (final file in chunk) _uploadOne(entry, file),
+        for (final file in chunk) _uploadOne(entry, file, current),
       ]);
       for (final result in results) {
         switch (result) {
@@ -193,6 +333,30 @@ class AppointmentImageUploadService {
             transientFailure = true;
             survivors.add(path);
         }
+      }
+      if (!current()) throw StateError('photo upload session ended');
+      final cleanupPaths = [
+        ...entry.cleanupPaths,
+        for (final file in files.take(i + chunk.length))
+          if (!survivors.contains(file.path)) file.path,
+      ];
+      // Save receipts before deleting originals or starting the next chunk.
+      final saved = await _store.checkpoint(
+        entry.id,
+        entry.copyWith(
+          paths: [
+            ...survivors,
+            ...files.skip(i + chunk.length).map((file) => file.path),
+          ],
+          uploaded: uploaded,
+          intents: entry.intents,
+          cleanupPaths: cleanupPaths,
+        ),
+      );
+      if (!saved) throw StateError('pending photo batch was removed');
+      if (!current()) throw StateError('photo upload session ended');
+      for (final file in chunk) {
+        if (!survivors.contains(file.path)) await _deleteQuietly(file);
       }
     }
 
@@ -230,13 +394,35 @@ class AppointmentImageUploadService {
   }
 
   /// Uploads one queued batch and updates its queue entry.
-  Future<void> _attempt(PendingUpload entry) async {
+  Future<void> _attempt(PendingUpload queued, bool Function() current) async {
+    var entry = queued;
     if (!await _matchesCurrentOwner(entry)) {
       _logger.warn(
         'IMG-UPLOAD skipped queue entry for ${entry.appointmentId}: '
         '${entry.hasOwner ? 'owner mismatch' : 'no owner (pre-upgrade entry)'}',
       );
       return;
+    }
+    if (!current()) return;
+    if (entry.stagingSources.isNotEmpty) {
+      try {
+        final staged = await _finishStaging(entry, current);
+        if (staged == null) return;
+        entry = staged;
+      } catch (error, stack) {
+        if (current()) {
+          _notifier.reportFailure(
+            entry.appointmentId,
+            failedCount: entry.paths.length,
+          );
+        }
+        _logger.warn('IMG-UPLOAD staged copy failed', error, stack);
+        rethrow;
+      }
+    }
+    for (final path in entry.cleanupPaths) {
+      if (!await _deleteQuietly(File(path))) return;
+      if (!current()) return;
     }
     final files = entry.paths
         .map(File.new)
@@ -247,8 +433,21 @@ class AppointmentImageUploadService {
       return;
     }
 
-    final upload = await _uploadFiles(entry, files);
+    final intents = {...entry.intents};
+    for (final file in files) {
+      intents[file.path] ??= await ImageUploadIntent.prepare(
+        entry.appointmentId,
+        entry.ownerUid,
+        file,
+      );
+      if (!current()) return;
+    }
+    entry = entry.copyWith(intents: intents);
+    if (!await _store.checkpoint(entry.id, entry) || !current()) return;
+    final upload = await _uploadFiles(entry, files, current);
+    if (!current()) return;
     final appendThrew = await _appendLinks(entry, upload.uploaded);
+    if (!current()) return;
     final tooLargeNames = upload.tooLargeNames;
     final survivors = upload.survivors;
 
@@ -264,22 +463,43 @@ class AppointmentImageUploadService {
       // Replace atomically so failed requeues leave the original entry intact.
       await _store.replace(
         entry.id,
-        PendingUpload(
-          appointmentId: entry.appointmentId,
+        entry.copyWith(
           paths: survivors,
-          enqueuedAtMs: entry.enqueuedAtMs,
-          ownerUid: entry.ownerUid,
-          ownerEmployeeId: entry.ownerEmployeeId,
           uploaded: outcome.uploadedToCarry,
+          intents: {for (final path in survivors) path: intents[path]!},
+          cleanupPaths: [
+            ...entry.cleanupPaths,
+            for (final file in files)
+              if (!survivors.contains(file.path) && file.existsSync())
+                file.path,
+          ],
         ),
       );
+      if (!current()) return;
       _notifier.reportFailure(
         entry.appointmentId,
         failedCount: outcome.failedCount,
         tooLargeFileNames: tooLargeNames,
       );
     } else {
-      await _store.remove(entry.id);
+      final cleanupPaths = [
+        for (final file in files)
+          if (!survivors.contains(file.path) && file.existsSync()) file.path,
+      ];
+      if (cleanupPaths.isEmpty) {
+        await _store.remove(entry.id);
+      } else {
+        await _store.checkpoint(
+          entry.id,
+          entry.copyWith(
+            paths: const [],
+            uploaded: const [],
+            intents: const {},
+            cleanupPaths: cleanupPaths,
+          ),
+        );
+      }
+      if (!current()) return;
       if (outcome.failedCount > 0) {
         _notifier.reportFailure(
           entry.appointmentId,
@@ -294,6 +514,9 @@ class AppointmentImageUploadService {
 
   /// Drains queued batches without running two drains at once.
   Future<void> drainPending() async {
+    if (_exitHold != null && _exitHoldLease?.isCurrent == true) return;
+    _exitHold = null;
+    _exitHoldLease = null;
     if (_draining) {
       _pendingDrain = true;
       return;
@@ -302,27 +525,47 @@ class AppointmentImageUploadService {
     try {
       do {
         _pendingDrain = false;
+        _drainOwnerResolved = false;
+        _drainOwner = null;
+        final lease = _session.capture();
+        final generation = _queueGeneration;
+        bool current() =>
+            lease?.isCurrent == true && generation == _queueGeneration;
+        if (!current() || _exitHold != null) continue;
         _drainOwner = await _currentOwnerOrNull();
         _drainOwnerResolved = true;
+        if (!current()) continue;
         try {
+          await _recoverStagingJournals(lease!.uid, current);
+          if (!current()) continue;
           final expired = await _store.prune(now: DateTime.now());
+          if (!current()) continue;
           for (final e in expired) {
-            for (final p in e.paths) {
+            for (final p in [
+              ...e.paths,
+              ...e.cleanupPaths,
+              ...e.stagingSources.values,
+              for (final target in e.stagingSources.keys) '$target.part',
+            ]) {
               await _deleteQuietly(File(p));
             }
           }
           for (final entry in await _store.load()) {
-            await _attempt(entry);
+            if (!current()) break;
+            await _attempt(entry, current);
+            if (!current()) break;
             // Per entry, not per drain: a long queue should visibly shrink.
             await _publishPending();
           }
-          await _publishPending();
+          if (current()) await _publishPending();
         } catch (e, st) {
           _logger.warn('IMG-UPLOAD drain failed', e, st);
           // A failed drain leaves the queue as it was; republish so the waiting
           // count is never left stale by the failure path.
-          await _publishPending();
+          if (current()) await _publishPending();
         }
+        _drainOwnerResolved = false;
+        _drainOwner = null;
       } while (_pendingDrain);
     } finally {
       _drainOwnerResolved = false;
@@ -332,30 +575,48 @@ class AppointmentImageUploadService {
   }
 
   Future<void> clearPending() async {
-    final entries = await _store.clearAll();
+    _queueGeneration++;
+    _exitHold = null;
+    _exitHoldLease = null;
+    _notifier.reportPending(const {});
+    _notifier.expired.value = const [];
+    final lease = _session.capture(duringExit: true);
+    if (lease == null) return;
+    final generation = _queueGeneration;
+    bool current() => lease.isCurrent && generation == _queueGeneration;
+    await _recoverStagingJournals(lease.uid, current);
+    if (!current()) return;
+    final entries = await _store.clearOwner(lease.uid, isCurrent: current);
     for (final entry in entries) {
-      for (final path in entry.paths) {
+      if (!current()) return;
+      for (final path in [
+        ...entry.paths,
+        ...entry.cleanupPaths,
+        ...entry.stagingSources.values,
+        for (final target in entry.stagingSources.keys) '$target.part',
+      ]) {
+        if (!current()) return;
         await _deleteQuietly(File(path));
       }
+      if (!current()) return;
       _notifier.clearFailure(entry.appointmentId);
     }
-    await _publishPending();
+    if (current()) await _publishPending();
   }
 
   Future<({String uid, String employeeId})> _currentOwner() async {
+    final lease = _session.capture();
     final uid = _auth.currentUser?.uid;
     if (uid == null) throw StateError('signed out');
     final employeeId = await _employeeIdForUid?.call(uid);
+    if (lease?.isCurrent != true) throw StateError('photo owner session ended');
     if (employeeId == null || employeeId.isEmpty) {
       throw StateError('no users doc for uid');
     }
     return (uid: uid, employeeId: employeeId);
   }
 
-  /// Memoised for the length of one drain: `_employeeIdForUid` is a Firestore
-  /// read, and the signed-in identity cannot change mid-pass, so re-resolving
-  /// it per queue entry AND per republish cost 2N+1 reads to answer one
-  /// question.
+  /// Memoised only within one generation-fenced drain pass.
   ({String uid, String employeeId})? _drainOwner;
   bool _drainOwnerResolved = false;
 
@@ -380,10 +641,19 @@ class AppointmentImageUploadService {
   }
 
   /// Republishes the queue depth per appointment from the store itself.
+  Future<void> acknowledgeExpiry(Set<String> ids) async {
+    final lease = _session.capture();
+    if (lease == null) return;
+    await _store.acknowledgeExpiry(lease.uid, ids);
+    if (lease.isCurrent) _notifier.expired.value = const [];
+  }
+
   Future<void> _publishPending() async {
+    final lease = _session.capture();
     try {
       final counts = <String, int>{};
       final owner = await _currentOwnerOrNull();
+      if (owner != null && owner.uid != lease?.uid) return;
       for (final entry in await _store.load()) {
         if (owner == null ||
             !entry.hasOwner ||
@@ -392,20 +662,30 @@ class AppointmentImageUploadService {
           continue;
         }
         counts[entry.appointmentId] =
-            (counts[entry.appointmentId] ?? 0) + entry.paths.length;
+            (counts[entry.appointmentId] ?? 0) +
+            entry.paths.length +
+            entry.uploaded.length;
       }
-      _notifier.reportPending(counts);
+      final expired = owner == null
+          ? const <PhotoUploadExpiry>[]
+          : await _store.expiredFor(owner.uid);
+      if (lease?.isCurrent == true) {
+        _notifier.reportPending(counts);
+        _notifier.expired.value = expired;
+      }
     } catch (e, st) {
       // Never let the SIGNAL break the upload: this is a status read.
       _logger.warn('IMG-UPLOAD pending count failed', e, st);
     }
   }
 
-  Future<void> _deleteQuietly(File f) async {
+  Future<bool> _deleteQuietly(File f) async {
     try {
       if (f.existsSync()) await f.delete();
+      return true;
     } catch (e, st) {
       _logger.warn('IMG-UPLOAD cleanup failed for ${f.path}', e, st);
+      return false;
     }
   }
 
@@ -463,6 +743,7 @@ final appointmentImageUploadProvider = Provider<AppointmentImageUploadService>((
   return AppointmentImageUploadService(
     appointments: ref.watch(appointmentsRepositoryProvider),
     notifier: ref.watch(photoUploadNotifierProvider),
+    session: ref.watch(sessionFenceProvider),
     employeeIdForUid: (uid) async {
       final match = await ref
           .read(employeesRepositoryProvider)

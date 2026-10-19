@@ -1804,12 +1804,14 @@ not default it off.
 - **Mocking**: `mocktail` at system boundaries only (Firebase, repositories). Real implementations everywhere else.
 - **Test harness**: Widgets using `ThemeNotifier.of(context)` must be wrapped in `ThemeNotifier(...)`. For overflow tests, pump the widget at a **small-phone size with 2× text** — set `tester.view.physicalSize` (a 260-wide logical viewport is the usual worst case) and wrap in a `MediaQuery` carrying `textScaler: TextScaler.linear(2)`. Each test file keeps its own local `_harness` helper for this; there is no shared one.
 - **Shard isolation**: `dart run tool/test.dart` (the fast full-suite runner) runs many test files in one isolate, resetting only the SharedPreferences/secure-storage mocks between files. Reset every `tester.view` value you set, call `markAllToursSeen()` before pumping a tour-hosting screen, override `isOfflineProvider` in bare containers, and set global mocks in `setUp`/`setUpAll` rather than in `main()`. Mirrored in `.claude/rules/testing.md`.
+- **Session ownership**: `sessionFenceProvider` (`core/app/session_fence.dart`) invalidates asynchronous routing and push-registration work on UID transitions and before account teardown. Normal leases cannot start during exit; cleanup leases are valid only for that exit generation. Failed exits may restore eligibility without reviving old work. A stale cleanup stops before subsequent remote/local steps, and exit callers check ownership before revoking credentials. This does not yet bound cleanup waits or migrate widget/native snapshot ownership.
 - **Three harness traps that fail as a HANG or a timeout rather than an
   assertion**, all mirrored in `.claude/rules/testing.md`: a widget test
   reaching an account exit must override `appointmentImageLoaderProvider`,
-  `clientsRepositoryProvider` and `appointmentsRepositoryProvider` (spread
+  `appointmentImageUploadProvider`, `clientsRepositoryProvider`,
+  `appointmentsRepositoryProvider`, and `sessionFenceProvider` (spread
   `accountExitStubOverrides()` from `test/support/account_exit_stubs.dart`,
-  which owns all three); a bare
+  which owns the complete override set); a bare
   `ProviderContainer` asserting an ERROR state must be given
   `retry: (retryCount, error) => null`, because it does not inherit the one
   `main()` sets and Riverpod 3's default retry means the future never settles;
@@ -1821,9 +1823,9 @@ not default it off.
   cases. Mirrored in `.claude/rules/testing.md`.
 
 Run: `dart run tool/test.dart` — the sharded full suite, ~3 min against ~10 for bare `flutter test`, which
-still works and gives the same count (4055 passing as of 2026-10-09, the 1.64.1+95 release pass — that is the runner's count;
-`grep`ing for `test(`/`testWidgets(` gives fewer (3745 as of 2026-10-09), since some cases are
-generated inside loops; `functions` adds 2219 jest tests across 106 suites in
+still works and gives the same count (4066 passing as of 2026-10-18 — that is the runner's count;
+`grep`ing for `test(`/`testWidgets(` gives fewer (3756 as of 2026-10-18), since some cases are
+generated inside loops; `functions` adds 2220 jest tests across 106 suites in
 `functions/__tests__/` — the parallel `functions/test/` directory was
 merged away). **`functions/node_modules` must be installed before `npx jest`
 means anything**: on an empty install it resolves a throwaway jest from the npx

@@ -2,17 +2,18 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
-
 import 'package:scheduling/core/data/paged_scan.dart';
 import 'package:scheduling/core/data/search_result_cache.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/performance/performance_trace.dart';
 import 'package:scheduling/core/search/search_tokens.dart';
+import 'package:scheduling/core/utils/firestore_parsing.dart';
 import 'package:scheduling/core/validators/email_format.dart';
 import 'package:scheduling/core/validators/phone_format.dart';
 import 'package:scheduling/features/clients/domain/clients_failure.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
+import 'package:scheduling/features/clients/domain/models/client_search_results.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
@@ -381,7 +382,13 @@ class FirebaseClientsRepository implements ClientsRepository {
           final byScore = a.score.compareTo(b.score);
           return byScore != 0 ? byScore : a.sortKey.compareTo(b.sortKey);
         });
-    return [for (final entry in ranked) entry.record];
+    final raw = response.data;
+    return ClientSearchResults(
+      [for (final entry in ranked) entry.record],
+      examinedCount: firestoreInt(raw['examinedCount']) ?? records.length,
+      matchedCount: firestoreInt(raw['matchedCount']) ?? records.length,
+      truncated: raw['truncated'] == true,
+    );
   }
 
   Future<List<ClientRecord>> _searchClientsLocal(

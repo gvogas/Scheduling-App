@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/animations/animated_loading_button.dart';
 import 'package:scheduling/core/app/device_deregistration.dart';
+import 'package:scheduling/core/app/pending_photo_exit.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
@@ -17,6 +18,7 @@ import 'package:scheduling/features/auth/widgets/auth_banner.dart';
 import 'package:scheduling/features/auth/widgets/auth_fields.dart';
 import 'package:scheduling/features/auth/widgets/auth_scaffold.dart';
 import 'package:scheduling/features/auth/widgets/password_requirements_checklist.dart';
+import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
 
@@ -178,19 +180,39 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
       _isSigningOut = true;
       _bannerError = null;
     });
-    await _signOutToLogin();
+    await _signOutToLogin(checkPendingPhotos: true);
   }
 
-  Future<void> _signOutToLogin() async {
+  Future<void> _signOutToLogin({bool checkPendingPhotos = false}) async {
     final logger = ref.read(loggerProvider);
     final analytics = ref.read(analyticsServiceProvider);
     DeviceDeregistrationDeps? deregistered;
+    PendingPhotoExit? pendingExit;
     try {
       // An active account holds push, presence and Live Activity registrations.
       final devices = DeviceDeregistrationDeps.from(ref.read);
+      if (checkPendingPhotos) {
+        pendingExit = await confirmPendingPhotoExit(
+          context,
+          devices.imageUploads,
+          devices.session!,
+        );
+        if (pendingExit == null || !pendingExit.isCurrent) {
+          if (mounted) setState(() => _isSigningOut = false);
+          return;
+        }
+      }
       await deregisterThisDevice(devices);
       deregistered = devices;
+      if (!devices.isCurrentExit) {
+        if (mounted) setState(() => _isSigningOut = false);
+        return;
+      }
       await _authService.signOut();
+      if (_authService.currentUser != null) {
+        if (mounted) setState(() => _isSigningOut = false);
+        return;
+      }
       analytics
         ..logSignOut()
         ..setUserRole(null);
@@ -207,6 +229,8 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
         _isLoading = false;
         _bannerError = context.l10n.error_somethingWentWrongPleaseTryAgain;
       });
+    } finally {
+      pendingExit?.resume();
     }
   }
 

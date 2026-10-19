@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:cloud_functions/cloud_functions.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 
 import 'package:scheduling/core/data/paged_scan.dart';
 import 'package:scheduling/core/data/search_result_cache.dart';
@@ -31,8 +32,10 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     FirebaseFunctions? functions,
     AppLogger? logger,
     DateTime Function()? clock,
+    SessionFence? session,
   }) : _appointments = firestore.collection('appointments'),
        _functions = functions,
+       _session = session,
        _logger = logger ?? AppLogger(),
        _clock = clock ?? DateTime.now {
     _images = AppointmentImagesStore(
@@ -47,6 +50,16 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
 
   final CollectionReference<Map<String, dynamic>> _appointments;
   final FirebaseFunctions? _functions;
+  final SessionFence? _session;
+
+  @override
+  bool Function()? captureWriteOwner() {
+    final session = _session;
+    if (session == null) return null;
+    final lease = session.capture();
+    return () => lease?.isCurrent == true;
+  }
+
   final AppLogger _logger;
 
   /// The photo half — the `appointments/{id}/images` subcollection.
@@ -110,6 +123,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   /// Unlike [_patchWindow] this does NOT poke `_localWrites`.
   @override
   void clearCaches() {
+    _acknowledgedWrites.clear();
     _searchCache.clear();
     _historyWindow = null;
     _pendingHistoryScan = null;
@@ -185,6 +199,8 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
         ..._toFirestoreMap(appointment),
         // The one client write of this counter the rules allow (see images.md).
         'pictureCount': 0,
+        'editProtocol': 1,
+        'editRevision': 0,
         'createdAt': FieldValue.serverTimestamp(),
         'updatedAt': FieldValue.serverTimestamp(),
       });
@@ -215,7 +231,20 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     required AppointmentRecord updated,
     required List<String> deleteIds,
     required List<AppointmentRecord> copies,
+    AppointmentRecord? base,
+    List<AppointmentRecord> deleteBases = const [],
   }) async {
+    if (_functions != null) {
+      if (base == null || deleteBases.length != deleteIds.length) {
+        throw StateError('Appointment rewrite requires every original record');
+      }
+      await _commitEdits(
+        edits: [(base: base, updated: updated)],
+        creates: copies,
+        deletes: deleteBases,
+      );
+      return;
+    }
     final opId = _newSeriesOpId();
     final batch = _appointments.firestore.batch()
       ..update(_appointments.doc(updated.id), {
@@ -246,8 +275,18 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   }
 
   @override
-  Future<void> updateAppointment(AppointmentRecord appointment) async {
+  Future<void> updateAppointment(
+    AppointmentRecord appointment, {
+    AppointmentRecord? base,
+  }) async {
     if (appointment.id == null) return;
+    if (_functions != null) {
+      if (base == null) {
+        throw StateError('Appointment edit requires original record');
+      }
+      await _commitEdits(edits: [(base: base, updated: appointment)]);
+      return;
+    }
     await _appointments.doc(appointment.id).update({
       ..._toFirestoreMap(appointment),
       'seriesOpId': _newSeriesOpId(),
@@ -257,7 +296,23 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   }
 
   @override
-  Future<void> updateAppointments(List<AppointmentRecord> appointments) async {
+  Future<void> updateAppointments(
+    List<AppointmentRecord> appointments, {
+    List<AppointmentRecord> bases = const [],
+  }) async {
+    if (_functions != null) {
+      final original = {for (final record in bases) record.id: record};
+      if (appointments.any((record) => !original.containsKey(record.id))) {
+        throw StateError('Appointment edits require every original record');
+      }
+      await _commitEdits(
+        edits: [
+          for (final record in appointments)
+            (base: original[record.id]!, updated: record),
+        ],
+      );
+      return;
+    }
     final records = [
       for (final a in appointments)
         if (a.id != null) a,
@@ -281,6 +336,62 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       }
     });
     _patchWindow(written);
+  }
+
+  final Map<String, AppointmentRecord> _acknowledgedWrites = {};
+
+  @override
+  AppointmentRecord? takeAcknowledgedWrite(String id) =>
+      _acknowledgedWrites.remove(id);
+
+  static Map<String, dynamic> _editablePayload(AppointmentRecord record) => {
+    ...record.toMap(),
+    'startTime': record.startTime.millisecondsSinceEpoch,
+    'endTime': record.endTime.millisecondsSinceEpoch,
+  };
+
+  Future<void> _commitEdits({
+    required List<({AppointmentRecord base, AppointmentRecord updated})> edits,
+    List<AppointmentRecord> creates = const [],
+    List<AppointmentRecord> deletes = const [],
+  }) async {
+    final isCurrent = captureWriteOwner();
+    if (isCurrent != null && !isCurrent()) throw StateError('Session ended');
+    final result = await _functions!
+        .httpsCallable('saveAppointmentEdits')
+        .call<Map<String, dynamic>>({
+          'edits': [
+            for (final edit in edits)
+              {
+                'id': edit.updated.id,
+                'base': _editablePayload(edit.base),
+                'data': _editablePayload(edit.updated),
+              },
+          ],
+          'creates': [
+            for (final record in creates)
+              {'id': record.id, 'data': _editablePayload(record)},
+          ],
+          'deletes': [
+            for (final record in deletes)
+              {'id': record.id, 'base': _editablePayload(record)},
+          ],
+        });
+    if (isCurrent != null && !isCurrent()) return;
+    if (result.data['appointments'] is! List) {
+      throw const FormatException('Missing appointment edit acknowledgement');
+    }
+    final records = _appointmentsFromCallable(result.data);
+    for (final record in records) {
+      if (record.id != null) _acknowledgedWrites[record.id!] = record;
+    }
+    while (_acknowledgedWrites.length > 400) {
+      _acknowledgedWrites.remove(_acknowledgedWrites.keys.first);
+    }
+    _patchWindow({
+      for (final record in records) record.id!: _rawOf(record),
+      for (final record in deletes) record.id!: null,
+    });
   }
 
   @override
@@ -592,6 +703,68 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   }
 
   @override
+  Future<List<Set<String>>>? findBusyEmployeeIdsForBookings({
+    required List<String> employeeIds,
+    required List<AppointmentRecord> bookings,
+    Set<String> excludeAppointmentIds = const {},
+    bool excludeOwnBookingIds = false,
+  }) {
+    if (_functions == null) return null;
+    return _findBusyBookingBatch(
+      employeeIds,
+      bookings,
+      excludeAppointmentIds,
+      excludeOwnBookingIds,
+    );
+  }
+
+  Future<List<Set<String>>> _findBusyBookingBatch(
+    List<String> employeeIds,
+    List<AppointmentRecord> bookings,
+    Set<String> excluded,
+    bool excludeOwn,
+  ) async {
+    final lease = _session?.capture();
+    bool current() => _session == null || lease?.isCurrent == true;
+    final result = <Set<String>>[];
+    for (var offset = 0; offset < bookings.length; offset += 16) {
+      if (!current()) throw StateError('Conflict check session changed');
+      final chunk = bookings.skip(offset).take(16).toList();
+      final response = await _functions!
+          .httpsCallable('findAppointmentConflicts')
+          .call<Map<String, dynamic>>({
+            'employeeIds': employeeIds,
+            'startMillis': chunk.first.startTime.millisecondsSinceEpoch,
+            'endMillis': chunk.first.endTime.millisecondsSinceEpoch,
+            'windows': [
+              for (final booking in chunk)
+                {
+                  'startMillis': booking.startTime.millisecondsSinceEpoch,
+                  'endMillis': booking.endTime.millisecondsSinceEpoch,
+                  if (excludeOwn && booking.id != null)
+                    'excludeAppointmentId': booking.id,
+                },
+            ],
+            if (excluded.isNotEmpty) 'excludeAppointmentIds': excluded.toList(),
+          });
+      if (!current()) throw StateError('Conflict check session changed');
+      final windows = response.data['windows'];
+      if (windows is! List || windows.length != chunk.length) {
+        throw const FormatException('Incomplete conflict batch response');
+      }
+      for (final window in windows) {
+        final ids = window is Map ? window['busyEmployeeIds'] : null;
+        if (ids is! List ||
+            ids.any((id) => id is! String || !employeeIds.contains(id))) {
+          throw const FormatException('Invalid conflict batch response');
+        }
+        result.add(ids.cast<String>().toSet());
+      }
+    }
+    return result;
+  }
+
+  @override
   Future<List<EmployeeRecord>> findBusyEmployees({
     required List<EmployeeRecord> candidates,
     required DateTime start,
@@ -848,26 +1021,27 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   }) async {
     final byId = <String, AppointmentRecord>{};
     final windowUnknownIds = <String>{};
-    final snapshots = await Future.wait([
-      for (var i = 0; i < employeeIds.length; i += 30)
+    var scanned = 0;
+    for (var i = 0; i < employeeIds.length; i += 30) {
+      final docs = await pageToCap(
         _appointments
             .where(
               'employeeIds',
               arrayContainsAny: employeeIds.skip(i).take(30).toList(),
             )
             .where('startTime', isLessThan: Timestamp.fromDate(end))
-            .where('endTime', isGreaterThan: Timestamp.fromDate(start))
-            .limit(_conflictScanLimit)
-            .get(),
-    ]);
-    for (final snapshot in snapshots) {
-      if (snapshot.docs.length >= _conflictScanLimit) {
-        _logger.warn(
-          'APPT-BUSY conflict query hit the $_conflictScanLimit-doc cap - '
-          'some clashes may be missing',
-        );
-      }
-      for (final doc in snapshot.docs) {
+            .where('endTime', isGreaterThan: Timestamp.fromDate(start)),
+        pageSize: 500,
+        cap: _conflictScanLimit - scanned,
+        onCapReached: () {
+          _logger.warn(
+            'APPT-BUSY conflict scan incomplete; booking not cleared',
+          );
+          throw StateError('conflict-scan-incomplete');
+        },
+      );
+      scanned += docs.length;
+      for (final doc in docs) {
         final data = doc.data();
         if (firestoreDateTime(data['startTime']) == null ||
             firestoreDateTime(data['endTime']) == null) {

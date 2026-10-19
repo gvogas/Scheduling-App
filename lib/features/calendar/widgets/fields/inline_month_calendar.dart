@@ -405,9 +405,11 @@ class _PickerDayCell extends StatelessWidget {
     }
 
     final dateLabel = dayLabelFormat.format(day);
+    void select() => onTap(day);
 
     return Semantics(
       button: true,
+      onTap: select,
       selected: isSelected,
       // The companion marker is a tint, and a tint says nothing out loud.
       label: isCompanion && companionLabel != null
@@ -416,7 +418,7 @@ class _PickerDayCell extends StatelessWidget {
       excludeSemantics: true,
       child: InkResponse(
         key: cellKey,
-        onTap: () => onTap(day),
+        onTap: select,
         radius: circleSize,
         child: Center(child: circle),
       ),

@@ -28,12 +28,26 @@ abstract class AppointmentsRepository {
     required AppointmentRecord updated,
     required List<String> deleteIds,
     required List<AppointmentRecord> copies,
+    AppointmentRecord? base,
+    List<AppointmentRecord> deleteBases = const [],
   });
 
-  Future<void> updateAppointment(AppointmentRecord appointment);
+  Future<void> updateAppointment(
+    AppointmentRecord appointment, {
+    AppointmentRecord? base,
+  });
+
+  /// Consumes the server's merged record after an acknowledged edit.
+  AppointmentRecord? takeAcknowledgedWrite(String id);
+
+  /// Captures ownership before asynchronous planning; null for injected test repositories.
+  bool Function()? captureWriteOwner();
 
   /// Atomically update series to propagate edit across visit and future siblings.
-  Future<void> updateAppointments(List<AppointmentRecord> appointments);
+  Future<void> updateAppointments(
+    List<AppointmentRecord> appointments, {
+    List<AppointmentRecord> bases = const [],
+  });
 
   /// Adds [pictures] to `appointments/{id}/images`.
   Future<void> appendAppointmentPictures(
@@ -138,6 +152,14 @@ abstract class AppointmentsRepository {
     required DateTime end,
     String? excludeAppointmentId,
   });
+
+  /// Optional bounded server batch; null retains the complete local fallback.
+  Future<List<Set<String>>>? findBusyEmployeeIdsForBookings({
+    required List<String> employeeIds,
+    required List<AppointmentRecord> bookings,
+    Set<String> excludeAppointmentIds = const {},
+    bool excludeOwnBookingIds = false,
+  }) => null;
 
   /// The live appointments standing in the way of [employeeIds] over
   /// [start]–[end], read ONCE.

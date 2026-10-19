@@ -9,7 +9,7 @@
 const {WaveValidationError, upsertCustomer} = require("./customers");
 const {adminFirestore} = require("../admin_firestore");
 const {getFeatureFlags} = require("../feature_flags");
-const {WaveApiError} = require("./client");
+const {WaveApiError, graphql} = require("./client");
 const {
   DEFAULT_MAX_ATTEMPTS,
   defaultBackoffMs,
@@ -61,13 +61,13 @@ async function dispatchQueuedJobs(ctx) {
       break;
     }
 
-    const jobData = doc.data() || {};
     // The actual claim time, not the drain-start clock — with a stale stamp, a
     // long drain could make a job look lease-expired to a concurrent reclaim
     // pass while it is still being dispatched.
     const claimStamp = nowFn ? nowFn() : new Date();
 
-    if (!await claimJob(ctx, doc, claimStamp)) {
+    const jobData = await claimJob(ctx, doc, claimStamp);
+    if (!jobData) {
       summary.skipped += 1;
       continue;
     }
@@ -96,7 +96,10 @@ async function dispatchJob(ctx, jobData) {
     // customers.js.
     const outcome = await dispatchUpsert(clientId, {
       db,
-      graphql: ctx.graphql,
+      graphql: (query, variables, options = {}) =>
+        (ctx.graphql || graphql)(query, variables, {
+          ...options, deadlineMs: ctx.deadlineMs - 2000,
+        }),
       businessId: ctx.businessId,
       // Lets the upsert run its crash-retry duplicate check (search Wave before
       // creating) when a previous attempt may have half-finished.

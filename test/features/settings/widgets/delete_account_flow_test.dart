@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/notices/app_notice.dart';
@@ -14,6 +15,7 @@ import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/auth/domain/auth_failure.dart';
 import 'package:scheduling/features/auth/services/account_deletion_service.dart';
 import 'package:scheduling/features/auth/services/auth_service.dart';
+import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/live_activity/application/live_activity_registration_controller.dart';
 import 'package:scheduling/features/notifications/application/push_registration_controller.dart';
 import 'package:scheduling/features/presence/application/presence_sync_controller.dart';
@@ -40,13 +42,14 @@ List<Override> _exitOverrides({
   required PushRegistrationController push,
   required PresenceSyncController presence,
   required LiveActivityRegistrationController liveActivity,
+  PendingPhotoExit? pendingPhotos,
 }) => [
   isOfflineProvider.overrideWithValue(false),
   authServiceProvider.overrideWithValue(auth),
   pushRegistrationControllerProvider.overrideWithValue(push),
   presenceSyncControllerProvider.overrideWithValue(presence),
   liveActivityRegistrationControllerProvider.overrideWithValue(liveActivity),
-  ...accountExitStubOverrides(),
+  ...accountExitStubOverrides(pendingPhotos: pendingPhotos),
 ];
 
 /// The smallest host the mixin needs — Settings itself carries app-lock
@@ -73,10 +76,7 @@ class _HostState extends ConsumerState<_Host> with DeleteAccountFlow<_Host> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextButton(
-            onPressed: signOut,
-            child: const Text('sign out'),
-          ),
+          TextButton(onPressed: signOut, child: const Text('sign out')),
           TextButton(
             onPressed: confirmDeleteAccount,
             child: const Text('delete'),
@@ -96,7 +96,12 @@ void main() {
     ).thenAnswer((_) async => throw failure);
 
     final container = ProviderContainer(
-      overrides: [isOfflineProvider.overrideWithValue(false)],
+      overrides: [
+        isOfflineProvider.overrideWithValue(false),
+        sessionFenceProvider.overrideWithValue(
+          SessionFence(readUid: () => 'test-uid'),
+        ),
+      ],
     );
     addTearDown(container.dispose);
     final notices = <AppNotice>[];
@@ -148,9 +153,7 @@ void main() {
 
   testWidgets(
     'a missing account during re-auth asks the user to log in again',
-    (
-      tester,
-    ) async {
+    (tester) async {
       // The whole point of the reauthentication context: without it this reads
       // "No account found with this email", naming an address the person never
       // typed on a screen that only asked for their password.
@@ -179,7 +182,12 @@ void main() {
     ).thenAnswer((_) async => throw const AuthFailureWrongCredentials());
 
     final container = ProviderContainer(
-      overrides: [isOfflineProvider.overrideWithValue(false)],
+      overrides: [
+        isOfflineProvider.overrideWithValue(false),
+        sessionFenceProvider.overrideWithValue(
+          SessionFence(readUid: () => 'test-uid'),
+        ),
+      ],
     );
     addTearDown(container.dispose);
 
@@ -278,6 +286,7 @@ void main() {
     required PushRegistrationController push,
     required PresenceSyncController presence,
     required LiveActivityRegistrationController liveActivity,
+    PendingPhotoExit? pendingPhotos,
   }) async {
     final service = _MockDeletionService();
     when(
@@ -291,6 +300,7 @@ void main() {
         push: push,
         presence: presence,
         liveActivity: liveActivity,
+        pendingPhotos: pendingPhotos,
       ),
     );
     addTearDown(container.dispose);
@@ -348,6 +358,86 @@ void main() {
   }
 
   testWidgets(
+    'pending photos can cancel account deletion after reauthentication',
+    (tester) async {
+      final c = wiredControllers();
+      final notices = await deleteFailingAfterTeardown(
+        tester,
+        error: Exception('deletion must not run'),
+        push: c.push,
+        presence: c.presence,
+        liveActivity: c.liveActivity,
+        pendingPhotos: const PendingPhotoExit(pendingCount: 1),
+      );
+      expect(find.text('Photos waiting to save'), findsOneWidget);
+      await tester.tap(find.text('Stay and retry'));
+      await tester.pumpAndSettle();
+
+      expect(notices, isEmpty);
+      verifyNever(c.push.unregisterCurrentDevice);
+      expect(find.text('delete'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  for (final discard in [false, true]) {
+    testWidgets(
+      'logout with pending photos requires explicit discard: $discard',
+      (tester) async {
+        final auth = _MockAuthService();
+        final deletion = _MockDeletionService();
+        final c = wiredControllers();
+        when(auth.signOut).thenAnswer((_) async {});
+        final container = ProviderContainer(
+          overrides: _exitOverrides(
+            auth: auth,
+            push: c.push,
+            presence: c.presence,
+            liveActivity: c.liveActivity,
+            pendingPhotos: const PendingPhotoExit(pendingCount: 2),
+          ),
+        );
+        addTearDown(container.dispose);
+        await tester.pumpWidget(
+          UncontrolledProviderScope(
+            container: container,
+            child: MaterialApp(
+              theme: lightTheme(),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              routes: {
+                '/login': (_) => const Scaffold(body: Text('login screen')),
+              },
+              home: _Host(service: deletion),
+            ),
+          ),
+        );
+        await tester.tap(find.text('sign out'));
+        await tester.pumpAndSettle();
+        verifyNever(auth.signOut);
+        verifyNever(c.push.unregisterCurrentDevice);
+        await tester.tap(
+          find.text(discard ? 'Discard photos and continue' : 'Stay and retry'),
+        );
+        await tester.pumpAndSettle();
+
+        if (discard) {
+          expect(find.text('login screen'), findsOneWidget);
+          verify(auth.signOut).called(1);
+        } else {
+          expect(find.text('sign out'), findsOneWidget);
+          verifyNever(auth.signOut);
+          verifyNever(c.push.unregisterCurrentDevice);
+          await tester.tap(find.text('sign out'));
+          await tester.pumpAndSettle();
+          expect(find.text('Photos waiting to save'), findsOneWidget);
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets(
     'a deletion that fails AFTER de-registration puts the device back',
     (tester) async {
       // The arm no test reached. Every existing case fails during RE-AUTH,
@@ -397,9 +487,7 @@ void main() {
 
   testWidgets(
     'delete flow cannot start while sign-out is already in progress',
-    (
-      tester,
-    ) async {
+    (tester) async {
       final service = _MockDeletionService();
       final auth = _MockAuthService();
       final push = _MockPush();

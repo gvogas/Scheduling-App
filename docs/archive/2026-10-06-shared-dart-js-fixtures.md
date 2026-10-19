@@ -1,5 +1,7 @@
 # Shared Dart/JS Fixtures Implementation Plan
 
+> **Status (swept 2026-10-18): COMPLETE 2026-10-07, archived** (`74fa736c..19713ea1`, tests only, no deploy). All nine mirrored pairs read one fixture each under `test/fixtures/shared/`; no divergence found.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Every hand-mirrored Dart/JS pair reads its worked examples from ONE JSON fixture under `test/fixtures/shared/`, so "keep the examples equal" is enforced by the file system instead of by discipline.

@@ -24,7 +24,8 @@ struct NextAppointmentIntent: AppIntent {
         }
         guard let next = snapshot.nextAppointment() else {
             return .result(dialog: IntentDialog(
-                stringLiteral: SiriStrings.noNext))
+                stringLiteral: snapshot.days.contains(where: \.isPartial)
+                    ? SiriStrings.partialSchedule : SiriStrings.noNext))
         }
         return .result(dialog: IntentDialog(
             stringLiteral: SiriStrings.next(next)))

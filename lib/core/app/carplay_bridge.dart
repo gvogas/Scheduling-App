@@ -2,6 +2,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:scheduling/core/app/app_sync_listeners.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/launchers/phone_call_launcher.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
@@ -18,13 +19,17 @@ class CarPlayBridge {
   CarPlayBridge(
     this._ref, {
     bool Function()? isIosPlatform,
+    SessionFence? session,
     MethodChannel channel = const MethodChannel(carPlayChannelName),
   }) : _isIosPlatform = isIosPlatform ?? defaultIsIosPlatform,
-       _channel = channel;
+       _channel = channel,
+       _session = session;
 
   final Ref _ref;
   final bool Function() _isIosPlatform;
   final MethodChannel _channel;
+  final SessionFence? _session;
+  int _generation = 0;
 
   bool _listening = false;
 
@@ -34,12 +39,14 @@ class CarPlayBridge {
   static const _snapshotChanged = 'snapshotChanged';
 
   void start() {
+    _generation++;
     if (!_isIosPlatform()) return;
     _channel.setMethodCallHandler(_handleCall);
     _listening = true;
   }
 
   void dispose() {
+    _generation++;
     if (!_listening) return;
     _channel.setMethodCallHandler(null);
     _listening = false;
@@ -91,17 +98,26 @@ class CarPlayBridge {
       return false;
     }
     final repository = _ref.read(appointmentsRepositoryProvider);
+    final lease = _session?.capture();
+    final generation = _generation;
+    if (_session != null && lease == null) return false;
     await repository.updateAppointmentStatus(id: id, status: status);
-    return true;
+    return generation == _generation && (_session == null || lease!.isCurrent);
   }
 
   /// The FINISHED `tel:` URI, so the stripping rule never forks into Swift.
   Future<String?> _dialableNumber(Object? arguments) async {
     final id = (_argumentsOf(arguments)['id'] as String?)?.trim() ?? '';
     if (id.isEmpty) return null;
+    final lease = _session?.capture();
+    final generation = _generation;
+    if (_session != null && lease == null) return null;
     final record = await _ref
         .read(appointmentsRepositoryProvider)
         .getAppointmentById(id);
+    if (generation != _generation || (_session != null && !lease!.isCurrent)) {
+      return null;
+    }
     final phone = record?.clientPhone.trim() ?? '';
     return phone.isEmpty ? null : dialableUri(phone).toString();
   }
@@ -111,4 +127,6 @@ class CarPlayBridge {
       (arguments as Map?)?.cast<String, dynamic>() ?? const {};
 }
 
-final carPlayBridgeProvider = Provider<CarPlayBridge>(CarPlayBridge.new);
+final carPlayBridgeProvider = Provider<CarPlayBridge>(
+  (ref) => CarPlayBridge(ref, session: ref.watch(sessionFenceProvider)),
+);

@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import 'package:scheduling/core/images/image_magic.dart';
 import 'package:scheduling/core/images/image_upload_failure.dart';
+import 'package:scheduling/core/images/image_upload_intent.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/performance/performance_trace.dart';
 import 'package:scheduling/core/validators/text_limits.dart';
@@ -68,6 +70,71 @@ class ImageStorageService {
       fileName: fileName,
       uploadedAt: uploadedAt,
     );
+  }
+
+  Future<AppointmentImage> uploadQueuedImage(
+    String appointmentId,
+    File file,
+    ImageUploadIntent intent, {
+    bool Function()? isCurrent,
+  }) async {
+    void checkCurrent() {
+      if (isCurrent != null && !isCurrent()) {
+        throw StateError('photo upload session ended');
+      }
+    }
+
+    checkCurrent();
+    final image = intent.image;
+    final fileName = image.fileName ?? '';
+    final expectedPrefix = 'appointments/$appointmentId/images/';
+    if (image.storagePath != '$expectedPrefix${image.fileName}' ||
+        !RegExp(
+          '^${RegExp.escape(intent.uploadId)}\\.(jpg|png)\$',
+        ).hasMatch(fileName)) {
+      throw StateError('invalid queued photo destination');
+    }
+    if (!await _isValidImageFile(file)) {
+      throw const ImageUploadFailureInvalidFormat();
+    }
+    final size = await file.length();
+    if (size > maxUploadBytes) throw const ImageUploadFailureTooLarge();
+    final digest = await sha256.bind(file.openRead()).first;
+    checkCurrent();
+    if (size != intent.byteLength || digest.toString() != intent.digest) {
+      throw StateError('queued photo bytes changed');
+    }
+    final ref = _storage.ref(image.storagePath);
+    FullMetadata? existing;
+    try {
+      existing = await ref.getMetadata();
+    } on FirebaseException catch (error) {
+      if (error.code != 'object-not-found') rethrow;
+    }
+    checkCurrent();
+    if (existing != null) {
+      final metadata = existing.customMetadata ?? const <String, String>{};
+      if (existing.size != size ||
+          intent.metadata.entries.any(
+            (item) => metadata[item.key] != item.value,
+          )) {
+        throw StateError('queued photo object does not match its upload');
+      }
+      return image;
+    }
+    await PerformanceTrace.measure(
+      PerformanceOperation.photoUpload,
+      () => ref.putFile(
+        file,
+        SettableMetadata(
+          contentType: _contentTypeFor(fileName),
+          cacheControl: 'private, max-age=31536000',
+          customMetadata: intent.metadata,
+        ),
+      ),
+    );
+    checkCurrent();
+    return image;
   }
 
   Future<void> _deleteImage(AppointmentImage image) async {

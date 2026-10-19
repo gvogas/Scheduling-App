@@ -4,8 +4,9 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
-
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
+import 'package:scheduling/core/platform/app_group_mirror_store.dart';
 import 'package:scheduling/features/home_widget/application/widget_sync_service.dart'
     show widgetAppGroupId;
 
@@ -18,10 +19,12 @@ const scheduleSnapshotKey = 'schedule_snapshot';
 /// doesn't call `HomeWidget.updateWidget` — the extension just reads this
 /// on demand.
 class ScheduleSnapshotService {
-  ScheduleSnapshotService({AppLogger? logger})
-    : _logger = logger ?? AppLogger();
+  ScheduleSnapshotService({AppLogger? logger, SessionFence? session})
+    : _logger = logger ?? AppLogger(),
+      _session = session;
 
   final AppLogger _logger;
+  final SessionFence? _session;
 
   /// Signature of the last successful write, used to dedup repeat writes.
   /// Null means nothing's been written yet; [_clearedState] means we wiped it.
@@ -31,13 +34,25 @@ class ScheduleSnapshotService {
   Future<void> writeSnapshot(Map<String, dynamic> payload) async {
     if (!Platform.isIOS) return;
     final signature = _signatureOf(payload);
-    if (signature == _lastState) return;
+    final lease = _session?.capture();
+    if (_session != null && lease == null) return;
+    if (_session == null && signature == _lastState) return;
     try {
       await HomeWidget.setAppGroupId(widgetAppGroupId);
-      await HomeWidget.saveWidgetData<String>(
-        scheduleSnapshotKey,
-        jsonEncode(payload),
-      );
+      if (_session == null) {
+        await HomeWidget.saveWidgetData<String>(
+          scheduleSnapshotKey,
+          jsonEncode(payload),
+        );
+      } else {
+        await appGroupMirrorStore.foreground(
+          scheduleSnapshotKey,
+          payload,
+          lease!.uid,
+          () => lease.isCurrent,
+        );
+        if (!lease.isCurrent) return;
+      }
       _lastState = signature;
     } catch (e, st) {
       _logger.warn('SIRI snapshot write failed', e, st);
@@ -48,10 +63,21 @@ class ScheduleSnapshotService {
   /// session in the shared container.
   Future<void> clearSnapshot() async {
     if (!Platform.isIOS) return;
-    if (_lastState == _clearedState) return;
+    final current = _session?.captureBoundary() ?? () => true;
+    if (_session == null && _lastState == _clearedState) return;
     try {
       await HomeWidget.setAppGroupId(widgetAppGroupId);
-      await HomeWidget.saveWidgetData<String>(scheduleSnapshotKey, null);
+      if (_session == null) {
+        await HomeWidget.saveWidgetData<String>(scheduleSnapshotKey, null);
+      } else {
+        await appGroupMirrorStore.foreground(
+          scheduleSnapshotKey,
+          null,
+          null,
+          current,
+        );
+        if (!current()) return;
+      }
       _lastState = _clearedState;
     } catch (e, st) {
       _logger.warn('SIRI snapshot clear failed', e, st);
@@ -79,5 +105,8 @@ extension ScheduleSnapshotApply on ScheduleSnapshotService {
 }
 
 final scheduleSnapshotServiceProvider = Provider<ScheduleSnapshotService>(
-  (ref) => ScheduleSnapshotService(logger: ref.watch(loggerProvider)),
+  (ref) => ScheduleSnapshotService(
+    logger: ref.watch(loggerProvider),
+    session: ref.watch(sessionFenceProvider),
+  ),
 );

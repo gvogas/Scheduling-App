@@ -112,6 +112,11 @@ struct SnapshotDay: Codable, Hashable {
     /// Device-local calendar day, `yyyy-MM-dd`.
     let date: String
     let appointments: [SnapshotAppointment]
+    var totalCount: Int? = nil
+    var truncated: Bool? = nil
+    var coverageComplete: Bool? = nil
+
+    var isPartial: Bool { truncated == true || coverageComplete != true }
 }
 
 struct ScheduleSnapshot: Codable {
@@ -123,6 +128,8 @@ struct ScheduleSnapshot: Codable {
     /// is the ordinary case and rings nothing.
     let viewer: String?
     let days: [SnapshotDay]
+    var ownerUid: String? = nil
+    var sessionEpoch: String? = nil
 
     var isAdmin: Bool { role == "admin" }
 
@@ -174,7 +181,15 @@ struct ScheduleSnapshot: Codable {
             let snapshot = try? JSONDecoder().decode(
                 ScheduleSnapshot.self, from: data)
         else { return nil }
-        guard accepts(version: snapshot.version) else { return nil }
+          guard accepts(version: snapshot.version) else { return nil }
+          guard let rawOwner = defaults.string(forKey: "schedule_session_owner"),
+                let ownerData = rawOwner.data(using: .utf8),
+                let binding = try? JSONSerialization.jsonObject(with: ownerData) as? [String: Any],
+                let uid = binding["ownerUid"] as? String,
+                let epoch = binding["epoch"] as? String,
+                snapshot.ownerUid == uid, snapshot.sessionEpoch == epoch else { return nil }
+          let age = Date().timeIntervalSince1970 - snapshot.generatedAt / 1000
+          guard age >= -300, age <= 24 * 60 * 60 else { return nil }
         return snapshot
     }
 

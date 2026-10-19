@@ -43,6 +43,7 @@ jobs:
   gate:
     name: Main-only ref check
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     outputs:
@@ -99,6 +100,7 @@ jobs:
     name: Deploy to production
     needs: [gate, verify]
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     # The only job that can mint a GCP token (the WIF provider requires it).
     environment: production
     env:
@@ -106,9 +108,17 @@ jobs:
     permissions:
       contents: read
       id-token: write
+      actions: read
     outputs:
       count: ${{ steps.after.outputs.count }}
     steps:
+      - name: Require a fresh deployment dispatch
+        run: |
+          if [ "$GITHUB_RUN_ATTEMPT" != "1" ]; then
+            echo "::error::Dispatch a fresh deployment instead of rerunning historical release jobs."
+            exit 1
+          fi
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ needs.gate.outputs.sha }}
@@ -155,6 +165,12 @@ jobs:
           echo "rest=$rest" >> "$GITHUB_OUTPUT"
           case "$rest" in *functions*) echo "functions=true" >> "$GITHUB_OUTPUT" ;; esac
 
+      - name: Read-only target permission preflight
+        timeout-minutes: 3
+        env:
+          TARGETS: ${{ inputs.targets }}
+        run: node functions/scripts/deploy/preflight.js "$TARGETS" "$PROJECT_ID" deployment-preflight.json
+
       - name: Export diff (deletions abort non-interactively)
         if: steps.plan.outputs.functions == 'true'
         run: |
@@ -162,24 +178,14 @@ jobs:
           node functions/scripts/deploy/export_diff.js functions/index.js live-before.json
 
       - name: Allowlists are a superset of the last deploy
+        timeout-minutes: 3
         if: steps.plan.outputs.functions == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          # Check against BOTH logs: dev's rows can lead main's, but only main's copy is protected.
-          git show origin/dev:docs/DEPLOYMENT.md > dev-deploy-log.md 2>/dev/null || : > dev-deploy-log.md
-          checked=""
-          for log in docs/DEPLOYMENT.md dev-deploy-log.md; do
-            base=$(node functions/scripts/deploy/deploy_log.js last-sha "$log")
-            if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-              echo "::warning::No usable last-deploy sha in $log ('$base')."
-              continue
-            fi
-            case " $checked " in *" $base "*) continue ;; esac
-            (cd functions && node scripts/deploy/allowlist_diff.js "$base")
-            checked="$checked $base"
-          done
-          if [ -z "$checked" ]; then
-            echo "::warning::No usable last-deploy sha in either Deploy log; allowlist check skipped. Do DEPLOYMENT.md §4(a) by hand."
-          fi
+          base=$(node functions/scripts/deploy/baseline.js resolve docs/deployment/last_verified_backend.json "$GITHUB_REPOSITORY")
+          git cat-file -e "$base^{commit}"
+          (cd functions && node scripts/deploy/allowlist_diff.js "$base")
 
       - name: TTL drift report
         if: steps.plan.outputs.indexes != ''
@@ -242,6 +248,23 @@ jobs:
           node functions/scripts/deploy/export_diff.js functions/index.js live-after.json --after-deploy
           echo "count=$(jq '.result | length' live-after.json)" >> "$GITHUB_OUTPUT"
 
+      - name: Verify deployed health and critical configuration
+        timeout-minutes: 15
+        if: steps.plan.outputs.functions == 'true'
+        env:
+          VERIFIED_SHA: ${{ needs.gate.outputs.sha }}
+        run: node functions/scripts/deploy/verify_config.js functions/index.js "$PROJECT_ID" deployed-config.json "$VERIFIED_SHA" "$GITHUB_RUN_ID"
+
+      - name: Preserve sanitized verification evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: deployed-configuration-${{ github.run_id }}
+          path: |
+            deployed-config.json
+            deployment-preflight.json
+          if-no-files-found: ignore
+
       - name: Checklist the workflow cannot enforce
         if: always()
         run: |
@@ -261,6 +284,7 @@ jobs:
     name: Open the deploy-log PR
     needs: [gate, deploy]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     # No environment: this job cannot mint a GCP token.
     permissions:
       contents: write
@@ -296,11 +320,18 @@ jobs:
             dev-checkout/docs/DEPLOYMENT.md \
             "--date=$(date -u +%Y-%m-%d)" "--sha=$SHA" "--targets=$TARGETS" \
             "--count=$COUNT" "--run-url=$RUN_URL" "--notes=$NOTES"
+          case "$TARGETS" in
+            functions|all)
+              node tools-src/functions/scripts/deploy/baseline.js record dev-checkout/docs/deployment/last_verified_backend.json "$GITHUB_REPOSITORY" "$SHA" "$GITHUB_RUN_ID"
+              ;;
+          esac
 
       - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
         with:
           path: dev-checkout
-          add-paths: docs/DEPLOYMENT.md
+          add-paths: |
+            docs/DEPLOYMENT.md
+            docs/deployment/last_verified_backend.json
           base: dev
           branch: deploy-log/${{ github.run_id }}
           title: "Record the ${{ inputs.targets }} deploy of ${{ needs.gate.outputs.sha }}"

@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction, Tristate;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -49,6 +51,39 @@ Future<void> _pump(
 void main() {
   final active = _employee('e1', 'Ada Lovelace');
   final disabled = _employee('e2', 'Grace Hopper');
+
+  testWidgets('selected crew can be toggled through the semantic action', (
+    tester,
+  ) async {
+    EmployeeRecord? toggled;
+    await _pump(
+      tester,
+      allEmployees: [active],
+      selectedEmployees: [active],
+      onToggle: (employee) => toggled = employee,
+    );
+    await tester.pumpAndSettle();
+    final node = tester.getSemantics(find.bySemanticsLabel(active.name));
+    expect(node.getSemanticsData().flagsCollection.isSelected, Tristate.isTrue);
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    node.owner!.performAction(node.id, SemanticsAction.tap);
+    await tester.pumpAndSettle();
+    expect(toggled, active);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('read-only crew have no semantic activation', (tester) async {
+    await _pump(
+      tester,
+      allEmployees: [active],
+      selectedEmployees: [active],
+      selectable: false,
+    );
+    await tester.pumpAndSettle();
+    final node = tester.getSemantics(find.bySemanticsLabel(active.name));
+    expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('every active employee is offered', (tester) async {
     await _pump(tester, allEmployees: [active], selectedEmployees: const []);
@@ -111,6 +146,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(toggled, isEmpty);
+      final node = tester.getSemantics(find.bySemanticsLabel(active.name));
+      expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isFalse);
+      expect(
+        node.getSemanticsData().flagsCollection.isEnabled,
+        Tristate.isFalse,
+      );
     });
 
     testWidgets('an assignee booked on another job stays tappable', (
@@ -150,9 +191,7 @@ void main() {
       expect(toggled, ['e1']);
     });
 
-    testWidgets('no availability text renders under the chips', (
-      tester,
-    ) async {
+    testWidgets('no availability text renders under the chips', (tester) async {
       final alan = _employee('e3', 'Alan Turing');
       await _pump(
         tester,

@@ -50,13 +50,14 @@ struct DayScheduleIntent: AppIntent {
         let appointments = bucket.appointments
         guard !appointments.isEmpty else {
             return .result(dialog: IntentDialog(
-                stringLiteral: SiriStrings.emptyDayFor(
+                stringLiteral: bucket.isPartial ? SiriStrings.partialSchedule : SiriStrings.emptyDayFor(
                     targetDate, admin: snapshot.isAdmin)))
         }
         let intro = SiriStrings.scheduleIntroFor(
             appointments.count, date: targetDate, admin: snapshot.isAdmin)
         let lines = appointments.map(SiriStrings.scheduleLine)
-        let spoken = ([intro] + lines).joined(separator: " ")
+        let tail = bucket.isPartial ? [SiriStrings.partialSchedule] : []
+        let spoken = ([intro] + lines + tail).joined(separator: " ")
         return .result(dialog: IntentDialog(stringLiteral: spoken))
     }
 }

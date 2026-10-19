@@ -50,6 +50,7 @@ struct Job: Codable, Hashable {
     // rather than sending 1 of 1.
     let dayIndex: Int?
     let dayCount: Int?
+    var endTime: String? = nil
 
     /// True for an all-day block, which stores a real midnight–23:59 span but
     /// must never be spoken as a clock time.
@@ -92,20 +93,54 @@ struct SchedulePayload: Codable {
     let rolloverAt: String?
     let todayJobs: [Job]?
     let tomorrowJobs: [Job]?
+    var ownerUid: String? = nil
+    var sessionEpoch: String? = nil
 
     /// The day (today or tomorrow) the widget should render at `date`, resolved
     /// purely from the payload so a future timeline entry can flip on-device.
     func resolved(at date: Date) -> DaySchedule {
-        if let rollover = parseInstant(rolloverAt), date >= rollover {
+        guard matchesCurrentOwner else {
+            return DaySchedule(headerDate: date, isTomorrow: false, jobs: [], needsSync: true)
+        }
+        let calendar = Calendar.current
+        let today = parseInstant(todayDate)
+        let tomorrow = parseInstant(tomorrowDate)
+        let onTomorrow = tomorrow.map { calendar.isDate(date, inSameDayAs: $0) } ?? false
+        let onToday = today.map { calendar.isDate(date, inSameDayAs: $0) } ?? false
+        guard onToday || onTomorrow else {
+            return DaySchedule(headerDate: date, isTomorrow: false, jobs: [], needsSync: true)
+        }
+        func remaining(_ jobs: [Job]) -> [Job] {
+            jobs.filter { job in
+                guard !["done", "completed", "cancelled"].contains(job.status.lowercased()) else { return false }
+                if job.allDay {
+                    let fallbackEnd = calendar.date(byAdding: .day, value: 1,
+                        to: calendar.startOfDay(for: job.start ?? date)) ?? date
+                    return (parseInstant(job.endTime) ?? fallbackEnd) > date
+                }
+                return (job.start ?? .distantPast) > date
+            }
+        }
+        if onTomorrow || (parseInstant(rolloverAt).map { date >= $0 } ?? false) {
             return DaySchedule(
                 headerDate: parseInstant(tomorrowDate) ?? date,
-                isTomorrow: true,
-                jobs: tomorrowJobs ?? [])
+                isTomorrow: !onTomorrow,
+                jobs: remaining(tomorrowJobs ?? []))
         }
         return DaySchedule(
             headerDate: parseInstant(todayDate) ?? date,
             isTomorrow: false,
-            jobs: todayJobs ?? [])
+            jobs: remaining(todayJobs ?? []))
+    }
+
+    private var matchesCurrentOwner: Bool {
+        guard let defaults = UserDefaults(suiteName: appGroupId),
+              let raw = defaults.string(forKey: "schedule_session_owner"),
+              let data = raw.data(using: .utf8),
+              let binding = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let uid = binding["ownerUid"] as? String,
+              let epoch = binding["epoch"] as? String else { return false }
+        return ownerUid == uid && sessionEpoch == epoch
     }
 
     static func load() -> SchedulePayload? {
@@ -123,6 +158,7 @@ struct DaySchedule {
     let headerDate: Date
     let isTomorrow: Bool
     let jobs: [Job]
+    var needsSync = false
 
     /// An all-day block is listed, but it is never "next" while a timed job
     /// remains — it starts at midnight, so it would otherwise own the
@@ -163,12 +199,18 @@ struct Provider: TimelineProvider {
         // labels refresh), and — crucially — one at the rollover instant so the
         // widget flips from today to tomorrow with the app closed.
         var dates: Set<Date> = [now]
+        for offset in 1...2 {
+            if let midnight = Calendar.current.date(byAdding: .day, value: offset,
+                to: Calendar.current.startOfDay(for: now)) { dates.insert(midnight) }
+        }
         if let payload = payload {
             for job in payload.todayJobs ?? [] {
                 if let start = job.start, start > now { dates.insert(start) }
+                if let end = parseInstant(job.endTime), end > now { dates.insert(end) }
             }
             for job in payload.tomorrowJobs ?? [] {
                 if let start = job.start, start > now { dates.insert(start) }
+                if let end = parseInstant(job.endTime), end > now { dates.insert(end) }
             }
             if let rollover = parseInstant(payload.rolloverAt),
                 rollover > now {
@@ -384,6 +426,9 @@ struct ScheduleWidgetEntryView: View {
 
     @ViewBuilder
     private var content: some View {
+        if day.needsSync || entry.payload == nil {
+            Text(french ? "Ouvrez ES Pro pour actualiser l'horaire." : "Open ES Pro to refresh your schedule.")
+        } else {
         switch family {
         case .systemSmall:
             // systemSmall can't host per-row Links, so the whole widget links
@@ -395,6 +440,7 @@ struct ScheduleWidgetEntryView: View {
             ListView(day: day, french: french, maxRows: 6)
         default:
             ListView(day: day, french: french, maxRows: 3)
+        }
         }
     }
 }

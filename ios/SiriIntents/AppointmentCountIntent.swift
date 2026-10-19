@@ -22,7 +22,14 @@ struct AppointmentCountIntent: AppIntent {
             return .result(dialog: IntentDialog(
                 stringLiteral: SiriStrings.noData))
         }
-        let count = snapshot.today?.appointments.count ?? 0
+        guard let bucket = snapshot.today else {
+            return .result(dialog: IntentDialog(stringLiteral: SiriStrings.noData))
+        }
+        if bucket.coverageComplete != true {
+            return .result(dialog: IntentDialog(
+                stringLiteral: SiriStrings.partialCount(bucket.appointments.count)))
+        }
+        let count = bucket.totalCount ?? bucket.appointments.count
         return .result(dialog: IntentDialog(
             stringLiteral: SiriStrings.count(count, admin: snapshot.isAdmin)))
     }

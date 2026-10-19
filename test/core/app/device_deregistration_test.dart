@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/core/app/device_deregistration.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/features/live_activity/application/live_activity_registration_controller.dart';
 import 'package:scheduling/features/notifications/application/push_registration_controller.dart';
 import 'package:scheduling/features/presence/application/presence_sync_controller.dart';
@@ -53,7 +56,7 @@ void main() {
   /// Pumps a widget holding a real `WidgetRef` and runs the function through
   /// it — the signature is `WidgetRef`, not `Ref`, because all three exits are
   /// widget-layer.
-  Future<void> run(WidgetTester tester) async {
+  Future<void> run(WidgetTester tester, {SessionFence? session}) async {
     late WidgetRef captured;
     await tester.pumpWidget(
       ProviderScope(
@@ -63,7 +66,7 @@ void main() {
           liveActivityRegistrationControllerProvider.overrideWithValue(
             liveActivity,
           ),
-          ...accountExitStubOverrides(calls: calls),
+          ...accountExitStubOverrides(calls: calls, session: session),
         ],
         child: Consumer(
           builder: (context, ref, _) {
@@ -75,6 +78,40 @@ void main() {
     );
     await deregisterThisDevice(DeviceDeregistrationDeps.from(captured.read));
   }
+
+  testWidgets(
+    'exit fences work before a held push cleanup and cannot clear the next account',
+    (tester) async {
+      String? uid = 'A';
+      final session = SessionFence(readUid: () => uid);
+      final oldWork = session.capture()!;
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      when(push.unregisterCurrentDevice).thenAnswer((_) {
+        calls.add('push');
+        entered.complete();
+        return release.future;
+      });
+      final pending = run(tester, session: session);
+      await entered.future;
+      expect(oldWork.isCurrent, isFalse);
+      expect(session.capture(), isNull);
+      uid = 'B';
+      release.complete();
+      await pending;
+      expect(calls, [
+        'push',
+        'presence',
+        'liveActivity',
+        'imageCache',
+        'imageUploads',
+        'clients',
+        'appointments',
+      ]);
+      expect(session.capture()!.uid, 'B');
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'tears down push, presence and Live Activity, then every local cache',
@@ -98,6 +135,32 @@ void main() {
       ]);
     },
   );
+
+  testWidgets('a stalled remote cleanup cannot hold exit past its budget', (
+    tester,
+  ) async {
+    final entered = Completer<void>();
+    final stalled = Completer<void>();
+    when(push.unregisterCurrentDevice).thenAnswer((_) {
+      calls.add('push');
+      entered.complete();
+      return stalled.future;
+    });
+    var completed = false;
+    final pending = run(tester).then((_) => completed = true);
+    await entered.future;
+    expect(
+      calls,
+      containsAll(['presence', 'liveActivity', 'clients', 'appointments']),
+    );
+    expect(completed, isFalse);
+    await tester.pump(deviceCleanupBudget);
+    await pending;
+    expect(completed, isTrue);
+    stalled.completeError(Exception('late cleanup error'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('a failing first step does not skip the other two', (
     tester,

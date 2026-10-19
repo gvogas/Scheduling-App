@@ -16,10 +16,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.event.pull_request.number || inputs.ref || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
+
 jobs:
   flutter:
     name: Flutter analyze + test
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -45,12 +50,21 @@ jobs:
       # supply here. The step this replaced copied `dev/.env.example`, deleted
       # in that same retirement, and failed EVERY run from then on.
       - name: Install dependencies
-        run: flutter pub get
+        run: flutter pub get --enforce-lockfile
+
+      - name: Verify generated models
+        run: |
+          dart run build_runner build --delete-conflicting-outputs
+          git diff --exit-code -- pubspec.lock 'lib/**/*.freezed.dart'
+          test -z "$(git ls-files --others --exclude-standard -- 'lib/**/*.freezed.dart')"
 
       # pubspec.yaml sets `generate: true`, so pub get already runs gen-l10n;
       # run it explicitly anyway so a stale tool cache can't skip it.
       - name: Generate localizations
         run: flutter gen-l10n
+
+      - name: Verify isolated native configuration helper
+        run: python3 tool/test_prepare_native_ci.py
 
       # The repo's baseline is `No issues found!` — this is an exact gate, not
       # a filtered one. Any lint that appears here is new.
@@ -81,6 +95,7 @@ jobs:
   functions:
     name: Cloud Functions lint + test
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     defaults:
       run:
         working-directory: functions
@@ -127,4 +142,75 @@ jobs:
         with:
           name: functions-coverage
           path: functions/coverage/lcov.info
+          if-no-files-found: warn
+
+  native:
+    name: iOS simulator + RunnerTests
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Determine native verification scope
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          VERIFIED_REF: ${{ inputs.ref }}
+        run: |
+          needed=true
+          if [ -z "$VERIFIED_REF" ] && git cat-file -e "$BASE_SHA^{commit}" 2>/dev/null; then
+            git diff --name-only "$BASE_SHA" HEAD > "$RUNNER_TEMP/native-changed-paths"
+            if ! grep -Eq '^(ios/|lib/|functions/|test/fixtures/shared/|pubspec\.|\.github/workflows/ci\.yml|tool/prepare_native_ci\.py)' "$RUNNER_TEMP/native-changed-paths"; then
+              needed=false
+            fi
+          fi
+          echo "needed=$needed" >> "$GITHUB_OUTPUT"
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        if: steps.scope.outputs.needed == 'true'
+        with:
+          flutter-version: 3.47.2
+          channel: stable
+          cache: true
+
+      - name: Verify native toolchain
+        if: steps.scope.outputs.needed == 'true'
+        run: |
+          xcodebuild -version | tee native-toolchain.txt
+          grep -qx 'Xcode 26.3' native-toolchain.txt
+          grep -qx 'Build version 17C529' native-toolchain.txt
+          xcrun --sdk iphonesimulator --show-sdk-version
+
+      - name: Prepare isolated simulator configuration
+        if: steps.scope.outputs.needed == 'true'
+        run: |
+          flutter pub get --enforce-lockfile
+          python3 tool/prepare_native_ci.py
+          flutter build ios --simulator --debug --config-only --no-codesign --dart-define-from-file=build/native-ci/firebase.json
+
+      - name: Build extensions and run RunnerTests
+        if: steps.scope.outputs.needed == 'true'
+        run: |
+          set -o pipefail
+          simulator=$(xcrun simctl create Scheduling-Audit-CI com.apple.CoreSimulator.SimDeviceType.iPhone-16 com.apple.CoreSimulator.SimRuntime.iOS-26-2)
+          xcrun simctl boot "$simulator"
+          xcrun simctl bootstatus "$simulator" -b
+          xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Debug -destination "id=$simulator" -derivedDataPath build/native-derived -resultBundlePath build/RunnerTests.xcresult -onlyUsePackageVersionsFromResolvedFile CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build test 2>&1 | tee build/native-ci/xcodebuild.log
+          git diff --exit-code -- ios/Runner.xcworkspace/xcshareddata/swiftpm/Package.resolved ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+
+      - name: Upload native diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: native-verification
+          path: |
+            build/RunnerTests.xcresult
+            build/native-ci/xcodebuild.log
+            native-toolchain.txt
           if-no-files-found: warn

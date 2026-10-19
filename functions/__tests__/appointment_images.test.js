@@ -91,6 +91,7 @@ function makeDb(config = {}) {
     const parentPath = `${name}/${id}`;
     return {
       _path: parentPath,
+      get: async () => ({exists: true}),
       update: async (patch) => {
         if (config.updateError) throw config.updateError;
         state.updates.push({path: parentPath, patch});
@@ -108,6 +109,15 @@ function makeDb(config = {}) {
     };
   };
   const db = {
+    runTransaction: async (body) => {
+      const writes = [];
+      const result = await body({
+        get: (ref) => ref.get(),
+        update: (ref, patch) => writes.push({ref, patch}),
+      });
+      for (const {ref, patch} of writes) await ref.update(patch);
+      return result;
+    },
     recursiveDelete: async (ref) => {
       if (config.deleteError) throw config.deleteError;
       state.recursiveDeletes.push(ref._path);

@@ -3,6 +3,7 @@
 // LayoutBuilder, so the title has to stay a plain Text.
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:scheduling/core/animations/tap_scale.dart';
@@ -95,17 +96,19 @@ AppointmentRecord _overdueAppt() => AppointmentRecord(
   employeeIds: const ['e1'],
 );
 
-Widget _wrap(Widget child, {double width = 375}) => MaterialApp(
-  localizationsDelegates: const [
-    AppLocalizations.delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ],
-  supportedLocales: AppLocalizations.supportedLocales,
-  theme: lightTheme(),
-  home: Scaffold(
-    body: Center(
-      child: SizedBox(width: width, child: child),
+Widget _wrap(Widget child, {double width = 375}) => ProviderScope(
+  child: MaterialApp(
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+    ],
+    supportedLocales: AppLocalizations.supportedLocales,
+    theme: lightTheme(),
+    home: Scaffold(
+      body: Center(
+        child: SizedBox(width: width, child: child),
+      ),
     ),
   ),
 );

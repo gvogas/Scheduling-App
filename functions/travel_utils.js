@@ -229,6 +229,7 @@ async function resolveReminderForAssignee(deps, args) {
     employeeDocId,
     kind,
     buildMsg: (locale) => buildNotificationMessage(kind, ctx, locale),
+    validUntil: startMs,
     nowDate,
     label: "reminder",
     roles: TIMED_RECIPIENT_ROLES,

@@ -2,6 +2,7 @@
 // being sorted open-then-closed, so it is pinned here rather than in the card.
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:scheduling/core/theme/themes.dart';
@@ -24,27 +25,29 @@ AppointmentDaySlice _slice({required String id, required String status}) {
   return sliceFor(record, _day)!;
 }
 
-Widget _wrap(List<AppointmentDaySlice> events) => MaterialApp(
-  localizationsDelegates: const [
-    AppLocalizations.delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ],
-  supportedLocales: AppLocalizations.supportedLocales,
-  theme: lightTheme(),
-  home: Scaffold(
-    body: CustomScrollView(
-      slivers: [
-        AgendaSliverList(
-          events: events,
-          nameMap: const {},
-          colorMap: const {},
-          onAppointmentTap: (_) {},
-          // An ordinary February day, so no holiday row joins the rows
-          // under test.
-          day: DateTime(2026, 2, 10),
-        ),
-      ],
+Widget _wrap(List<AppointmentDaySlice> events) => ProviderScope(
+  child: MaterialApp(
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+    ],
+    supportedLocales: AppLocalizations.supportedLocales,
+    theme: lightTheme(),
+    home: Scaffold(
+      body: CustomScrollView(
+        slivers: [
+          AgendaSliverList(
+            events: events,
+            nameMap: const {},
+            colorMap: const {},
+            onAppointmentTap: (_) {},
+            // An ordinary February day, so no holiday row joins the rows
+            // under test.
+            day: DateTime(2026, 2, 10),
+          ),
+        ],
+      ),
     ),
   ),
 );

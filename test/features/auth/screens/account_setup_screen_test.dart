@@ -20,9 +20,12 @@ import 'package:scheduling/features/auth/screens/account_setup_screen.dart';
 import 'package:scheduling/features/auth/services/auth_service.dart';
 import 'package:scheduling/features/auth/widgets/auth_banner.dart';
 import 'package:scheduling/features/auth/widgets/auth_fields.dart';
+import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
+
+import '../../../support/account_exit_stubs.dart';
 
 class _MockAuthService extends Mock implements AuthService {}
 
@@ -46,9 +49,11 @@ Widget _harness({
   required AuthService auth,
   bool offline = false,
   SignInOutcome? resumeOutcome,
+  PendingPhotoExit? pendingPhotos,
 }) {
   return ProviderScope(
     overrides: [
+      ...accountExitStubOverrides(pendingPhotos: pendingPhotos),
       isOfflineProvider.overrideWithValue(offline),
       if (resumeOutcome != null)
         signInControllerProvider.overrideWith(
@@ -236,6 +241,31 @@ void main() {
   });
 
   group('the setup sign-out path', () {
+    testWidgets('pending photos can keep the user signed in during setup', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _harness(
+          auth: auth,
+          pendingPhotos: const PendingPhotoExit(pendingCount: 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final logOut = find.widgetWithText(TextButton, 'Log out');
+      await tester.ensureVisible(logOut);
+      await tester.pumpAndSettle();
+      await tester.tap(logOut);
+      // The setup submit button remains busy behind the modal.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Stay and retry'));
+      await tester.pumpAndSettle();
+
+      verifyNever(() => auth.signOut());
+      expect(find.text('login screen'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('signing out returns to login', (tester) async {
       when(() => auth.signOut()).thenAnswer((_) async {});
       await tester.pumpWidget(_harness(auth: auth));

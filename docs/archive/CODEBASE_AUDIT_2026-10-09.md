@@ -1,5 +1,7 @@
 # Codebase Audit — 2026-10-09
 
+**Status (swept 2026-10-18): superseded, archived.** S1 and B2 deployed 2026-10-11 (`0ab3f05c`); the app half rides 1.64.2+96. Open: B1, the optional prod `backfill-search-tokens` run once 1.64 is on every phone, carried in `docs/plans/README.md` §6.
+
 Scope: whole repo (`lib/`, `functions/`, `firestore.rules`, `storage.rules`,
 `.github/workflows/`, `test/`). Baseline: `dev` @ `af97733f`, clean tree.
 Emphasis on the 42 commits since the 2026-10-07 audit baseline

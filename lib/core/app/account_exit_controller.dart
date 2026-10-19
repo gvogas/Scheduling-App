@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:scheduling/core/app/device_deregistration.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/features/auth/services/auth_service.dart';
+import 'package:scheduling/features/calendar/application/photo_upload_notifier.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
 import 'package:scheduling/shared/widgets/feedback/error_snack_bar.dart';
@@ -16,6 +18,13 @@ final accountExitControllerProvider = Provider<AccountExitController>(
     deregisterDevice: () =>
         deregisterThisDevice(DeviceDeregistrationDeps.from(ref.read)),
     isSignedIn: () => ref.read(firebaseAuthProvider).currentUser != null,
+    sessionForExit: () => ref.read(sessionFenceProvider),
+    pendingPhotoCount: () => ref
+        .read(photoUploadNotifierProvider)
+        .pending
+        .value
+        .values
+        .fold<int>(0, (sum, count) => sum + count),
   ),
 );
 
@@ -29,15 +38,21 @@ class AccountExitController {
     required AuthService authService,
     required Future<void> Function() deregisterDevice,
     required bool Function() isSignedIn,
+    SessionFence Function()? sessionForExit,
+    int Function()? pendingPhotoCount,
   }) : _logger = logger,
        _authService = authService,
        _deregisterDevice = deregisterDevice,
-       _isSignedIn = isSignedIn;
+       _isSignedIn = isSignedIn,
+       _sessionForExit = sessionForExit,
+       _pendingPhotoCount = pendingPhotoCount;
 
   final AppLogger _logger;
   final AuthService _authService;
   final Future<void> Function() _deregisterDevice;
   final bool Function() _isSignedIn;
+  final SessionFence Function()? _sessionForExit;
+  final int Function()? _pendingPhotoCount;
   bool _isHandlingAccountExit = false;
 
   /// De-registers this device, signs out, and lands on login with a notice.
@@ -60,14 +75,24 @@ class AccountExitController {
     _isHandlingAccountExit = true;
 
     var exitScheduled = false;
+    SessionFence? session;
+    SessionLease? lease;
     try {
-      final message = selectMessage(AppLocalizations.of(navContext));
+      final l10n = AppLocalizations.of(navContext);
+      final message = [
+        selectMessage(l10n),
+        if ((_pendingPhotoCount?.call() ?? 0) > 0)
+          l10n.account_forcedExitPhotos,
+      ].join(' ');
+      session = _sessionForExit?.call();
+      lease = session?.beginExit();
       await _deregisterDevice();
+      if (lease != null && !lease.isCurrent) return;
       await _authService.signOut();
-      if (!isMounted()) return;
+      if (!isMounted() || _authService.currentUser != null) return;
 
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!isMounted()) {
+        if (!isMounted() || _authService.currentUser != null) {
           _isHandlingAccountExit = false;
           return;
         }
@@ -81,9 +106,11 @@ class AccountExitController {
         );
         _isHandlingAccountExit = false;
       });
+      WidgetsBinding.instance.scheduleFrame();
       exitScheduled = true;
     } catch (e, st) {
       _logger.warn('ACCOUNT-EXIT sign-out failed', e, st);
+      if (lease?.isCurrent == true) session?.resume();
     } finally {
       if (!exitScheduled) _isHandlingAccountExit = false;
     }

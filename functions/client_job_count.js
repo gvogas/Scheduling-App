@@ -72,9 +72,10 @@ function clientsToRecount(beforeData, afterData) {
  *
  * @param {!Object} db Firestore instance.
  * @param {string} clientId Client doc id.
+ * @param {Object=} transaction Optional shared transaction snapshot.
  * @return {!Promise<number>}
  */
-async function countJobsFor(db, clientId) {
+async function countJobsFor(db, clientId, transaction) {
   const base = db.collection("appointments").where("clientId", "==", clientId);
   // A multi-day run is ONE job stored as one document per work day, so a
   // document count would read 5 for a Monday-to-Friday booking — on a badge
@@ -86,12 +87,14 @@ async function countJobsFor(db, clientId) {
   // Minus cancelled, plus cancelled later run days (inclusion-exclusion).
   const laterRunDaysOf = (q) => q.where("dayIndex", ">", 1);
   const cancelledOf = (q) => q.where("status", "==", "cancelled");
+  const read = (q) => transaction ?
+    transaction.get(q.count()) : q.count().get();
   const [total, laterRunDays, cancelled, cancelledLaterRunDays] =
     await Promise.all([
-      base.count().get(),
-      laterRunDaysOf(base).count().get(),
-      cancelledOf(base).count().get(),
-      laterRunDaysOf(cancelledOf(base)).count().get(),
+      read(base),
+      read(laterRunDaysOf(base)),
+      read(cancelledOf(base)),
+      read(laterRunDaysOf(cancelledOf(base))),
     ]);
   return (
     total.data().count -
@@ -108,12 +111,17 @@ async function countJobsFor(db, clientId) {
  * @return {!Promise<void>}
  */
 async function recountOne(db, clientId) {
-  const jobCount = await countJobsFor(db, clientId);
   try {
     // update(), not set({merge:true}) — a client removed out-of-band (the app
     // has no delete path, but the Admin SDK and console bypass that) must not
     // be resurrected as a stub doc holding nothing but a count.
-    await db.collection("clients").doc(clientId).update({jobCount});
+    const parent = db.collection("clients").doc(clientId);
+    await db.runTransaction(async (tx) => {
+      const snapshot = await tx.get(parent);
+      if (!snapshot.exists) return;
+      const jobCount = await countJobsFor(db, clientId, tx);
+      tx.update(parent, {jobCount});
+    });
   } catch (err) {
     if (err && err.code === NOT_FOUND) return;
     throw err;

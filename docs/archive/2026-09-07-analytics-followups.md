@@ -1,8 +1,6 @@
 # Firebase Analytics — remaining work
 
-**State: verified on a device 2026-09-10; what remains is off-repo** — an App
-Store Connect action, a release step, or a reporting-window wait. Nothing here
-blocks development. Item 6 blocks an App Store submission.
+**Status (swept 2026-10-18): code complete, archived.** Device-verified 2026-09-10 and shipped since 1.61.0+90. Everything left is off-repo and unverified (ASC privacy answers, four DebugView events, the post-release Events check); it is carried in `docs/plans/README.md` §5.
 
 The device pass was NOT purely off-repo in the end: it found that iOS reports a
 `screen_view` of its own, now disabled by `FirebaseAutomaticScreenReportingEnabled`

@@ -99,7 +99,9 @@ void main() {
     when(
       () => appointments.onLocalWrite,
     ).thenAnswer((_) => const Stream.empty());
-    when(() => appointments.updateAppointment(any())).thenAnswer((_) async {});
+    when(
+      () => appointments.updateAppointment(any(), base: any(named: 'base')),
+    ).thenAnswer((_) async {});
     when(
       () => appointments.updateAppointmentStatus(
         id: any(named: 'id'),
@@ -173,7 +175,10 @@ void main() {
       expect(outcome, isA<EventDetailsSaved>());
       final written =
           verify(
-                () => appointments.updateAppointment(captureAny()),
+                () => appointments.updateAppointment(
+                  captureAny(),
+                  base: any(named: 'base'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(written.startTime, DateTime(2026, 5, 10, 9, 30));
@@ -188,7 +193,10 @@ void main() {
 
       final written =
           verify(
-                () => appointments.updateAppointment(captureAny()),
+                () => appointments.updateAppointment(
+                  captureAny(),
+                  base: any(named: 'base'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(written.status, 'pending');
@@ -212,7 +220,9 @@ void main() {
 
       expect(outcome, isA<EventDetailsBusyEmployees>());
       expect(stateOf(c).isSaving, isFalse);
-      verifyNever(() => appointments.updateAppointment(any()));
+      verifyNever(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      );
     });
 
     test('forceBusy skips the clash check and writes', () async {
@@ -232,7 +242,9 @@ void main() {
       ).delayAppointment(_appointment, minutes: 60, forceBusy: true);
 
       expect(outcome, isA<EventDetailsSaved>());
-      verify(() => appointments.updateAppointment(any())).called(1);
+      verify(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      ).called(1);
     });
 
     test('a second tap while saving is Busy, not a second write', () async {
@@ -245,7 +257,9 @@ void main() {
       ).delayAppointment(_appointment, minutes: 15);
 
       expect(outcome, isA<EventDetailsSaveBusy>());
-      verifyNever(() => appointments.updateAppointment(any()));
+      verifyNever(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      );
     });
 
     test('is refused offline before the flag is set', () async {

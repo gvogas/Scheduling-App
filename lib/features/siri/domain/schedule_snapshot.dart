@@ -107,6 +107,9 @@ Map<String, dynamic> buildScheduleSnapshot({
       for (final entry in buckets.entries)
         {
           'date': _dayKey(entry.key),
+          'totalCount': entry.value.length,
+          'truncated': entry.value.length > scheduleSnapshotPerDayCap,
+          'coverageComplete': true,
           'appointments': [
             for (final slice
                 in (entry.value

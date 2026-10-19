@@ -1,7 +1,8 @@
 # Code review and improvements — 2026-09-23
 
-Baseline: `6b96db46`, initially clean working tree. Changes are local and have
-not been deployed.
+Baseline: `6b96db46`, initially clean working tree.
+
+**Status (swept 2026-10-18): superseded, archived.** Fixes deployed 2026-09-29 (`e70b494d`) and shipped in 1.63.0+93; the rollout and its recovery runbook stay live in `docs/audits/AUDIT_ROLLOUT_2026-09-23.md`.
 
 This review concentrated on authorization, asynchronous data access, cache
 freshness and repeated reads. It also inspected callable validation and scope

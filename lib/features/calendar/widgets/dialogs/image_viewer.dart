@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:saver_gallery/saver_gallery.dart';
+import 'package:scheduling/core/images/appointment_storage_image.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/permissions/media_permission_service.dart';
@@ -126,10 +127,14 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
     if (provider is FileImage) return provider.file;
     // Refused photos use a placeholder that should not be exported.
     if (isRefusedImage(provider)) return null;
-    if (provider is MemoryImage) {
+    if (provider is MemoryImage || provider is AppointmentStorageImage) {
+      final bytes = provider is AppointmentStorageImage
+          ? await provider.loadBytes()
+          : (provider as MemoryImage).bytes;
+      if (bytes.isEmpty) return null;
       final dir = await getTemporaryDirectory();
       final file = File(_pathIn(dir.path, _photoFileName()));
-      return await file.writeAsBytes(provider.bytes);
+      return await file.writeAsBytes(bytes);
     }
     return null;
   }

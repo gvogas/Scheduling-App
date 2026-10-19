@@ -397,6 +397,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
     final logger = ref.read(loggerProvider);
     final selectedEmployees = state.selectedEmployees;
     final shift = Duration(minutes: minutes);
+    final isCurrent = repo.captureWriteOwner();
     final updated = appointment.copyWith(
       startTime: appointment.startTime.add(shift),
       endTime: appointment.endTime.add(shift),
@@ -413,8 +414,14 @@ class EventDetailsController extends Notifier<EventDetailsState>
         );
         if (conflict != null) return _busyEmployees(conflict);
       }
-      await repo.updateAppointment(updated);
-      return EventDetailsSaved(updated);
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
+      }
+      await repo.updateAppointment(updated, base: appointment);
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
+      }
+      return EventDetailsSaved(repo.takeAcknowledgedWrite(id) ?? updated);
     } catch (e, st) {
       logger.warn('APPT-SAVE delayAppointment failed', e, st);
       return EventDetailsFailed(e);
@@ -546,6 +553,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
     final repo = ref.read(appointmentsRepositoryProvider);
     final logger = ref.read(loggerProvider);
     final pipeline = _pipeline();
+    final isCurrent = repo.captureWriteOwner();
     // Avoid touching Storage when no new photos exist.
     final uploader = state.newImages.isEmpty
         ? null
@@ -601,6 +609,9 @@ class EventDetailsController extends Notifier<EventDetailsState>
         pipeline,
         selectedEmployees,
       );
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
+      }
       final updated = pipeline.buildUpdatedRecord(
         appointment,
         id: id,
@@ -631,12 +642,16 @@ class EventDetailsController extends Notifier<EventDetailsState>
         savedRepeat: savedRepeat,
         selectedEmployees: selectedEmployees,
         checkConflicts: !forceBusy && !isPersonal,
+        isCurrent: isCurrent,
       );
       if (saved is! EventDetailsSaved) {
         if (ref.mounted) state = state.copyWith(isSaving: false);
         return saved;
       }
 
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
+      }
       await pipeline.applyPhotoChanges(
         id: id,
         uploader: uploader,
@@ -669,6 +684,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
     required RepeatInterval savedRepeat,
     required List<EmployeeRecord> selectedEmployees,
     required bool checkConflicts,
+    bool Function()? isCurrent,
   }) async {
     final seriesEditor = AppointmentSeriesEditor(repo);
     // A run member never rewrites its series.
@@ -691,7 +707,13 @@ class EventDetailsController extends Notifier<EventDetailsState>
         );
         if (conflict != null) return _busyEmployees(conflict);
       }
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
+      }
       final result = await seriesEditor.commitRewrite(plan);
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
+      }
       return EventDetailsSaved(
         result.updated,
         futureBookings: result.futureBookings,
@@ -716,8 +738,17 @@ class EventDetailsController extends Notifier<EventDetailsState>
         );
         if (conflict != null) return _busyEmployees(conflict);
       }
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
+      }
       final updatedSiblings = await seriesEditor.commitPropagate(plan);
-      return EventDetailsSaved(updated, updatedSiblings: updatedSiblings);
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
+      }
+      return EventDetailsSaved(
+        repo.takeAcknowledgedWrite(id) ?? updated,
+        updatedSiblings: updatedSiblings,
+      );
     }
 
     if (checkConflicts) {
@@ -730,8 +761,10 @@ class EventDetailsController extends Notifier<EventDetailsState>
       if (conflict != null) return _busyEmployees(conflict);
     }
 
-    await repo.updateAppointment(updated);
-    return EventDetailsSaved(updated);
+    if (isCurrent != null && !isCurrent()) return const EventDetailsSaveBusy();
+    await repo.updateAppointment(updated, base: appointment);
+    if (isCurrent != null && !isCurrent()) return const EventDetailsSaveBusy();
+    return EventDetailsSaved(repo.takeAcknowledgedWrite(id) ?? updated);
   }
 
   EventDetailsBusyEmployees _busyEmployees(AppointmentConflictHit conflict) =>

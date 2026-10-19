@@ -173,20 +173,27 @@ async function purgeAppointmentImages(appointmentId, deps) {
 async function recountPictures(appointmentId, deps) {
   const {db, logger: log} = deps;
   const parent = db.collection("appointments").doc(appointmentId);
-  const snap = await parent.collection(IMAGES_SUBCOLLECTION).count().get();
-  const count = snap.data().count;
+  let count;
+  try {
+    count = await db.runTransaction(async (tx) => {
+      const snapshot = await tx.get(parent);
+      if (!snapshot.exists) return -1;
+      const aggregate = await tx.get(
+          parent.collection(IMAGES_SUBCOLLECTION).count());
+      const currentCount = aggregate.data().count;
+      tx.update(parent, {pictureCount: currentCount});
+      return currentCount;
+    });
+  } catch (err) {
+    if (err && err.code === 5) return -1;
+    throw err;
+  }
   if (count > PICTURE_COUNT_WARN_CAP && log) {
     log.warn("appointment holds more photos than the app can read", {
       appointmentId,
       count,
       cap: PICTURE_COUNT_WARN_CAP,
     });
-  }
-  try {
-    await parent.update({pictureCount: count});
-  } catch (err) {
-    if (err && err.code === 5) return -1; // NOT_FOUND — parent already deleted.
-    throw err;
   }
   return count;
 }

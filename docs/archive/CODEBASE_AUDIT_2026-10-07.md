@@ -1,5 +1,7 @@
 # Codebase Audit — 2026-10-07
 
+**Status (swept 2026-10-18): superseded, archived.** Functions deployed at `364d4812`, I3 at `0ab3f05c`; the app half rides 1.64.2+96 (`docs/plans/README.md` §1).
+
 Scope: whole repo (`lib/`, `functions/`, `firestore.rules`, `storage.rules`,
 `.github/workflows/`, `test/`). Baseline: `dev` @ `6a19ff6a`, clean tree.
 Emphasis on the code changed since the 2026-09-28 audit (`cee76f45..HEAD`, 95

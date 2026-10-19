@@ -3,6 +3,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/animations/animated_loading_button.dart';
+import 'package:scheduling/core/app/pending_photo_exit.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/constants/app_urls.dart';
 import 'package:scheduling/core/launchers/web_url_launcher.dart';
@@ -23,6 +25,7 @@ import 'package:scheduling/features/auth/widgets/auth_fields.dart';
 import 'package:scheduling/features/auth/widgets/auth_scaffold.dart';
 import 'package:scheduling/features/auth/widgets/password_requirements_checklist.dart';
 import 'package:scheduling/features/auth/widgets/password_strength_meter.dart';
+import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
@@ -271,7 +274,7 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
     ).pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
   }
 
-  /// Abandons setup with a plain `signOut`; there is nothing to tear down.
+  /// Abandons setup after checking for any pending photos owned by this UID.
   Future<void> _signOut() async {
     if (_isTransitionBusy) return;
     final logger = ref.read(loggerProvider);
@@ -279,19 +282,48 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
       _isSigningOut = true;
       _bannerError = null;
     });
+    PendingPhotoExit? pendingExit;
+    SessionFence? exitSession;
+    SessionLease? exitLease;
     try {
+      final uploads = ref.read(appointmentImageUploadProvider);
+      final session = ref.read(sessionFenceProvider);
+      exitSession = session;
+      final lease = session.capture();
+      pendingExit = await confirmPendingPhotoExit(context, uploads, session);
+      if (pendingExit == null || !pendingExit.isCurrent) {
+        if (mounted) setState(() => _isSigningOut = false);
+        return;
+      }
+      if (lease?.isCurrent != true) {
+        if (mounted) setState(() => _isSigningOut = false);
+        return;
+      }
+      exitLease = session.beginExit();
+      await uploads.clearPending();
+      if (exitLease?.isCurrent != true) {
+        if (mounted) setState(() => _isSigningOut = false);
+        return;
+      }
       await _authService.signOut();
       if (!mounted) return;
+      if (_authService.currentUser != null) {
+        setState(() => _isSigningOut = false);
+        return;
+      }
       await Navigator.of(
         context,
       ).pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
     } catch (error, stackTrace) {
       logger.warn('AUTH-SETUP signOut failed', error, stackTrace);
+      if (exitLease?.isCurrent == true) exitSession?.resume();
       if (!mounted) return;
       setState(() {
         _isSigningOut = false;
         _bannerError = context.l10n.error_somethingWentWrongPleaseTryAgain;
       });
+    } finally {
+      pendingExit?.resume();
     }
   }
 

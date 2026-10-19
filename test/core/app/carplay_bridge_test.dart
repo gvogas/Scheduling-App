@@ -6,12 +6,14 @@
 // matter are the ones with no other cover — a repository throw, an unknown
 // method, and a torn-down bridge.
 
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
-
 import 'package:scheduling/core/app/carplay_bridge.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
@@ -84,6 +86,7 @@ void main() {
   CarPlayBridge start({
     bool isIos = true,
     bool isOffline = false,
+    SessionFence? session,
     AsyncValue<Map<String, dynamic>?> snapshot = const AsyncValue.data(
       _snapshot,
     ),
@@ -96,7 +99,8 @@ void main() {
         scheduleSnapshotServiceProvider.overrideWithValue(snapshotService),
         scheduleSnapshotProvider.overrideWith((ref) => snapshot),
         carPlayBridgeProvider.overrideWith(
-          (ref) => CarPlayBridge(ref, isIosPlatform: () => isIos),
+          (ref) =>
+              CarPlayBridge(ref, isIosPlatform: () => isIos, session: session),
         ),
       ],
     );
@@ -245,6 +249,25 @@ void main() {
   });
 
   group('dialableNumberFor', () {
+    test(
+      'an old phone lookup cannot return a number to the next session',
+      () async {
+        String? uid = 'A';
+        final session = SessionFence(readUid: () => uid);
+        final gate = Completer<AppointmentRecord?>();
+        final entered = Completer<void>();
+        when(() => repository.getAppointmentById(any())).thenAnswer((_) {
+          entered.complete();
+          return gate.future;
+        });
+        start(session: session);
+        final pending = resultOf('dialableNumberFor', {'id': 'a1'});
+        await entered.future;
+        uid = 'B';
+        gate.complete(_job(clientPhone: '5145551234'));
+        expect(await pending, isNull);
+      },
+    );
     test('answers the FINISHED tel: URI, stripped by dialableUri', () async {
       start();
 

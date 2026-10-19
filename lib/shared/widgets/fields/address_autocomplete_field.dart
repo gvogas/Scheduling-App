@@ -52,10 +52,12 @@ class _AddressAutocompleteFieldState
   List<AddressSuggestion> _suggestions = [];
   bool _isLoading = false;
   String? _serviceError;
-  bool _suppressFetch = false;
+  bool _writingSelection = false;
+  late String _observedText;
   String? _sessionToken;
   String _lastTypedApt = '';
   String _lastFetched = '';
+  List<AddressSuggestion> _lastResults = [];
 
   /// Request id used to discard stale responses that come back late.
   int _requestId = 0;
@@ -73,22 +75,60 @@ class _AddressAutocompleteFieldState
       logger: _logger,
       tag: 'ADDR-AUTO debounced action failed',
     );
+    _observedText = widget.controller.text;
+    widget.controller.addListener(_onControllerChanged);
+  }
+
+  @override
+  void didUpdateWidget(covariant AddressAutocompleteField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller.removeListener(_onControllerChanged);
+    widget.controller.addListener(_onControllerChanged);
+    _observedText = widget.controller.text;
+    _invalidateLookup();
+    _lastFetched = '';
+    _sessionToken = null;
   }
 
   @override
   void dispose() {
+    widget.controller.removeListener(_onControllerChanged);
+    _requestId++;
     _debounce.dispose();
     super.dispose();
   }
 
   String _ensureSessionToken() => _sessionToken ??= _uuid.v4();
 
+  void _invalidateLookup() {
+    _debounce.cancel();
+    _requestId++;
+    _suggestions = [];
+    _isLoading = false;
+    _serviceError = null;
+    _lastTypedApt = '';
+  }
+
+  void _onControllerChanged() {
+    final text = widget.controller.text;
+    if (text == _observedText) return;
+    _observedText = text;
+    if (_writingSelection) return;
+    setState(_invalidateLookup);
+  }
+
+  void _writeSelection(String text) {
+    _writingSelection = true;
+    try {
+      widget.controller.text = text;
+    } finally {
+      _writingSelection = false;
+    }
+  }
+
   void _onTextChanged(String value) {
     widget.onChanged?.call(value);
-    if (_suppressFetch) {
-      _suppressFetch = false;
-      return;
-    }
 
     if (!ref.read(featureFlagsProvider).addressAutocomplete) {
       _onAutocompletePaused();
@@ -124,8 +164,12 @@ class _AddressAutocompleteFieldState
     // Skip re-fetching the exact query we already fetched successfully, so we
     // don't bill for an identical call. This is only set on success, so a
     // failed fetch will still retry.
-    if (query == _lastFetched) return;
+    if (query == _lastFetched) {
+      setState(() => _suggestions = _lastResults);
+      return;
+    }
     final requestId = ++_requestId;
+    final controller = widget.controller;
     // Logger resolved BEFORE the await: `ref.read` throws once unmounted (ADR-0033).
     setState(() {
       _isLoading = true;
@@ -137,8 +181,14 @@ class _AddressAutocompleteFieldState
         query,
         sessionToken: _ensureSessionToken(),
       );
-      if (!mounted || requestId != _requestId) return;
+      if (!mounted ||
+          requestId != _requestId ||
+          controller != widget.controller ||
+          controller.text != query) {
+        return;
+      }
       _lastFetched = query;
+      _lastResults = results;
       setState(() {
         _suggestions = results;
         _isLoading = false;
@@ -146,7 +196,12 @@ class _AddressAutocompleteFieldState
     } catch (e, st) {
       // A typed failure (a server pause included) was logged by the repository.
       if (e is! Failure) _logger.warn('ADDR-AUTO autocomplete failed', e, st);
-      if (!mounted || requestId != _requestId) return;
+      if (!mounted ||
+          requestId != _requestId ||
+          controller != widget.controller ||
+          controller.text != query) {
+        return;
+      }
       setState(() {
         _suggestions = [];
         _isLoading = false;
@@ -193,13 +248,22 @@ class _AddressAutocompleteFieldState
   Future<void> _selectSuggestion(AddressSuggestion s) async {
     // Invalidate any pending debounce/in-flight request so a late response can't resurface suggestions.
     _debounce.cancel();
-    _requestId++;
-    _suppressFetch = true;
+    final requestId = ++_requestId;
+    final controller = widget.controller;
+    final apt = AddressParser.splitApt(controller.text)?.apt ?? _lastTypedApt;
+    final sessionToken = _ensureSessionToken();
+    _sessionToken = null;
+    _lastFetched = '';
+    bool isCurrent() =>
+        mounted &&
+        requestId == _requestId &&
+        controller == widget.controller &&
+        controller.text == s.description;
     var base = s.description;
     String? error;
     // Paused: Places would refuse the details call, so keep the shown text.
     if (ref.read(featureFlagsProvider).addressAutocomplete) {
-      widget.controller.text = s.description;
+      _writeSelection(s.description);
       setState(() {
         _suggestions = [];
         _isLoading = true;
@@ -207,7 +271,7 @@ class _AddressAutocompleteFieldState
       try {
         final details = await _service.getPlaceDetails(
           s.placeId,
-          sessionToken: _ensureSessionToken(),
+          sessionToken: sessionToken,
         );
         if (details.fullAddress.isNotEmpty) base = details.fullAddress;
       } on MapsFailurePaused {
@@ -216,7 +280,7 @@ class _AddressAutocompleteFieldState
         if (e is! Failure) {
           _logger.warn('ADDR-DETAILS getPlaceDetails failed', e, st);
         }
-        if (mounted) {
+        if (mounted && isCurrent()) {
           error = _localizedErrorFor(
             e,
             context,
@@ -224,17 +288,12 @@ class _AddressAutocompleteFieldState
           );
         }
       }
-      if (!mounted) return;
+      if (!isCurrent()) return;
     } else {
       // Otherwise a re-enable would skip the pre-pause query as already fetched.
       _lastFetched = '';
     }
-    _suppressFetch = true;
-    widget.controller.text = AddressParser.formatForDisplay(
-      base,
-      _lastTypedApt,
-    );
-    _sessionToken = null;
+    _writeSelection(AddressParser.formatForDisplay(base, apt));
     _lastTypedApt = '';
     setState(() {
       _suggestions = [];

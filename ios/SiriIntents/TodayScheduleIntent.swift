@@ -21,15 +21,20 @@ struct TodayScheduleIntent: AppIntent {
             return .result(dialog: IntentDialog(
                 stringLiteral: SiriStrings.noData))
         }
-        let appointments = snapshot.today?.appointments ?? []
+        guard let bucket = snapshot.today else {
+            return .result(dialog: IntentDialog(stringLiteral: SiriStrings.noData))
+        }
+        let appointments = bucket.appointments
         guard !appointments.isEmpty else {
             return .result(dialog: IntentDialog(
-                stringLiteral: SiriStrings.emptyDay(admin: snapshot.isAdmin)))
+                stringLiteral: bucket.isPartial ? SiriStrings.partialSchedule
+                    : SiriStrings.emptyDay(admin: snapshot.isAdmin)))
         }
         let intro = SiriStrings.scheduleIntro(
             appointments.count, admin: snapshot.isAdmin)
         let lines = appointments.map(SiriStrings.scheduleLine)
-        let spoken = ([intro] + lines).joined(separator: " ")
+        let tail = bucket.isPartial ? [SiriStrings.partialSchedule] : []
+        let spoken = ([intro] + lines + tail).joined(separator: " ")
         return .result(dialog: IntentDialog(stringLiteral: spoken))
     }
 }

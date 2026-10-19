@@ -1,18 +1,6 @@
 # Live staff map improvements — design
 
-**Status (verified 2026-10-01): BUILT and committed (`ed59a6a5`, `e544fb01`), DEVICE PASS
-DONE (owner, 2026-09-19), NOT SHIPPED** — no app build has shipped since 1.61.0+90;
-it rides the next one (1.63.0+93 is cut). The accessibility page is rewritten for
-the team sheet in the repo; publishing both legal pages waits on the build.
-Original banner: built 2026-09-13, not shipped. No backend deploy (the optional rules type check was skipped).
-Left: the device-only checks in §7, republishing `docs/legal/privacy-policy.html`
-to `es-pro-legal` once the build ships — the CURRENT file, byte-identical (last
-changed 2026-09-19, `bec23b85`). The two-hour passages it once carried are gone:
-the 2 h pin cutoff was removed 2026-09-14 by owner call (`.claude/rules/employees.md`),
-re-checking the crew-map paragraph of `docs/legal/accessibility.html` (written
-2026-09-14 against 1.61's staff list, which this build replaces with the team
-sheet) and republishing it, and flipping the Apple tester's Test account switch once the
-build ships. Deviations from this design are recorded at the end of this file.
+**Status (swept 2026-10-18): SHIPPED in 1.63.0+93, archived** (built `ed59a6a5`/`e544fb01`, device pass 2026-09-19 by the owner; no backend deploy). Owner steps, unverified and carried in `docs/plans/README.md` §6: republish `privacy-policy.html` and `accessibility.html` to `es-pro-legal`, flip the Apple tester's Test account switch. Deviations from this design are recorded at the end of this file.
 
 Mockup (chosen design, private artifact):
 https://claude.ai/code/artifact/3033bea3-5790-4966-9e8f-a3ce99339655

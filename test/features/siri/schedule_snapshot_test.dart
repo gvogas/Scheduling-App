@@ -168,6 +168,12 @@ void main() {
       final day = _appointmentsOn(snapshot, '2026-07-20');
       expect(day, hasLength(scheduleSnapshotPerDayCap));
       expect(day.last['id'], 'a${scheduleSnapshotPerDayCap - 1}');
+      final bucket = _days(
+        snapshot,
+      ).firstWhere((d) => d['date'] == '2026-07-20');
+      expect(bucket['totalCount'], scheduleSnapshotPerDayCap + 5);
+      expect(bucket['truncated'], isTrue);
+      expect(bucket['coverageComplete'], isTrue);
     });
 
     test('carries only the fields the intents speak', () {

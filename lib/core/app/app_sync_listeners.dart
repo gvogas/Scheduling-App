@@ -57,6 +57,15 @@ class AppSyncListeners {
   }
 
   void _pushRegistration() {
+    ref.listen<bool>(isOfflineProvider, (previous, next) {
+      if (previous == true && !next) {
+        _fireAndForget(
+          'APP-SYNC push reconnect failed',
+          () =>
+              ref.read(pushRegistrationControllerProvider).retryRegistration(),
+        );
+      }
+    });
     ref.listen<AsyncValue<Map<String, dynamic>>>(currentUserDocProvider, (
       prev,
       next,

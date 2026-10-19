@@ -1,4 +1,4 @@
-# `docs/CLOUD_FUNCTIONS.md` — refresh history before 2026-09-05
+# `docs/CLOUD_FUNCTIONS.md` — refresh history before 2026-10-07
 
 Trimmed out of the header of `docs/CLOUD_FUNCTIONS.md` on 2026-09-06, where the
 stacked "Previously refreshed ..." block had reached nine entries. The four most
@@ -10,10 +10,33 @@ the three entries from 2026-09-01 through 2026-09-04 (releases 1.55.0+84 to
 1.57.0+86, across which the export list went 25 -> 29), frozen as written and
 placed above the 2026-09-06 trim, newest first.
 
+**Added 2026-10-18** by the docs sweep: the four entries from 2026-09-19
+through 2026-09-29 (releases 1.62.0+91 to 1.63.0+93, across which the export
+list went 29 -> 32), frozen as written and placed above the 2026-10-01
+addition, newest first.
+
 **Added 2026-10-01** by the docs sweep, when the stack had grown back to seven:
 the four entries from 2026-09-05 through 2026-09-12 (releases 1.58.0+87 to
 1.61.0+90, across which the export list sat at 29), frozen as written and
 placed above the 2026-09-13 addition, newest first.
+
+Previously refreshed 2026-09-29 (release 1.63.0+93 — **32 exports, all 32 deployed**:
+`resetEmployeePassword` and `completePasswordReset` went live at `306ed848`, and
+the release's review fixes to both bodies at `cc38be5d` the same day — see the
+deploy log; re-checked 2026-10-01, nothing in `functions/` has changed since). Earlier 2026-09-29: `syncClientBuilding` went live at `e70b494d`. Previously refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
+and NOT YET DEPLOYED; the other 29 are deployed at `bec23b85`**, though five of
+their bodies changed in source and are also undeployed: `createEmployeeAccount`
+and `completeEmployeeSetup` (per-account operation lock, optional `newPassword`),
+`syncUsersByUid` (transactional live reconciliation), `deleteClient` (deletion
+barrier) and `searchClients` (optional `archived`/`type`/`buildingKey` filters).
+Deploy ordering — rules, then the nine new client composites READY, then
+functions, then `functions/scripts/backfill-client-buildings.js` — is in
+[audit rollout](audits/AUDIT_ROLLOUT_2026-09-23.md). Previously refreshed 2026-09-19 (release 1.62.0+91 — **still 29 exports, all DEPLOYED**: the
+month-end overdue rider on `sendDailyJobDigest` and Wave Phase 4 (the `worker.js`
+split, the guarded import updates, the cadence deleted and
+`waveSetImportSchedule` retired to a no-op) went live 2026-09-19 16:37Z
+(`608b817a`), ahead of the app build; the audit's stale-block clear in
+`waveUpsertCustomer` followed at ~19:45Z (`bec23b85`).
 
 Previously refreshed 2026-09-12 (release
 1.61.0+90 — **the export list is unchanged at 29**,

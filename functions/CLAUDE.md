@@ -4,7 +4,7 @@ Root context `../CLAUDE.md`. Per-function reference: `docs/CLOUD_FUNCTIONS.md`; 
 
 ## Wiring
 
-- Keep `index.js` a thin re-export of 31 functions under their original names; `docs/DEPLOYMENT.md` uses that count as a deploy abort check, so update it with any add or remove. (ADR-0030)
+- Keep `index.js` a thin re-export of 32 functions under their original names; `docs/DEPLOYMENT.md` uses that count as a deploy abort check, so update it with any add or remove. (ADR-0030)
 - Add a function to its domain module and re-export it from `index.js`; shared guards go in `security.js`, shared secrets in `params.js`, never back in `index.js` or a feature module. (ADR-0135)
 - Define each secret once: `params.js` owns `GOOGLE_MAP_API_KEY`, `APNS_AUTH_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID`; never re-`defineSecret` one or re-export it from a feature module.
 - Every function carries a JSDoc block (`require-jsdoc` + `valid-jsdoc`; see `code-quality.md`). Run `cd functions && npm run lint` (eslint-config-google, 80-char lines) before any deploy.

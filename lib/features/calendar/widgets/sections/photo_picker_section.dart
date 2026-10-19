@@ -5,11 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
 import 'package:scheduling/core/images/appointment_image_loader.dart';
-import 'package:scheduling/core/logging/app_logger.dart';
+import 'package:scheduling/core/images/appointment_storage_image.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
 import 'package:scheduling/features/calendar/widgets/dialogs/image_viewer.dart';
 import 'package:scheduling/features/calendar/widgets/views/appointment_image_carousel.dart';
+import 'package:scheduling/features/calendar/widgets/views/appointment_photo_semantics.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/fields/form_helpers.dart';
 
@@ -47,80 +48,25 @@ class PhotoPickerSection extends ConsumerStatefulWidget {
 }
 
 class _PhotoPickerSectionState extends ConsumerState<PhotoPickerSection> {
-  List<Uint8List> _loadedBytes = const [];
+  List<AppointmentStorageImage> get _existingProviders => [
+    for (final image in widget.existingImages)
+      AppointmentStorageImage(image, ref.read(appointmentImageLoaderProvider)),
+  ];
 
-  /// The image list [_loadedBytes] was loaded for.
-  List<AppointmentImage> _resolvedFor = const [];
-
-  /// The existing photos' bytes, or empty while stale/loading.
-  List<Uint8List> get _existingBytes =>
-      listEquals(_resolvedFor, widget.existingImages) ? _loadedBytes : const [];
-
-  @override
-  void initState() {
-    super.initState();
-    _loadBytes();
-  }
-
-  @override
-  void didUpdateWidget(PhotoPickerSection oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!listEquals(oldWidget.existingImages, widget.existingImages)) {
-      _loadBytes();
-    }
-  }
-
-  Future<void> _loadBytes() async {
-    final images = widget.existingImages;
-    if (images.isEmpty) {
-      if (_loadedBytes.isNotEmpty) {
-        setState(() {
-          _loadedBytes = const [];
-          _resolvedFor = const [];
-        });
-      }
-      return;
-    }
-    // Both providers are read BEFORE the await: `ref.read` on an unmounted
-    // consumer throws under Riverpod 3, and this future is fired unawaited from
-    // `initState`, so a read in the catch below would throw exactly in the case
-    // the catch exists for.
-    final loader = ref.read(appointmentImageLoaderProvider);
-    final logger = ref.read(loggerProvider);
-
-    // `loadAll` swallows its own per-image failures today, so this catch is for
-    // the shapes it does not own — an OOM decoding a large batch, or a future
-    // refactor that lets one through.
-    final List<Uint8List> bytes;
-    try {
-      bytes = await loader.loadAll(images);
-    } catch (e, st) {
-      logger.warn('IMG-LOAD photo picker preload failed', e, st);
-      return;
-    }
-    // Ignore loads that finish after close or list changes.
-    if (!mounted || !listEquals(images, widget.existingImages)) return;
-    setState(() {
-      _loadedBytes = bytes;
-      _resolvedFor = images;
-    });
-  }
+  List<ImageProvider> get _providers => [
+    ..._existingProviders,
+    ...widget.newImages.map(FileImage.new),
+  ];
 
   void _openViewer(BuildContext context, int tappedIndex) {
-    final providers = buildImageProviders(
-      bytes: _existingBytes,
-      files: widget.newImages,
-    );
+    final providers = _providers;
     if (providers.isEmpty) return;
     ImageViewer.open(context, images: providers, initialIndex: tappedIndex);
   }
 
   // Empty lets the failure banner stand alone.
   Widget _readOnlyGallery() {
-    final providers = buildImageProviders(
-      bytes: _existingBytes,
-      files: widget.newImages,
-    );
+    final providers = _providers;
     if (providers.isEmpty) return const SizedBox.shrink();
     return AppointmentImageCarousel(images: providers);
   }
@@ -140,7 +86,7 @@ class _PhotoPickerSectionState extends ConsumerState<PhotoPickerSection> {
         else if (hasPhotos)
           _EditablePhotoStrip(
             existingImages: widget.existingImages,
-            existingBytes: _existingBytes,
+            existingProviders: _existingProviders,
             newImages: widget.newImages,
             failedCount: widget.failedCount,
             onOpenViewer: _openViewer,
@@ -177,7 +123,7 @@ class _PhotoPickerSectionState extends ConsumerState<PhotoPickerSection> {
 class _EditablePhotoStrip extends StatelessWidget {
   const _EditablePhotoStrip({
     required this.existingImages,
-    required this.existingBytes,
+    required this.existingProviders,
     required this.newImages,
     required this.failedCount,
     required this.onOpenViewer,
@@ -187,7 +133,7 @@ class _EditablePhotoStrip extends StatelessWidget {
   });
 
   final List<AppointmentImage> existingImages;
-  final List<Uint8List> existingBytes;
+  final List<AppointmentStorageImage> existingProviders;
   final List<File> newImages;
   final int failedCount;
   final void Function(BuildContext context, int tappedIndex) onOpenViewer;
@@ -227,9 +173,14 @@ class _EditablePhotoStrip extends StatelessWidget {
             return _newThumb(context, MapEntry(i, newImages[i]), thumbCache);
           }
           if (index < addButtonIndex) {
-            return const Padding(
-              padding: EdgeInsets.only(right: AppSpacing.sp8),
-              child: _FailedPhotoThumb(),
+            return Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.sp8),
+              child: AppointmentPhotoSemantics(
+                index: index + 1,
+                count: addButtonIndex,
+                unavailable: true,
+                child: const _FailedPhotoThumb(),
+              ),
             );
           }
           return _addButton(context, scheme, labelStyle);
@@ -272,43 +223,65 @@ class _EditablePhotoStrip extends StatelessWidget {
     MapEntry<int, AppointmentImage> entry,
     int thumbCache,
   ) {
-    // Loading placeholders are not tappable.
-    final bytes = entry.key < existingBytes.length
-        ? existingBytes[entry.key]
-        : null;
+    return FutureBuilder<Uint8List>(
+      key: ValueKey(entry.value.storagePath),
+      future: existingProviders[entry.key].loadBytes(),
+      builder: (context, snapshot) => _loadedExistingThumb(
+        context,
+        entry,
+        thumbCache,
+        snapshot.hasError ? Uint8List(0) : snapshot.data,
+      ),
+    );
+  }
+
+  Widget _loadedExistingThumb(
+    BuildContext context,
+    MapEntry<int, AppointmentImage> entry,
+    int thumbCache,
+    Uint8List? bytes,
+  ) {
     // Empty bytes mean a refused photo.
     final refused = bytes != null && bytes.isEmpty;
+    final open = bytes == null || refused
+        ? null
+        : () => onOpenViewer(context, entry.key);
     return Stack(
       children: [
         Padding(
           padding: const EdgeInsets.only(right: AppSpacing.sp8),
-          child: GestureDetector(
-            onTap: bytes == null || refused
-                ? null
-                : () => onOpenViewer(context, entry.key),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.r8),
-              child: refused
-                  ? SizedBox(
-                      width: 90,
-                      height: 90,
-                      child: _photoErrorTile(context),
-                    )
-                  : bytes == null
-                  ? SizedBox(
-                      width: 90,
-                      height: 90,
-                      child: _photoPlaceholder(context),
-                    )
-                  : Image.memory(
-                      bytes,
-                      width: 90,
-                      height: 90,
-                      cacheWidth: thumbCache,
-                      cacheHeight: thumbCache,
-                      fit: BoxFit.cover,
-                      errorBuilder: (ctx, _, _) => _photoErrorTile(ctx),
-                    ),
+          child: AppointmentPhotoSemantics(
+            index: entry.key + 1,
+            count: existingImages.length + newImages.length + failedCount,
+            loading: bytes == null,
+            unavailable: refused,
+            onTap: open,
+            child: GestureDetector(
+              onTap: open,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.r8),
+                child: refused
+                    ? SizedBox(
+                        width: 90,
+                        height: 90,
+                        child: _photoErrorTile(context),
+                      )
+                    : bytes == null
+                    ? SizedBox(
+                        width: 90,
+                        height: 90,
+                        child: _photoPlaceholder(context),
+                      )
+                    : Image.memory(
+                        bytes,
+                        width: 90,
+                        height: 90,
+                        cacheWidth: thumbCache,
+                        cacheHeight: thumbCache,
+                        fit: BoxFit.cover,
+                        errorBuilder: (ctx, _, _) => _photoErrorTile(ctx),
+                      ),
+              ),
             ),
           ),
         ),
@@ -331,25 +304,28 @@ class _EditablePhotoStrip extends StatelessWidget {
     MapEntry<int, File> entry,
     int thumbCache,
   ) {
-    // Offset by the entries the viewer will actually be handed, NOT by
-    // existingImages: while a load is outstanding `existingBytes` is empty, so
-    // counting the images would point past the end of the provider list.
-    final viewerIndex = existingBytes.length + entry.key;
+    final viewerIndex = existingProviders.length + entry.key;
+    void open() => onOpenViewer(context, viewerIndex);
     return Stack(
       children: [
         Padding(
           padding: const EdgeInsets.only(right: AppSpacing.sp8),
-          child: GestureDetector(
-            onTap: () => onOpenViewer(context, viewerIndex),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(AppRadius.r8),
-              child: Image.file(
-                entry.value,
-                width: 90,
-                height: 90,
-                cacheWidth: thumbCache,
-                cacheHeight: thumbCache,
-                fit: BoxFit.cover,
+          child: AppointmentPhotoSemantics(
+            index: existingImages.length + entry.key + 1,
+            count: existingImages.length + newImages.length + failedCount,
+            onTap: open,
+            child: GestureDetector(
+              onTap: open,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.r8),
+                child: Image.file(
+                  entry.value,
+                  width: 90,
+                  height: 90,
+                  cacheWidth: thumbCache,
+                  cacheHeight: thumbCache,
+                  fit: BoxFit.cover,
+                ),
               ),
             ),
           ),

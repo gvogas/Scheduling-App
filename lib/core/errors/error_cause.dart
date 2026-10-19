@@ -20,6 +20,8 @@ enum _ErrorCause {
   signedOut,
   tooManyAttempts,
   invalidData,
+  editConflict,
+  incompleteCheck,
   unknown,
 }
 
@@ -32,9 +34,17 @@ _ErrorCause _classifyError(Object error) {
       'permission-denied' => _ErrorCause.permissionDenied,
       'not-found' => _ErrorCause.notFound,
       'unauthenticated' || 'user-token-expired' => _ErrorCause.signedOut,
+      'resource-exhausted'
+          when const [
+            'conflict-scan-incomplete',
+            'client-search-incomplete',
+          ].contains(error.message) =>
+        _ErrorCause.incompleteCheck,
       'resource-exhausted' ||
       'too-many-requests' => _ErrorCause.tooManyAttempts,
       'invalid-argument' || 'already-exists' => _ErrorCause.invalidData,
+      'aborted' when error.message == 'appointment-edit-conflict' =>
+        _ErrorCause.editConflict,
       _ => _ErrorCause.unknown,
     };
   }
@@ -53,8 +63,10 @@ _ErrorCause _classifyError(Object error) {
 /// The three sites testing `next is! AsyncError || previous is AsyncError`
 /// therefore re-logged and re-pushed a notice on every retry — the rebuild
 /// spam `ref.listen` exists to avoid.
-bool isFirstAsyncError(AsyncValue<Object?>? previous, AsyncValue<Object?> next) =>
-    next.hasError && !(previous?.hasError ?? false);
+bool isFirstAsyncError(
+  AsyncValue<Object?>? previous,
+  AsyncValue<Object?> next,
+) => next.hasError && !(previous?.hasError ?? false);
 
 /// Composes "{intro}. {cause}" — what failed, then why and what to do next.
 ///
@@ -85,6 +97,8 @@ String composeErrorNoticeFor(
     _ErrorCause.signedOut => l10n.error_causeSignedOut,
     _ErrorCause.tooManyAttempts => l10n.error_causeTooManyAttempts,
     _ErrorCause.invalidData => l10n.error_causeInvalidData,
+    _ErrorCause.editConflict => l10n.error_causeEditConflict,
+    _ErrorCause.incompleteCheck => l10n.error_causeIncompleteCheck,
     _ErrorCause.unknown => l10n.error_causeUnknown,
   };
   return l10n.error_noticeWithCause(intro, cause);

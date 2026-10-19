@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/images/appointment_image_loader.dart';
 import 'package:scheduling/core/images/image_storage_service.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
@@ -9,7 +10,7 @@ import 'package:scheduling/features/calendar/domain/appointments_repository.dart
 import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
 
-/// The four overrides every widget test reaching an account exit needs.
+/// The dependency overrides every widget test reaching an account exit needs.
 ///
 /// `deregisterThisDevice` forgets everything the session cached locally, and
 /// each of the four fails a DIFFERENT way without an override. The image
@@ -30,9 +31,18 @@ import 'package:scheduling/features/clients/domain/clients_repository.dart';
 /// Pass [calls] to RECORD the teardown order (`'imageCache'`, `'clients'`,
 /// `'appointments'`); leave it null for silent stubs. That is the only
 /// difference between the two variants this replaces, so it is the only knob.
-List<Override> accountExitStubOverrides({List<String>? calls}) => [
+List<Override> accountExitStubOverrides({
+  List<String>? calls,
+  SessionFence? session,
+  PendingPhotoExit? pendingPhotos,
+}) => [
+  sessionFenceProvider.overrideWithValue(
+    session ?? SessionFence(readUid: () => 'test-uid'),
+  ),
   appointmentImageLoaderProvider.overrideWithValue(_StubLoader(calls)),
-  appointmentImageUploadProvider.overrideWithValue(_StubUploads(calls)),
+  appointmentImageUploadProvider.overrideWithValue(
+    _StubUploads(calls, pendingPhotos),
+  ),
   clientsRepositoryProvider.overrideWithValue(_StubClients(calls)),
   appointmentsRepositoryProvider.overrideWithValue(_StubAppointments(calls)),
 ];
@@ -49,7 +59,7 @@ class _StubLoader extends AppointmentImageLoader {
 }
 
 class _StubUploads extends AppointmentImageUploadService {
-  _StubUploads(this.calls)
+  _StubUploads(this.calls, this.pendingPhotos)
     : super(
         appointments: _StubAppointments(null),
         notifier: PhotoUploadNotifier(),
@@ -59,6 +69,11 @@ class _StubUploads extends AppointmentImageUploadService {
       );
 
   final List<String>? calls;
+  final PendingPhotoExit? pendingPhotos;
+
+  @override
+  Future<PendingPhotoExit> prepareForExit() async =>
+      pendingPhotos ?? const PendingPhotoExit(pendingCount: 0);
 
   @override
   Future<void> clearPending() async => calls?.add('imageUploads');

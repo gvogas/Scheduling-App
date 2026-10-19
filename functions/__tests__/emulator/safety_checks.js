@@ -16,6 +16,7 @@ const {
 } = require("../../employee_accounts_self");
 const {reconcileClientBuilding} = require("../../client_buildings");
 const {backfillBuildings} = require("../../scripts/backfill-client-buildings");
+const {verifyAppointmentEdits} = require("./appointment_edits_checks");
 
 /**
  * Invoked only after the parent smoke runner has validated demo/local hosts.
@@ -99,6 +100,7 @@ async function verifySafety(project, firestore, auth, admin) {
       }
     }
     console.log("Client deletion: both booking commit orders checked.");
+    await verifyAppointmentEdits(db, prefix, write);
 
     const email = `${prefix}@example.test`;
     const fields = {name: "Test Employee", email, colorValue: "1"};

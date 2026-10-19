@@ -66,6 +66,8 @@ final class CarPlayScheduleStore {
         let changed = fresh?.generatedAt != snapshot?.generatedAt
             || fresh?.days != snapshot?.days
             || fresh?.role != snapshot?.role
+            || fresh?.ownerUid != snapshot?.ownerUid
+            || fresh?.sessionEpoch != snapshot?.sessionEpoch
         snapshot = fresh
         guard changed else { return }
         notify()

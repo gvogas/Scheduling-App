@@ -555,46 +555,31 @@
       "collectionGroup": "appointmentReminders",
       "fieldPath": "expiresAt",
       "ttl": true,
-      "indexes": [
-        { "order": "ASCENDING", "queryScope": "COLLECTION" },
-        { "order": "DESCENDING", "queryScope": "COLLECTION" }
-      ]
+      "indexes": []
     },
     {
       "collectionGroup": "appointmentSeriesNotices",
       "fieldPath": "expiresAt",
       "ttl": true,
-      "indexes": [
-        { "order": "ASCENDING", "queryScope": "COLLECTION" },
-        { "order": "DESCENDING", "queryScope": "COLLECTION" }
-      ]
+      "indexes": []
     },
     {
       "collectionGroup": "appointmentOverduePrompts",
       "fieldPath": "expiresAt",
       "ttl": true,
-      "indexes": [
-        { "order": "ASCENDING", "queryScope": "COLLECTION" },
-        { "order": "DESCENDING", "queryScope": "COLLECTION" }
-      ]
+      "indexes": []
     },
     {
       "collectionGroup": "appointmentRecountClaims",
       "fieldPath": "expiresAt",
       "ttl": true,
-      "indexes": [
-        { "order": "ASCENDING", "queryScope": "COLLECTION" },
-        { "order": "DESCENDING", "queryScope": "COLLECTION" }
-      ]
+      "indexes": []
     },
     {
       "collectionGroup": "clientRecountClaims",
       "fieldPath": "expiresAt",
       "ttl": true,
-      "indexes": [
-        { "order": "ASCENDING", "queryScope": "COLLECTION" },
-        { "order": "DESCENDING", "queryScope": "COLLECTION" }
-      ]
+      "indexes": []
     },
     {
       "collectionGroup": "liveActivityTokens",
@@ -619,10 +604,7 @@
       "collectionGroup": "rateLimits",
       "fieldPath": "expiresAt",
       "ttl": true,
-      "indexes": [
-        { "order": "ASCENDING", "queryScope": "COLLECTION" },
-        { "order": "DESCENDING", "queryScope": "COLLECTION" }
-      ]
+      "indexes": []
     },
     {
       "collectionGroup": "presence",

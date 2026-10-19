@@ -126,6 +126,7 @@ void main() {
     widgetPayloads = StreamController<Map<String, dynamic>?>.broadcast();
     snapshotPayloads = StreamController<Map<String, dynamic>?>.broadcast();
     when(() => push.sync()).thenAnswer((_) async {});
+    when(() => push.retryRegistration()).thenAnswer((_) async {});
     when(() => presence.sync()).thenAnswer((_) async {});
     when(() => liveActivity.sync()).thenAnswer((_) async {});
     when(() => uploads.drainPending()).thenAnswer((_) async {});
@@ -268,6 +269,7 @@ void main() {
       await tester.pump();
 
       verify(() => uploads.drainPending()).called(1);
+      verify(() => push.retryRegistration()).called(1);
     });
 
     testWidgets('does NOT drain when signed out', (tester) async {

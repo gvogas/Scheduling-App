@@ -13,7 +13,7 @@ create copy had drifted into an unreachable `|| "synced"`. Requeuing a refused d
 in the same call. The trigger stamps only edited docs, so `backfill-wave-blocked.js` replays the contract (live
 2026-09-13: 726 scanned, 1 patched). Audit B1: a `blocked` client edited back to its last-synced values never
 re-ran the contract (the refusal write never touched `lastSyncedHash`). The badge reasons were a `Semantics`
-label only until Phase 2 made them visible text. Plan: `docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`.
+label only until Phase 2 made them visible text. Plan: `docs/archive/2026-09-10-wave-validated-contract-phases-2-4.md`.
 
 ## Decision
 `verdictPatch` over one verdict; enforce at enqueue, dispatch and import; build state and search tokens in

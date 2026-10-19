@@ -6,6 +6,7 @@ import 'package:live_activities/live_activities.dart';
 import 'package:live_activities/models/activity_update.dart';
 
 import 'package:scheduling/core/app/device_deregistration.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/platform/ios_platform.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
@@ -26,12 +27,16 @@ final liveActivityTokenRepositoryProvider =
       (ref) => LiveActivityTokenRepository(
         firestore: ref.watch(firestoreProvider),
         logger: ref.watch(loggerProvider),
+        session: ref.watch(sessionFenceProvider),
       ),
     );
 
 final liveActivityRegistrationControllerProvider =
     Provider<LiveActivityRegistrationController>((ref) {
-      final controller = LiveActivityRegistrationController(ref);
+      final controller = LiveActivityRegistrationController(
+        ref,
+        session: ref.watch(sessionFenceProvider),
+      );
       ref.onDispose(controller.dispose);
       return controller;
     });
@@ -54,13 +59,27 @@ class LiveActivityRegistrationController with ReentrantSync {
     this._ref, {
     FirebaseAuth? auth,
     LiveActivities? plugin,
+    SessionFence? session,
     this.isIosPlatform = defaultIsIosPlatform,
   }) : _injectedAuth = auth,
-       _injectedPlugin = plugin;
+       _injectedPlugin = plugin,
+       _logger = _ref.read(loggerProvider),
+       _session =
+           session ??
+           SessionFence(
+             readUid: () => (auth ?? FirebaseAuth.instance).currentUser?.uid,
+           );
 
   final Ref _ref;
   final FirebaseAuth? _injectedAuth;
   final LiveActivities? _injectedPlugin;
+  final AppLogger _logger;
+  final SessionFence _session;
+  SessionLease? _registrationLease;
+  bool _disposed = false;
+  Future<bool>? _endingCards;
+  bool _endRequired = false;
+  bool _resyncAfterEnd = false;
 
   /// Injected so tests can reach past the iOS gate (see `defaultIsIosPlatform`).
   final bool Function() isIosPlatform;
@@ -83,8 +102,6 @@ class LiveActivityRegistrationController with ReentrantSync {
   /// Live cards keyed by activity id — one update token each.
   final Map<String, String> _activityTokens = <String, String>{};
 
-  AppLogger get _logger => _ref.read(loggerProvider);
-
   static String _currentLocale() => currentServerLocale;
 
   /// Idempotent; concurrent calls coalesce.
@@ -105,11 +122,23 @@ class LiveActivityRegistrationController with ReentrantSync {
   /// The body of [sync], run under the [ReentrantSync] guard.
   Future<void> _syncGuarded() async {
     final generation = syncGeneration;
+    final lease = _session.capture();
+    if (lease == null || _disposed) return;
+    bool stale() => isSyncStale(generation) || !lease.isCurrent || _disposed;
+    if (_endingCards != null) {
+      _resyncAfterEnd = true;
+      return;
+    }
     // The cold-start default is true, so wait for the stored preference.
     await _ref.read(liveActivityEnabledProvider.notifier).ready;
-    if (isSyncStale(generation)) return;
+    if (stale()) return;
     final featureOn = _ref.read(featureFlagsProvider).liveActivities;
     if (featureOn) _pauseCleared = false;
+    if (_endRequired) {
+      final ended = await _endCardsNative();
+      if (stale() || !ended) return;
+      if (!featureOn) _pauseCleared = true;
+    }
     if (!_ref.read(liveActivityEnabledProvider)) {
       // Not `unregister`: invalidating the generation would drop an in-flight preference flip.
       await _teardown();
@@ -128,7 +157,10 @@ class LiveActivityRegistrationController with ReentrantSync {
     }
     if (!featureOn) {
       // A remote pause keeps the push-to-start row: iOS may not re-emit its token on resume.
-      if (!_pauseCleared) _pauseCleared = await _endLocalCards();
+      if (!_pauseCleared) {
+        final ended = await _endLocalCards();
+        if (!stale()) _pauseCleared = ended;
+      }
       return;
     }
 
@@ -138,16 +170,17 @@ class LiveActivityRegistrationController with ReentrantSync {
     if (uid != null &&
         uid == _uid &&
         locale == _locale &&
-        _pushToStartSub != null) {
+        _pushToStartSub != null &&
+        _registrationLease?.isCurrent == true) {
       return;
     }
 
     await _ref.read(firebaseReadyProvider.future).catchError((Object _) {});
-    if (uid == null || isSyncStale(generation)) return;
-    if (!await _ensurePlugin() || isSyncStale(generation)) return;
+    if (uid == null || stale()) return;
+    if (!await _ensurePlugin() || stale()) return;
 
     final docId = await _resolveUserDocId();
-    if (isSyncStale(generation)) return;
+    if (stale()) return;
     if (docId == null) {
       _logger.warn('LIVE-ACT no users doc for uid; skip token upsert');
       return;
@@ -156,9 +189,11 @@ class LiveActivityRegistrationController with ReentrantSync {
     _docId = docId;
     _uid = uid;
     _locale = locale;
-    await _reupsertKnownTokens();
-    _subscribePushToStart();
-    _subscribeActivityUpdates();
+    _registrationLease = lease;
+    await _reupsertKnownTokens(lease);
+    if (stale()) return;
+    _subscribePushToStart(lease, generation);
+    _subscribeActivityUpdates(lease, generation);
   }
 
   /// The one device-capability probe (iOS 17.2+, ActivityKit on, push start allowed); never throws.
@@ -185,30 +220,42 @@ class LiveActivityRegistrationController with ReentrantSync {
   }
 
   /// Re-stamps this device's rows so their `locale` (the card's EN/FR text) follows the app.
-  Future<void> _reupsertKnownTokens() async {
+  Future<void> _reupsertKnownTokens(SessionLease lease) async {
     final pushToStart = _pushToStartToken;
     if (pushToStart != null) {
       await _upsert(
         token: pushToStart,
         kind: LiveActivityTokenKind.pushToStart,
+        lease: lease,
       );
     }
-    for (final entry in _activityTokens.entries) {
+    for (final entry in _activityTokens.entries.toList()) {
       await _upsert(
         token: entry.value,
         kind: LiveActivityTokenKind.update,
         activityId: entry.key,
+        lease: lease,
       );
     }
   }
 
-  void _subscribePushToStart() {
-    unawaited(_pushToStartSub?.cancel());
+  void _subscribePushToStart(SessionLease lease, int generation) {
+    unawaited(_cancel(_pushToStartSub));
     _pushToStartSub = _plugin.pushToStartTokenUpdateStream.listen(
       (token) {
+        if (!lease.isCurrent ||
+            isSyncStale(generation) ||
+            _disposed ||
+            !identical(lease, _registrationLease)) {
+          return;
+        }
         _pushToStartToken = token;
         unawaited(
-          _upsert(token: token, kind: LiveActivityTokenKind.pushToStart),
+          _upsert(
+            token: token,
+            kind: LiveActivityTokenKind.pushToStart,
+            lease: lease,
+          ),
         );
       },
       onError: (Object e, StackTrace st) =>
@@ -216,10 +263,16 @@ class LiveActivityRegistrationController with ReentrantSync {
     );
   }
 
-  void _subscribeActivityUpdates() {
-    unawaited(_activitySub?.cancel());
+  void _subscribeActivityUpdates(SessionLease lease, int generation) {
+    unawaited(_cancel(_activitySub));
     _activitySub = _plugin.activityUpdateStream.listen(
       (event) {
+        if (!lease.isCurrent ||
+            isSyncStale(generation) ||
+            _disposed ||
+            !identical(lease, _registrationLease)) {
+          return;
+        }
         event.mapOrNull<void>(
           active: (value) {
             _activityTokens[value.activityId] = value.activityToken;
@@ -228,6 +281,7 @@ class LiveActivityRegistrationController with ReentrantSync {
                 token: value.activityToken,
                 kind: LiveActivityTokenKind.update,
                 activityId: value.activityId,
+                lease: lease,
               ),
             );
           },
@@ -241,13 +295,20 @@ class LiveActivityRegistrationController with ReentrantSync {
   }
 
   Future<void> _upsert({
+    required SessionLease lease,
     required String token,
     required LiveActivityTokenKind kind,
     String? activityId,
   }) async {
     final docId = _docId;
     final uid = _uid;
-    if (docId == null || uid == null) return;
+    if (docId == null ||
+        uid == null ||
+        !lease.isCurrent ||
+        !identical(lease, _registrationLease) ||
+        _disposed) {
+      return;
+    }
     await _ref
         .read(liveActivityTokenRepositoryProvider)
         .upsertToken(
@@ -280,18 +341,40 @@ class LiveActivityRegistrationController with ReentrantSync {
   /// [endLocalCards], reporting whether the device-wide end succeeded.
   Future<bool> _endLocalCards() async {
     if (!isIosPlatform() || !_pluginReady) return true;
-    var ended = true;
-    try {
-      await _plugin.endAllActivities();
-    } catch (e, st) {
-      ended = false;
-      _logger.warn('LIVE-ACT endLocalCards failed', e, st);
-    }
-    // Also swept here so a missed `ended` event cannot leave a dead row.
-    for (final activityId in _activityTokens.keys.toList()) {
-      await _forgetActivity(activityId);
+    final lease = _session.capture(duringExit: true);
+    final docId = _uid == lease?.uid ? _docId : null;
+    final activityIds = _activityTokens.keys.toList();
+    _activityTokens.clear();
+    final repository = _ref.read(liveActivityTokenRepositoryProvider);
+    final ended = await _endCardsNative();
+    for (final activityId in activityIds) {
+      if (lease?.isCurrent != true || docId == null || _disposed) break;
+      await repository.deleteToken(userDocId: docId, docId: activityId);
     }
     return ended;
+  }
+
+  Future<bool> _endCardsNative() {
+    final pending = _endingCards;
+    if (pending != null) return pending;
+    _endRequired = true;
+    final ending = () async {
+      try {
+        await _plugin.endAllActivities();
+        _endRequired = false;
+        return true;
+      } catch (error, stack) {
+        _logger.warn('LIVE-ACT endLocalCards failed', error, stack);
+        return false;
+      }
+    }();
+    return _endingCards = ending.whenComplete(() {
+      _endingCards = null;
+      if (_resyncAfterEnd && !_endRequired && !_disposed) {
+        _resyncAfterEnd = false;
+        unawaited(sync());
+      }
+    });
   }
 
   /// Best-effort de-registration for sign-out or account deletion; never throws.
@@ -302,27 +385,38 @@ class LiveActivityRegistrationController with ReentrantSync {
 
   /// [unregister] without the sync invalidation, for the opt-out reconcile in [_syncGuarded].
   Future<void> _teardown() async {
+    final generation = syncGeneration;
+    final lease = _session.capture(duringExit: true);
+    final knownDocId = _uid == lease?.uid ? _docId : null;
+    final ending = endLocalCards();
+    final cancellation = _cancelStreams();
+    _registrationLease = null;
+    _docId = null;
+    _uid = null;
+    _locale = null;
+    _pushToStartToken = null;
+    _activityTokens.clear();
     try {
-      await endLocalCards();
-      final docId = _docId ?? await _resolveUserDocId();
+      final repository = _ref.read(liveActivityTokenRepositoryProvider);
+      await ending;
+      await cancellation;
+      if (lease == null ||
+          !lease.isCurrent ||
+          isSyncStale(generation) ||
+          _disposed) {
+        return;
+      }
+      final docId = knownDocId ?? await _resolveUserDocId();
+      if (!lease.isCurrent || isSyncStale(generation) || _disposed) return;
       if (docId != null) {
         // By kind: the push-to-start doc id IS a token this session may never have seen.
-        await _ref
-            .read(liveActivityTokenRepositoryProvider)
-            .deleteTokensOfKind(
-              userDocId: docId,
-              kind: LiveActivityTokenKind.pushToStart,
-            );
+        await repository.deleteTokensOfKind(
+          userDocId: docId,
+          kind: LiveActivityTokenKind.pushToStart,
+        );
       }
     } catch (e, st) {
       _logger.warn('LIVE-ACT unregister failed', e, st);
-    } finally {
-      await _cancelStreams();
-      _docId = null;
-      _uid = null;
-      _locale = null;
-      _pushToStartToken = null;
-      _activityTokens.clear();
     }
   }
 
@@ -335,14 +429,29 @@ class LiveActivityRegistrationController with ReentrantSync {
   );
 
   Future<void> _cancelStreams() async {
-    await _pushToStartSub?.cancel();
+    final push = _pushToStartSub?.cancel();
+    final activity = _activitySub?.cancel();
     _pushToStartSub = null;
-    await _activitySub?.cancel();
     _activitySub = null;
+    try {
+      await Future.wait([?push, ?activity]);
+    } catch (error, stack) {
+      _logger.warn('LIVE-ACT cancel streams failed', error, stack);
+    }
+  }
+
+  Future<void> _cancel(StreamSubscription<dynamic>? stream) async {
+    try {
+      await stream?.cancel();
+    } catch (error, stack) {
+      _logger.warn('LIVE-ACT cancel stream failed', error, stack);
+    }
   }
 
   /// Cancels the token streams without [unregister]'s network delete.
   void dispose() {
+    _disposed = true;
+    invalidateSync();
     unawaited(_cancelStreams());
   }
 }

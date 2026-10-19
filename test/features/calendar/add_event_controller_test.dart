@@ -62,6 +62,7 @@ void main() {
     registerFallbackValue(DateTime(2026));
     registerFallbackValue(<AppointmentImage>[]);
     registerFallbackValue(<AppointmentRecord>[]);
+    registerFallbackValue(<File>[]);
   });
 
   late _MockAppointmentsRepo appointments;
@@ -75,6 +76,12 @@ void main() {
     clients = _MockClientsRepo();
     employees = _MockEmployeesRepo();
     uploader = _MockUploader();
+    when(
+      () => uploader.enqueuePhotos(
+        appointmentId: any(named: 'appointmentId'),
+        newImages: any(named: 'newImages'),
+      ),
+    ).thenAnswer((_) async {});
 
     // The roster a prefill resolves its crew against: two crew, one dispatcher.
     when(employees.watchEmployees).thenAnswer(
@@ -147,29 +154,23 @@ void main() {
       expect(readState().endDate, DateTime(2026, 8, 4));
     });
 
-    test(
-      'once touched, moving the start shifts the end by the same days',
-      () {
-        final c = readNotifier()
-          ..selectDate(DateTime(2026, 8))
-          ..selectEndDate(DateTime(2026, 8, 5));
-        expect(readState().endDateTouched, isTrue);
+    test('once touched, moving the start shifts the end by the same days', () {
+      final c = readNotifier()
+        ..selectDate(DateTime(2026, 8))
+        ..selectEndDate(DateTime(2026, 8, 5));
+      expect(readState().endDateTouched, isTrue);
 
-        c.selectDate(DateTime(2026, 8, 3));
-        expect(readState().endDate, DateTime(2026, 8, 7));
-      },
-    );
+      c.selectDate(DateTime(2026, 8, 3));
+      expect(readState().endDate, DateTime(2026, 8, 7));
+    });
 
-    test(
-      'a start date moved past a touched end date drags the end along',
-      () {
-        readNotifier()
-          ..selectDate(DateTime(2026, 8))
-          ..selectEndDate(DateTime(2026, 8, 2))
-          ..selectDate(DateTime(2026, 8, 10));
-        expect(readState().endDate, DateTime(2026, 8, 11));
-      },
-    );
+    test('a start date moved past a touched end date drags the end along', () {
+      readNotifier()
+        ..selectDate(DateTime(2026, 8))
+        ..selectEndDate(DateTime(2026, 8, 2))
+        ..selectDate(DateTime(2026, 8, 10));
+      expect(readState().endDate, DateTime(2026, 8, 11));
+    });
 
     test('selectEndDate clears any endDate error', () async {
       final c = readNotifier()
@@ -247,13 +248,16 @@ void main() {
       expect(readState().isSearchingClient, isFalse);
     });
 
-    test('a digits-only query under seven digits never hits the repository', () async {
-      await readNotifier().searchClients('514');
-      await readNotifier().searchClients('514562');
-      verifyNever(() => clients.searchClients(any()));
-      expect(readState().clientSearchStatus.isHolding, isTrue);
-      expect(readState().clientSearchStatus.digitsTyped, 6);
-    });
+    test(
+      'a digits-only query under seven digits never hits the repository',
+      () async {
+        await readNotifier().searchClients('514');
+        await readNotifier().searchClients('514562');
+        verifyNever(() => clients.searchClients(any()));
+        expect(readState().clientSearchStatus.isHolding, isTrue);
+        expect(readState().clientSearchStatus.digitsTyped, 6);
+      },
+    );
 
     test('a text query still searches from the first character', () async {
       when(() => clients.searchClients(any())).thenAnswer((_) async => []);
@@ -276,15 +280,19 @@ void main() {
       verify(() => clients.searchClients('5145628332')).called(1);
     });
 
-    test('extra digits narrow the previous answer with no second call', () async {
-      when(() => clients.searchClients('5145628'))
-          .thenAnswer((_) async => [marie, jp]);
-      await readNotifier().searchClients('5145628');
-      await readNotifier().searchClients('5145628332');
-      verify(() => clients.searchClients('5145628')).called(1);
-      verifyNever(() => clients.searchClients('5145628332'));
-      expect(readState().clientResults, [marie]);
-    });
+    test(
+      'extra digits narrow the previous answer with no second call',
+      () async {
+        when(
+          () => clients.searchClients('5145628'),
+        ).thenAnswer((_) async => [marie, jp]);
+        await readNotifier().searchClients('5145628');
+        await readNotifier().searchClients('5145628332');
+        verify(() => clients.searchClients('5145628')).called(1);
+        verifyNever(() => clients.searchClients('5145628332'));
+        expect(readState().clientResults, [marie]);
+      },
+    );
 
     // F5
     test('a truncated answer is re-queried rather than narrowed', () async {
@@ -292,17 +300,24 @@ void main() {
         25,
         (i) => ClientRecord(id: 'c$i', name: '514562$i', phone: '514562$i'),
       );
-      when(() => clients.searchClients('5145628')).thenAnswer((_) async => full);
-      when(() => clients.searchClients('5145628332'))
-          .thenAnswer((_) async => [marie]);
+      when(
+        () => clients.searchClients('5145628'),
+      ).thenAnswer((_) async => full);
+      when(
+        () => clients.searchClients('5145628332'),
+      ).thenAnswer((_) async => [marie]);
       await readNotifier().searchClients('5145628');
       await readNotifier().searchClients('5145628332');
       verify(() => clients.searchClients('5145628332')).called(1);
     });
 
     test('a miss at ten digits falls back to the first seven', () async {
-      when(() => clients.searchClients('5145628233')).thenAnswer((_) async => []);
-      when(() => clients.searchClients('5145628')).thenAnswer((_) async => [marie]);
+      when(
+        () => clients.searchClients('5145628233'),
+      ).thenAnswer((_) async => []);
+      when(
+        () => clients.searchClients('5145628'),
+      ).thenAnswer((_) async => [marie]);
       await readNotifier().searchClients('5145628233');
       expect(readState().clientResults, [marie]);
       expect(readState().clientSearchStatus.answeredRung, PhoneRung.firstSeven);
@@ -324,21 +339,31 @@ void main() {
       expect(readState().isSearchingClient, isFalse);
     });
 
-    test('starting a new search clears the previous rows immediately', () async {
-      when(() => clients.searchClients('5145628')).thenAnswer((_) async => [marie]);
-      await readNotifier().searchClients('5145628');
-      expect(readState().clientResults, isNotEmpty);
+    test(
+      'starting a new search clears the previous rows immediately',
+      () async {
+        when(
+          () => clients.searchClients('5145628'),
+        ).thenAnswer((_) async => [marie]);
+        await readNotifier().searchClients('5145628');
+        expect(readState().clientResults, isNotEmpty);
 
-      final gate = Completer<List<ClientRecord>>();
-      when(() => clients.searchClients('4385551')).thenAnswer((_) => gate.future);
-      final pending = readNotifier().searchClients('4385551');
-      expect(readState().clientResults, isEmpty,
-          reason: 'stale rows must not stay tappable behind the spinner');
-      expect(readState().isSearchingClient, isTrue);
-      gate.complete([jp]);
-      await pending;
-      expect(readState().clientResults, [jp]);
-    });
+        final gate = Completer<List<ClientRecord>>();
+        when(
+          () => clients.searchClients('4385551'),
+        ).thenAnswer((_) => gate.future);
+        final pending = readNotifier().searchClients('4385551');
+        expect(
+          readState().clientResults,
+          isEmpty,
+          reason: 'stale rows must not stay tappable behind the spinner',
+        );
+        expect(readState().isSearchingClient, isTrue);
+        gate.complete([jp]);
+        await pending;
+        expect(readState().clientResults, [jp]);
+      },
+    );
   });
 
   group('selectClient', () {
@@ -418,40 +443,76 @@ void main() {
       },
     );
 
+    test('a PERSONAL save never returns the busy outcome — the clash alert '
+        'handles it after the write', () async {
+      // Both would fire otherwise, giving two dialogs about the same clash
+      // back to back.
+      when(
+        () => appointments.findBusyEmployees(
+          candidates: any(named: 'candidates'),
+          start: any(named: 'start'),
+          end: any(named: 'end'),
+        ),
+      ).thenAnswer((_) async => const [_employeeA]);
+
+      final c = readNotifier();
+      fillValid(c);
+      c.setPersonal(value: true);
+
+      final outcome = await c.submit(
+        title: 'Dentist',
+        address: '',
+        notes: '',
+        materialsNeeded: '',
+      );
+
+      expect(outcome, isA<AddEventSubmitted>());
+      verifyNever(
+        () => appointments.findBusyEmployees(
+          candidates: any(named: 'candidates'),
+          start: any(named: 'start'),
+          end: any(named: 'end'),
+        ),
+      );
+      verify(() => appointments.addAppointment(any())).called(1);
+    });
+
     test(
-      'a PERSONAL save never returns the busy outcome — the clash alert '
-      'handles it after the write',
+      'waits for local photo handoff before reporting the created appointment',
       () async {
-        // Both would fire otherwise, giving two dialogs about the same clash
-        // back to back.
+        final controller = readNotifier();
+        fillValid(controller);
+        controller.addImages([File('picked.jpg')]);
+        final entered = Completer<void>();
+        final handoff = Completer<void>();
         when(
-          () => appointments.findBusyEmployees(
-            candidates: any(named: 'candidates'),
-            start: any(named: 'start'),
-            end: any(named: 'end'),
+          () => uploader.enqueuePhotos(
+            appointmentId: any(named: 'appointmentId'),
+            newImages: any(named: 'newImages'),
           ),
-        ).thenAnswer((_) async => const [_employeeA]);
-
-        final c = readNotifier();
-        fillValid(c);
-        c.setPersonal(value: true);
-
-        final outcome = await c.submit(
-          title: 'Dentist',
-          address: '',
-          notes: '',
-          materialsNeeded: '',
-        );
-
-        expect(outcome, isA<AddEventSubmitted>());
-        verifyNever(
-          () => appointments.findBusyEmployees(
-            candidates: any(named: 'candidates'),
-            start: any(named: 'start'),
-            end: any(named: 'end'),
-          ),
-        );
+        ).thenAnswer((_) {
+          entered.complete();
+          return handoff.future;
+        });
+        var completed = false;
+        final saving = controller
+            .submit(
+              title: 'Leak fix',
+              address: '1 Main St',
+              notes: '',
+              materialsNeeded: '',
+            )
+            .then((outcome) {
+              completed = true;
+              return outcome;
+            });
+        await entered.future;
+        expect(completed, isFalse);
         verify(() => appointments.addAppointment(any())).called(1);
+
+        handoff.complete();
+
+        expect(await saving, isA<AddEventSubmitted>());
       },
     );
 
@@ -480,7 +541,7 @@ void main() {
       verify(() => appointments.addAppointment(any())).called(1);
       // No images were selected, so the uploader should never run.
       verifyNever(
-        () => uploader.uploadInBackground(
+        () => uploader.enqueuePhotos(
           appointmentId: any(named: 'appointmentId'),
           newImages: any(named: 'newImages'),
         ),

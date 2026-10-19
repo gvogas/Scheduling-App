@@ -2,7 +2,7 @@
 
 Things left over from the rules cut-down and its code follow-up pass.
 
-**Status: ALL DONE 2026-10-08.**
+**Status (swept 2026-10-18): ALL DONE 2026-10-08, archived** (`3000b7e4`..`8d296a04`). Item 3's rules change DEPLOYED 2026-10-11 (run 38155634051, `0ab3f05c`); its "pending" wording below is the state at the time.
 
 ## 1. Run the touched tests in isolation — DONE
 

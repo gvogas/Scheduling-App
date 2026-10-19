@@ -81,6 +81,7 @@ class EventDetailsSavePipeline {
       employeeIds: assignees.ids,
       employeeNames: assignees.names,
       notes: notes.trim(),
+      fieldNotes: appointment.fieldNotes,
       materialsNeeded: materialsNeeded.trim(),
       status: status,
       repeat: repeat,
@@ -107,7 +108,7 @@ class EventDetailsSavePipeline {
     // Delete bytes only after documents stop referencing them.
     await _deleteOrphanedImages(removedImages);
     if (newImages.isNotEmpty) {
-      uploader?.uploadInBackground(appointmentId: id, newImages: newImages);
+      await uploader?.enqueuePhotos(appointmentId: id, newImages: newImages);
     }
   }
 

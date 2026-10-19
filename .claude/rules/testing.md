@@ -60,12 +60,12 @@ before each file; nothing else is reset. The leaks found when sharding landed
   `FlutterSecureStorage.setMockInitialValues({})` in `setUp`. `SettingsScreen`
   additionally needs `PackageInfo.setMockInitialValues(...)` and a `ProviderScope`
   (it watches `appInfoProvider` + `appLockEnabledProvider` during build).
-- **Any widget test reaching an account exit must override FOUR providers:
+- **Any widget test reaching an account exit must override FIVE providers:
   `appointmentImageLoaderProvider`, `appointmentImageUploadProvider`,
-  `clientsRepositoryProvider` and `appointmentsRepositoryProvider`** — count
-  them off `accountExitStubOverrides` rather than off this sentence, which said
-  THREE until 2026-09-05 while the helper returned four, so following it as
-  written still hung. `deregisterThisDevice` forgets everything
+  `clientsRepositoryProvider`, `appointmentsRepositoryProvider` and
+  `sessionFenceProvider`** — spread `accountExitStubOverrides()` to keep this
+  list current. The session fence needs an injected UID rather than a live
+  Firebase Auth stream. `deregisterThisDevice` forgets everything
   the session cached locally, and each of them fails a different way
   without an override. The image loader resolves the platform cache directory
   through `path_provider`, and a method channel never completes under

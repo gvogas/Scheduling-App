@@ -66,9 +66,7 @@ void main() {
       expect(noticeFor(_fb('not-found')), expected(l10n.error_causeNotFound));
     });
 
-    testWidgets('socket and timeout exceptions map to offline', (
-      tester,
-    ) async {
+    testWidgets('socket and timeout exceptions map to offline', (tester) async {
       await pumpHost(tester);
       expect(
         noticeFor(const SocketException('x')),
@@ -112,6 +110,37 @@ void main() {
       await pumpHost(tester);
       expect(noticeFor(Exception('boom')), expected(l10n.error_causeUnknown));
       expect(noticeFor(_fb('aborted')), expected(l10n.error_causeUnknown));
+      expect(
+        noticeFor(
+          FirebaseException(
+            plugin: 'cloud_functions',
+            code: 'aborted',
+            message: 'appointment-edit-conflict',
+          ),
+        ),
+        expected(l10n.error_causeEditConflict),
+      );
+    });
+
+    testWidgets('an incomplete scan is distinct from rate limiting', (
+      tester,
+    ) async {
+      await pumpHost(tester);
+      for (final message in [
+        'conflict-scan-incomplete',
+        'client-search-incomplete',
+      ]) {
+        expect(
+          noticeFor(
+            FirebaseException(
+              plugin: 'cloud_functions',
+              code: 'resource-exhausted',
+              message: message,
+            ),
+          ),
+          expected(l10n.error_causeIncompleteCheck),
+        );
+      }
     });
   });
 
@@ -200,10 +229,7 @@ void main() {
       expect(notice, isA<NoticeError>());
       // The caller's intro, then the shared offline cause — the same sentence
       // composeErrorNotice builds for a real SocketException.
-      expect(
-        notice.message,
-        'Intro. ${l10n.error_causeOffline}',
-      );
+      expect(notice.message, 'Intro. ${l10n.error_causeOffline}');
     });
   });
 

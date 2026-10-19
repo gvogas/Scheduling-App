@@ -78,6 +78,7 @@ function dbReturning(docs) {
     calls,
     collection: jest.fn((name) => {
       const chain = {name, where: [], orderBy: null, limit: null};
+      let offset = 0;
       calls.push(chain);
       const q = {
         where: (f, op, v) => {
@@ -92,7 +93,17 @@ function dbReturning(docs) {
           chain.limit = n;
           return q;
         },
-        get: async () => ({docs: docs.map(makeDoc)}),
+        startAfter: (doc) => {
+          offset = docs.findIndex((entry) => entry.id === doc.id) + 1;
+          return q;
+        },
+        select: (...fields) => {
+          chain.select = fields;
+          return q;
+        },
+        get: async () => ({
+          docs: docs.slice(offset, offset + chain.limit).map(makeDoc),
+        }),
       };
       return q;
     }),
@@ -246,17 +257,54 @@ describe("searchClients", () => {
     expect(out.clients).toHaveLength(25);
   });
 
-  test("hitting the read cap WARNS — the truncation must not be silent",
+  test("result truncation reports the complete candidate and match counts",
       async () => {
         const many = Array.from({length: 200}, (_, i) => ({
           id: `c${i}`, name: "Smith", firstName: "A", lastName: "Smith",
         }));
         getFirestore.mockReturnValue(dbReturning(many));
-        await searchClients.run(req({query: "smith"}));
-        expect(logger.warn).toHaveBeenCalledWith(
-            "searchClients: read cap hit", expect.any(Object));
-        const [, payload] = logger.warn.mock.calls[0];
-        expect(JSON.stringify(payload)).not.toContain(UID);
+        const out = await searchClients.run(req({query: "smith"}));
+        expect(out).toMatchObject({
+          examinedCount: 200, matchedCount: 200, truncated: true,
+        });
+        expect(logger.warn).not.toHaveBeenCalled();
+      });
+
+  test("the only full multiword match beyond 200 candidates is found",
+      async () => {
+        getFirestore.mockReturnValue(dbReturning([
+          ...Array.from({length: 200}, (_, i) => ({
+            id: `broad${i}`, name: "Ada Other",
+          })),
+          {id: "full", name: "Ada Smith"},
+        ]));
+        const out = await searchClients.run(req({query: "ada smith"}));
+        expect(out.clients.map((client) => client.id)).toEqual(["full"]);
+        expect(out).toMatchObject({examinedCount: 201, truncated: false});
+      });
+
+  test("an exact phone beyond the display limit is prioritized", async () => {
+    getFirestore.mockReturnValue(dbReturning([
+      ...Array.from({length: 30}, (_, i) => ({
+        id: `broad${i}`, name: `A${i}`, phone: "151455512340",
+      })),
+      {id: "exact", name: "Zed", phone: "(514) 555-1234"},
+    ]));
+    const out = await searchClients.run(req({query: "5145551234"}));
+    expect(out.clients[0].id).toBe("exact");
+    expect(out).toMatchObject({matchedCount: 31, truncated: true});
+  });
+
+  test("an incomplete candidate scan reports an error, never no matches",
+      async () => {
+        getFirestore.mockReturnValue(dbReturning(
+            Array.from({length: 5001}, (_, i) => ({
+              id: `c${i}`, name: "Ada Other",
+            }))));
+        const error = await expectRejection(searchClients,
+            req({query: "ada smith"}));
+        expect(error.code).toBe("resource-exhausted");
+        expect(error.message).toBe("client-search-incomplete");
       });
 
   test("a short result set does not warn", async () => {
@@ -497,16 +545,84 @@ describe("findAppointmentConflicts", () => {
     expect(out.appointments.map((a) => a.id)).toEqual(["a1"]);
   });
 
-  test("hitting the read cap warns", async () => {
-    const many = Array.from({length: 500}, (_, i) => ({
+  test("the only conflict beyond 500 terminal rows is returned", async () => {
+    const many = Array.from({length: 501}, (_, i) => ({
       id: `a${i}`,
-      status: "pending",
+      status: i === 500 ? "pending" : "done",
       startTime: new Date(base.startMillis),
       endTime: new Date(base.endMillis),
     }));
     getFirestore.mockReturnValue(dbReturning(many));
-    await findAppointmentConflicts.run(req());
-    expect(logger.warn).toHaveBeenCalledWith(
-        "findAppointmentConflicts: read cap hit", expect.any(Object));
+    const out = await findAppointmentConflicts.run(req());
+    expect(out.appointments.map((a) => a.id)).toEqual(["a500"]);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test.each([5000, 5001])("%i candidate rows have an honest outcome",
+      async (count) => {
+        const many = Array.from({length: count}, (_, i) => ({
+          id: `a${i}`, status: "done",
+          startTime: new Date(base.startMillis),
+          endTime: new Date(base.endMillis),
+        }));
+        getFirestore.mockReturnValue(dbReturning(many));
+        if (count === 5000) {
+          expect((await findAppointmentConflicts.run(req())).appointments)
+              .toEqual([]);
+          expect(logger.warn).not.toHaveBeenCalled();
+        } else {
+          expect((await expectRejection(findAppointmentConflicts, req())).code)
+              .toBe("resource-exhausted");
+          expect(logger.warn).toHaveBeenCalled();
+        }
+      });
+});
+
+
+describe("bounded conflict batches", () => {
+  const start = Date.UTC(2026, 9, 18, 9);
+  const hour = 3600000;
+  const day = 24 * hour;
+  const windows = [0, 1].map((i) => ({startMillis: start + i * day,
+    endMillis: start + i * day + hour}));
+  const request = (extra = {}) => ({auth: {uid: UID}, data: {
+    employeeIds: ["e1"], startMillis: start, endMillis: start + hour,
+    windows, ...extra,
+  }});
+
+  test("preserves order, exclusions and the batch budget", async () => {
+    const db = dbReturning([0, 1].map((i) => ({id: `a${i}`,
+      employeeIds: ["e1", "outside"], status: "pending",
+      startTime: new Date(start + i * day),
+      endTime: new Date(start + i * day + hour)})));
+    getFirestore.mockReturnValue(db);
+    const out = await findAppointmentConflicts.run(request({
+      excludeAppointmentIds: ["a0"],
+    }));
+    expect(out).toEqual({windows: [
+      {busyEmployeeIds: []}, {busyEmployeeIds: ["e1"]},
+    ]});
+    expect(security.enforceDurableRateLimit).toHaveBeenCalledWith(
+        "findAppointmentConflicts", UID, 120, 60000, "uid", 2);
+    expect(db.calls).toHaveLength(2);
+    expect(db.calls.every((call) => call.select.includes("employeeIds")))
+        .toBe(true);
+    expect(db.calls.some((call) => call.select.includes("notes"))).toBe(false);
+  });
+
+  test.each([[], Array(17).fill(windows[0]), [{unexpected: true}],
+    [{startMillis: start + hour, endMillis: start}]].map((value) => [value]))(
+      "invalid batch %j spends no rate or query work", async (value) => {
+        await expect(findAppointmentConflicts.run(request({windows: value})))
+            .rejects.toMatchObject({code: "invalid-argument"});
+        expect(security.enforceDurableRateLimit).not.toHaveBeenCalled();
+        expect(getFirestore).not.toHaveBeenCalled();
+      });
+
+  test("an incomplete window rejects the whole batch", async () => {
+    getFirestore.mockReturnValue(dbReturning(Array.from({length: 5001},
+        (_, i) => ({id: `closed-${i}`, status: "done"}))));
+    await expect(findAppointmentConflicts.run(request()))
+        .rejects.toMatchObject({code: "resource-exhausted"});
   });
 });

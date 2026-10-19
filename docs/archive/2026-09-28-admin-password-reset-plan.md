@@ -1,6 +1,6 @@
 # Admin Password Reset Implementation Plan
 
-**Status: EXECUTED 2026-09-29** (verified 2026-10-01) — built, backend deployed at `306ed848` + `cc38be5d`, app half unshipped in 1.63.0+93. The "Deviations from the spec" section records where the real code forced a different shape; the unticked boxes below are unknown, not outstanding.
+**Status (swept 2026-10-18): EXECUTED and SHIPPED, archived.** Backend `306ed848` + `cc38be5d` (2026-09-29), S4 `8739e48c`; app in 1.63.0+93, on every phone (owner, 2026-10-09). The "Deviations from the spec" section records where the real code forced a different shape. Unticked boxes are unknown, not outstanding.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

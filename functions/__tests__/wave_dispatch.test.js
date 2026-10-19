@@ -266,6 +266,41 @@ describe("drainQueue happy path", () => {
 // ---------------------------------------------------------------------------
 
 describe("drainQueue claim atomicity", () => {
+  test("a job deferred after the query is not claimed early", async () => {
+    const job = {id: "customerUpsert__c1", data: {
+      type: "customerUpsert", refPath: "clients/c1", status: "queued",
+      attempts: 0, nextAttemptAt: new Date("2024-01-01"),
+    }};
+    const {db, refs} = drainDb([job]);
+    refs[0]._data.nextAttemptAt = new Date(+now() + 60_000);
+    const upsertCustomer = jest.fn();
+    const summary = await drainQueue({
+      db, now, logger: fakeLogger(), upsertCustomer,
+    });
+    expect(upsertCustomer).not.toHaveBeenCalled();
+    expect(summary.skipped).toBe(1);
+    expect(refs[0]._data.status).toBe("queued");
+  });
+
+  test("dispatch and failure use current claimed attempts and reference",
+      async () => {
+        const job = {id: "customerUpsert__c1", data: {
+          type: "customerUpsert", refPath: "clients/stale", status: "queued",
+          attempts: 0, nextAttemptAt: new Date("2024-01-01"),
+        }};
+        const {db, refs} = drainDb([job]);
+        Object.assign(refs[0]._data, {attempts: 3, refPath: "clients/current"});
+        const upsertCustomer = jest.fn().mockRejectedValue(
+            new WaveApiError("network", "offline"));
+        await drainQueue({
+          db, now, logger: fakeLogger(), upsertCustomer,
+          backoffFn: fixedBackoff(), maxAttempts: 5,
+        });
+        expect(upsertCustomer).toHaveBeenCalledWith("current",
+            expect.objectContaining({priorAttempts: 3}));
+        expect(refs[0]._data.attempts).toBe(4);
+      });
+
   test("skips a job that is already inflight at claim time", async () => {
     const job = {
       id: "customerUpsert__c1",

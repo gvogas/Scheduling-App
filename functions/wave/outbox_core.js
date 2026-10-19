@@ -265,30 +265,32 @@ async function reclaimStaleJobs(ctx) {
  * @param {!DrainContext} ctx Shared drain state.
  * @param {!Object} doc The queue doc snapshot from the batch query.
  * @param {!Date} claimStamp The lease stamp; `commitOutcome` matches on it.
- * @return {!Promise<boolean>} whether this drain now owns the job.
+ * @return {!Promise<?Object>} Current claimed fields, or null if not claimed.
  */
 async function claimJob(ctx, doc, claimStamp) {
   const {db, logger} = ctx;
-  let claimed = false;
+  let claimed = null;
   try {
     await db.runTransaction(async (tx) => {
       // Reset on each retry so a prior abandoned callback run doesn't bleed:
       // Firestore may re-run the callback, and a `true` left over from an
       // aborted attempt would claim a job this drain does not hold.
-      claimed = false;
+      claimed = null;
       const fresh = await tx.get(doc.ref);
       if (!fresh || !fresh.exists) return; // deleted between query and claim
       const freshData = fresh.data() || {};
       if (freshData.status !== "queued") return; // already claimed/done
+      const dueAt = timestampToMs(freshData.nextAttemptAt);
+      if (!Number.isFinite(dueAt) || dueAt > timestampToMs(claimStamp)) return;
       tx.update(doc.ref, {status: "inflight", claimedAt: claimStamp});
-      claimed = true;
+      claimed = freshData;
     });
   } catch (txErr) {
     logger.warn("WAVE-WORKER claim transaction failed", {
       jobId: doc.id,
       error: sanitizeError(txErr),
     });
-    return false;
+    return null;
   }
   return claimed;
 }

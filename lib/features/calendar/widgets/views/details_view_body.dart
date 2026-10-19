@@ -9,6 +9,7 @@ import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/core/utils/date_utils_helper.dart';
+import 'package:scheduling/core/utils/presentation_time_provider.dart';
 import 'package:scheduling/features/auth/application/active_user_identity_provider.dart';
 import 'package:scheduling/features/auth/application/is_active_admin_provider.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
@@ -220,7 +221,11 @@ class DetailsViewBody extends ConsumerWidget {
     final isSaving = ref.watch(provider.select((s) => s.isSaving));
     final notifier = ref.read(provider.notifier);
 
-    final data = _DetailsViewData.from(appointment, client);
+    final data = _DetailsViewData.from(
+      appointment,
+      client,
+      ref.watch(presentationTimeProvider),
+    );
     // Resolved once: it gates the field record below AND the Start button.
     final canRecordFieldWork = _canRecordFieldWork(ref, appointment);
 
@@ -611,12 +616,15 @@ class _DetailsViewData {
   factory _DetailsViewData.from(
     AppointmentRecord appointment,
     ClientRecord? client,
+    DateTime now,
   ) {
     final status = AppointmentStatus.fromRaw(appointment.status);
     // The actions (mark-done/cancel/edit) are gated on the real stored status,
     // while the header chip uses the time-derived one instead, so it matches
     // what the card shows.
-    final displayStatus = AppointmentStatus.fromRaw(appointment.displayStatus);
+    final displayStatus = AppointmentStatus.fromRaw(
+      appointment.displayStatusAt(now),
+    );
     final phone = (client?.phone.isNotEmpty ?? false)
         ? client!.phone
         : appointment.clientPhone;

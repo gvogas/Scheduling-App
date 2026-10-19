@@ -2,16 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (2026-09-13): PHASE 2 COMPLETE — shipped in 1.61.0+90 and deployed
-2026-09-13 02:07Z (`38c8225b`), in the inverted order below. Phase 3 COMPLETE
-(its own plan, archived at `docs/archive/2026-09-11-wave-validated-contract-phase-3.md`). Phase 4
-BUILT 2026-09-13 and DEPLOYED 2026-09-19 16:37Z (`608b817a`, all 29 updated,
-no export change); the cadence wording was dropped from `docs/legal/` the same
-day. Left (verified 2026-10-01): republish privacy + terms to `es-pro-legal`; ship the
-app build that drops the Settings cadence picker (gone from `lib/`, rides 1.63.0+93,
-unshipped); and — its own §4a deploy, once 1.61.0 has aged out of the fleet,
-which cannot start until a newer build ships — delete `waveSetImportSchedule`
-(DONE 2026-10-11, ADR-0184, `0ab3f05c`).** The "nothing deployed" paragraph below is the
+**Status (swept 2026-10-18): COMPLETE, archived.** Phase 2 deployed 2026-09-13 (`38c8225b`), Phase 3 in its own archived plan, Phase 4 deployed 2026-09-19 (`608b817a`); the cadence-free app shipped in 1.63.0+93 and `waveSetImportSchedule` was deleted 2026-10-11 (`0ab3f05c`, ADR-0184). Only off-repo item: republish privacy + terms to `es-pro-legal` (carried in `docs/plans/README.md` §6). The "nothing deployed" paragraph below is the
 build-time state. Phase 1 was complete, deployed (`fe9edc51`, report-only) and
 prod-replayed 2026-09-09 (**724 clients, 0 blocking, 1 advisory**). Design:
 `docs/archive/2026-08-30-wave-validated-contract-design.md` §3-§7. Phase 1 plan:

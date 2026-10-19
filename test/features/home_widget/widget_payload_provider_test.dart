@@ -18,6 +18,10 @@ import 'package:scheduling/features/home_widget/application/widget_sync_service.
 /// three-line branch and it is the whole reason `AppSyncListeners.isUnsettled`
 /// exists.
 void main() {
+  // The signed-in path reads currentDayProvider, whose lifecycle listener
+  // needs a binding even when this file runs outside the shared test shards.
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   /// Reads the payload once the overridden identity has settled.
   Future<AsyncValue<Map<String, dynamic>?>> payloadFor(
     Future<ActiveUserIdentity?> Function(Ref ref) identity,

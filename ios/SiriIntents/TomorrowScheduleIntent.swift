@@ -27,16 +27,20 @@ struct TomorrowScheduleIntent: AppIntent {
         }
         let tomorrow = Calendar.current.date(
             byAdding: .day, value: 1, to: Date()) ?? Date()
-        let appointments = snapshot.day(on: tomorrow)?.appointments ?? []
+        guard let bucket = snapshot.day(on: tomorrow) else {
+            return .result(dialog: IntentDialog(stringLiteral: SiriStrings.outOfWindow))
+        }
+        let appointments = bucket.appointments
         guard !appointments.isEmpty else {
             return .result(dialog: IntentDialog(
-                stringLiteral: SiriStrings.emptyDayFor(
+                stringLiteral: bucket.isPartial ? SiriStrings.partialSchedule : SiriStrings.emptyDayFor(
                     tomorrow, admin: snapshot.isAdmin)))
         }
         let intro = SiriStrings.scheduleIntroFor(
             appointments.count, date: tomorrow, admin: snapshot.isAdmin)
         let lines = appointments.map(SiriStrings.scheduleLine)
-        let spoken = ([intro] + lines).joined(separator: " ")
+        let tail = bucket.isPartial ? [SiriStrings.partialSchedule] : []
+        let spoken = ([intro] + lines + tail).joined(separator: " ")
         return .result(dialog: IntentDialog(stringLiteral: spoken))
     }
 }

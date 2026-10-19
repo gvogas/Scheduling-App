@@ -52,9 +52,13 @@ class AppointmentImageDiskCache {
   /// Returns cached bytes for [key], or null for a miss.
   Future<Uint8List?> read(String key) async {
     if (key.isEmpty) return null;
+    final generation = _generation;
     try {
+      await _mutations;
+      if (generation != _generation) return null;
       final file = await _fileFor(key);
       final bytes = await file.readAsBytes();
+      if (generation != _generation) return null;
       return bytes.isEmpty ? null : bytes;
     } on PathNotFoundException {
       // A missing file is the ordinary cache-miss path.

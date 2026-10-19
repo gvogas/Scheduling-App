@@ -339,6 +339,54 @@ void main() {
       expect(pushToStart.hasListener, isTrue);
     });
 
+    test(
+      'a delayed old card ending cannot detach replacement token streams',
+      () async {
+        final container = await registered();
+        final controller = controllerOf(container);
+        final started = Completer<void>();
+        final release = Completer<void>();
+        when(plugin.endAllActivities).thenAnswer((_) {
+          started.complete();
+          return release.future;
+        });
+        final exit = controller.unregister();
+        await started.future;
+        final nextUser = _MockUser();
+        when(() => nextUser.uid).thenReturn('uid-2');
+        when(() => auth.currentUser).thenReturn(nextUser);
+        when(
+          () => employees.findUserByUid('uid-2'),
+        ).thenAnswer((_) async => const UserUidMatch(id: 'doc-2', data: {}));
+        await controller.sync();
+        expect(pushToStart.hasListener, isFalse);
+        release.complete();
+        await exit;
+        await pumpEventQueue();
+        expect(pushToStart.hasListener, isTrue);
+        pushToStart.add('token-b');
+        await pumpEventQueue();
+        verify(
+          () => tokenRepo.upsertToken(
+            userDocId: 'doc-2',
+            docId: any(named: 'docId'),
+            token: 'token-b',
+            kind: LiveActivityTokenKind.pushToStart,
+            locale: any(named: 'locale'),
+            uid: 'uid-2',
+            expiresAt: any(named: 'expiresAt'),
+          ),
+        ).called(1);
+        verifyNever(
+          () => tokenRepo.deleteTokensOfKind(
+            userDocId: 'doc-2',
+            kind: any(named: 'kind'),
+          ),
+        );
+        controller.dispose();
+      },
+    );
+
     test('ends local cards once per pause, not on every sync', () async {
       final container = await registered();
 

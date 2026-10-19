@@ -19,6 +19,7 @@ import 'package:scheduling/features/auth/screens/change_password_screen.dart';
 import 'package:scheduling/features/auth/services/auth_service.dart';
 import 'package:scheduling/features/auth/widgets/auth_banner.dart';
 import 'package:scheduling/features/auth/widgets/auth_fields.dart';
+import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/features/live_activity/application/live_activity_registration_controller.dart';
 import 'package:scheduling/features/notifications/application/push_registration_controller.dart';
@@ -75,7 +76,10 @@ const _teardownThenSignOut = [
 ];
 
 /// Device-registration doubles that record each teardown step into [calls].
-List<Override> _deviceOverrides(List<String> calls) {
+List<Override> _deviceOverrides(
+  List<String> calls, {
+  PendingPhotoExit? pendingPhotos,
+}) {
   final push = _MockPush();
   final presence = _MockPresence();
   final liveActivity = _MockLiveActivity();
@@ -94,7 +98,7 @@ List<Override> _deviceOverrides(List<String> calls) {
     pushRegistrationControllerProvider.overrideWithValue(push),
     presenceSyncControllerProvider.overrideWithValue(presence),
     liveActivityRegistrationControllerProvider.overrideWithValue(liveActivity),
-    ...accountExitStubOverrides(calls: calls),
+    ...accountExitStubOverrides(calls: calls, pendingPhotos: pendingPhotos),
   ];
 }
 
@@ -105,13 +109,14 @@ Widget _harness({
   SignInOutcome resumeOutcome = const SignInSuccess(_employee),
   double textScale = 1,
   AnalyticsService? analytics,
+  PendingPhotoExit? pendingPhotos,
 }) {
   return ProviderScope(
     overrides: [
       if (analytics != null)
         analyticsServiceProvider.overrideWithValue(analytics),
       isOfflineProvider.overrideWithValue(offline),
-      ..._deviceOverrides(calls ?? <String>[]),
+      ..._deviceOverrides(calls ?? <String>[], pendingPhotos: pendingPhotos),
       signInControllerProvider.overrideWith(
         () => _StubSignInController(resumeOutcome),
       ),
@@ -329,6 +334,33 @@ void main() {
 
     verify(() => auth.completePasswordReset(_chosen)).called(1);
   });
+
+  testWidgets(
+    'Log out with pending photos can stay without tearing down the device',
+    (tester) async {
+      await tester.pumpWidget(
+        _harness(
+          auth: auth,
+          calls: calls,
+          pendingPhotos: const PendingPhotoExit(pendingCount: 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final logOut = find.text('Log out');
+      await tester.ensureVisible(logOut);
+      await tester.tap(logOut);
+      // The busy button keeps animating behind the pending-work dialog.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(calls, isEmpty);
+      await tester.tap(find.text('Stay and retry'));
+      await tester.pumpAndSettle();
+
+      expect(calls, isEmpty);
+      expect(find.text('login screen'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('Log out tears the device down, then signs out to login', (
     tester,

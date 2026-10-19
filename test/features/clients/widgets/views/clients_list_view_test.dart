@@ -12,6 +12,7 @@ import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/client_grouping.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
+import 'package:scheduling/features/clients/domain/models/client_search_results.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
@@ -98,6 +99,25 @@ void main() {
         limit: any(named: 'limit'),
       ),
     ).thenAnswer((_) async => const []);
+  });
+
+  testWidgets('a limited search shows how many matches are omitted', (
+    tester,
+  ) async {
+    when(() => repo.searchClients(any())).thenAnswer(
+      (_) async => ClientSearchResults(
+        [_sophie],
+        examinedCount: 201,
+        matchedCount: 30,
+        truncated: true,
+      ),
+    );
+    await tester.pumpWidget(_wrap(repo, searchQuery: 'sophie'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Showing 1 of 30 matches.'), findsOneWidget);
+    expect(find.text('Sophie Tremblay'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('search error offers a Retry that re-runs the search', (

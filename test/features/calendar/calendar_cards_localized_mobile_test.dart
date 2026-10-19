@@ -57,16 +57,18 @@ final _appointment = AppointmentRecord(
   status: 'in_progress',
 );
 
-Widget _materialWrap(Widget child) => MaterialApp(
-  locale: const Locale('fr'),
-  localizationsDelegates: const [
-    AppLocalizations.delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-  ],
-  supportedLocales: AppLocalizations.supportedLocales,
-  home: Scaffold(body: child),
+Widget _materialWrap(Widget child) => ProviderScope(
+  child: MaterialApp(
+    locale: const Locale('fr'),
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+      GlobalCupertinoLocalizations.delegate,
+    ],
+    supportedLocales: AppLocalizations.supportedLocales,
+    home: Scaffold(body: child),
+  ),
 );
 
 void main() {

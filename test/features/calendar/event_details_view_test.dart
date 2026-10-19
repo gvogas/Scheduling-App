@@ -86,7 +86,9 @@ void main() {
     when(
       () => appointments.onLocalWrite,
     ).thenAnswer((_) => const Stream.empty());
-    when(() => appointments.updateAppointment(any())).thenAnswer((_) async {});
+    when(
+      () => appointments.updateAppointment(any(), base: any(named: 'base')),
+    ).thenAnswer((_) async {});
     // The edit flow now runs a conflict check before writing; no clash here.
     when(
       () => appointments.findBusyEmployees(
@@ -190,7 +192,10 @@ void main() {
 
     final saved =
         verify(
-              () => appointments.updateAppointment(captureAny()),
+              () => appointments.updateAppointment(
+                captureAny(),
+                base: any(named: 'base'),
+              ),
             ).captured.single
             as AppointmentRecord;
     expect(saved.title, 'Updated title');

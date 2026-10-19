@@ -39,6 +39,7 @@ class _RecordingPlaces implements PlacesRepository {
 
   /// When set, the next autocomplete waits on this instead of returning.
   Completer<List<AddressSuggestion>>? gate;
+  Completer<ParsedAddress>? detailsGate;
   Object? throws;
   Exception? detailsThrows;
 
@@ -64,6 +65,11 @@ class _RecordingPlaces implements PlacesRepository {
     required String sessionToken,
   }) async {
     tokens.add(sessionToken);
+    final pending = detailsGate;
+    if (pending != null) {
+      detailsGate = null;
+      return await pending.future;
+    }
     if (detailsThrows != null) throw detailsThrows!;
     return details ?? const ParsedAddress();
   }
@@ -173,6 +179,7 @@ void main() {
     await settle(tester);
 
     expect(places.queries, ['1 Main St'], reason: 'no second billed call');
+    expect(find.text('1 Main St, Montreal'), findsOneWidget);
   });
 
   testWidgets('a FAILED query is retried, unlike a settled one', (
@@ -265,16 +272,80 @@ void main() {
     places.suggestions = const [
       AddressSuggestion(placeId: 'p9', description: '9 Oak Ave, Laval'),
     ];
-    // TWO keystrokes, deliberately. `controller.text = ` notifies listeners
-    // but does NOT fire a TextField's `onChanged`, so the two
-    // `_suppressFetch = true` assignments in `_selectSuggestion` are never
-    // consumed by the programmatic writes they guard — the first real
-    // keystroke after a selection absorbs one instead. Harmless (the flag is a
-    // bool, so exactly one is swallowed) but it is what the field does.
     await type(tester, '9 Oak');
-    await type(tester, '9 Oak Ave');
 
     expect(places.tokens.last, isNot(firstSession));
+    expect(places.queries.last, '9 Oak');
+  });
+
+  for (final replacement in ['ne', 'new query']) {
+    testWidgets('typing "$replacement" immediately invalidates an old lookup', (
+      tester,
+    ) async {
+      final slow = Completer<List<AddressSuggestion>>();
+      places.gate = slow;
+      await pumpField(tester);
+      await type(tester, 'old query');
+      await typeOnly(tester, replacement);
+      slow.complete(const [
+        AddressSuggestion(placeId: 'old', description: 'STALE RESULT'),
+      ]);
+      await tester.pump();
+      expect(find.text('STALE RESULT'), findsNothing);
+      expect(places.queries, ['old query']);
+      await settle(tester);
+    });
+  }
+
+  for (final externalEdit in [false, true]) {
+    testWidgets(
+      'late details preserve a newer ${externalEdit ? 'controller' : 'typed'} edit',
+      (tester) async {
+        final slow = Completer<ParsedAddress>();
+        places
+          ..detailsGate = slow
+          ..suggestions = const [
+            AddressSuggestion(placeId: 'old', description: 'OLD SELECTION'),
+          ];
+        await pumpField(tester);
+        await type(tester, 'old query');
+        await tester.tap(find.text('OLD SELECTION'));
+        await tester.pump();
+        if (externalEdit) {
+          controller.text = 'new address';
+        } else {
+          await typeOnly(tester, 'new address');
+        }
+        slow.complete(const ParsedAddress(fullAddress: 'OLD DETAILS'));
+        await tester.pump();
+        expect(controller.text, 'new address');
+        expect(find.byType(AdaptiveProgressIndicator), findsNothing);
+        await settle(tester);
+      },
+    );
+  }
+
+  testWidgets('late details cannot write through a replacement controller', (
+    tester,
+  ) async {
+    final oldController = controller;
+    final slow = Completer<ParsedAddress>();
+    places
+      ..detailsGate = slow
+      ..suggestions = const [
+        AddressSuggestion(placeId: 'old', description: 'OLD SELECTION'),
+      ];
+    await pumpField(tester);
+    await type(tester, 'old query');
+    await tester.tap(find.text('OLD SELECTION'));
+    await tester.pump();
+    controller = TextEditingController(text: 'replacement address');
+    await pumpField(tester);
+    slow.complete(const ParsedAddress(fullAddress: 'OLD DETAILS'));
+    await tester.pump();
+    expect(controller.text, 'replacement address');
+    expect(find.byType(AdaptiveProgressIndicator), findsNothing);
+    oldController.dispose();
   });
 
   testWidgets('a lookup that fails AFTER dispose does not escape as a crash', (

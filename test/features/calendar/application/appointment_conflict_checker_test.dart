@@ -26,6 +26,8 @@ void main() {
     registerFallbackValue(<EmployeeRecord>[]);
     registerFallbackValue(<String>[]);
     registerFallbackValue(DateTime(2026));
+    registerFallbackValue(<AppointmentRecord>[]);
+    registerFallbackValue(<String>{});
   });
 
   late _MockRepo repo;
@@ -59,6 +61,45 @@ void main() {
       ),
     ).thenAnswer((_) async => clashes);
   }
+
+  test(
+    'batch results retain first-conflict order and avoid per-booking calls',
+    () async {
+      when(
+        () => repo.findBusyEmployeeIdsForBookings(
+          employeeIds: any(named: 'employeeIds'),
+          bookings: any(named: 'bookings'),
+          excludeAppointmentIds: any(named: 'excludeAppointmentIds'),
+          excludeOwnBookingIds: any(named: 'excludeOwnBookingIds'),
+        ),
+      ).thenAnswer(
+        (_) async => [
+          <String>{},
+          {'nadia'},
+          {'marc'},
+        ],
+      );
+      final result = await findFirstAppointmentConflict(
+        repo: repo,
+        candidates: [marc, nadia],
+        bookings: [
+          _appt(id: 'one', start: day1),
+          _appt(id: 'two', start: day2),
+          _appt(id: 'three', start: day3),
+        ],
+      );
+      expect(result!.start, day2);
+      expect(result.busyEmployees, [nadia]);
+      verifyNever(
+        () => repo.findBusyEmployees(
+          candidates: any(named: 'candidates'),
+          start: any(named: 'start'),
+          end: any(named: 'end'),
+          excludeAppointmentId: any(named: 'excludeAppointmentId'),
+        ),
+      );
+    },
+  );
 
   test('no candidates never touches the repository', () async {
     final hit = await findFirstAppointmentConflict(

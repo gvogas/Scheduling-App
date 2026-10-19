@@ -10,6 +10,7 @@ import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/client_grouping.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
+import 'package:scheduling/features/clients/domain/models/client_search_results.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
@@ -26,6 +27,7 @@ import 'package:scheduling/features/clients/widgets/views/row_cache.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/app_empty_state.dart';
 import 'package:scheduling/shared/widgets/feedback/skeleton_loader.dart';
+import 'package:scheduling/shared/widgets/feedback/warning_note.dart';
 import 'package:scheduling/shared/widgets/primitives/fade_in_item.dart';
 
 class ClientsListView extends ConsumerStatefulWidget {
@@ -360,7 +362,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
         .when(
           data: (results) => results.isEmpty
               ? _emptyState(query: query)
-              : _resultsList(results),
+              : _searchResults(results),
           loading: () =>
               local.isEmpty ? _fittedSkeleton() : _resultsList(local),
           // A failed search must not look like "no such client" — show an error
@@ -368,6 +370,25 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
           error: (e, _) =>
               local.isEmpty ? _searchError(e, query) : _resultsList(local),
         );
+  }
+
+  Widget _searchResults(List<ClientRecord> results) {
+    final list = _resultsList(results);
+    if (results is! ClientSearchResults || !results.truncated) return list;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(AppSpacing.sp12),
+          child: WarningNote(
+            message: context.l10n.clients_searchTruncated(
+              results.length,
+              results.matchedCount,
+            ),
+          ),
+        ),
+        Expanded(child: list),
+      ],
+    );
   }
 
   Widget _typeEmptyState({required ClientType type, required String query}) =>

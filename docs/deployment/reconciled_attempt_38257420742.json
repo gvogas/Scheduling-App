@@ -1,0 +1,169 @@
+{
+  "observedOn": "2026-10-19",
+  "project": "schedulingapp-88727",
+  "failedRun": 38257420742,
+  "runAttempt": 1,
+  "completedAt": "2026-10-12T13:46:03Z",
+  "headSha": "b88ab248fc7b556002c5d3d2e9c4f17515efd2de",
+  "verifiedBaseline": "0ab3f05ce88e77b8dd1551e8bec9e56a1bda9f17",
+  "conclusion": "No live function was updated by this failed attempt; all 31 names match the verified baseline and every update predates the attempt.",
+  "failure": "Storage default-bucket discovery returned HTTP 403 for firebasestorage.defaultBucket.get.",
+  "deploymentIdentityRecheck": "Local impersonation unavailable; no IAM change made. The new workflow preflight must check this under its configured identity.",
+  "functions": [
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/cascadeDeleteAppointmentImages",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T15:59:55.828961842Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/changeEmployeeEmail",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:16.397502373Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/completeEmployeeSetup",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:22.136450582Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/completePasswordReset",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:16.945951034Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/createEmployeeAccount",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:00.090045256Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/deleteAccount",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T15:59:59.810994197Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/deleteClient",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:15.707661549Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/deleteEmployeeAccount",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:23.362350865Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/findAppointmentConflicts",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T15:59:56.941735648Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/notifyAppointmentChanges",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:20.723741736Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/placesAutocomplete",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:23.039112759Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/placesGetDetails",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:00.123133178Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/placesReverseGeocode",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:15.394034431Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/propagateClientEdits",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:16.420841712Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/purgeExpiredHistory",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T15:59:56.714518150Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/recountAppointmentPictures",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:20.202434276Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/recountClientJobs",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:20.431490197Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/resetEmployeePassword",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:02.931764963Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/restoreAppointmentStatus",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:20.845199821Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/searchClients",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T15:59:56.784296916Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/searchHistory",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:16.966484549Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/sendDailyJobDigest",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:16.057881973Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/sendUpcomingJobReminders",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:20.159505857Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/syncClientBuilding",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:17.377022599Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/syncUsersByUid",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T15:59:54.870961889Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/waveBootstrap",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:16.683735729Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/waveGetConnection",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T15:59:55.927107576Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/waveImportCustomers",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:20.414861453Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/waveRetryFailedJobs",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T15:59:59.227045287Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-central1/functions/waveUpsertCustomer",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:01.045153815Z"
+    },
+    {
+      "name": "projects/schedulingapp-88727/locations/us-east1/functions/validateUploadedImage",
+      "state": "ACTIVE",
+      "updateTime": "2026-10-11T16:00:22.186734455Z"
+    }
+  ]
+}

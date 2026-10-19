@@ -2,12 +2,15 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/app/device_deregistration.dart';
+import 'package:scheduling/core/app/pending_photo_exit.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/features/auth/domain/auth_failure.dart';
 import 'package:scheduling/features/auth/services/account_deletion_service.dart';
 import 'package:scheduling/features/auth/services/auth_service.dart';
+import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/settings/widgets/dialogs/delete_account_dialog.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
@@ -53,14 +56,32 @@ mixin DeleteAccountFlow<T extends ConsumerStatefulWidget> on ConsumerState<T> {
     // [restoreThisDevice]. Non-null is exactly "there is something to roll
     // back", which is why it replaces a separate bool.
     DeviceDeregistrationDeps? deregistered;
+    PendingPhotoExit? pendingExit;
     try {
       // Clean up this device's push token, presence, and Live Activity state
       // — best effort, so a failure here doesn't block sign-out. The ORDER is
       // owned by `deregisterThisDevice`; all three exits share it.
       final devices = DeviceDeregistrationDeps.from(ref.read);
+      pendingExit = await confirmPendingPhotoExit(
+        context,
+        devices.imageUploads,
+        devices.session!,
+      );
+      if (pendingExit == null || !pendingExit.isCurrent) {
+        if (mounted) setState(() => _isSigningOut = false);
+        return;
+      }
       await deregisterThisDevice(devices);
       deregistered = devices;
+      if (!devices.isCurrentExit) {
+        if (mounted) setState(() => _isSigningOut = false);
+        return;
+      }
       await authService.signOut();
+      if (authService.currentUser != null) {
+        if (mounted) setState(() => _isSigningOut = false);
+        return;
+      }
       // After the sign-out lands; never `resetAnalyticsData`, clear `user_role` instead (ADR-0165).
       analytics
         ..logSignOut()
@@ -78,6 +99,8 @@ mixin DeleteAccountFlow<T extends ConsumerStatefulWidget> on ConsumerState<T> {
         ),
       );
       return;
+    } finally {
+      pendingExit?.resume();
     }
     if (!mounted) return;
     try {
@@ -142,14 +165,41 @@ mixin DeleteAccountFlow<T extends ConsumerStatefulWidget> on ConsumerState<T> {
     // See [restoreThisDevice]: holding the deps is what lets both catch arms
     // roll back without touching `ref` after these round-trips.
     DeviceDeregistrationDeps? deregistered;
+    PendingPhotoExit? pendingExit;
+    final lease = ref.read(sessionFenceProvider).capture();
     try {
+      if (lease == null) {
+        if (mounted) setState(() => _isDeletingAccount = false);
+        return;
+      }
       await deletionService.reauthenticateWithPassword(password);
+      if (!lease.isCurrent || !mounted) {
+        if (mounted) setState(() => _isDeletingAccount = false);
+        return;
+      }
       // Drop this device's registrations while still authenticated, before
       // deleteAccount revokes access — same shared order as the other exits.
       final devices = DeviceDeregistrationDeps.from(ref.read);
+      pendingExit = await confirmPendingPhotoExit(
+        context,
+        devices.imageUploads,
+        devices.session!,
+      );
+      if (pendingExit == null || !pendingExit.isCurrent) {
+        if (mounted) setState(() => _isDeletingAccount = false);
+        return;
+      }
       await deregisterThisDevice(devices);
       deregistered = devices;
+      if (!devices.isCurrentExit) {
+        if (mounted) setState(() => _isDeletingAccount = false);
+        return;
+      }
       await deletionService.deleteAccount();
+      if (devices.hasReplacementSession) {
+        if (mounted) setState(() => _isDeletingAccount = false);
+        return;
+      }
     } on AuthFailure catch (e, st) {
       // Logged before the mounted guard: this fires AFTER push, presence and
       // the Live Activity have already de-registered, so a half-torn-down
@@ -183,6 +233,8 @@ mixin DeleteAccountFlow<T extends ConsumerStatefulWidget> on ConsumerState<T> {
         ),
       );
       return;
+    } finally {
+      pendingExit?.resume();
     }
     if (!mounted) return;
     final message = context.l10n.settings_accountDeleted;

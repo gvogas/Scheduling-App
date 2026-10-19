@@ -17,11 +17,14 @@ one file every rule below is about.
 console-only state: `firebase deploy --only firestore:indexes` treats any prod
 field override missing from that file as drift and DELETES it (this removed all
 5 live TTL policies once, on 2026-07-21 — never pass `--force` to a deploy).
-Keep real single-field indexes on those entries rather than the Firebase docs'
-`"indexes": []` example — `live_activity_registry.js` `_pruneExpired` queries
+Keep real single-field indexes on the **queried** expiry entries —
+`live_activity_registry.js` `_pruneExpired` queries
 `.where("expiresAt", "<=", now)`, and the token sweep is a **collection-group**
 query, so `liveActivityTokens.expiresAt` needs a `COLLECTION_GROUP`-scoped index
-or the reaper fails `FAILED_PRECONDITION` into a swallowed no-op. The live
+or the reaper fails `FAILED_PRECONDITION` into a swallowed no-op. The six other
+TTL collections use ID/transaction lookups rather than expiry queries; their
+expiry indexes are exempted while `ttl: true` remains declared. Recheck consumers
+before adding an expiry query. The live
 map's admin `presence` collection-group read orders by `updatedAt`, so the
 `COLLECTION_GROUP`-scoped `presence.updatedAt` override stays too.
 

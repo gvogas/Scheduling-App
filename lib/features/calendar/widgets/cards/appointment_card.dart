@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:scheduling/core/animations/tap_scale.dart';
 import 'package:scheduling/core/layout/breakpoints.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/core/utils/date_utils_helper.dart';
+import 'package:scheduling/core/utils/presentation_time_provider.dart';
 import 'package:scheduling/features/calendar/domain/appointment_crew.dart';
 import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
 import 'package:scheduling/features/calendar/domain/day_off_reason.dart';
@@ -46,7 +48,7 @@ BoxDecoration _crewBarDecoration(ThemeData theme, List<Color> colors) {
 }
 
 /// One appointment card reused across appointment surfaces.
-class AppointmentCard extends StatelessWidget {
+class AppointmentCard extends ConsumerWidget {
   const AppointmentCard({
     required this.appointment,
     required this.crew,
@@ -99,15 +101,21 @@ class AppointmentCard extends StatelessWidget {
   final bool showDate;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final now = ref.watch(presentationTimeProvider);
 
     // Time off renders as a strip instead of a job card.
     if (appointment.isTimeOff) {
-      return _DayOffStrip(appointment: appointment, crew: crew, onTap: onTap);
+      return _DayOffStrip(
+        appointment: appointment,
+        crew: crew,
+        onTap: onTap,
+        now: now,
+      );
     }
 
-    final model = _CardModel.from(context, this);
+    final model = _CardModel.from(context, this, now);
 
     final card = TapScale(
       child: DecoratedBox(
@@ -278,17 +286,21 @@ class _DayOffStrip extends StatelessWidget {
     required this.appointment,
     required this.crew,
     required this.onTap,
+    required this.now,
   });
 
   final AppointmentRecord appointment;
   final List<AppointmentCrew> crew;
   final VoidCallback? onTap;
+  final DateTime now;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = context.l10n;
-    final displayStatus = AppointmentStatus.fromRaw(appointment.displayStatus);
+    final displayStatus = AppointmentStatus.fromRaw(
+      appointment.displayStatusAt(now),
+    );
     final isOver = displayStatus.isTerminal;
     // Name the crew the day off belongs to.
     final crewLabel = _crewLabel(context);
@@ -492,9 +504,13 @@ class _CardModel {
     required this.semanticsLabel,
   });
 
-  factory _CardModel.from(BuildContext context, AppointmentCard card) {
+  factory _CardModel.from(
+    BuildContext context,
+    AppointmentCard card,
+    DateTime now,
+  ) {
     final appointment = card.appointment;
-    final status = AppointmentStatus.fromRaw(appointment.displayStatus);
+    final status = AppointmentStatus.fromRaw(appointment.displayStatusAt(now));
     final timeLabel = card._timeLabel(context);
     // Denormalized photo count is indicator-only.
     final hasPhotos = appointment.hasPictures;

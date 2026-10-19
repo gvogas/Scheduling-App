@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Status (swept 2026-10-18): BUILT; functions DEPLOYED (`29fa4072`, `364d4812`); app half rides 1.64.2+96, not yet shipped.** Left: that build, then Task 17 Step 5's device check. Unticked boxes are unknown, not outstanding.
+
 **Goal:** Four Remote Config kill switches (address autocomplete, presence/live map, Live Activities, Wave sync) plus a `min_supported_build` forced-update gate, enforced in the app and in Cloud Functions, all failing OPEN.
 
 **Architecture:** One Remote Config template is the single source of truth. Functions read it through `firebase-admin`'s server-side Remote Config behind a 60 s per-instance cache (`feature_flags_policy.js` owns the decisions, `feature_flags.js` the admin call). The app reads it through `RemoteConfigService` → `featureFlagsProvider`, and each feature gates at the one place it already decides on/off.

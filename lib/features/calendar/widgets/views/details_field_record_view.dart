@@ -153,7 +153,7 @@ class _DetailsFieldRecordViewState
       if (accepted.isEmpty) return;
       // Queued FIRST: nothing after this line may be what stops the crew's
       // photos reaching the job.
-      uploader.uploadInBackground(appointmentId: id, newImages: accepted);
+      await uploader.enqueuePhotos(appointmentId: id, newImages: accepted);
       // Counted at ACCEPT, not at upload: the queue drains on reconnect, so a
       // send-time event would report the crew's offline photos as never taken.
       analytics.logPhotoAdded(
