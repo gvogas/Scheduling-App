@@ -116,7 +116,7 @@ dev_dependencies:
   very_good_analysis: ^11.0.0
 
   # Codegen (freezed value classes only)
-  build_runner: ^2.16.1
+  build_runner: ^2.16.2
   freezed: ^4.0.1
 
   # Testing
