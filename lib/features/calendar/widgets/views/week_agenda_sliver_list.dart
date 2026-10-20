@@ -19,8 +19,11 @@ List<Widget> weekAgendaSlivers(
   required Map<String, Color> colorMap,
   bool isAdmin = true,
   bool isLoading = false,
+  bool hasError = false,
+  VoidCallback? onRetry,
   double bottomClearance = 0,
 }) {
+  if (hasError) return [AgendaSliverList.errorState(context, onRetry: onRetry)];
   if (isLoading) return const [SliverToBoxAdapter(child: AgendaSkeleton())];
   // Memoized per locale; never a DateFormat constructor inside a builder.
   final weekdayFormat = weekdayAbbrevFormatFor(

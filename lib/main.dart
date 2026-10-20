@@ -41,6 +41,7 @@ import 'package:scheduling/core/security/app_lock.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/core/utils/app_language.dart';
+import 'package:scheduling/core/utils/date_utils_helper.dart';
 import 'package:scheduling/core/utils/debouncer.dart';
 import 'package:scheduling/core/utils/presentation_time_provider.dart';
 import 'package:scheduling/features/home_widget/application/widget_sync_service.dart';
@@ -383,6 +384,7 @@ class _PaulAppState extends ConsumerState<PaulApp> {
 
   Widget _buildAppShell(BuildContext context, Widget? child) {
     final media = MediaQuery.of(context);
+    DateUtilsHelper.use24Hour = media.alwaysUse24HourFormat;
     // Compose in-app text scale with the OS scale, capped app-wide.
     final systemFactor = media.textScaler.scale(14) / 14;
     final effectiveScale = math.min(
@@ -402,6 +404,8 @@ class _PaulAppState extends ConsumerState<PaulApp> {
         data: theme,
         child: UpdateGate(
           child: AppLock(
+            navigatorKey: _navigatorKey,
+            scaffoldMessengerKey: _scaffoldMessengerKey,
             child: NoticeListener(
               navigatorKey: _navigatorKey,
               child: Column(

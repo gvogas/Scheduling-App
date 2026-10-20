@@ -10,6 +10,7 @@
 // The filesystem is real here rather than mocked — it is fast in the VM, and a
 // fake would test the fake.
 
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -193,6 +194,44 @@ void main() {
       expect(await cache.read('key/new'), isNotNull);
     },
   );
+
+  test('a read is not held behind a queued write of another key', () async {
+    // The loader reads disk BEFORE the network; a strip of first-time photos
+    // queues one write per fetch, and a later photo's read used to wait for
+    // the whole chain. Keys are independent and a rename is atomic, so it no
+    // longer does.
+    final gate = Completer<Directory>();
+    var resolves = 0;
+    final cache = AppointmentImageDiskCache(
+      directory: () {
+        resolves += 1;
+        return resolves == 1 ? gate.future : Future.value(root);
+      },
+      logger: AppLogger(),
+    );
+    final seeded = cacheOver();
+    await seeded.write(key, _bytes('photo'), generation: seeded.generation);
+
+    // Held in the directory resolve, so the chain never settles until released.
+    unawaited(cache.write('other', _bytes('x'), generation: cache.generation));
+    final read = cache.read(key);
+    gate.complete(root);
+
+    expect(await read, _bytes('photo'));
+  });
+
+  test('a read still waits for a clear already under way', () async {
+    // The one mutation a read must not race: it would hand the next session a
+    // file the clear is about to delete.
+    final cache = cacheOver();
+    await cache.write(key, _bytes('photo'), generation: cache.generation);
+
+    final clearing = cache.clear();
+    final read = cache.read(key);
+    await clearing;
+
+    expect(await read, isNull);
+  });
 
   test('an unresolvable directory degrades to a miss, never a throw', () async {
     // A disk failure must cost a network fetch, not a photo that fails to

@@ -21,6 +21,7 @@ import 'package:scheduling/features/calendar/data/appointment_image_upload_servi
 import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
 import 'package:scheduling/features/calendar/domain/assignee_resolver.dart';
+import 'package:scheduling/features/calendar/domain/calendar_failure.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/domain/models/repeat_interval.dart';
@@ -65,6 +66,12 @@ abstract class EventDetailsState
     @Default(<AppointmentImage>[]) List<AppointmentImage> removedExistingImages,
     @Default(<File>[]) List<File> newImages,
     @Default(false) bool isSaving,
+
+    /// The status this sheet WROTE, over the record it opened with. Start job
+    /// keeps the sheet open, so the opening snapshot is stale from then on.
+    String? liveStatus,
+    DateTime? liveStartedAt,
+    DateTime? liveCompletedAt,
     ClientRecord? client,
     ClientRecord? selectedClient,
     @Default(<ClientRecord>[]) List<ClientRecord> clientResults,
@@ -405,23 +412,20 @@ class EventDetailsController extends Notifier<EventDetailsState>
       status: AppointmentStatus.storedRaw(appointment.status),
     );
     try {
-      if (!forceBusy && !appointment.isPersonal) {
-        final conflict = await findFirstAppointmentConflict(
-          repo: repo,
-          candidates: selectedEmployees,
-          bookings: [updated],
-          excludeOwnBookingIds: true,
-        );
-        if (conflict != null) return _busyEmployees(conflict);
-      }
       if (isCurrent != null && !isCurrent()) {
         return const EventDetailsSaveBusy();
       }
-      await repo.updateAppointment(updated, base: appointment);
+      await repo.updateAppointment(
+        updated,
+        base: appointment,
+        checkConflicts: !forceBusy && !appointment.isPersonal,
+      );
       if (isCurrent != null && !isCurrent()) {
         return const EventDetailsSaveBusy();
       }
       return EventDetailsSaved(repo.takeAcknowledgedWrite(id) ?? updated);
+    } on CalendarFailureEmployeesBusy catch (busy) {
+      return _busyEmployees(busy, selectedEmployees, [updated]);
     } catch (e, st) {
       logger.warn('APPT-SAVE delayAppointment failed', e, st);
       return EventDetailsFailed(e);
@@ -495,6 +499,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
     try {
       await repo.updateAppointmentStatus(id: id, status: status);
       // Live activity cleanup is server-owned.
+      if (ref.mounted) _recordLiveStatus(appointment, status);
       return const EventDetailsActionOk();
     } catch (e, st) {
       logger.warn('APPT-STATUS updateAppointmentStatus($status) failed', e, st);
@@ -502,6 +507,20 @@ class EventDetailsController extends Notifier<EventDetailsState>
     } finally {
       if (ref.mounted) state = state.copyWith(isSaving: false);
     }
+  }
+
+  /// Mirrors `lifecycleStamps` locally: the server stamps the transition into
+  /// `in_progress`/`done` on a client job only, so the row shows the same pair.
+  void _recordLiveStatus(AppointmentRecord appointment, String status) {
+    final now = DateTime.now();
+    final stamps = !appointment.isPersonal;
+    state = state.copyWith(
+      liveStatus: status,
+      liveStartedAt: stamps && status == 'in_progress'
+          ? now
+          : state.liveStartedAt,
+      liveCompletedAt: stamps && status == 'done' ? now : state.liveCompletedAt,
+    );
   }
 
   void setSaving({required bool busy}) {
@@ -699,20 +718,21 @@ class EventDetailsController extends Notifier<EventDetailsState>
         end: end,
         repeat: repeat,
       );
-      if (checkConflicts) {
-        final conflict = await findFirstAppointmentConflict(
-          repo: repo,
-          candidates: selectedEmployees,
-          bookings: [plan.updated, ...plan.copies],
-          excludeAppointments: plan.deleteBases,
-          excludeOwnBookingIds: true,
-        );
-        if (conflict != null) return _busyEmployees(conflict);
-      }
       if (isCurrent != null && !isCurrent()) {
         return const EventDetailsSaveBusy();
       }
-      final result = await seriesEditor.commitRewrite(plan);
+      final SeriesRewriteResult result;
+      try {
+        result = await seriesEditor.commitRewrite(
+          plan,
+          checkConflicts: checkConflicts,
+        );
+      } on CalendarFailureEmployeesBusy catch (busy) {
+        return _busyEmployees(busy, selectedEmployees, [
+          plan.updated,
+          ...plan.copies,
+        ]);
+      }
       if (isCurrent != null && !isCurrent()) {
         return const EventDetailsSaveBusy();
       }
@@ -731,19 +751,21 @@ class EventDetailsController extends Notifier<EventDetailsState>
         start: start,
         end: end,
       );
-      if (checkConflicts) {
-        final conflict = await findFirstAppointmentConflict(
-          repo: repo,
-          candidates: selectedEmployees,
-          bookings: [plan.updated, ...plan.propagated],
-          excludeOwnBookingIds: true,
-        );
-        if (conflict != null) return _busyEmployees(conflict);
-      }
       if (isCurrent != null && !isCurrent()) {
         return const EventDetailsSaveBusy();
       }
-      final updatedSiblings = await seriesEditor.commitPropagate(plan);
+      final int updatedSiblings;
+      try {
+        updatedSiblings = await seriesEditor.commitPropagate(
+          plan,
+          checkConflicts: checkConflicts,
+        );
+      } on CalendarFailureEmployeesBusy catch (busy) {
+        return _busyEmployees(busy, selectedEmployees, [
+          plan.updated,
+          ...plan.propagated,
+        ]);
+      }
       if (isCurrent != null && !isCurrent()) {
         return const EventDetailsSaveBusy();
       }
@@ -753,28 +775,33 @@ class EventDetailsController extends Notifier<EventDetailsState>
       );
     }
 
-    if (checkConflicts) {
-      final conflict = await findFirstAppointmentConflict(
-        repo: repo,
-        candidates: selectedEmployees,
-        bookings: [updated],
-        excludeOwnBookingIds: true,
-      );
-      if (conflict != null) return _busyEmployees(conflict);
-    }
-
     if (isCurrent != null && !isCurrent()) return const EventDetailsSaveBusy();
-    await repo.updateAppointment(updated, base: appointment);
+    try {
+      await repo.updateAppointment(
+        updated,
+        base: appointment,
+        checkConflicts: checkConflicts,
+      );
+    } on CalendarFailureEmployeesBusy catch (busy) {
+      return _busyEmployees(busy, selectedEmployees, [updated]);
+    }
     if (isCurrent != null && !isCurrent()) return const EventDetailsSaveBusy();
     return EventDetailsSaved(repo.takeAcknowledgedWrite(id) ?? updated);
   }
 
-  EventDetailsBusyEmployees _busyEmployees(AppointmentConflictHit conflict) =>
-      EventDetailsBusyEmployees(
-        busyEmployees: conflict.busyEmployees,
-        start: conflict.start,
-        end: conflict.end,
-      );
+  /// The server's refusal as the sheet's busy outcome; callers reset `isSaving`.
+  EventDetailsBusyEmployees _busyEmployees(
+    CalendarFailureEmployeesBusy busy,
+    List<EmployeeRecord> candidates,
+    List<AppointmentRecord> bookings,
+  ) {
+    final hit = conflictHitOf(busy, candidates: candidates, bookings: bookings);
+    return EventDetailsBusyEmployees(
+      busyEmployees: hit.busyEmployees,
+      start: hit.start,
+      end: hit.end,
+    );
+  }
 
   /// Waits for seeding, validates the saved snapshot, and returns a stop
   /// outcome on errors.
@@ -864,3 +891,27 @@ final eventDetailsControllerProvider = NotifierProvider.autoDispose
     .family<EventDetailsController, EventDetailsState, EventDetailsKey>(
       EventDetailsController.new,
     );
+
+/// Unposted crew-note drafts by appointment id.
+///
+/// Outside [EventDetailsState] on purpose: that controller autoDisposes with
+/// the sheet, and the draft exists to survive a scrim tap or drag dismiss.
+class FieldNoteDrafts extends Notifier<Map<String, String>> {
+  @override
+  Map<String, String> build() => const {};
+
+  String draftFor(String appointmentId) => state[appointmentId] ?? '';
+
+  void set(String appointmentId, String text) {
+    if (text.isEmpty) return clear(appointmentId);
+    state = {...state, appointmentId: text};
+  }
+
+  void clear(String appointmentId) {
+    if (!state.containsKey(appointmentId)) return;
+    state = {...state}..remove(appointmentId);
+  }
+}
+
+final fieldNoteDraftsProvider =
+    NotifierProvider<FieldNoteDrafts, Map<String, String>>(FieldNoteDrafts.new);

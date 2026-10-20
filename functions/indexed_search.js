@@ -76,7 +76,9 @@ function exactProbeToken(tokens) {
 /**
  * Server-side client search, admin-only because clients are PII.
  */
-const searchClients = onCall(APP_CHECK, async (req) => {
+const searchClients = onCall({
+  enforceAppCheck: true, minInstances: 1, memory: "512MiB",
+}, async (req) => {
   const uid = await assertAdminCall(req, new Set([
     "query", "archived", "type", "buildingKey",
   ]));
@@ -222,7 +224,8 @@ function blocksProposedWindow(data, proposed) {
  * Server-side conflict validation for appointment writes.
  */
 const findAppointmentConflicts = onCall(
-    {enforceAppCheck: true, timeoutSeconds: 120}, async (req) => {
+    {enforceAppCheck: true, timeoutSeconds: 120, minInstances: 1,
+      memory: "512MiB"}, async (req) => {
       const profile = await assertActiveCall(req, new Set([
         "employeeIds",
         "startMillis",
@@ -312,13 +315,15 @@ const findAppointmentConflicts = onCall(
 
 /**
  * Reads one complete bounded window; batching projects only scheduling fields.
+ * `fetch` runs each page, so a transaction can pass `tx.get`.
  * @param {!Object} db Firestore handle.
  * @param {!Object} options Validated window and viewer scope.
  * @return {!Promise<!Object>} Matching appointment records.
  */
 async function readConflictWindow(db, options) {
   const {employeeIds, startMillis, endMillis, excludeId, clientJobsOnly,
-    excluded, uid, minimal = false} = options;
+    excluded, uid, minimal = false, fetch = (query) => query.get(),
+    label = "findAppointmentConflicts"} = options;
   const found = new Map();
   const busy = new Set();
   const proposed = {
@@ -341,10 +346,10 @@ async function readConflictWindow(db, options) {
     while (!finished) {
       const limit = Math.min(CONFLICT_READ_LIMIT,
           CONFLICT_SCAN_LIMIT + 1 - scanned);
-      const snap = await query.limit(limit).get();
+      const snap = await fetch(query.limit(limit));
       scanned += snap.docs.length;
       if (scanned > CONFLICT_SCAN_LIMIT) {
-        logger.warn("findAppointmentConflicts: incomplete scan", {
+        logger.warn(`${label}: incomplete scan`, {
           uidHash: shortHash(uid), count: scanned,
         });
         throw new HttpsError("resource-exhausted", "conflict-scan-incomplete");
@@ -380,4 +385,5 @@ module.exports = {
   searchHistory,
   findAppointmentConflicts,
   blocksProposedWindow,
+  readConflictWindow,
 };

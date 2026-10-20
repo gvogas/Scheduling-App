@@ -25,6 +25,7 @@ import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_header_pair.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_top_bar.dart';
 import 'package:scheduling/shared/widgets/feedback/centered_error_text.dart';
+import 'package:scheduling/shared/widgets/feedback/offline_form_notice.dart';
 
 /// The one surface where a person edits their OWN record.
 class MyDetailsScreen extends ConsumerStatefulWidget {
@@ -341,69 +342,54 @@ class _MyDetailsScreenState extends ConsumerState<MyDetailsScreen> {
         isAdmin: identity.value?.role == 'admin',
         employeeId: identity.value?.docId ?? '',
       ),
-      body: identity.when(
-        loading: () => const Center(child: AdaptiveProgressIndicator(size: 32)),
-        error: (_, _) => Center(
-          child: CenteredErrorText(
-            message: l10n.error_somethingWentWrong,
-            onRetry: () => ref.invalidate(activeUserIdentityProvider),
-          ),
-        ),
-        // A settled null identity — signed out or inactive — is the only real
-        // error here.
-        data: (value) => value == null
-            ? Center(
-                child: CenteredErrorText(
-                  message: l10n.error_somethingWentWrong,
-                  onRetry: () => ref.invalidate(activeUserIdentityProvider),
-                ),
-              )
-            : _body(value.docId, isAdmin: value.role == 'admin'),
-      ),
+      body: _body(identity),
     );
   }
 
-  Widget _body(String docId, {required bool isAdmin}) {
+  /// ONE loading gate over the three reads (identity, own record, emergency
+  /// pair), so a cold open shows a single late spinner, never three in a row.
+  Widget _body(AsyncValue<ActiveUserIdentity?> identity) {
     final l10n = context.l10n;
+    final docId = identity.value?.docId;
     final record = ref.watch(myEmployeeRecordProvider);
-    final emergency = ref.watch(emergencyContactProvider(docId));
+    final roster = ref.watch(allUsersStreamProvider);
+    final emergency = docId == null
+        ? null
+        : ref.watch(emergencyContactProvider(docId));
 
-    // Both reads must land before the form is safe to show: the identity
+    // All three must land before the form is safe to show: the identity
     // section seeds its controllers ONCE, and a blank-by-default field over a
     // stored value invites the person to save the blank back.
-    final roster = ref.watch(allUsersStreamProvider);
-    if (record == null) {
-      if (roster.isLoading) {
-        return const Center(child: AdaptiveProgressIndicator(size: 32));
-      }
-      return Center(
-        child: CenteredErrorText(
-          message: l10n.error_somethingWentWrong,
-          onRetry: () => ref.invalidate(allUsersStreamProvider),
-        ),
-      );
+    final loading =
+        identity.isLoading ||
+        (docId != null && record == null && roster.isLoading) ||
+        (emergency?.isLoading ?? false);
+    if (loading) return const _LateSpinner();
+
+    // A settled null identity — signed out or inactive — is a real error.
+    if (identity.hasError || docId == null) {
+      return _retry(l10n, () => ref.invalidate(activeUserIdentityProvider));
     }
-    if (emergency.isLoading) {
-      return const Center(child: AdaptiveProgressIndicator(size: 32));
+    if (record == null) {
+      return _retry(l10n, () => ref.invalidate(allUsersStreamProvider));
     }
     // A failed emergency read is "we couldn't load it", never "you have none on
     // file" — the same distinction the edit-person sheet draws.
-    if (emergency.hasError) {
-      return Center(
-        child: CenteredErrorText(
-          message: l10n.error_somethingWentWrong,
-          onRetry: () => ref.invalidate(emergencyContactProvider(docId)),
-        ),
+    if (emergency == null || emergency.hasError) {
+      return _retry(
+        l10n,
+        () => ref.invalidate(emergencyContactProvider(docId)),
       );
     }
 
     _seed(record);
-    final contact = emergency.requireValue;
-    _seedEmergencyContact(contact);
+    _seedEmergencyContact(emergency.requireValue);
+    final isAdmin = identity.value?.role == 'admin';
 
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.sp16),
       children: [
+        const OfflineFormNotice(),
         MyIdentitySection(
           email: record.email,
           initialPhone: _storedPhone,
@@ -449,4 +435,39 @@ class _MyDetailsScreenState extends ConsumerState<MyDetailsScreen> {
       ],
     );
   }
+
+  Widget _retry(AppLocalizations l10n, VoidCallback onRetry) => Center(
+    child: CenteredErrorText(
+      message: l10n.error_somethingWentWrong,
+      onRetry: onRetry,
+    ),
+  );
+}
+
+/// A spinner that waits [_delay] first — the usual cold read lands sooner, so
+/// most opens never flash one.
+class _LateSpinner extends StatefulWidget {
+  const _LateSpinner();
+
+  static const _delay = Duration(milliseconds: 300);
+
+  @override
+  State<_LateSpinner> createState() => _LateSpinnerState();
+}
+
+class _LateSpinnerState extends State<_LateSpinner> {
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(_LateSpinner._delay).then((_) {
+      if (mounted) setState(() => _visible = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => _visible
+      ? const Center(child: AdaptiveProgressIndicator(size: 32))
+      : const SizedBox.expand();
 }

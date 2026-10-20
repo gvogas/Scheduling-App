@@ -11,6 +11,7 @@ import 'package:scheduling/features/calendar/domain/appointments_repository.dart
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/widgets/views/details_action_bar.dart';
 import 'package:scheduling/features/calendar/widgets/views/details_view_body.dart';
+import 'package:scheduling/features/calendar/widgets/views/details_view_leaf_widgets.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
@@ -152,6 +153,34 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('the Edit chip clears the 48 px tap floor at its painted size', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _wrap(
+        DetailsViewBody(
+          appointment: _appointment,
+          showActions: true,
+          onClose: () {},
+        ),
+        overrides: _overrides(appointments, clients, employees, uploadNotifier),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The hit box is the InkWell; the painted chip inside it stays ~26 px.
+    final chip = find.byType(DetailsEditChip);
+    expect(tester.getSize(chip).height, greaterThanOrEqualTo(48));
+    expect(
+      tester
+          .getSize(
+            find.descendant(of: chip, matching: find.byType(Container)).first,
+          )
+          .height,
+      lessThan(40),
+    );
+  });
 
   testWidgets('shows the client phone number and address', (tester) async {
     await tester.pumpWidget(

@@ -12,6 +12,7 @@ import 'package:scheduling/features/calendar/application/add_event_controller.da
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
+import 'package:scheduling/features/calendar/domain/calendar_failure.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_prefill.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
@@ -89,7 +90,12 @@ void main() {
     );
 
     when(appointments.newDocId).thenReturn('appt-1');
-    when(() => appointments.addAppointment(any())).thenAnswer((_) async {});
+    when(
+      () => appointments.addAppointment(
+        any(),
+        checkConflicts: any(named: 'checkConflicts'),
+      ),
+    ).thenAnswer((_) async {});
     when(
       () => appointments.findBusyEmployees(
         candidates: any(named: 'candidates'),
@@ -413,47 +419,51 @@ void main() {
           readState().errors.keys,
           containsAll(['title', 'client', 'employees']),
         );
-        verifyNever(() => appointments.addAppointment(any()));
-      },
-    );
-
-    test(
-      'returns AddEventBusyEmployees when busy check finds conflicts',
-      () async {
-        when(
-          () => appointments.findBusyEmployees(
-            candidates: any(named: 'candidates'),
-            start: any(named: 'start'),
-            end: any(named: 'end'),
+        verifyNever(
+          () => appointments.addAppointment(
+            any(),
+            checkConflicts: any(named: 'checkConflicts'),
           ),
-        ).thenAnswer((_) async => const [_employeeA]);
-
-        final c = readNotifier();
-        fillValid(c);
-
-        final outcome = await c.submit(
-          title: 'Leak fix',
-          address: '999 Maple',
-          notes: '',
-          materialsNeeded: '',
         );
-
-        expect(outcome, isA<AddEventBusyEmployees>());
-        verifyNever(() => appointments.addAppointment(any()));
       },
     );
 
-    test('a PERSONAL save never returns the busy outcome — the clash alert '
+    test('maps the save refusal to AddEventBusyEmployees', () async {
+      when(
+        () => appointments.addAppointment(any(), checkConflicts: true),
+      ).thenThrow(
+        CalendarFailureEmployeesBusy(
+          busyEmployeeIds: const ['e1'],
+          start: DateTime(2026, 5, 10, 9),
+          end: DateTime(2026, 5, 10, 10),
+        ),
+      );
+
+      final c = readNotifier();
+      fillValid(c);
+
+      final outcome = await c.submit(
+        title: 'Leak fix',
+        address: '999 Maple',
+        notes: '',
+        materialsNeeded: '',
+      );
+
+      expect(outcome, isA<AddEventBusyEmployees>());
+      final busy = outcome as AddEventBusyEmployees;
+      expect(busy.busyEmployees, const [_employeeA]);
+      expect(busy.start, DateTime(2026, 5, 10, 9));
+      expect(busy.end, DateTime(2026, 5, 10, 10));
+      expect(readState().isSubmitting, isFalse);
+    });
+
+    test('a PERSONAL save never asks for the busy check — the clash alert '
         'handles it after the write', () async {
       // Both would fire otherwise, giving two dialogs about the same clash
       // back to back.
       when(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-        ),
-      ).thenAnswer((_) async => const [_employeeA]);
+        () => appointments.addAppointment(any(), checkConflicts: true),
+      ).thenThrow(StateError('must not be consulted'));
 
       final c = readNotifier();
       fillValid(c);
@@ -467,13 +477,7 @@ void main() {
       );
 
       expect(outcome, isA<AddEventSubmitted>());
-      verifyNever(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-        ),
-      );
+      // A bare matcher records the default `checkConflicts: false` — pinned.
       verify(() => appointments.addAppointment(any())).called(1);
     });
 
@@ -508,7 +512,12 @@ void main() {
             });
         await entered.future;
         expect(completed, isFalse);
-        verify(() => appointments.addAppointment(any())).called(1);
+        verify(
+          () => appointments.addAppointment(
+            any(),
+            checkConflicts: any(named: 'checkConflicts'),
+          ),
+        ).called(1);
 
         handoff.complete();
 
@@ -538,7 +547,12 @@ void main() {
       expect(saved.employeeIds, [_employeeA.id]);
       expect(saved.status, 'pending');
 
-      verify(() => appointments.addAppointment(any())).called(1);
+      verify(
+        () => appointments.addAppointment(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      ).called(1);
       // No images were selected, so the uploader should never run.
       verifyNever(
         () => uploader.enqueuePhotos(
@@ -719,7 +733,10 @@ void main() {
       // indistinguishable from a form that failed validation.
       final gate = Completer<void>();
       when(
-        () => appointments.addAppointment(any()),
+        () => appointments.addAppointment(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).thenAnswer((_) => gate.future);
 
       final c = readNotifier()
@@ -744,7 +761,12 @@ void main() {
       expect(second, isA<AddEventBusy>());
       gate.complete();
       await first;
-      verify(() => appointments.addAppointment(any())).called(1);
+      verify(
+        () => appointments.addAppointment(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      ).called(1);
     });
 
     test('turning Personal off clears the day-off flag', () {
@@ -799,12 +821,8 @@ void main() {
 
     test('skips busy check on forceBusy and writes the appointment', () async {
       when(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-        ),
-      ).thenAnswer((_) async => const [_employeeA]);
+        () => appointments.addAppointment(any(), checkConflicts: true),
+      ).thenThrow(StateError('must not be consulted'));
 
       final c = readNotifier();
       fillValid(c);
@@ -818,20 +836,19 @@ void main() {
       );
 
       expect(outcome, isA<AddEventSubmitted>());
-      verifyNever(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-        ),
-      );
+      // A bare matcher records the default `checkConflicts: false` — pinned.
       verify(() => appointments.addAppointment(any())).called(1);
     });
 
     test('books repeat occurrences atomically with the appointment', () async {
       var nextId = 0;
       when(appointments.newDocId).thenAnswer((_) => 'appt-${++nextId}');
-      when(() => appointments.addAppointments(any())).thenAnswer((_) async {});
+      when(
+        () => appointments.addAppointments(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      ).thenAnswer((_) async {});
 
       final c = readNotifier();
       fillValid(c);
@@ -850,7 +867,10 @@ void main() {
       expect((outcome as AddEventSubmitted).futureBookings, 15);
 
       final captured = verify(
-        () => appointments.addAppointments(captureAny()),
+        () => appointments.addAppointments(
+          captureAny(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).captured.single;
       final series = (captured as List).cast<AppointmentRecord>();
       expect(series, hasLength(16));
@@ -867,24 +887,27 @@ void main() {
       );
       // …and shares the series key (the first visit's doc id).
       expect(series.every((a) => a.seriesId == 'appt-1'), isTrue);
-      verifyNever(() => appointments.addAppointment(any()));
+      verifyNever(
+        () => appointments.addAppointment(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      );
     });
 
     test('checks repeat copies and reports a future conflict', () async {
       var nextId = 0;
       when(appointments.newDocId).thenAnswer((_) => 'appt-${++nextId}');
+      // The server names the FIRST clashing window of the batch.
       when(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
+        () => appointments.addAppointments(any(), checkConflicts: true),
+      ).thenThrow(
+        CalendarFailureEmployeesBusy(
+          busyEmployeeIds: const ['e1'],
+          start: DateTime(2026, 9, 10, 9),
+          end: DateTime(2026, 9, 10, 10),
         ),
-      ).thenAnswer((invocation) async {
-        final start = invocation.namedArguments[#start] as DateTime;
-        return start == DateTime(2026, 9, 10, 9)
-            ? const [_employeeA]
-            : const <EmployeeRecord>[];
-      });
+      );
 
       final c = readNotifier();
       fillValid(c);
@@ -902,15 +925,20 @@ void main() {
       expect(busy.busyEmployees, const [_employeeA]);
       expect(busy.start, DateTime(2026, 9, 10, 9));
       expect(busy.end, DateTime(2026, 9, 10, 10));
-      verifyNever(() => appointments.addAppointment(any()));
-      verifyNever(() => appointments.addAppointments(any()));
+      expect(readState().isSubmitting, isFalse);
+      verify(
+        () => appointments.addAppointments(any(), checkConflicts: true),
+      ).called(1);
     });
 
     test(
       'returns AddEventFailed and resets isSubmitting when repo throws',
       () async {
         when(
-          () => appointments.addAppointment(any()),
+          () => appointments.addAppointment(
+            any(),
+            checkConflicts: any(named: 'checkConflicts'),
+          ),
         ).thenThrow(Exception('boom'));
 
         final c = readNotifier();
@@ -928,23 +956,14 @@ void main() {
       },
     );
 
-    test('a lease gone stale before the write returns Busy and frees '
+    test('a lease already stale at the write returns Busy and frees '
         'isSubmitting', () async {
       var current = true;
       when(() => appointments.captureWriteOwner()).thenReturn(() => current);
-      when(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-        ),
-      ).thenAnswer((_) async {
-        current = false;
-        return const [];
-      });
 
       final c = readNotifier();
       fillValid(c);
+      current = false;
       final outcome = await c.submit(
         title: 'Leak fix',
         address: '999 Maple',
@@ -954,14 +973,24 @@ void main() {
 
       expect(outcome, isA<AddEventBusy>());
       expect(readState().isSubmitting, isFalse);
-      verifyNever(() => appointments.addAppointment(any()));
+      verifyNever(
+        () => appointments.addAppointment(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      );
     });
 
     test('a lease gone stale after the write returns Busy and frees '
         'isSubmitting', () async {
       var current = true;
       when(() => appointments.captureWriteOwner()).thenReturn(() => current);
-      when(() => appointments.addAppointment(any())).thenAnswer((_) async {
+      when(
+        () => appointments.addAppointment(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      ).thenAnswer((_) async {
         current = false;
       });
 
@@ -1007,7 +1036,12 @@ void main() {
 
         expect(outcome, isA<AddEventFailed>());
         expect((outcome as AddEventFailed).error, isA<SocketException>());
-        verifyNever(() => appointments.addAppointment(any()));
+        verifyNever(
+          () => appointments.addAppointment(
+            any(),
+            checkConflicts: any(named: 'checkConflicts'),
+          ),
+        );
         verifyNever(
           () => appointments.findBusyEmployees(
             candidates: any(named: 'candidates'),
@@ -1027,7 +1061,12 @@ void main() {
     test('a 3-day job writes three linked one-day documents', () async {
       var nextId = 0;
       when(appointments.newDocId).thenAnswer((_) => 'appt-${++nextId}');
-      when(() => appointments.addAppointments(any())).thenAnswer((_) async {});
+      when(
+        () => appointments.addAppointments(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      ).thenAnswer((_) async {});
 
       final c = readNotifier();
       fillValid(c);
@@ -1047,7 +1086,10 @@ void main() {
       expect(outcome.runDays, 3);
 
       final captured = verify(
-        () => appointments.addAppointments(captureAny()),
+        () => appointments.addAppointments(
+          captureAny(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).captured.single;
       final run = (captured as List).cast<AppointmentRecord>();
       expect(run, hasLength(3));
@@ -1077,7 +1119,10 @@ void main() {
 
       final captured =
           verify(
-                () => appointments.addAppointment(captureAny()),
+                () => appointments.addAppointment(
+                  captureAny(),
+                  checkConflicts: any(named: 'checkConflicts'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(captured.seriesId, '');
@@ -1104,7 +1149,10 @@ void main() {
 
       final captured =
           verify(
-                () => appointments.addAppointment(captureAny()),
+                () => appointments.addAppointment(
+                  captureAny(),
+                  checkConflicts: any(named: 'checkConflicts'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(captured.startTime, DateTime(2026, 5, 10, 9));
@@ -1264,7 +1312,10 @@ void main() {
       expect(outcome, isA<AddEventSubmitted>());
       final written =
           verify(
-                () => appointments.addAppointment(captureAny()),
+                () => appointments.addAppointment(
+                  captureAny(),
+                  checkConflicts: any(named: 'checkConflicts'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(

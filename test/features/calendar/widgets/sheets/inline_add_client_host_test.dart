@@ -92,6 +92,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(AddClientSheet), findsOneWidget);
+    // A booking is already in progress, so the sheet offers no second one.
+    expect(find.text('Add and book a job'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

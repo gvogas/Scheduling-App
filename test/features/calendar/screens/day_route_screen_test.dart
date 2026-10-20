@@ -56,6 +56,7 @@ Widget _wrap({
   List<AppointmentRecord>? businessWide,
   List<EmployeeRecord> employees = const [_jane],
   double textScale = 1,
+  DateTime? initialDay,
 }) {
   return ProviderScope(
     overrides: [
@@ -86,7 +87,11 @@ Widget _wrap({
           ).copyWith(textScaler: TextScaler.linear(textScale)),
           child: child!,
         ),
-        home: const DayRouteScreen(isAdmin: false, employeeId: 'e1'),
+        home: DayRouteScreen(
+          isAdmin: false,
+          employeeId: 'e1',
+          initialDay: initialDay,
+        ),
       ),
     ),
   );
@@ -367,6 +372,33 @@ void main() {
     expect(find.text('Bob Smith'), findsNothing);
     // The selected assignee's job renders in the timeline.
     expect(find.text('Appt 1'), findsOneWidget);
+  });
+
+  testWidgets('opens on the calendar day it was handed, not today', (
+    tester,
+  ) async {
+    // The calendar passes its selected day; a job on that day is a stop and
+    // today's job is not.
+    await _pump(
+      tester,
+      _wrap(
+        jobs: [
+          _job(id: 1, hour: 9, status: 'pending', address: '1 A St'),
+          _job(
+            id: 2,
+            hour: 10,
+            status: 'pending',
+            address: '2 B St',
+            dayOffset: 3,
+          ),
+        ],
+        initialDay: _at(0, 3),
+      ),
+    );
+
+    expect(find.text('Appt 2'), findsOneWidget);
+    expect(find.text('Appt 1'), findsNothing);
+    expect(find.byIcon(Icons.today_outlined), findsOneWidget);
   });
 
   testWidgets('tapping the date label opens a date picker', (tester) async {

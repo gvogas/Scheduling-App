@@ -50,6 +50,7 @@ Widget _harness({
   bool offline = false,
   SignInOutcome? resumeOutcome,
   PendingPhotoExit? pendingPhotos,
+  void Function(Object? loginArgs)? onLogin,
 }) {
   return ProviderScope(
     overrides: [
@@ -70,10 +71,19 @@ Widget _harness({
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: lightTheme(),
-        routes: {
-          AppRoutes.login: (_) => const Scaffold(body: Text('login screen')),
-          AppRoutes.mainCalendar: (_) =>
-              const Scaffold(body: Text('main calendar')),
+        onGenerateRoute: (settings) {
+          if (settings.name == AppRoutes.login) {
+            onLogin?.call(settings.arguments);
+          }
+          return MaterialPageRoute<void>(
+            builder: (_) => Scaffold(
+              body: Text(switch (settings.name) {
+                AppRoutes.login => 'login screen',
+                AppRoutes.mainCalendar => 'main calendar',
+                _ => 'other route',
+              }),
+            ),
+          );
         },
         home: AccountSetupScreen(authService: auth),
       ),
@@ -350,21 +360,37 @@ void main() {
   });
 
   group('post-setup recovery', () {
-    testWidgets('a pending resume routes back to login for a clean retry', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _harness(auth: auth, resumeOutcome: const SignInProfilePending()),
-      );
-      await tester.pumpAndSettle();
-      await _fillForm(tester);
-      await _consent(tester);
+    testWidgets(
+      'a pending resume routes back to login TELLING them the account is ready',
+      (tester) async {
+        // The password change landed before the resume ran, so a bare Login
+        // with the remembered (old) password was a silent dead end (U10).
+        Object? loginArgs;
+        await tester.pumpWidget(
+          _harness(
+            auth: auth,
+            resumeOutcome: const SignInProfilePending(),
+            onLogin: (args) => loginArgs = args,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await _fillForm(tester);
+        await _consent(tester);
 
-      await _submit(tester);
-      await tester.pumpAndSettle();
+        await _submit(tester);
+        await tester.pumpAndSettle();
 
-      expect(find.text('login screen'), findsOneWidget);
-    });
+        expect(find.text('login screen'), findsOneWidget);
+        expect(
+          loginArgs,
+          isA<LoginArgs>().having(
+            (a) => a.notice,
+            'notice',
+            LoginNotice.accountReady,
+          ),
+        );
+      },
+    );
 
     testWidgets(
       'unexpected resume outcomes re-enable the screen instead of leaving it stuck loading',

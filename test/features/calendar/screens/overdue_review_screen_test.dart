@@ -12,6 +12,7 @@ import 'package:scheduling/features/calendar/application/overdue_review_provider
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/screens/overdue_review_screen.dart';
+import 'package:scheduling/features/calendar/widgets/views/agenda_sliver_list.dart';
 import 'package:scheduling/features/calendar/widgets/views/overdue_review_action_bar.dart';
 import 'package:scheduling/features/calendar/widgets/views/overdue_review_list.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
@@ -52,46 +53,65 @@ void main() {
     ).thenAnswer((_) async {});
   });
 
-  Widget wrap(List<AppointmentRecord> jobs, {double textScale = 1}) =>
-      ProviderScope(
-        overrides: [
-          overdueOpenJobsProvider.overrideWith((ref) => Stream.value(jobs)),
-          appointmentsRepositoryProvider.overrideWithValue(repo),
-          noticeServiceProvider.overrideWithValue(notices),
-          isOfflineProvider.overrideWithValue(false),
-          employeeColorMapProvider.overrideWithValue(const {}),
-          employeeNameMapProvider.overrideWithValue(const {}),
-        ],
-        child: ThemeNotifier(
-          themeMode: ThemeMode.light,
-          toggleTheme: () {},
-          textScale: textScale,
-          setTextScale: (_) {},
-          setLanguage: (_) {},
-          child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            theme: lightTheme(),
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: TextScaler.linear(textScale)),
-              child: child ?? const SizedBox.shrink(),
-            ),
-            home: OverdueReviewScreen(
-              isAdmin: true,
-              employeeId: 'me',
-              openJob: (context, job) async => opened.add(job),
-            ),
-          ),
+  Widget wrap(
+    List<AppointmentRecord> jobs, {
+    double textScale = 1,
+    Stream<List<AppointmentRecord>>? stream,
+  }) => ProviderScope(
+    overrides: [
+      overdueOpenJobsProvider.overrideWith(
+        (ref) => stream ?? Stream.value(jobs),
+      ),
+      appointmentsRepositoryProvider.overrideWithValue(repo),
+      noticeServiceProvider.overrideWithValue(notices),
+      isOfflineProvider.overrideWithValue(false),
+      employeeColorMapProvider.overrideWithValue(const {}),
+      employeeNameMapProvider.overrideWithValue(const {}),
+    ],
+    child: ThemeNotifier(
+      themeMode: ThemeMode.light,
+      toggleTheme: () {},
+      textScale: textScale,
+      setTextScale: (_) {},
+      setLanguage: (_) {},
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: lightTheme(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child ?? const SizedBox.shrink(),
         ),
-      );
+        home: OverdueReviewScreen(
+          isAdmin: true,
+          employeeId: 'me',
+          openJob: (context, job) async => opened.add(job),
+        ),
+      ),
+    ),
+  );
 
   void useTallViewport(WidgetTester tester) {
     tester.view.physicalSize = const Size(900, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
   }
+
+  testWidgets(
+    'loading shows skeleton rows like the other lists, not a spinner',
+    (tester) async {
+      // Fixed pumps: the shimmer animates for as long as the list loads.
+      await tester.pumpWidget(wrap(const [], stream: const Stream.empty()));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.byType(AgendaSkeleton), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('an empty list shows the empty state, never a blank screen', (
     tester,

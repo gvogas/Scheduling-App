@@ -69,7 +69,11 @@ void main() {
   setUp(() {
     repository = _MockRepo();
     when(
-      () => repository.updateAppointment(any(), base: any(named: 'base')),
+      () => repository.updateAppointment(
+        any(),
+        base: any(named: 'base'),
+        checkConflicts: any(named: 'checkConflicts'),
+      ),
     ).thenAnswer((_) async {});
     when(
       () => repository.findBusyEmployees(
@@ -195,7 +199,11 @@ void main() {
       await tester.pumpAndSettle();
 
       verifyNever(
-        () => repository.updateAppointment(any(), base: any(named: 'base')),
+        () => repository.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       );
     });
 
@@ -279,6 +287,7 @@ void main() {
                 () => repository.updateAppointment(
                   captureAny(),
                   base: any(named: 'base'),
+                  checkConflicts: any(named: 'checkConflicts'),
                 ),
               ).captured.last
               as AppointmentRecord;
@@ -352,6 +361,7 @@ void main() {
                 () => repository.updateAppointment(
                   captureAny(),
                   base: any(named: 'base'),
+                  checkConflicts: any(named: 'checkConflicts'),
                 ),
               ).captured.last
               as AppointmentRecord;
@@ -390,6 +400,7 @@ void main() {
                 () => repository.updateAppointment(
                   captureAny(),
                   base: any(named: 'base'),
+                  checkConflicts: any(named: 'checkConflicts'),
                 ),
               ).captured.single
               as AppointmentRecord;
@@ -415,6 +426,7 @@ void main() {
                 () => repository.updateAppointment(
                   captureAny(),
                   base: any(named: 'base'),
+                  checkConflicts: any(named: 'checkConflicts'),
                 ),
               ).captured.single
               as AppointmentRecord;
@@ -434,6 +446,7 @@ void main() {
         () => repository.updateAppointment(
           captureAny(),
           base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
         ),
       ).captured.cast<AppointmentRecord>();
       expect(writes.last.employeeIds, ['e1']);
@@ -447,7 +460,11 @@ void main() {
       // Each swap writes immediately, so a refused write has to leave the row
       // offering the same replacement rather than claiming it took the job.
       when(
-        () => repository.updateAppointment(any(), base: any(named: 'base')),
+        () => repository.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).thenThrow(Exception('permission-denied'));
 
       await pumpAndOpen(tester, roster: [_marc, _nadia]);
@@ -457,7 +474,11 @@ void main() {
       await tester.pumpAndSettle();
 
       verify(
-        () => repository.updateAppointment(any(), base: any(named: 'base')),
+        () => repository.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).called(1);
       expect(find.text('Nadia Berger takes this one'), findsNothing);
       expect(
@@ -520,6 +541,7 @@ void main() {
                 () => repository.updateAppointment(
                   captureAny(),
                   base: any(named: 'base'),
+                  checkConflicts: any(named: 'checkConflicts'),
                 ),
               ).captured.single
               as AppointmentRecord;

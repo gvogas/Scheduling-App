@@ -1,15 +1,19 @@
 import 'dart:async';
 
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
 import 'package:scheduling/core/navigation/app_destination.dart';
 import 'package:scheduling/core/navigation/hub_shell_scope.dart';
+import 'package:scheduling/core/notifications/push_notification_service.dart';
 import 'package:scheduling/features/auth/application/active_user_identity_provider.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
+import 'package:scheduling/features/notifications/application/push_registration_controller.dart';
 import 'package:scheduling/features/presence/data/location_share_ask_store.dart';
 import 'package:scheduling/features/presence/widgets/location_share_ask_gate.dart';
 import 'package:scheduling/features/settings/application/app_info_provider.dart';
@@ -42,25 +46,33 @@ class _NoShell implements HubTabSelector {
   void goHome() {}
 }
 
+class _MockPushService extends Mock implements PushNotificationService {}
+
 const _me = EmployeeRecord(id: 'e1', uid: 'uid-1', status: 'active');
 const _build = '1.62.0+91';
 
 void main() {
   late List<bool> holds;
+  late _MockPushService push;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     holds = [];
+    push = _MockPushService();
   });
 
   /// The calendar as the gate sees it; [holds] records every `holdsTour`.
+  /// iOS has already been asked about notifications unless a test says not.
   Future<void> pumpCalendar(
     WidgetTester tester, {
     EmployeeRecord? me = _me,
+    AuthorizationStatus pushStatus = AuthorizationStatus.authorized,
   }) async {
+    when(push.authorizationStatus).thenAnswer((_) async => pushStatus);
     final container = ProviderContainer(
       overrides: [
         myEmployeeRecordProvider.overrideWith((ref) => me),
+        pushNotificationServiceProvider.overrideWithValue(push),
         activeUserIdentityProvider.overrideWith(
           (ref) => Completer<Never>().future,
         ),
@@ -82,24 +94,48 @@ void main() {
         child: MaterialApp(
           onGenerateRoute: (settings) => MaterialPageRoute<void>(
             settings: settings,
-            builder: (_) => settings.name == AppRoutes.shareLocationAsk
-                ? const Scaffold(body: Text('ask page'))
-                : HubShellScope(
+            builder: (context) => switch (settings.name) {
+              AppRoutes.shareLocationAsk => const Scaffold(
+                body: Text('ask page'),
+              ),
+              AppRoutes.notificationAsk => Scaffold(
+                body: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('push page'),
+                ),
+              ),
+              _ => HubShellScope(
                     shell: const _NoShell(),
                     current: HubTab.calendar,
-                    child: LocationShareAskGate(
-                      builder: (_, {required holdsTour}) {
-                        holds.add(holdsTour);
-                        return const SizedBox();
-                      },
-                    ),
-                  ),
+                child: LocationShareAskGate(
+                  builder: (_, {required holdsTour}) {
+                    holds.add(holdsTour);
+                    return const SizedBox();
+                  },
+                ),
+              ),
+            },
           ),
         ),
       ),
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('the notifications page comes first and holds the team-map '
+      'page until it is popped', (tester) async {
+    await pumpCalendar(tester, pushStatus: AuthorizationStatus.notDetermined);
+
+    expect(find.text('push page'), findsOneWidget);
+    expect(find.text('ask page'), findsNothing);
+    expect(holds, everyElement(isTrue));
+
+    await tester.tap(find.text('push page'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ask page'), findsOneWidget);
+    expect(holds.last, isFalse);
+  });
 
   testWidgets('someone not sharing gets the page on their first calendar '
       'visit', (tester) async {

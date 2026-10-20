@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/app/account_exit_controller.dart';
+import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/security/app_lock.dart';
 import 'package:scheduling/core/security/biometric_auth_service.dart';
 import 'package:scheduling/core/storage/secure_storage_service.dart';
@@ -14,6 +17,12 @@ class _MockSecureStorage extends Mock implements SecureStorageService {}
 
 class _MockBiometrics extends Mock implements BiometricAuthService {}
 
+class _MockFirebaseAuth extends Mock implements FirebaseAuth {}
+
+class _MockUser extends Mock implements User {}
+
+class _MockAccountExit extends Mock implements AccountExitController {}
+
 /// Drives the lifecycle the way the OS does, so the widget's observer fires.
 void _lifecycle(AppLifecycleState state) =>
     WidgetsBinding.instance.handleAppLifecycleStateChanged(state);
@@ -22,6 +31,13 @@ void main() {
   late _MockSecureStorage storage;
   late _MockBiometrics biometrics;
 
+  setUpAll(() {
+    registerFallbackValue(GlobalKey<NavigatorState>());
+    registerFallbackValue(GlobalKey<ScaffoldMessengerState>());
+    registerFallbackValue((AppLocalizations _) => '');
+    registerFallbackValue(() => true);
+  });
+
   setUp(() {
     storage = _MockSecureStorage();
     biometrics = _MockBiometrics();
@@ -29,17 +45,32 @@ void main() {
     when(() => biometrics.authenticate(any())).thenAnswer((_) async => false);
   });
 
-  Future<void> pumpLock(WidgetTester tester) async {
+  Future<void> pumpLock(
+    WidgetTester tester, {
+    _MockAccountExit? exit,
+    FirebaseAuth? auth,
+    GlobalKey<NavigatorState>? navigatorKey,
+    GlobalKey<ScaffoldMessengerState>? messengerKey,
+  }) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
           secureStorageServiceProvider.overrideWithValue(storage),
           biometricAuthServiceProvider.overrideWithValue(biometrics),
+          if (exit != null)
+            accountExitControllerProvider.overrideWithValue(exit),
+          if (auth != null) firebaseAuthProvider.overrideWithValue(auth),
         ],
-        child: const MaterialApp(
+        child: MaterialApp(
+          navigatorKey: navigatorKey,
+          scaffoldMessengerKey: messengerKey,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           supportedLocales: AppLocalizations.supportedLocales,
-          home: AppLock(child: Scaffold(body: Text('secret'))),
+          home: AppLock(
+            navigatorKey: navigatorKey,
+            scaffoldMessengerKey: messengerKey,
+            child: const Scaffold(body: Text('secret')),
+          ),
         ),
       ),
     );
@@ -146,21 +177,121 @@ void main() {
     verify(() => biometrics.authenticate(any())).called(greaterThan(0));
   });
 
-  testWidgets('unavailable biometrics opens the session WITHOUT disabling the '
-      'stored setting', (tester) async {
+  testWidgets('unavailable biometrics says so INLINE and Continue opens the '
+      'session WITHOUT disabling the stored setting', (tester) async {
     // `isAvailable()` is `try { isDeviceSupported() } catch { false }`, so it
     // returns false for the pre-first-unlock `local_auth` channel window this
     // whole subsystem exists to handle. Persisting that answer turns the
-    // user's app lock off forever after one hiccup.
+    // user's app lock off forever after one hiccup. The message used to be a
+    // toast over a vanishing overlay (C21); now the overlay stays and explains
+    // itself, and Continue is the same session-only release.
     when(() => storage.readFlag(any())).thenAnswer((_) async => true);
-    when(() => storage.writeFlag(any(), value: any(named: 'value')))
-        .thenAnswer((_) async {});
+    when(
+      () => storage.writeFlag(any(), value: any(named: 'value')),
+    ).thenAnswer((_) async {});
     when(() => biometrics.isAvailable()).thenAnswer((_) async => false);
 
     await pumpLock(tester);
 
-    expect(isLocked(tester), isFalse, reason: 'open for THIS session');
+    expect(
+      find.text("Biometric lock isn't available on this device."),
+      findsOneWidget,
+    );
+    expect(isLocked(tester), isFalse, reason: 'no biometric prompt to retry');
+    verifyNever(() => biometrics.authenticate(any()));
+
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Continue'),
+      findsNothing,
+      reason: 'open for THIS session',
+    );
     verifyNever(() => storage.writeFlag(any(), value: any(named: 'value')));
+  });
+
+  testWidgets('the overlay offers no Log out without the navigator keys', (
+    tester,
+  ) async {
+    when(() => storage.readFlag(any())).thenAnswer((_) async => true);
+    await pumpLock(tester);
+
+    expect(isLocked(tester), isTrue);
+    expect(find.text('Log out'), findsNothing);
+  });
+
+  testWidgets(
+    'Log out exits through AccountExitController and drops the lock',
+    (tester) async {
+      // C21: the overlay was a dead end for someone whose biometrics no longer
+      // match. The exit goes through the ONE shared owner (ADR-0026), and the
+      // lock lifts only once nobody is signed in — a signed-out app has nothing
+      // left to protect.
+      when(() => storage.readFlag(any())).thenAnswer((_) async => true);
+      final exit = _MockAccountExit();
+      final auth = _MockFirebaseAuth();
+      final user = _MockUser();
+      when(() => auth.currentUser).thenReturn(user);
+      when(
+        () => exit.exitAccount(
+          selectMessage: any(named: 'selectMessage'),
+          navigatorKey: any(named: 'navigatorKey'),
+          scaffoldMessengerKey: any(named: 'scaffoldMessengerKey'),
+          isMounted: any(named: 'isMounted'),
+        ),
+      ).thenAnswer((_) async => when(() => auth.currentUser).thenReturn(null));
+      await pumpLock(
+        tester,
+        exit: exit,
+        auth: auth,
+        navigatorKey: GlobalKey<NavigatorState>(),
+        messengerKey: GlobalKey<ScaffoldMessengerState>(),
+      );
+      expect(isLocked(tester), isTrue);
+
+      await tester.tap(find.text('Log out'));
+      await tester.pumpAndSettle();
+
+      verify(
+        () => exit.exitAccount(
+          selectMessage: any(named: 'selectMessage'),
+          navigatorKey: any(named: 'navigatorKey'),
+          scaffoldMessengerKey: any(named: 'scaffoldMessengerKey'),
+          isMounted: any(named: 'isMounted'),
+        ),
+      ).called(1);
+      expect(isLocked(tester), isFalse);
+    },
+  );
+
+  testWidgets('a Log out that leaves the session signed in keeps the lock', (
+    tester,
+  ) async {
+    when(() => storage.readFlag(any())).thenAnswer((_) async => true);
+    final exit = _MockAccountExit();
+    final auth = _MockFirebaseAuth();
+    when(() => auth.currentUser).thenReturn(_MockUser());
+    when(
+      () => exit.exitAccount(
+        selectMessage: any(named: 'selectMessage'),
+        navigatorKey: any(named: 'navigatorKey'),
+        scaffoldMessengerKey: any(named: 'scaffoldMessengerKey'),
+        isMounted: any(named: 'isMounted'),
+      ),
+    ).thenAnswer((_) async {});
+    await pumpLock(
+      tester,
+      exit: exit,
+      auth: auth,
+      navigatorKey: GlobalKey<NavigatorState>(),
+      messengerKey: GlobalKey<ScaffoldMessengerState>(),
+    );
+
+    await tester.tap(find.text('Log out'));
+    await tester.pumpAndSettle();
+
+    expect(isLocked(tester), isTrue);
   });
 
   testWidgets('a successful unlock clears the gate', (tester) async {
@@ -220,30 +351,32 @@ void main() {
     }
   });
 
-  testWidgets('resume re-prompts and unlocks a session locked by backgrounding',
-      (tester) async {
-    // The full round trip an ordinary app switch takes, which no test drove
-    // end to end: unlocked → backgrounded → locked → resumed → unlocked.
-    when(() => storage.readFlag(any())).thenAnswer((_) async => true);
-    when(() => biometrics.authenticate(any())).thenAnswer((_) async => true);
-    await pumpLock(tester);
-    expect(isLocked(tester), isFalse);
+  testWidgets(
+    'resume re-prompts and unlocks a session locked by backgrounding',
+    (tester) async {
+      // The full round trip an ordinary app switch takes, which no test drove
+      // end to end: unlocked → backgrounded → locked → resumed → unlocked.
+      when(() => storage.readFlag(any())).thenAnswer((_) async => true);
+      when(() => biometrics.authenticate(any())).thenAnswer((_) async => true);
+      await pumpLock(tester);
+      expect(isLocked(tester), isFalse);
 
-    when(() => biometrics.authenticate(any())).thenAnswer((_) async => false);
-    _lifecycle(AppLifecycleState.inactive);
-    _lifecycle(AppLifecycleState.hidden);
-    _lifecycle(AppLifecycleState.paused);
-    await tester.pumpAndSettle();
-    expect(isLocked(tester), isTrue);
+      when(() => biometrics.authenticate(any())).thenAnswer((_) async => false);
+      _lifecycle(AppLifecycleState.inactive);
+      _lifecycle(AppLifecycleState.hidden);
+      _lifecycle(AppLifecycleState.paused);
+      await tester.pumpAndSettle();
+      expect(isLocked(tester), isTrue);
 
-    when(() => biometrics.authenticate(any())).thenAnswer((_) async => true);
-    _lifecycle(AppLifecycleState.hidden);
-    _lifecycle(AppLifecycleState.inactive);
-    _lifecycle(AppLifecycleState.resumed);
-    await tester.pumpAndSettle();
+      when(() => biometrics.authenticate(any())).thenAnswer((_) async => true);
+      _lifecycle(AppLifecycleState.hidden);
+      _lifecycle(AppLifecycleState.inactive);
+      _lifecycle(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
 
-    expect(isLocked(tester), isFalse);
-  });
+      expect(isLocked(tester), isFalse);
+    },
+  );
 
   testWidgets('a thrown biometric prompt does not escape the zone handler', (
     tester,

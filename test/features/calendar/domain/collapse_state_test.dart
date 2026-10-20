@@ -49,6 +49,17 @@ void main() {
     expect(collapse.onDragDelta(-30), isFalse);
   });
 
+  test('restoring a remembered state applies it and drops banked travel', () {
+    final collapse = CalendarCollapse()
+      ..onDragDelta(-20)
+      ..restore(collapsed: true);
+    expect(collapse.isCollapsed, isTrue);
+    // The 20px banked before the restore must not count toward re-expanding.
+    expect(collapse.onDragDelta(20), isFalse);
+    expect(collapse.onDragDelta(4), isTrue);
+    expect(collapse.isCollapsed, isFalse);
+  });
+
   test('tapping the handle toggles it without a drag', () {
     final collapse = CalendarCollapse()..toggle();
     expect(collapse.isCollapsed, isTrue);

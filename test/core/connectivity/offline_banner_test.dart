@@ -23,7 +23,7 @@ Widget _app(List<ConnectivityResult> results) => ProviderScope(
 );
 
 void main() {
-  const offlineText = "Offline — changes will sync when you're back online";
+  const offlineText = 'Offline — you can view your schedule; saving needs a connection';
 
   testWidgets('shows the banner when the device is offline', (tester) async {
     await tester.pumpWidget(_app(const [ConnectivityResult.none]));

@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/features/calendar/data/firebase_appointments_repository.dart';
+import 'package:scheduling/features/calendar/domain/calendar_failure.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 
 class _Firestore extends Mock implements FirebaseFirestore {}
@@ -131,4 +132,81 @@ void main() {
       expect(repo.takeAcknowledgedWrite('job'), isNull);
     },
   );
+
+  Map<String, dynamic> sentPayload() =>
+      (verify(
+                () =>
+                    callable.call<Map<String, dynamic>>(captureAny<Object?>()),
+              ).captured.single
+              as Map)
+          .cast<String, dynamic>();
+
+  test('checkConflicts rides on the save and is absent by default', () async {
+    await repo.updateAppointment(
+      original.copyWith(notes: 'mine'),
+      base: original,
+      checkConflicts: true,
+    );
+    expect(sentPayload()['checkConflicts'], isTrue);
+
+    await repo.updateAppointment(original.copyWith(notes: 'x'), base: original);
+    expect(sentPayload().containsKey('checkConflicts'), isFalse);
+  });
+
+  test('a create goes through the callable, not a Firestore batch', () async {
+    when(() => response.data).thenReturn({
+      'appointments': [
+        {'id': 'job', 'data': original.toMap()},
+      ],
+    });
+    await repo.addAppointment(original, checkConflicts: true);
+    final payload = sentPayload();
+    expect(payload['checkConflicts'], isTrue);
+    final create = (payload['creates'] as List).single as Map;
+    expect(create['id'], 'job');
+    expect(
+      (create['data'] as Map)['startTime'],
+      original.startTime.millisecondsSinceEpoch,
+    );
+  });
+
+  test(
+    'the busy refusal becomes the typed failure the sheet renders',
+    () async {
+      when(() => callable.call<Map<String, dynamic>>(any<Object?>())).thenThrow(
+        FirebaseFunctionsException(
+          code: 'failed-precondition',
+          message: 'appointment-employee-busy',
+          details: {
+            'busyEmployeeIds': const ['e2'],
+            'startMillis': original.startTime.millisecondsSinceEpoch,
+            'endMillis': original.endTime.millisecondsSinceEpoch,
+          },
+        ),
+      );
+      await expectLater(
+        repo.updateAppointment(original, base: original, checkConflicts: true),
+        throwsA(
+          isA<CalendarFailureEmployeesBusy>()
+              .having((f) => f.busyEmployeeIds, 'busyEmployeeIds', ['e2'])
+              .having((f) => f.start, 'start', original.startTime)
+              .having((f) => f.end, 'end', original.endTime),
+        ),
+      );
+      expect(repo.takeAcknowledgedWrite('job'), isNull);
+    },
+  );
+
+  test('any other callable error passes through untouched', () async {
+    when(() => callable.call<Map<String, dynamic>>(any<Object?>())).thenThrow(
+      FirebaseFunctionsException(
+        code: 'aborted',
+        message: 'appointment-edit-conflict',
+      ),
+    );
+    await expectLater(
+      repo.updateAppointment(original, base: original, checkConflicts: true),
+      throwsA(isA<FirebaseFunctionsException>()),
+    );
+  });
 }

@@ -7,7 +7,11 @@ import 'package:scheduling/features/auth/widgets/password_requirements_checklist
 import 'package:scheduling/l10n/l10n.dart';
 
 void main() {
-  Future<void> pumpChecklist(WidgetTester tester, String password) async {
+  Future<void> pumpChecklist(
+    WidgetTester tester,
+    String password, {
+    bool mustDifferFromStarting = false,
+  }) async {
     await tester.pumpWidget(
       MaterialApp(
         localizationsDelegates: const [
@@ -17,7 +21,10 @@ void main() {
         ],
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: PasswordRequirementsChecklist(password: password),
+          body: PasswordRequirementsChecklist(
+            password: password,
+            mustDifferFromStarting: mustDifferFromStarting,
+          ),
         ),
       ),
     );
@@ -31,10 +38,7 @@ void main() {
     tester,
   ) async {
     await pumpChecklist(tester, '');
-    expect(
-      find.byIcon(Icons.circle_outlined),
-      findsNWidgets(requirementCount),
-    );
+    expect(find.byIcon(Icons.circle_outlined), findsNWidgets(requirementCount));
     expect(find.byIcon(Icons.check_circle), findsNothing);
   });
 
@@ -54,5 +58,24 @@ void main() {
       find.byIcon(Icons.circle_outlined),
       findsNWidgets(requirementCount - 1),
     );
+  });
+
+  testWidgets('the starting-password note is informational, never a check', (
+    tester,
+  ) async {
+    // Only the server can tell a retyped starting password apart (C4), so the
+    // row must not read as met when every checkable requirement is.
+    await pumpChecklist(tester, 'Abcdef1!', mustDifferFromStarting: true);
+    expect(
+      find.text('Not the temporary password you were given'),
+      findsOneWidget,
+    );
+    expect(find.byIcon(Icons.info_outline), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle), findsNWidgets(requirementCount));
+  });
+
+  testWidgets('the note is absent by default', (tester) async {
+    await pumpChecklist(tester, 'Abcdef1!');
+    expect(find.byIcon(Icons.info_outline), findsNothing);
   });
 }

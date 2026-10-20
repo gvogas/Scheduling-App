@@ -54,9 +54,10 @@ final _history = [
 Widget _wrap(AppointmentsRepository repo) => ProviderScope(
   overrides: [
     appointmentsRepositoryProvider.overrideWithValue(repo),
-    employeeColorMapProvider.overrideWithValue(
-      const {'e1': Color(0xFF6366F1), 'e2': Color(0xFF10B981)},
-    ),
+    employeeColorMapProvider.overrideWithValue(const {
+      'e1': Color(0xFF6366F1),
+      'e2': Color(0xFF10B981),
+    }),
   ],
   child: ThemeNotifier(
     themeMode: ThemeMode.light,
@@ -74,9 +75,9 @@ Widget _wrap(AppointmentsRepository repo) => ProviderScope(
       supportedLocales: AppLocalizations.supportedLocales,
       theme: lightTheme(),
       builder: (context, child) => MediaQuery(
-        data: MediaQuery.of(context).copyWith(
-          textScaler: const TextScaler.linear(2),
-        ),
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: const TextScaler.linear(2)),
         child: child ?? const SizedBox.shrink(),
       ),
       home: const HistoryScreen(isAdmin: false, employeeId: 'e1'),

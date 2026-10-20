@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
+import 'package:scheduling/features/clients/widgets/cards/archived_pill.dart';
 import 'package:scheduling/features/clients/widgets/sheets/client_detail_sheet.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/status_pill.dart';
@@ -47,31 +48,39 @@ class ClientTile extends StatelessWidget {
     final phone = client.phone.trim();
     final count = client.jobCount;
 
-    return Material(
-      color: selected ? scheme.secondaryContainer : Colors.transparent,
-      child: InkWell(
-        onTap: () => _open(context),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            horizontal: _gutter,
-            vertical: AppSpacing.sp12,
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              AppAvatar(name: displayName),
-              const SizedBox(width: AppSpacing.sp12),
-              Expanded(
-                child: _buildDetails(
-                  theme,
-                  scheme,
-                  displayName,
-                  address,
-                  phone,
-                  count,
-                ),
+    // One semantics node per row: the InkWell alone announces no role, and the
+    // selected state is otherwise colour-only.
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        selected: selected,
+        child: Material(
+          color: selected ? scheme.secondaryContainer : Colors.transparent,
+          child: InkWell(
+            onTap: () => _open(context),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: _gutter,
+                vertical: AppSpacing.sp12,
               ),
-            ],
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AppAvatar(name: displayName),
+                  const SizedBox(width: AppSpacing.sp12),
+                  Expanded(
+                    child: _buildDetails(
+                      theme,
+                      scheme,
+                      displayName,
+                      address,
+                      phone,
+                      count,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -137,7 +146,7 @@ class ClientTile extends StatelessWidget {
         ],
         if (client.archived) ...[
           const SizedBox(height: AppSpacing.sp8),
-          const _ArchivedPill(),
+          const ArchivedPill(),
         ],
       ],
     );
@@ -170,22 +179,6 @@ class _TypePill extends StatelessWidget {
       icon: icon,
       background: background,
       foreground: foreground,
-      radius: AppRadius.r8,
-    );
-  }
-}
-
-/// "Archived", as a neutral pill under the row's own lines.
-class _ArchivedPill extends StatelessWidget {
-  const _ArchivedPill();
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return StatusPill(
-      label: context.l10n.clients_filterArchived,
-      background: scheme.surfaceContainerHighest,
-      foreground: scheme.onSurfaceVariant,
       radius: AppRadius.r8,
     );
   }

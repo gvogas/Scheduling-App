@@ -59,10 +59,15 @@ void main() {
         copies: any(named: 'copies'),
         base: any(named: 'base'),
         deleteBases: any(named: 'deleteBases'),
+        checkConflicts: any(named: 'checkConflicts'),
       ),
     ).thenAnswer((_) async {});
     when(
-      () => repo.updateAppointments(any(), bases: any(named: 'bases')),
+      () => repo.updateAppointments(
+        any(),
+        bases: any(named: 'bases'),
+        checkConflicts: any(named: 'checkConflicts'),
+      ),
     ).thenAnswer((_) async {});
   });
 
@@ -100,6 +105,7 @@ void main() {
             copies: captureAny(named: 'copies'),
             base: any(named: 'base'),
             deleteBases: any(named: 'deleteBases'),
+            checkConflicts: any(named: 'checkConflicts'),
           ),
         ).captured;
         final deleteIds = (captured[1] as List).cast<String>();
@@ -158,6 +164,7 @@ void main() {
             copies: captureAny(named: 'copies'),
             base: any(named: 'base'),
             deleteBases: any(named: 'deleteBases'),
+            checkConflicts: any(named: 'checkConflicts'),
           ),
         ).captured;
         expect((captured[1] as List).cast<String>(), ['a3']);
@@ -211,6 +218,7 @@ void main() {
                       () => repo.updateAppointments(
                         captureAny(),
                         bases: any(named: 'bases'),
+                        checkConflicts: any(named: 'checkConflicts'),
                       ),
                     ).captured.single
                     as List)
@@ -228,36 +236,39 @@ void main() {
       },
     );
 
-    test('an end-only edit keeps a moved sibling after its own start', () async {
-      final appointment = _appt(
-        id: 'p1',
-        start: DateTime(2026, 1, 15, 10),
-        seriesId: 'ps',
-      );
-      final moved = _appt(
-        id: 'p2',
-        start: DateTime(2026, 3, 20, 14),
-        seriesId: 'ps',
-      );
-      when(
-        () => repo.getSeries('ps'),
-      ).thenAnswer((_) async => [appointment, moved]);
-      final newEnd = DateTime(2026, 1, 15, 12);
+    test(
+      'an end-only edit keeps a moved sibling after its own start',
+      () async {
+        final appointment = _appt(
+          id: 'p1',
+          start: DateTime(2026, 1, 15, 10),
+          seriesId: 'ps',
+        );
+        final moved = _appt(
+          id: 'p2',
+          start: DateTime(2026, 3, 20, 14),
+          seriesId: 'ps',
+        );
+        when(
+          () => repo.getSeries('ps'),
+        ).thenAnswer((_) async => [appointment, moved]);
+        final newEnd = DateTime(2026, 1, 15, 12);
 
-      final plan = await editor.planPropagate(
-        updated: appointment.copyWith(endTime: newEnd),
-        appointment: appointment,
-        id: 'p1',
-        start: appointment.startTime,
-        end: newEnd,
-      );
+        final plan = await editor.planPropagate(
+          updated: appointment.copyWith(endTime: newEnd),
+          appointment: appointment,
+          id: 'p1',
+          start: appointment.startTime,
+          end: newEnd,
+        );
 
-      final sibling = plan.propagated.single;
-      expect(
-        (sibling.startTime, sibling.endTime),
-        (DateTime(2026, 3, 20, 14), DateTime(2026, 3, 20, 16)),
-      );
-    });
+        final sibling = plan.propagated.single;
+        expect(
+          (sibling.startTime, sibling.endTime),
+          (DateTime(2026, 3, 20, 14), DateTime(2026, 3, 20, 16)),
+        );
+      },
+    );
 
     test(
       'carries isAllDay, isPersonal and isDayOff onto every sibling',
@@ -299,6 +310,7 @@ void main() {
                       () => repo.updateAppointments(
                         captureAny(),
                         bases: any(named: 'bases'),
+                        checkConflicts: any(named: 'checkConflicts'),
                       ),
                     ).captured.single
                     as List)

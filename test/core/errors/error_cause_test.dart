@@ -53,6 +53,18 @@ void main() {
       );
     });
 
+    testWidgets('failed-precondition maps to its own cause', (tester) async {
+      await pumpHost(tester);
+      expect(
+        noticeFor(_fb('failed-precondition')),
+        expected(l10n.error_causeFailedPrecondition),
+      );
+      expect(
+        l10n.error_causeFailedPrecondition,
+        isNot(l10n.error_causeUnknown),
+      );
+    });
+
     testWidgets('permission-denied maps to permissionDenied', (tester) async {
       await pumpHost(tester);
       expect(

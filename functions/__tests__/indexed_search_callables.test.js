@@ -689,3 +689,13 @@ describe("bounded conflict batches", () => {
         .rejects.toMatchObject({code: "resource-exhausted"});
   });
 });
+
+describe("warm callable options", () => {
+  test.each([
+    ["searchClients", searchClients, {minInstances: 1, availableMemoryMb: 512}],
+    ["findAppointmentConflicts", findAppointmentConflicts,
+      {minInstances: 1, availableMemoryMb: 512, timeoutSeconds: 120}],
+  ])("%s keeps one instance warm with room to load", (_, callable, opts) => {
+    expect(callable.__endpoint).toMatchObject(opts);
+  });
+});

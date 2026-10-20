@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/adaptive/adaptive_pickers.dart';
@@ -34,6 +35,7 @@ import 'package:scheduling/features/calendar/widgets/sheets/inline_add_client_ho
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/maps/domain/address_parser.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/feedback/offline_form_notice.dart';
 import 'package:scheduling/shared/widgets/sheets/form_sheet_frame.dart';
 
 class DetailsEditBody extends ConsumerStatefulWidget {
@@ -57,6 +59,10 @@ class DetailsEditBody extends ConsumerStatefulWidget {
 class _DetailsEditBodyState extends ConsumerState<DetailsEditBody>
     with InlineAddClientHost {
   late final Debouncer _clientSearchDebounce;
+  final _errorFocus = appointmentFormErrorFocus();
+
+  /// The draft as the edit opened.
+  late final List<Object?> _baseline;
 
   @override
   void initState() {
@@ -66,13 +72,53 @@ class _DetailsEditBodyState extends ConsumerState<DetailsEditBody>
       logger: ref.read(loggerProvider),
       tag: 'CLI-SEARCH debounced client search failed',
     );
+    _baseline = _fingerprint(
+      ref.read(
+        eventDetailsControllerProvider(EventDetailsKey(widget.appointment)),
+      ),
+    );
   }
 
   @override
   void dispose() {
     _clientSearchDebounce.dispose();
+    _errorFocus.dispose();
     super.dispose();
   }
+
+  /// Everything the person can change. The client falls back to the stored
+  /// id while its record is still loading, and photos count only the edits,
+  /// so the async seeds that land after open never read as dirty.
+  List<Object?> _fingerprint(EventDetailsState state) => [
+    widget.controllers.title.text,
+    widget.controllers.notes.text,
+    widget.controllers.materials.text,
+    widget.controllers.address.text,
+    widget.controllers.clientSearch.text,
+    state.selectedClient?.id ??
+        (state.clientCleared ? '' : widget.appointment.clientId),
+    state.selectedEmployees.map((e) => e.id).join(','),
+    state.selectedDate,
+    state.endDate,
+    state.selectedStartTime,
+    state.selectedEndTime,
+    state.repeat,
+    state.editingStatus,
+    state.isPersonal,
+    state.isDayOff,
+    state.isAllDay,
+    state.removedExistingImages.length,
+    state.newImages.length,
+  ];
+
+  bool _isDirty() => !listEquals(
+    _baseline,
+    _fingerprint(
+      ref.read(
+        eventDetailsControllerProvider(EventDetailsKey(widget.appointment)),
+      ),
+    ),
+  );
 
   // Debounce so comprehensive client search doesn't fire a Firestore read on every keystroke.
   void _onClientSearchChanged(String query) {
@@ -112,7 +158,9 @@ class _DetailsEditBodyState extends ConsumerState<DetailsEditBody>
       isBusy: state.isSaving,
       onPrimary: () => _save(context, ref),
       onCancel: widget.onClose,
+      isDirty: _isDirty,
       children: [
+        const OfflineFormNotice(),
         _formFields(context, state, notifier),
         const SizedBox(height: AppSpacing.sp24),
         // Destructive actions live in the footer, never in the bar.
@@ -149,6 +197,7 @@ class _DetailsEditBodyState extends ConsumerState<DetailsEditBody>
 
     return AppointmentFormFields(
       controllers: widget.controllers,
+      errorFocus: _errorFocus,
       allEmployees: allEmployees,
       rosterStatus: rosterStatusOf(roster),
       onRetryRoster: () => ref.invalidate(employeesStreamProvider),
@@ -443,12 +492,21 @@ class _DetailsEditBodyState extends ConsumerState<DetailsEditBody>
     EventDetailsSaveOutcome outcome,
   ) {
     switch (outcome) {
-      // Each surfaces nothing: the form already shows its own field errors, the
-      // conflict prompt owns `BusyEmployees`, and `SaveBusy` is a skipped
+      // Save sits in the fixed header, so the errored field may be off-screen.
+      case EventDetailsInvalid():
+        _errorFocus.focusFirstError(
+          ref
+              .read(
+                eventDetailsControllerProvider(
+                  EventDetailsKey(widget.appointment),
+                ),
+              )
+              .errors
+              .keys,
+        );
+      // The conflict prompt owns `BusyEmployees`; `SaveBusy` is a skipped
       // duplicate save rather than a failure.
-      case EventDetailsInvalid() ||
-          EventDetailsBusyEmployees() ||
-          EventDetailsSaveBusy():
+      case EventDetailsBusyEmployees() || EventDetailsSaveBusy():
         return;
       case EventDetailsSaved(
         :final appointment,

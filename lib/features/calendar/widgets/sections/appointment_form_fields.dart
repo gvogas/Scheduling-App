@@ -26,7 +26,23 @@ import 'package:scheduling/shared/widgets/fields/form_helpers.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
 import 'package:scheduling/shared/widgets/fields/sheet_field_row.dart';
 import 'package:scheduling/shared/widgets/primitives/mono_section_label.dart';
+import 'package:scheduling/shared/widgets/sheets/form_error_focus.dart';
 import 'package:scheduling/shared/widgets/sheets/sheet_widgets.dart';
+
+/// The validator's error keys in on-screen order; the schedule rows share one
+/// node since they sit in one panel.
+FormErrorFocus appointmentFormErrorFocus() => FormErrorFocus(
+  const [
+    'title',
+    'client',
+    'employees',
+    'date',
+    'endDate',
+    'startTime',
+    'endTime',
+  ],
+  shared: const {'endDate': 'date', 'startTime': 'date', 'endTime': 'date'},
+);
 
 /// Text controllers shared by add and edit appointment forms.
 class AppointmentFormControllers {
@@ -141,6 +157,7 @@ class AppointmentFormFields extends StatelessWidget {
     this.onApplyTemplate,
     this.onPersonalChanged,
     this.tourWrap,
+    this.errorFocus,
     this.assigneeAvailability = AssigneeAvailability.none,
     this.previousAddresses = const [],
     this.lastVisitLabel,
@@ -202,6 +219,9 @@ class AppointmentFormFields extends StatelessWidget {
 
   /// Wraps a section as its feature-tour step.
   final Widget Function(TourStepId id, Widget child)? tourWrap;
+
+  /// Nodes a failed Save focuses, built by [appointmentFormErrorFocus].
+  final FormErrorFocus? errorFocus;
 
   /// The ten always-present pickers. See [AppointmentFormCallbacks].
   final AppointmentFormCallbacks callbacks;
@@ -334,6 +354,7 @@ class AppointmentFormFields extends StatelessWidget {
             ? l10n.calendar_personal
             : l10n.calendar_eGPlumbingRepair,
         controller: controllers.title,
+        focusNode: errorFocus?.nodeFor('title'),
         required: !isPersonal,
         optional: isPersonal,
         textCapitalization: TextCapitalization.sentences,
@@ -402,6 +423,7 @@ class AppointmentFormFields extends StatelessWidget {
         TourStepId.apptClient,
         selectedClient == null
             ? SheetFocusScroll(
+                focusNode: errorFocus?.nodeFor('client'),
                 child: ClientPicker(
                   controller: controllers.clientSearch,
                   results: clientResults,
@@ -441,14 +463,17 @@ class AppointmentFormFields extends StatelessWidget {
     const SizedBox(height: AppSpacing.sp4),
     _tour(
       TourStepId.apptCrew,
-      EmployeePicker(
-        allEmployees: allEmployees,
-        selectedEmployees: selectedEmployees,
-        onToggle: callbacks.onToggleEmployee,
-        errorText: _err(context, 'employees'),
-        availability: assigneeAvailability,
-        rosterStatus: rosterStatus,
-        onRetryRoster: onRetryRoster,
+      SheetFocusScroll(
+        focusNode: errorFocus?.nodeFor('employees'),
+        child: EmployeePicker(
+          allEmployees: allEmployees,
+          selectedEmployees: selectedEmployees,
+          onToggle: callbacks.onToggleEmployee,
+          errorText: _err(context, 'employees'),
+          availability: assigneeAvailability,
+          rosterStatus: rosterStatus,
+          onRetryRoster: onRetryRoster,
+        ),
       ),
     ),
     const SizedBox(height: AppSpacing.sp16),
@@ -511,26 +536,29 @@ class AppointmentFormFields extends StatelessWidget {
       const SizedBox(height: AppSpacing.sp8),
       _tour(
         TourStepId.apptSchedule,
-        SheetPanel(
-          children: [
-            // All day controls whether time rows exist.
-            if (!isDayOff)
-              _AllDaySwitch(
-                value: isAllDay,
-                onChanged: callbacks.onAllDayChanged,
-              ),
-            _dateRows(context, l10n),
-            // All-day schedules show dates only.
-            if (!isAllDay && !isDayOff) ...timeRows(),
-            // Repeat is hidden for personal and multi-day jobs, and for one day
-            // of a run: a run member's own window is a single day, so
-            // `isMultiDay` is false for it and cannot carry this on its own.
-            if (!isPersonal && !isMultiDay && !isRunMember)
-              RepeatIntervalPicker(
-                current: repeat,
-                onChanged: callbacks.onSelectRepeat,
-              ),
-          ],
+        SheetFocusScroll(
+          focusNode: errorFocus?.nodeFor('date'),
+          child: SheetPanel(
+            children: [
+              // All day controls whether time rows exist.
+              if (!isDayOff)
+                _AllDaySwitch(
+                  value: isAllDay,
+                  onChanged: callbacks.onAllDayChanged,
+                ),
+              _dateRows(context, l10n),
+              // All-day schedules show dates only.
+              if (!isAllDay && !isDayOff) ...timeRows(),
+              // Repeat is hidden for personal and multi-day jobs, and for one
+              // day of a run: a run member's own window is a single day, so
+              // `isMultiDay` is false for it and cannot carry this on its own.
+              if (!isPersonal && !isMultiDay && !isRunMember)
+                RepeatIntervalPicker(
+                  current: repeat,
+                  onChanged: callbacks.onSelectRepeat,
+                ),
+            ],
+          ),
         ),
       ),
       const SizedBox(height: AppSpacing.sp16),

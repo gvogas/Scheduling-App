@@ -23,6 +23,7 @@ import 'package:scheduling/features/employees/application/employees_providers.da
 import 'package:scheduling/features/employees/domain/employees_repository.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/feedback/offline_form_notice.dart';
 
 import '../../support/tour_test_support.dart';
 
@@ -128,7 +129,11 @@ void main() {
     ).thenAnswer((_) async => const <AppointmentRecord>[]);
   });
 
-  Future<void> pump(WidgetTester tester, {VoidCallback? onClose}) async {
+  Future<void> pump(
+    WidgetTester tester, {
+    VoidCallback? onClose,
+    bool offline = false,
+  }) async {
     tester.view.physicalSize = const Size(800, 2400);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -141,7 +146,7 @@ void main() {
           clientsRepositoryProvider.overrideWithValue(clients),
           employeesRepositoryProvider.overrideWithValue(employees),
           photoUploadNotifierProvider.overrideWithValue(PhotoUploadNotifier()),
-          isOfflineProvider.overrideWithValue(false),
+          isOfflineProvider.overrideWithValue(offline),
           eventDetailsControllerProvider(
             EventDetailsKey(_open),
           ).overrideWith(() => _BusyController(EventDetailsKey(_open))),
@@ -182,6 +187,31 @@ void main() {
     expect(find.text('Changes saved'), findsNothing);
     expect(find.textContaining("Couldn't save"), findsNothing);
     expect(savedRecords, isEmpty);
+  });
+
+  testWidgets('offline, the edit form says so up front', (tester) async {
+    await pump(tester, offline: true);
+
+    expect(find.byType(OfflineFormNotice), findsOneWidget);
+  });
+
+  testWidgets('Cancel asks only once the draft differs from the record', (
+    tester,
+  ) async {
+    var closed = false;
+    await pump(tester, onClose: () => closed = true);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsNothing);
+    expect(closed, isTrue);
+
+    closed = false;
+    await tester.enterText(find.byType(TextField).first, 'Leak fix, urgent');
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+    expect(closed, isFalse);
   });
 
   testWidgets('a delete skipped by the guard neither closes nor announces', (

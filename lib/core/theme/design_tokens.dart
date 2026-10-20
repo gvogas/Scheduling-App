@@ -211,8 +211,13 @@ abstract final class AppMotion {
   static const Duration popIn = Duration(milliseconds: 200);
   static const Duration riseInShort = Duration(milliseconds: 240);
 
-  /// Total in-hold-out lifetime of a notice (`06-sheets-and-dialogs.md` §11).
+  /// Total in-hold-out lifetime of a success/info notice (`06-sheets-and-dialogs.md` §11).
   static const Duration noticeCycle = Duration(milliseconds: 2600);
+  static const Duration noticeErrorFloor = Duration(seconds: 5);
+  static const Duration noticeErrorPerChar = Duration(milliseconds: 40);
+  static const Duration noticeErrorCap = Duration(seconds: 10);
+  static const Duration noticeActionFloor = Duration(seconds: 6);
+  static const Duration noticeAccessibleFloor = Duration(seconds: 6);
 }
 
 /// Black or white, whichever contrasts with [background].

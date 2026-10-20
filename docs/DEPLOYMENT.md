@@ -99,6 +99,11 @@ the wild still sends it.
 New fields must read through `optionalString(...)` or `x === true`, never
 `requireString(...)`. A new *required* field breaks every older build.
 
+Pending example (not yet deployed): `saveAppointmentEdits` gained the optional
+`checkConflicts` key — an ADDITION to the allowlist, so the deployed build keeps
+working, while the next app build sends it on every admin Save and refuses to
+build before this deploys (ADR-0030).
+
 **(c) Rules: is any cap tighter than what a shipped write path can produce?**
 
 This is the most common way a rules deploy breaks the app, and it fails with an

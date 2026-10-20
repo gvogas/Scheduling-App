@@ -471,6 +471,31 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a footer keeps its own semantics node outside the card label', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      _wrap(
+        AppointmentCard(
+          appointment: _appt(),
+          crew: _theo,
+          footer: TextButton(onPressed: () {}, child: const Text('Navigate')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final footer = tester.getSemantics(find.text('Navigate'));
+    expect(footer.label, 'Navigate');
+    expect(footer.flagsCollection.isButton, isTrue);
+    expect(
+      find.bySemanticsLabel(RegExp('Water heater swap.*Theo Bell')),
+      findsOneWidget,
+    );
+    handle.dispose();
+  });
+
   testWidgets('the whole card carries one coherent semantics label', (
     tester,
   ) async {

@@ -40,8 +40,9 @@ void main() {
     ),
   );
 
-  testWidgets('the number is the headline and the name is the qualifier',
-      (tester) async {
+  testWidgets('the number is the headline and the name is the qualifier', (
+    tester,
+  ) async {
     await tester.pumpWidget(harness(client: marie));
     expect(find.text('(514) 562-8332'), findsOneWidget);
     expect(find.textContaining('Marie Tremblay'), findsOneWidget);
@@ -50,17 +51,17 @@ void main() {
 
   testWidgets('the address switch reports both directions', (tester) async {
     final changes = <bool>[];
-    await tester.pumpWidget(harness(
-      client: marie,
-      onUseClientAddressChanged: changes.add,
-    ));
+    await tester.pumpWidget(
+      harness(client: marie, onUseClientAddressChanged: changes.add),
+    );
     await tester.tap(find.byType(Switch));
     await tester.pumpAndSettle();
     expect(changes, [false]);
   });
 
-  testWidgets('the declined address stays visible when the switch is off',
-      (tester) async {
+  testWidgets('the declined address stays visible when the switch is off', (
+    tester,
+  ) async {
     await tester.pumpWidget(harness(client: marie, useClientAddress: false));
     expect(find.textContaining('4820 rue Wellington'), findsOneWidget);
   });
@@ -68,24 +69,26 @@ void main() {
   testWidgets('Change and Remove both fire', (tester) async {
     var changed = false;
     var removed = false;
-    await tester.pumpWidget(harness(
-      client: marie,
-      onChange: () => changed = true,
-      onRemove: () => removed = true,
-    ));
+    await tester.pumpWidget(
+      harness(
+        client: marie,
+        onChange: () => changed = true,
+        onRemove: () => removed = true,
+      ),
+    );
     await tester.tap(find.text('Change'));
     await tester.tap(find.text('Remove'));
     expect(changed, isTrue);
     expect(removed, isTrue);
   });
 
-  testWidgets('a client with no job count omits the count rather than showing 0',
-      (tester) async {
-    await tester.pumpWidget(harness(
-      client: marie.copyWith(jobCount: null),
-    ));
-    expect(find.textContaining('0 jobs'), findsNothing);
-  });
+  testWidgets(
+    'a client with no job count omits the count rather than showing 0',
+    (tester) async {
+      await tester.pumpWidget(harness(client: marie.copyWith(jobCount: null)));
+      expect(find.textContaining('0 jobs'), findsNothing);
+    },
+  );
 
   testWidgets('no overflow at 260px and 2x text', (tester) async {
     tester.view.physicalSize = const Size(260, 640);

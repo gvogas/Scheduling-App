@@ -14,12 +14,30 @@ final overdueReviewClockProvider = Provider<DateTime Function()>(
   (ref) => DateTime.now,
 );
 
+/// [now] floored to its quarter hour, so every open inside one quarter issues
+/// the SAME `endTime < boundary` query and resumes the SDK's cached target.
+DateTime overdueReviewBoundary(DateTime now) {
+  final step = kOverdueReviewRefresh.inMinutes;
+  return DateTime(
+    now.year,
+    now.month,
+    now.day,
+    now.hour,
+    now.minute - now.minute % step,
+  );
+}
+
 /// Every open job whose end has passed, oldest first — shared by the review
 /// screen and the drawer count so the two cannot disagree. Admin-only query.
 final overdueOpenJobsProvider =
     StreamProvider.autoDispose<List<AppointmentRecord>>((ref) {
-      final now = ref.watch(overdueReviewClockProvider)();
-      final refresh = Timer(kOverdueReviewRefresh, ref.invalidateSelf);
+      final clock = ref.watch(overdueReviewClockProvider)();
+      final now = overdueReviewBoundary(clock);
+      // Re-issued AT the next boundary, so the lag stays under one quarter.
+      final refresh = Timer(
+        now.add(kOverdueReviewRefresh).difference(clock),
+        ref.invalidateSelf,
+      );
       ref.onDispose(refresh.cancel);
       return streamForUid(ref, (uid) {
         if (uid == null) return Stream.value(const <AppointmentRecord>[]);

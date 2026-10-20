@@ -35,10 +35,12 @@ class ScheduleSnapshotService {
   String? _lastUid;
   String? _lastSignature;
   String? _lastWritten;
+  Map<String, dynamic>? _lastMeaningful;
 
   Future<void> writeSnapshot(Map<String, dynamic> payload) async {
     if (!_isIos()) return;
-    final signature = _signatureOf(payload);
+    final meaningful = _meaningfulOf(payload);
+    final signature = _signatureFor(meaningful);
     final lease = _session.capture();
     if (lease == null) return;
     try {
@@ -59,6 +61,7 @@ class ScheduleSnapshotService {
       _lastUid = lease.uid;
       _lastSignature = signature;
       _lastWritten = saved;
+      _lastMeaningful = meaningful;
     } catch (e, st) {
       _logger.warn('SIRI snapshot write failed', e, st);
     }
@@ -70,6 +73,7 @@ class ScheduleSnapshotService {
     if (!_isIos()) return;
     final current = _session.captureBoundary();
     _lastUid = _lastSignature = _lastWritten = null;
+    _lastMeaningful = null;
     try {
       await _store.foreground(scheduleSnapshotKey, null, null, current);
     } catch (e, st) {
@@ -80,9 +84,20 @@ class ScheduleSnapshotService {
   /// The schedule-relevant slice of [payload] — everything except the
   /// ever-changing `generatedAt` stamp, which must not defeat the
   /// unchanged-schedule check.
-  static String _signatureOf(Map<String, dynamic> payload) {
-    final meaningful = Map<String, dynamic>.of(payload)..remove('generatedAt');
-    return jsonEncode(meaningful);
+  static Map<String, dynamic> _meaningfulOf(Map<String, dynamic> payload) =>
+      Map<String, dynamic>.of(payload)..remove('generatedAt');
+
+  static String _signatureOf(Map<String, dynamic> payload) =>
+      jsonEncode(_meaningfulOf(payload));
+
+  /// Reuses the landed signature when nothing changed — a deep compare bails at
+  /// the first difference and allocates nothing, where the encode walks it all.
+  String _signatureFor(Map<String, dynamic> meaningful) {
+    final last = _lastMeaningful;
+    final signature = _lastSignature;
+    return last != null && signature != null && _deepEquals(meaningful, last)
+        ? signature
+        : jsonEncode(meaningful);
   }
 
   /// Test hook for the `generatedAt`-insensitive dedup signature.
@@ -95,6 +110,26 @@ class ScheduleSnapshotService {
 extension ScheduleSnapshotApply on ScheduleSnapshotService {
   Future<void> apply(Map<String, dynamic>? payload) =>
       payload == null ? clearSnapshot() : writeSnapshot(payload);
+}
+
+/// JSON-shaped structural equality (maps, lists, scalars).
+bool _deepEquals(Object? a, Object? b) {
+  if (a is Map && b is Map) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (!b.containsKey(entry.key)) return false;
+      if (!_deepEquals(entry.value, b[entry.key])) return false;
+    }
+    return true;
+  }
+  if (a is List && b is List) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (!_deepEquals(a[i], b[i])) return false;
+    }
+    return true;
+  }
+  return a == b;
 }
 
 final scheduleSnapshotServiceProvider = Provider<ScheduleSnapshotService>(

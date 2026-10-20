@@ -17,7 +17,10 @@ import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
 
 class Login extends ConsumerStatefulWidget {
-  const Login({super.key});
+  const Login({this.notice, super.key});
+
+  /// A handoff from setup or a password change, shown as an info banner.
+  final LoginNotice? notice;
 
   @override
   ConsumerState<Login> createState() => _LoginState();
@@ -35,10 +38,12 @@ class _LoginState extends ConsumerState<Login> {
   String? _emailError;
   String? _passwordError;
   String? _bannerError;
+  LoginNotice? _notice;
 
   @override
   void initState() {
     super.initState();
+    _notice = widget.notice;
     _prefillRememberedEmail();
   }
 
@@ -98,6 +103,7 @@ class _LoginState extends ConsumerState<Login> {
     setState(() {
       _submitted = true;
       _bannerError = null;
+      _notice = null;
     });
 
     if (!_validate()) return;
@@ -123,7 +129,7 @@ class _LoginState extends ConsumerState<Login> {
         });
       case SignInNoProfile():
         setState(() {
-          _bannerError = context.l10n.error_noUserProfileFoundForThisAccount;
+          _bannerError = context.l10n.error_noAccountRecordContactAdmin;
         });
       case SignInAccountDisabled():
         setState(() {
@@ -191,9 +197,15 @@ class _LoginState extends ConsumerState<Login> {
     });
   }
 
+  String? _noticeText(AppLocalizations l10n) => switch (_notice) {
+    LoginNotice.accountReady => l10n.auth_accountReadySignInAgain,
+    null => null,
+  };
+
   @override
   Widget build(BuildContext context) {
     final isLoading = ref.watch(signInControllerProvider).inProgress;
+    final bannerError = _bannerError;
     return AuthScaffold(
       hero: AuthHero(
         title: context.l10n.auth_welcomeBack,
@@ -202,8 +214,13 @@ class _LoginState extends ConsumerState<Login> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Error-only: this screen navigates away on success.
-          AuthBanner(message: _bannerError),
+          // An error outranks the handoff notice; success navigates away.
+          AuthBanner(
+            message: bannerError ?? _noticeText(context.l10n),
+            tone: bannerError == null
+                ? AuthBannerTone.info
+                : AuthBannerTone.error,
+          ),
           const SizedBox(height: AppSpacing.sp16),
           AuthEmailField(
             label: context.l10n.common_email,

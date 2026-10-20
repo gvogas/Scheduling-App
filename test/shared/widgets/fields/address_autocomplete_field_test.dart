@@ -150,6 +150,26 @@ void main() {
     await settle(tester);
   }
 
+  testWidgets('the clear button stays beside the spinner during a lookup', (
+    tester,
+  ) async {
+    // A lookup can run ten seconds; the spinner used to REPLACE the x, so the
+    // field could not be cleared until Places answered.
+    final slow = Completer<List<AddressSuggestion>>();
+    places.gate = slow;
+    await pumpField(tester);
+    await type(tester, '1 Main St');
+
+    expect(find.byType(AdaptiveProgressIndicator), findsOneWidget);
+    await tester.tap(find.byTooltip('Clear text'));
+    await tester.pump();
+
+    expect(controller.text, isEmpty);
+    expect(find.byType(AdaptiveProgressIndicator), findsNothing);
+    slow.complete(const []);
+    await settle(tester);
+  });
+
   testWidgets('a query below the minimum length never reaches Places', (
     tester,
   ) async {

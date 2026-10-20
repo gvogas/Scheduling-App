@@ -84,6 +84,26 @@ void main() {
     expect(find.text('Extra Large'), findsOneWidget);
   });
 
+  testWidgets('size rows read as buttons, the current one selected', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      _wrap(const TextSizeScreen(isAdmin: true, employeeId: 'e1')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSemantics(find.text('Medium')),
+      isSemantics(isButton: true, isSelected: true, hasTapAction: true),
+    );
+    expect(
+      tester.getSemantics(find.text('Small')),
+      isSemantics(isButton: true, isSelected: false),
+    );
+    handle.dispose();
+  });
+
   testWidgets('shows Apply button', (tester) async {
     await tester.pumpWidget(_wrap(const TextSizeScreen(isAdmin: true, employeeId: 'e1')));
     expect(find.text('Apply'), findsOneWidget);

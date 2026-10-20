@@ -38,6 +38,15 @@ void main() {
       contains('employee record'),
     );
   });
+  testWidgets('weak password names the checklist, not a 6-character floor', (
+    t,
+  ) async {
+    // C2: the server policy is 8+ with mixed case and a digit, which is what
+    // the checklist under the field already says.
+    final message = await messageFor(t, const AuthFailureWeakPassword());
+    expect(message, contains('requirements'));
+    expect(message, isNot(contains('6')));
+  });
   testWidgets('expired session message', (t) async {
     expect(
       await messageFor(t, const AuthFailureSessionExpired()),

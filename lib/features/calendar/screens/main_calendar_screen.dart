@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
@@ -18,6 +20,7 @@ import 'package:scheduling/core/utils/date_utils_helper.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/application/calendar_crew_filter_provider.dart';
+import 'package:scheduling/features/calendar/data/calendar_view_prefs.dart';
 import 'package:scheduling/features/calendar/domain/appointment_crew.dart';
 import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
 import 'package:scheduling/features/calendar/domain/collapse_state.dart';
@@ -71,6 +74,7 @@ typedef _BuildData = ({
   Map<String, Color> colorMap,
   Map<String, String> nameMap,
   bool isLoading,
+  bool hasError,
   String monthLabel,
   String monthLabelShort,
   String yearLabel,
@@ -92,6 +96,10 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
 
   /// Captured so dispose can clear without touching `ref`.
   OpenCalendarRange? _openRange;
+
+  /// Read once in initState; the prefs writes outlive any one build.
+  late final CalendarViewPrefs _viewPrefs;
+  late final AppLogger _logger;
   late DateFormat _monthLabelFormat;
   late DateFormat _monthShortLabelFormat;
   late DateFormat _yearLabelFormat;
@@ -115,10 +123,44 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
     if (widget.isAdmin) {
       _openRange = ref.read(openCalendarRangeProvider.notifier);
     }
+    _viewPrefs = ref.read(calendarViewPrefsProvider);
+    _logger = ref.read(loggerProvider);
+    unawaited(_restoreViewPrefs());
     // Publish after build so Riverpod accepts the provider write.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _publishRange();
     });
+  }
+
+  /// Re-applies the last collapse and agenda mode; a failed read keeps the defaults.
+  Future<void> _restoreViewPrefs() async {
+    try {
+      final stored = await _viewPrefs.load();
+      if (!mounted) return;
+      final mode = _AgendaMode.values.asNameMap()[stored.agendaMode];
+      setState(() {
+        _collapse.restore(collapsed: stored.isCollapsed);
+        if (mode != null && mode != _agendaMode) {
+          _agendaMode = mode;
+          _appointmentRange = _rangeFor(
+            _focusedDay,
+            _selectedDay ?? _focusedDay,
+          );
+        }
+      });
+      _publishRange();
+    } catch (e, st) {
+      _logger.warn('SETTINGS calendar view prefs read failed', e, st);
+    }
+  }
+
+  /// Fire-and-forget; the view already changed, so a failed write is log-only.
+  Future<void> _persist(Future<void> Function() write) async {
+    try {
+      await write();
+    } catch (e, st) {
+      _logger.warn('SETTINGS calendar view prefs write failed', e, st);
+    }
   }
 
   @override
@@ -133,12 +175,21 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
   void _publishRange() => _openRange?.publish(this, _appointmentRange);
 
   void _onCollapseDrag(double dy) {
-    if (_collapse.onDragDelta(dy)) setState(() {});
+    if (_collapse.onDragDelta(dy)) _onCollapseChanged();
   }
 
   void _toggleCollapse() {
     _collapse.toggle();
+    _onCollapseChanged();
+  }
+
+  void _onCollapseChanged() {
     setState(() {});
+    unawaited(
+      _persist(
+        () => _viewPrefs.saveCollapsed(isCollapsed: _collapse.isCollapsed),
+      ),
+    );
   }
 
   // Show Today when either the selected day or focused month differs.
@@ -202,6 +253,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
       if (newRange != _appointmentRange) _appointmentRange = newRange;
     });
     _publishRange();
+    unawaited(_persist(() => _viewPrefs.saveAgendaMode(mode.name)));
   }
 
   /// A tap on a week bar: that day, in day mode.
@@ -243,8 +295,14 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
   }
 
   Map<DateTime, List<AppointmentDaySlice>>? _dayIndex;
-  // Tracks the source list used for _dayIndex.
+  // Tracks the source list and range used for _dayIndex.
   List<AppointmentRecord>? _indexedAppointments;
+  AppointmentDateRange? _indexedRange;
+
+  /// The last list the stream delivered and the range it answered, kept on
+  /// screen while a new range's provider instance is still loading.
+  List<AppointmentRecord>? _heldAppointments;
+  AppointmentDateRange? _heldRange;
 
   // Memo for the crew filter, keyed on source identity and the filtered id.
   List<AppointmentRecord>? _filterSource;
@@ -269,10 +327,14 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
     ];
   }
 
-  /// Rebuilds [_dayIndex] only for a new source list.
+  /// Rebuilds [_dayIndex] only for a new source list or range.
   void _refreshDayIndex(List<AppointmentRecord> source) {
-    if (identical(source, _indexedAppointments)) return;
+    if (identical(source, _indexedAppointments) &&
+        _indexedRange == _appointmentRange) {
+      return;
+    }
     _indexedAppointments = source;
+    _indexedRange = _appointmentRange;
     _dayIndex = expandToDays(
       source,
       _appointmentRange,
@@ -331,6 +393,9 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
         );
   }
 
+  /// Re-subscribes the range stream after a cold error (retry is off app-wide).
+  void _retryAppointments() => ref.invalidate(_appointmentsProvider);
+
   Future<void> _pickMonth() async {
     final picked = await MonthYearPicker.show(context, _focusedDay);
     if (picked != null && mounted) _setFocusedDay(picked);
@@ -359,14 +424,29 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
         : null;
 
     // Error logging is owned by the onAsyncChange listener in build.
+    final selectedDay = _selectedDay ?? _focusedDay;
+    final delivered = appointmentsAsync.value;
+    if (delivered != null) {
+      _heldAppointments = delivered;
+      _heldRange = _appointmentRange;
+    }
+    // A range change forks a new provider instance that starts empty; the held
+    // list covers the overlap, so the dots and the agenda never blank meanwhile.
+    final held = _heldAppointments;
+    final heldRange = _heldRange;
+    final holding = delivered == null && held != null && heldRange != null;
+    final heldCoversDay =
+        holding &&
+        !selectedDay.isBefore(heldRange.start) &&
+        selectedDay.isBefore(heldRange.end);
     final visibleAppointments = _applyCrewFilter(
-      appointmentsAsync.value ?? const <AppointmentRecord>[],
+      delivered ?? (holding ? held : const <AppointmentRecord>[]),
       crewFilter,
     );
 
     _refreshDayIndex(visibleAppointments);
 
-    final selectedDay = _selectedDay ?? _focusedDay;
+    final hasError = appointmentsAsync.hasError && !appointmentsAsync.hasValue;
     final weekDays = _weekOf(selectedDay);
     final agendaEvents = _agendaMode == _AgendaMode.week
         ? [for (final day in weekDays) ..._getEventsForDay(day)]
@@ -386,7 +466,8 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
       userName: userName,
       colorMap: colorMap,
       nameMap: nameMap,
-      isLoading: appointmentsAsync.isLoading,
+      isLoading: delivered == null && !hasError && !heldCoversDay,
+      hasError: hasError,
       // Header decides which month label fits.
       monthLabel: _monthLabelFormat.format(_focusedDay),
       monthLabelShort: _monthShortLabelFormat.format(_focusedDay),
@@ -486,6 +567,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
               children: [
                 _content(
                   isLoading: data.isLoading,
+                  hasError: data.hasError,
                   colorMap: data.colorMap,
                   nameMap: data.nameMap,
                   today: data.today,
@@ -546,6 +628,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
         arguments: DayRouteArgs(
           isAdmin: widget.isAdmin,
           employeeId: widget.employeeId,
+          initialDay: _selectedDay ?? _focusedDay,
         ),
       ),
       icon: Icons.alt_route_rounded,
@@ -598,6 +681,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
 
   Widget _content({
     required bool isLoading,
+    required bool hasError,
     required Map<String, Color> colorMap,
     required Map<String, String> nameMap,
     required DateTime today,
@@ -641,6 +725,8 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
             colorMap: colorMap,
             isAdmin: widget.isAdmin,
             isLoading: isLoading,
+            hasError: hasError,
+            onRetry: _retryAppointments,
             bottomClearance: kFloatingControlsClearance,
           )
         : [
@@ -649,6 +735,8 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
               nameMap: nameMap,
               colorMap: colorMap,
               isLoading: isLoading,
+              hasError: hasError,
+              onRetry: _retryAppointments,
               isAdmin: widget.isAdmin,
               day: agendaDay,
               bottomClearance: kFloatingControlsClearance,

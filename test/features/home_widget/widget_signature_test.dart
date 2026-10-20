@@ -131,6 +131,20 @@ void main() {
       expect(reloads, 1);
     });
 
+    test('a change deep inside one job is rewritten', () async {
+      final s = service();
+      await s.sync(payload());
+      await s.sync({
+        ...payload(),
+        'todayJobs': [
+          {'id': 'j1', 'status': 'done'},
+        ],
+      });
+
+      expect(group.savesOf(mirrorWidgetKey), 2);
+      expect(reloads, 2);
+    });
+
     test('a changed schedule is rewritten', () async {
       final s = service();
       await s.sync(payload());

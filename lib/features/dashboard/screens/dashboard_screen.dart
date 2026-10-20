@@ -146,24 +146,27 @@ class _StatsList extends ConsumerWidget {
     final nameMap = ref.watch(employeeNameMapProvider);
     final now = ref.watch(dashboardClockProvider)();
     // Both the hero card and the sections below carry their own sp16 inset.
-    return ListView(
-      padding: EdgeInsets.zero,
-      children: [
-        tour.stepIf(
-          TourStepId.dashboardHero,
-          DashboardHero(ops: stats.todayOps, now: now),
-        ),
-        Padding(
-          // No top inset: the hero's bottom margin already supplies it.
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.sp16,
-            0,
-            AppSpacing.sp16,
-            AppSpacing.sp16,
+    return RefreshIndicator.adaptive(
+      onRefresh: () => refreshDashboardReads(ref),
+      child: ListView(
+        padding: EdgeInsets.zero,
+        children: [
+          tour.stepIf(
+            TourStepId.dashboardHero,
+            DashboardHero(ops: stats.todayOps, now: now),
           ),
-          child: _buildSections(context, ref, colorMap, nameMap),
-        ),
-      ],
+          Padding(
+            // No top inset: the hero's bottom margin already supplies it.
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.sp16,
+              0,
+              AppSpacing.sp16,
+              AppSpacing.sp16,
+            ),
+            child: _buildSections(context, ref, colorMap, nameMap),
+          ),
+        ],
+      ),
     );
   }
 
@@ -247,14 +250,64 @@ class _StatsList extends ConsumerWidget {
   }
 }
 
+/// The loaded layout's silhouette: a hero block, then card sections under
+/// label-sized bars, so the content lands where the skeleton stood.
 class _LoadingList extends StatelessWidget {
   const _LoadingList();
 
+  /// Hero height at scale 1 — a total, a date, a status bar and a legend.
+  static const double _heroHeight = 148;
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.sp16),
-      children: [for (var i = 0; i < 8; i++) const SkeletonAppointmentRow()],
+      padding: EdgeInsets.zero,
+      children: [
+        Container(
+          key: const ValueKey('dashboard-skeleton-hero'),
+          height: _heroHeight,
+          margin: const EdgeInsets.all(AppSpacing.sp16),
+          decoration: BoxDecoration(
+            color: scheme.surfaceContainerHighest,
+            borderRadius: BorderRadius.circular(AppRadius.r16),
+          ),
+        ),
+        for (final rows in const [1, 3, 2])
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.sp16,
+              0,
+              AppSpacing.sp16,
+              AppSpacing.sp16,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _SectionLabelBar(color: scheme.surfaceContainerHighest),
+                const SizedBox(height: AppSpacing.sp12),
+                for (var i = 0; i < rows; i++) const SkeletonAppointmentRow(),
+              ],
+            ),
+          ),
+      ],
     );
   }
+}
+
+/// Stands in for a section's mono label.
+class _SectionLabelBar extends StatelessWidget {
+  const _SectionLabelBar({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: 120,
+    height: 12,
+    decoration: BoxDecoration(
+      color: color,
+      borderRadius: BorderRadius.circular(AppRadius.rFull),
+    ),
+  );
 }

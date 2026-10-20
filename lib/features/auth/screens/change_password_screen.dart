@@ -14,6 +14,7 @@ import 'package:scheduling/features/auth/application/sign_in_controller.dart';
 import 'package:scheduling/features/auth/data/auth_error_mapper.dart';
 import 'package:scheduling/features/auth/domain/auth_failure.dart';
 import 'package:scheduling/features/auth/services/auth_service.dart';
+import 'package:scheduling/features/auth/widgets/account_setup/locked_email_panel.dart';
 import 'package:scheduling/features/auth/widgets/auth_banner.dart';
 import 'package:scheduling/features/auth/widgets/auth_fields.dart';
 import 'package:scheduling/features/auth/widgets/auth_scaffold.dart';
@@ -158,8 +159,11 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
             employeeId: employee.id,
           ),
         );
+      // The change landed; the profile outlasted the retry ladder, so sign in again.
       case SignInNoSession() || SignInProfilePending():
-        await _signOutToLogin();
+        await _signOutToLogin(
+          loginArgs: const LoginArgs(notice: LoginNotice.accountReady),
+        );
       case SignInInvalidCredentials() ||
           SignInNoProfile() ||
           SignInAccountDisabled() ||
@@ -182,7 +186,10 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
     await _signOutToLogin(checkPendingPhotos: true);
   }
 
-  Future<void> _signOutToLogin({bool checkPendingPhotos = false}) async {
+  Future<void> _signOutToLogin({
+    bool checkPendingPhotos = false,
+    LoginArgs? loginArgs,
+  }) async {
     final logger = ref.read(loggerProvider);
     final analytics = ref.read(analyticsServiceProvider);
     DeviceDeregistrationDeps? deregistered;
@@ -216,9 +223,11 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
         ..logSignOut()
         ..setUserRole(null);
       if (!mounted) return;
-      await Navigator.of(
-        context,
-      ).pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
+      await Navigator.of(context).pushNamedAndRemoveUntil(
+        AppRoutes.login,
+        (_) => false,
+        arguments: loginArgs,
+      );
     } catch (error, stackTrace) {
       logger.warn('AUTH-CHANGEPW signOut failed', error, stackTrace);
       if (deregistered != null) await restoreThisDevice(deregistered);
@@ -247,6 +256,7 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
           ),
           const SizedBox(height: AppSpacing.sp8),
           Text(l10n.auth_changePasswordBody, style: theme.textTheme.bodyMedium),
+          ..._identityPanel(),
           const SizedBox(height: AppSpacing.sp24),
           ..._passwordFields(l10n),
           AuthBanner(message: _bannerError),
@@ -268,6 +278,16 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
     );
   }
 
+  /// Whose account is being changed — the signed-in address, read-only.
+  List<Widget> _identityPanel() {
+    final email = _authService.currentUser?.email ?? '';
+    if (email.isEmpty) return const [];
+    return [
+      const SizedBox(height: AppSpacing.sp16),
+      LockedEmailPanel(email: email),
+    ];
+  }
+
   List<Widget> _passwordFields(AppLocalizations l10n) => [
     AuthPasswordField(
       label: l10n.auth_newPassword,
@@ -287,7 +307,10 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
       valueListenable: _passwordController,
       builder: (context, value, _) => Padding(
         padding: const EdgeInsets.only(top: AppSpacing.sp8),
-        child: PasswordRequirementsChecklist(password: value.text.trim()),
+        child: PasswordRequirementsChecklist(
+          password: value.text.trim(),
+          mustDifferFromStarting: true,
+        ),
       ),
     ),
     const SizedBox(height: AppSpacing.sp16),

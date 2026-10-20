@@ -95,13 +95,9 @@ String formatPhoneNumber(String value) {
   return buffer.toString();
 }
 
-/// Applies [formatPhoneNumber] as the user types, keeping the caret at the end
-/// of the text they just entered.
-///
-/// The caret is parked at the end whenever the formatting changed the string,
-/// which is the honest behaviour for a mask like this: re-deriving a mid-string
-/// caret offset across inserted `(`, `)`, ` ` and `-` characters is what makes
-/// hand-rolled phone masks jump unpredictably during a mid-number edit.
+/// Applies [formatPhoneNumber] as the user types, carrying the caret through
+/// the mask: it lands after the same count of digits it followed before, so a
+/// mid-number correction keeps its place instead of jumping to the end.
 class PhoneInputFormatter extends TextInputFormatter {
   const PhoneInputFormatter();
 
@@ -112,9 +108,26 @@ class PhoneInputFormatter extends TextInputFormatter {
   ) {
     final formatted = formatPhoneNumber(newValue.text);
     if (formatted == newValue.text) return newValue;
+    final caret = newValue.selection.extentOffset;
+    final digitsBefore = caret < 0
+        ? phoneDigits(newValue.text).length
+        : phoneDigits(newValue.text.substring(0, caret)).length;
     return TextEditingValue(
       text: formatted,
-      selection: TextSelection.collapsed(offset: formatted.length),
+      selection: TextSelection.collapsed(
+        offset: _offsetAfterDigits(formatted, digitsBefore),
+      ),
     );
+  }
+
+  /// Index just past the [count]-th digit of [text]; 0 for none, the end when
+  /// [text] has fewer digits.
+  static int _offsetAfterDigits(String text, int count) {
+    if (count == 0) return 0;
+    var seen = 0;
+    for (var i = 0; i < text.length; i++) {
+      if (!_nonDigit.hasMatch(text[i]) && ++seen == count) return i + 1;
+    }
+    return text.length;
   }
 }

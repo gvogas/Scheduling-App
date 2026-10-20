@@ -87,9 +87,9 @@ void main() {
   testWidgets('normalizes the submitted email before a retryable failure', (
     tester,
   ) async {
-    when(() => auth.sendPasswordResetEmail(any())).thenThrow(
-      FirebaseAuthException(code: 'network-request-failed'),
-    );
+    when(
+      () => auth.sendPasswordResetEmail(any()),
+    ).thenThrow(FirebaseAuthException(code: 'network-request-failed'));
 
     await tester.pumpWidget(_wrap(auth, initialEmail: ' USER@Example.COM '));
     await tester.pumpAndSettle();
@@ -98,10 +98,28 @@ void main() {
     await tester.pumpAndSettle();
 
     verify(() => auth.sendPasswordResetEmail('user@example.com')).called(1);
-    expect(
-      find.widgetWithText(TextField, 'user@example.com'),
-      findsOneWidget,
-    );
+    expect(find.widgetWithText(TextField, 'user@example.com'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('names the admin reset path on the form AND the sent state', (
+    tester,
+  ) async {
+    // U23: employee emails are often not real inboxes, so the reset mail may
+    // reach nobody; the one path that always works is an admin reset.
+    const note =
+        "If your work email isn't a real inbox, ask your admin to reset your "
+        'password from the Team screen.';
+    when(() => auth.sendPasswordResetEmail(any())).thenAnswer((_) async {});
+
+    await tester.pumpWidget(_wrap(auth, initialEmail: 'user@example.com'));
+    await tester.pumpAndSettle();
+    expect(find.text(note), findsOneWidget);
+
+    await tester.tap(_sendResetButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text(note), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -170,13 +188,11 @@ void main() {
 
   testWidgets(
     'keyboard resubmit while loading does not fire a second reset request',
-    (
-      tester,
-    ) async {
+    (tester) async {
       final completer = Completer<void>();
-      when(() => auth.sendPasswordResetEmail(any())).thenAnswer(
-        (_) => completer.future,
-      );
+      when(
+        () => auth.sendPasswordResetEmail(any()),
+      ).thenAnswer((_) => completer.future);
 
       await tester.pumpWidget(_wrap(auth, initialEmail: 'user@example.com'));
       await tester.pumpAndSettle();

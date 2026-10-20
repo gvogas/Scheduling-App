@@ -271,7 +271,10 @@ void main() {
   testWidgets('upload failures expose retry as a TextButton', (tester) async {
     await pumpSection(tester, failedCount: 1, onRetry: () {});
 
-    expect(find.widgetWithText(TextButton, 'Retry'), findsOneWidget);
+    final retry = find.widgetWithText(TextButton, 'Retry');
+    expect(retry, findsOneWidget);
+    // The 48 px floor: it was shrink-wrapped to its label.
+    expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
     expect(tester.takeException(), isNull);
   });
 

@@ -22,6 +22,7 @@ enum _ErrorCause {
   invalidData,
   editConflict,
   incompleteCheck,
+  failedPrecondition,
   unknown,
 }
 
@@ -42,6 +43,7 @@ _ErrorCause _classifyError(Object error) {
         _ErrorCause.incompleteCheck,
       'resource-exhausted' ||
       'too-many-requests' => _ErrorCause.tooManyAttempts,
+      'failed-precondition' => _ErrorCause.failedPrecondition,
       'invalid-argument' || 'already-exists' => _ErrorCause.invalidData,
       'aborted' when error.message == 'appointment-edit-conflict' =>
         _ErrorCause.editConflict,
@@ -89,8 +91,11 @@ String composeErrorNoticeFor(
   AppLocalizations l10n, {
   required String intro,
   required Object error,
-}) {
-  final cause = switch (_classifyError(error)) {
+}) => l10n.error_noticeWithCause(intro, errorCauseFor(l10n, error));
+
+/// The cause sentence alone, for a surface whose title already carries the intro.
+String errorCauseFor(AppLocalizations l10n, Object error) {
+  return switch (_classifyError(error)) {
     _ErrorCause.offline => l10n.error_causeOffline,
     _ErrorCause.permissionDenied => l10n.error_causePermissionDenied,
     _ErrorCause.notFound => l10n.error_causeNotFound,
@@ -99,9 +104,9 @@ String composeErrorNoticeFor(
     _ErrorCause.invalidData => l10n.error_causeInvalidData,
     _ErrorCause.editConflict => l10n.error_causeEditConflict,
     _ErrorCause.incompleteCheck => l10n.error_causeIncompleteCheck,
+    _ErrorCause.failedPrecondition => l10n.error_causeFailedPrecondition,
     _ErrorCause.unknown => l10n.error_causeUnknown,
   };
-  return l10n.error_noticeWithCause(intro, cause);
 }
 
 /// Fails a write fast when the device is offline, surfacing the standard

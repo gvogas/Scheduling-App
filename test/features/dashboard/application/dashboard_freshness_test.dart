@@ -57,6 +57,51 @@ void main() {
     },
   );
 
+  testWidgets('the one-shot reads outlive a 3-minute absence but not an hour', (
+    tester,
+  ) async {
+    // Both self-invalidate on write and roll over at midnight, so leaving the
+    // dashboard is no reason to drop ~2k read documents after three minutes.
+    final appointments = _Appointments();
+    final clients = _Clients();
+    when(
+      () => appointments.onRecordWrite,
+    ).thenAnswer((_) => const Stream.empty());
+    when(() => appointments.fetchInRange(any())).thenAnswer((_) async => []);
+    when(
+      () => clients.fetchClientsCreatedSince(any()),
+    ).thenAnswer((_) async => []);
+    final container = ProviderContainer(
+      overrides: [
+        appointmentsRepositoryProvider.overrideWithValue(appointments),
+        clientsRepositoryProvider.overrideWithValue(clients),
+      ],
+    );
+
+    Future<void> visit() async {
+      final history = container.listen(dashboardHistoryProvider, (_, _) {});
+      final recent = container.listen(newClientsProvider, (_, _) {});
+      await container.read(dashboardHistoryProvider.future);
+      await container.read(newClientsProvider.future);
+      history.close();
+      recent.close();
+    }
+
+    await visit();
+    await tester.pump(const Duration(minutes: 10));
+    await visit();
+    verify(() => appointments.fetchInRange(any())).called(1);
+    verify(() => clients.fetchClientsCreatedSince(any())).called(1);
+
+    // `verify` counts since the last verify: one NEW read each after the grace.
+    await tester.pump(kDashboardReadKeepAlive + const Duration(seconds: 1));
+    await visit();
+    verify(() => appointments.fetchInRange(any())).called(1);
+    verify(() => clients.fetchClientsCreatedSince(any())).called(1);
+    // Disposing cancels the eviction timer the last visit armed.
+    container.dispose();
+  });
+
   test('client mutations refresh the new-clients read', () async {
     final appointments = _Appointments();
     final clients = _Clients();

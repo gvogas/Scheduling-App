@@ -50,28 +50,71 @@ final myPresenceFixProvider = StreamProvider.autoDispose<PresenceFix?>((ref) {
       .watchLocation(userDocId: record.id);
 });
 
+/// What a location-sharing flip ended as.
+sealed class LocationSharingOutcome {
+  const LocationSharingOutcome();
+}
+
+/// The flag is as requested; when on, presence is tracking (or paused).
+class LocationSharingApplied extends LocationSharingOutcome {
+  const LocationSharingApplied();
+}
+
+/// Turn on met a refused or unavailable OS permission: the flag was put back
+/// to off, so Settings never reads "On" while nothing can upload.
+class LocationSharingBlocked extends LocationSharingOutcome {
+  const LocationSharingBlocked(this.permission);
+
+  final LocationPermissionResult permission;
+}
+
+/// Lost the session mid-flip; nothing to report.
+class LocationSharingAbandoned extends LocationSharingOutcome {
+  const LocationSharingAbandoned();
+}
+
 /// The ONE owner of the location-sharing flip: the field AND presence.
-Future<void> applyLocationSharing(
+Future<LocationSharingOutcome> applyLocationSharing(
   WidgetRef ref,
   EmployeeRecord record, {
   required bool enabled,
   SessionFence? session,
 }) async {
   final lease = session?.capture();
-  if (session != null && lease == null) return;
+  if (session != null && lease == null) return const LocationSharingAbandoned();
   final presence = ref.read(presenceSyncControllerProvider);
-  await ref
-      .read(employeesRepositoryProvider)
-      .updateSelfDetails(record.copyWith(locationSharingEnabled: enabled));
-  if (!ref.context.mounted || (lease != null && !lease.isCurrent)) return;
-  if (enabled) {
-    await presence.sync();
-  } else {
+  final repository = ref.read(employeesRepositoryProvider);
+  final permissions = ref.read(locationPermissionServiceProvider);
+  final featureOn = ref.read(featureFlagsProvider).presence;
+  bool stale() => !ref.context.mounted || (lease != null && !lease.isCurrent);
+  await repository.updateSelfDetails(
+    record.copyWith(locationSharingEnabled: enabled),
+  );
+  if (stale()) return const LocationSharingAbandoned();
+  if (!enabled) {
     await presence.unregister();
+    return const LocationSharingApplied();
   }
+  // sync() spends the one iOS prompt; a paused feature never reaches it.
+  await presence.sync();
+  if (stale()) return const LocationSharingAbandoned();
+  if (!featureOn) return const LocationSharingApplied();
+  final permission = await permissions.currentStatus();
+  if (stale()) return const LocationSharingAbandoned();
+  if (permission == LocationPermissionResult.granted) {
+    return const LocationSharingApplied();
+  }
+  await repository.updateSelfDetails(
+    record.copyWith(locationSharingEnabled: false),
+  );
+  if (stale()) return const LocationSharingAbandoned();
+  await presence.unregister();
+  return LocationSharingBlocked(permission);
 }
 
 /// [applyLocationSharing] behind the shared offline guard, tag and notice.
+/// True only when the flag now reads as requested; a refused permission
+/// notices and returns false, so a caller keeps its page open.
 Future<bool> saveLocationSharing(
   BuildContext context,
   WidgetRef ref,
@@ -92,9 +135,23 @@ Future<bool> saveLocationSharing(
     return false;
   }
   try {
-    await applyLocationSharing(ref, record, enabled: enabled, session: session);
+    final outcome = await applyLocationSharing(
+      ref,
+      record,
+      enabled: enabled,
+      session: session,
+    );
     if (!lease.isCurrent) return false;
-    return true;
+    switch (outcome) {
+      case LocationSharingApplied():
+        return true;
+      case LocationSharingAbandoned():
+        return false;
+      case LocationSharingBlocked(:final permission):
+        logger.breadcrumb('PRESENCE sharing refused: ${permission.name}');
+        notices.error(l10n.settings_locationPermissionRefused);
+        return false;
+    }
   } catch (error, stackTrace) {
     logger.warn('ME-SAVE location sharing failed', error, stackTrace);
     if (!context.mounted) return false;

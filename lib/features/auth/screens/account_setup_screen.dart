@@ -244,7 +244,7 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
             employeeId: employee.id,
           ),
         );
-      // Active server-side but the doc isn't readable yet — back to sign-in.
+      // Active server-side but the doc outlasted the retry ladder — sign in again.
       case SignInNoSession() || SignInProfilePending():
         await _recoverToLoginAfterSetup();
       // Only signIn() yields these; looping back here is not a recovery.
@@ -269,9 +269,11 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
       logger.warn('AUTH-SETUP recovery signOut failed', error, stackTrace);
     }
     if (!mounted) return;
-    await Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
+    await Navigator.of(context).pushNamedAndRemoveUntil(
+      AppRoutes.login,
+      (_) => false,
+      arguments: const LoginArgs(notice: LoginNotice.accountReady),
+    );
   }
 
   /// Abandons setup after checking for any pending photos owned by this UID.
@@ -477,7 +479,10 @@ class _AccountSetupScreenState extends ConsumerState<AccountSetupScreen> {
         // Trimmed, matching what `_validate` gates on and setup stores.
         PasswordStrengthMeter(password: value.text.trim()),
         const SizedBox(height: AppSpacing.sp8),
-        PasswordRequirementsChecklist(password: value.text.trim()),
+        PasswordRequirementsChecklist(
+          password: value.text.trim(),
+          mustDifferFromStarting: true,
+        ),
       ],
     ),
   );

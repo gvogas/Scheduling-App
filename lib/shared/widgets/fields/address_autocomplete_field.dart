@@ -339,20 +339,30 @@ class _AddressAutocompleteFieldState
       errorText: widget.errorText,
       onChanged: _onTextChanged,
       // ClearTextButton's placeholder: the pin while empty, the x once filled.
-      suffixIcon: _isLoading
-          ? const Padding(
-              padding: EdgeInsets.all(AppSpacing.sp12),
-              child: AdaptiveProgressIndicator(size: 16),
-            )
-          : ClearTextButton(
-              controller: widget.controller,
-              onCleared: _onCleared,
-              placeholder: Icon(
+      // The lookup spinner sits BESIDE the x, never in its place — a lookup can
+      // run ten seconds, and the field has to stay clearable throughout.
+      suffixIcon: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.only(left: AppSpacing.sp8),
+              child: AdaptiveProgressIndicator(size: 12),
+            ),
+          ClearTextButton(
+            controller: widget.controller,
+            onCleared: _onCleared,
+            placeholder: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sp12),
+              child: Icon(
                 Icons.location_on_outlined,
                 size: 18,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ),
+          ),
+        ],
+      ),
     );
   }
 

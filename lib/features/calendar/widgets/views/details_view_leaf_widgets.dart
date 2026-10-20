@@ -15,6 +15,7 @@ import 'package:scheduling/features/calendar/widgets/sections/photo_picker_secti
 import 'package:scheduling/features/calendar/widgets/views/details_view_widgets.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/status_chip.dart';
+import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
 
 class DetailsEditChip extends StatelessWidget {
   const DetailsEditChip({required this.onTap, super.key});
@@ -25,35 +26,41 @@ class DetailsEditChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final chip = Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sp12,
+        vertical: AppSpacing.sp4,
+      ),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        border: Border.all(color: scheme.outlineVariant, width: 1.5),
+        borderRadius: BorderRadius.circular(AppRadius.r8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.edit_outlined, size: 13, color: scheme.onSurface),
+          const SizedBox(width: AppSpacing.sp4),
+          Text(
+            context.l10n.common_edit,
+            style: theme.textTheme.labelSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurface,
+            ),
+          ),
+        ],
+      ),
+    );
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AppRadius.r8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.sp12,
-            vertical: AppSpacing.sp4,
-          ),
-          decoration: BoxDecoration(
-            color: scheme.surfaceContainerHighest,
-            border: Border.all(color: scheme.outlineVariant, width: 1.5),
-            borderRadius: BorderRadius.circular(AppRadius.r8),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.edit_outlined, size: 13, color: scheme.onSurface),
-              const SizedBox(width: AppSpacing.sp4),
-              Text(
-                context.l10n.common_edit,
-                style: theme.textTheme.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: scheme.onSurface,
-                ),
-              ),
-            ],
-          ),
+        // The tap floor sits INSIDE the InkWell around the painted chip, as
+        // `GhostControl` does; widthFactor keeps the box hugging the chip.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: kGhostTapTarget),
+          child: Center(widthFactor: 1, child: chip),
         ),
       ),
     );

@@ -65,16 +65,21 @@ void main() {
         results: [marie, jp],
         truncated: false,
       );
-      expect(window.narrowTo('5145628').narrowTo('5145628332').results, [marie]);
+      expect(window.narrowTo('5145628').narrowTo('5145628332').results, [
+        marie,
+      ]);
     });
 
-    test('narrowing to nothing yields an empty result set, not a miss flag', () {
-      final window = ClientSearchWindow(
-        digits: '5145628',
-        results: [marie, jp],
-        truncated: false,
-      );
-      expect(window.narrowTo('5145628777').results, isEmpty);
-    });
+    test(
+      'narrowing to nothing yields an empty result set, not a miss flag',
+      () {
+        final window = ClientSearchWindow(
+          digits: '5145628',
+          results: [marie, jp],
+          truncated: false,
+        );
+        expect(window.narrowTo('5145628777').results, isEmpty);
+      },
+    );
   });
 }

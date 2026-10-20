@@ -9,8 +9,11 @@ import 'package:scheduling/features/clients/widgets/cards/client_tile.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/primitives/app_avatar.dart';
 
-Widget _harness(ClientRecord client, {Future<void> Function()? onOpen}) =>
-    ThemeNotifier(
+Widget _harness(
+  ClientRecord client, {
+  Future<void> Function()? onOpen,
+  bool selected = false,
+}) => ThemeNotifier(
   themeMode: ThemeMode.light,
   toggleTheme: () {},
   textScale: 1,
@@ -21,7 +24,7 @@ Widget _harness(ClientRecord client, {Future<void> Function()? onOpen}) =>
     supportedLocales: AppLocalizations.supportedLocales,
     theme: lightTheme(),
     home: Scaffold(
-      body: ClientTile(client: client, onOpen: onOpen),
+      body: ClientTile(client: client, onOpen: onOpen, selected: selected),
     ),
   ),
 );
@@ -75,6 +78,23 @@ void main() {
     await tester.pump();
 
     expect(tapped, isTrue);
+  });
+
+  testWidgets('the row is one button node that reports its selection', (
+    tester,
+  ) async {
+    // Selection used to be colour-only, and the InkWell announced no role.
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      _harness(const ClientRecord(id: 'c1', name: 'Acme'), selected: true),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.getSemantics(find.byType(ClientTile)),
+      isSemantics(isButton: true, isSelected: true, hasTapAction: true),
+    );
+    handle.dispose();
   });
 
   testWidgets('an archived client shows the Archived pill', (tester) async {
@@ -144,11 +164,7 @@ void main() {
   testWidgets('renders the type badge for a commercial client', (tester) async {
     await tester.pumpWidget(
       _harness(
-        const ClientRecord(
-          id: 'c1',
-          name: 'Acme',
-          type: ClientType.commercial,
-        ),
+        const ClientRecord(id: 'c1', name: 'Acme', type: ClientType.commercial),
       ),
     );
     await tester.pumpAndSettle();

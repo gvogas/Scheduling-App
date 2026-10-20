@@ -4,6 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
@@ -12,13 +13,21 @@ import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/widgets/sheets/edit_client_sheet.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/feedback/offline_form_notice.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class _MockClientsRepo extends Mock implements ClientsRepository {}
 
-Widget _harness(ClientsRepository repo, ClientRecord client) => ProviderScope(
-  overrides: [clientsRepositoryProvider.overrideWithValue(repo)],
+Widget _harness(
+  ClientsRepository repo,
+  ClientRecord client, {
+  bool offline = false,
+}) => ProviderScope(
+  overrides: [
+    clientsRepositoryProvider.overrideWithValue(repo),
+    isOfflineProvider.overrideWithValue(offline),
+  ],
   child: ThemeNotifier(
     themeMode: ThemeMode.light,
     toggleTheme: () {},
@@ -42,12 +51,13 @@ Finder _fieldFor(String label) => find.descendant(
 Future<void> _pump(
   WidgetTester tester,
   ClientsRepository repo,
-  ClientRecord client,
-) async {
+  ClientRecord client, {
+  bool offline = false,
+}) async {
   tester.view.physicalSize = const Size(800, 3000);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  await tester.pumpWidget(_harness(repo, client));
+  await tester.pumpWidget(_harness(repo, client, offline: offline));
   await tester.pumpAndSettle();
 }
 
@@ -331,6 +341,43 @@ void main() {
     await tester.pumpAndSettle();
 
     verifyNever(() => repo.updateClient(any()));
+    // The errored field takes focus so the shake happens in view.
+    expect(
+      tester
+          .widget<TextField>(_fieldFor('Name or business'))
+          .focusNode
+          ?.hasFocus,
+      isTrue,
+    );
+  });
+
+  testWidgets('offline, the form says so before anything is typed', (
+    tester,
+  ) async {
+    await _pump(
+      tester,
+      repo,
+      const ClientRecord(id: 'c1', name: 'Acme'),
+      offline: true,
+    );
+
+    expect(find.byType(OfflineFormNotice), findsOneWidget);
+    expect(find.textContaining("You're offline"), findsOneWidget);
+  });
+
+  testWidgets('Cancel asks only once the stored values have been edited', (
+    tester,
+  ) async {
+    await _pump(tester, repo, const ClientRecord(id: 'c1', name: 'Acme'));
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsNothing);
+
+    await tester.enterText(_fieldFor('Name or business'), 'Acme Inc');
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
   });
 
   testWidgets('the sheet offers no archive or delete action', (tester) async {

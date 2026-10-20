@@ -8,6 +8,7 @@ import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
+import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/widgets/fields/client_address_section.dart';
 import 'package:scheduling/features/clients/widgets/sheets/add_client_sheet.dart';
 import 'package:scheduling/l10n/l10n.dart';
@@ -18,11 +19,20 @@ import '../../../../support/tour_test_support.dart';
 class _FakeClientsRepository implements ClientsRepository {
   ClientRecord? added;
 
+  /// What the duplicate-phone lookup finds on file.
+  List<ClientRecord> onFile = const [];
+
   @override
   Future<ClientRecord> addClient(ClientRecord client) async {
     added = client;
     return client.copyWith(id: 'new-id');
   }
+
+  @override
+  Future<List<ClientRecord>> searchClients(
+    String query, {
+    ClientsFilter filter = const ClientsFilterAll(),
+  }) async => onFile;
 
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
@@ -51,6 +61,7 @@ void main() {
   Future<_FakeClientsRepository> pumpSheet(
     WidgetTester tester, {
     String? initialName,
+    bool showBookAction = true,
   }) async {
     await setTallViewport(tester);
     final repo = _FakeClientsRepository();
@@ -64,7 +75,10 @@ void main() {
             GlobalWidgetsLocalizations.delegate,
           ],
           supportedLocales: AppLocalizations.supportedLocales,
-          home: _SheetHost(initialName: initialName),
+          home: _SheetHost(
+            initialName: initialName,
+            showBookAction: showBookAction,
+          ),
         ),
       ),
     );
@@ -444,7 +458,52 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repo.added, isNull);
+    // Save sits in the fixed header, so the errored field is brought into
+    // focus rather than left shaking out of view.
+    expect(
+      tester
+          .widget<TextField>(_fieldLabelled('Name or business'))
+          .focusNode
+          ?.hasFocus,
+      isTrue,
+    );
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the inline source hides Add and book a job', (tester) async {
+    await pumpSheet(tester, showBookAction: false);
+
+    expect(find.text('Add and book a job'), findsNothing);
+    expect(find.text('Add'), findsOneWidget);
+  });
+
+  testWidgets('Cancel on an untouched sheet closes it with no confirm', (
+    tester,
+  ) async {
+    // The seed (and its phone lift) is the baseline, not an edit.
+    await pumpSheet(tester, initialName: 'Marc 514-555-0000');
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Discard changes?'), findsNothing);
+    expect(find.byType(AddClientSheet), findsNothing);
+  });
+
+  testWidgets('Cancel on an edited sheet asks before discarding', (
+    tester,
+  ) async {
+    await pumpSheet(tester);
+    await tester.enterText(find.byType(TextField).first, 'Acme');
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+    expect(find.byType(AddClientSheet), findsOneWidget);
+
+    await tester.tap(find.text('Discard'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AddClientSheet), findsNothing);
   });
 
   testWidgets('Add and book a job reports the follow-up action', (
@@ -465,6 +524,58 @@ void main() {
 
     expect(repo.added, isNotNull);
     expect(_lastResult?.next, AddClientNext.bookJob);
+  });
+
+  group('duplicate phone', () {
+    testWidgets('a number already on file blocks Add until Use anyway', (
+      tester,
+    ) async {
+      // The costliest data error here: a second client is a second Wave
+      // customer, created silently.
+      final repo = await pumpSheet(tester);
+      repo.onFile = const [_jane];
+      await tester.enterText(_fieldLabelled('Name or business'), 'Someone');
+      await _typeDuplicatePhone(tester);
+      expect(find.text('Already on file: Jane Doe'), findsOneWidget);
+
+      await tester.tap(find.byType(SwitchListTile));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+      expect(repo.added, isNull);
+      expect(find.textContaining('already on file'), findsOneWidget);
+
+      await tester.tap(find.text('Use anyway'));
+      await tester.pumpAndSettle();
+      expect(find.text('Already on file: Jane Doe'), findsNothing);
+      await tester.tap(find.text('Add'));
+      await tester.pumpAndSettle();
+
+      expect(repo.added?.phone, '(514) 555-0000');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('Open hands the existing client back instead of adding', (
+      tester,
+    ) async {
+      final repo = await pumpSheet(tester);
+      repo.onFile = const [_jane];
+      await _typeDuplicatePhone(tester);
+
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(repo.added, isNull);
+      expect(_lastResult?.client.id, 'x1');
+      expect(_lastResult?.next, AddClientNext.openExisting);
+    });
+
+    testWidgets('a number nobody has shows no row', (tester) async {
+      await pumpSheet(tester);
+      await _typeDuplicatePhone(tester);
+
+      expect(find.textContaining('Already on file'), findsNothing);
+    });
   });
 
   testWidgets('the plain Add verb reports no follow-up action', (tester) async {
@@ -488,6 +599,15 @@ void main() {
 /// Captured from the sheet's pop so the follow-up action can be asserted.
 AddClientResult? _lastResult;
 
+const _jane = ClientRecord(id: 'x1', name: 'Jane Doe', phone: '(514) 555-0000');
+
+/// Types a number already on file and lets the debounced lookup land.
+Future<void> _typeDuplicatePhone(WidgetTester tester) async {
+  await tester.enterText(_fieldLabelled('Phone'), '5145550000');
+  await tester.pump(const Duration(milliseconds: 300));
+  await tester.pumpAndSettle();
+}
+
 /// LabeledTextField renders its label outside the TextField, so match on the
 /// wrapper and descend — the same shape clients_screen_test uses.
 Finder _fieldLabelled(String label) => find.descendant(
@@ -498,9 +618,10 @@ Finder _fieldLabelled(String label) => find.descendant(
 // Hosts the sheet behind a button so opening it creates a poppable modal route
 // with the Material ancestor showModalBottomSheet provides.
 class _SheetHost extends StatelessWidget {
-  const _SheetHost({this.initialName});
+  const _SheetHost({this.initialName, this.showBookAction = true});
 
   final String? initialName;
+  final bool showBookAction;
 
   @override
   Widget build(BuildContext context) {
@@ -514,6 +635,7 @@ class _SheetHost extends StatelessWidget {
               builder: (_) => AddClientSheet(
                 initialName: initialName,
                 analyticsSource: AnalyticsSources.clientsTab,
+                showBookAction: showBookAction,
               ),
             );
           },

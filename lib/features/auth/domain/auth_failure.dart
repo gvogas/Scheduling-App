@@ -138,7 +138,7 @@ class AuthFailureWeakPassword extends AuthFailure {
   const AuthFailureWeakPassword();
   @override
   String toLocalizedMessageInContext(BuildContext c, AuthErrorContext _) =>
-      c.l10n.validation_passwordIsTooWeakUseAtLeast6Characters;
+      c.l10n.validation_passwordDoesNotMeetAllRequirements;
 }
 
 class AuthFailureOperationNotAllowed extends AuthFailure {

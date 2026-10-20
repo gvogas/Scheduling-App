@@ -86,7 +86,11 @@ void main() {
       employees.watchEmployees,
     ).thenAnswer((_) => Stream.value(const [_employeeA]));
     when(
-      () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      () => appointments.updateAppointment(
+        any(),
+        base: any(named: 'base'),
+        checkConflicts: any(named: 'checkConflicts'),
+      ),
     ).thenAnswer((_) async {});
     when(
       () => appointments.fetchAppointmentPictures(any()),
@@ -152,11 +156,16 @@ void main() {
           copies: any(named: 'copies'),
           base: any(named: 'base'),
           deleteBases: any(named: 'deleteBases'),
+          checkConflicts: any(named: 'checkConflicts'),
         ),
       );
       // It saves as a plain single-document update instead.
       verify(
-        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).called(1);
     });
 
@@ -180,6 +189,7 @@ void main() {
           copies: any(named: 'copies'),
           base: any(named: 'base'),
           deleteBases: any(named: 'deleteBases'),
+          checkConflicts: any(named: 'checkConflicts'),
         ),
       );
     });
@@ -202,6 +212,7 @@ void main() {
                 () => appointments.updateAppointment(
                   captureAny(),
                   base: any(named: 'base'),
+                  checkConflicts: any(named: 'checkConflicts'),
                 ),
               ).captured.single
               as AppointmentRecord;

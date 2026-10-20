@@ -25,7 +25,11 @@ AppointmentDaySlice _slice({required String id, required String status}) {
   return sliceFor(record, _day)!;
 }
 
-Widget _wrap(List<AppointmentDaySlice> events) => ProviderScope(
+Widget _wrap(
+  List<AppointmentDaySlice> events, {
+  bool hasError = false,
+  VoidCallback? onRetry,
+}) => ProviderScope(
   child: MaterialApp(
     localizationsDelegates: const [
       AppLocalizations.delegate,
@@ -42,6 +46,8 @@ Widget _wrap(List<AppointmentDaySlice> events) => ProviderScope(
             nameMap: const {},
             colorMap: const {},
             onAppointmentTap: (_) {},
+            hasError: hasError,
+            onRetry: onRetry,
             // An ordinary February day, so no holiday row joins the rows
             // under test.
             day: DateTime(2026, 2, 10),
@@ -57,7 +63,7 @@ void main() {
     await initializeDateFormatting('en_CA');
   });
 
-  testWidgets('rules off the closed block and counts the DONE work only', (
+  testWidgets('rules off the closed block and counts the COMPLETE work only', (
     tester,
   ) async {
     // The cancelled card sinks into the same block and renders there, but it
@@ -72,7 +78,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('DONE · 1'), findsOneWidget);
+    expect(find.text('COMPLETE · 1'), findsOneWidget);
     expect(find.byType(Divider), findsOneWidget);
     expect(find.text('cancelled'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -88,7 +94,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(Divider), findsNothing);
-    expect(find.textContaining('DONE ·'), findsNothing);
+    expect(find.textContaining('COMPLETE ·'), findsNothing);
   });
 
   testWidgets('a day that is entirely closed still gets one rule, at the top', (
@@ -102,18 +108,57 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('DONE · 1'), findsOneWidget);
+    expect(find.text('COMPLETE · 1'), findsOneWidget);
     expect(
-      tester.getTopLeft(find.text('DONE · 1')).dy,
+      tester.getTopLeft(find.text('COMPLETE · 1')).dy,
       lessThan(tester.getTopLeft(find.text('done')).dy),
     );
+  });
+
+  testWidgets('a cold error shows the error text and Retry over the empty '
+      'state', (tester) async {
+    var retries = 0;
+    await tester.pumpWidget(
+      _wrap(const [], hasError: true, onRetry: () => retries++),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text("Couldn't load appointments"), findsOneWidget);
+    expect(find.text('No appointments found'), findsNothing);
+    await tester.tap(find.text('Retry'));
+    expect(retries, 1);
+  });
+
+  testWidgets('a card keeps its fade-in State when a job lands above it', (
+    tester,
+  ) async {
+    // A stream emission that inserts or reorders shifts indexes; without a
+    // key lookup the list re-inflated every shifted card and re-ran the stagger.
+    await tester.pumpWidget(_wrap([_slice(id: 'a', status: 'pending')]));
+    await tester.pumpAndSettle();
+    final before = tester.state(find.byKey(const ValueKey<String?>('a')));
+
+    await tester.pumpWidget(
+      _wrap([
+        _slice(id: 'new', status: 'pending'),
+        _slice(id: 'a', status: 'pending'),
+      ]),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.state(find.byKey(const ValueKey<String?>('a'))),
+      same(before),
+    );
+    expect(find.text('new'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('a day of nothing but cancellations draws no rule', (
     tester,
   ) async {
     // Cancelled work still sinks to the tail, so without suppressing the rule
-    // at zero this day would be headed "DONE · 0".
+    // at zero this day would be headed "COMPLETE · 0".
     await tester.pumpWidget(
       _wrap([
         _slice(id: 'one', status: 'cancelled'),
@@ -123,7 +168,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(Divider), findsNothing);
-    expect(find.textContaining('DONE ·'), findsNothing);
+    expect(find.textContaining('COMPLETE ·'), findsNothing);
     expect(find.text('one'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

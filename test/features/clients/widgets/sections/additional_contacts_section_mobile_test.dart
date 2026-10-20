@@ -20,9 +20,7 @@ Widget _wrap(Widget child) => MaterialApp(
 void main() {
   testWidgets(
     'additional contacts section does not overflow at 2x text on phone width',
-    (
-      tester,
-    ) async {
+    (tester) async {
       final fields = ContactFields();
       addTearDown(fields.dispose);
       tester.view.physicalSize = const Size(320, 760);

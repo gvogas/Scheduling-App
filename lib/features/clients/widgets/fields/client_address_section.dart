@@ -108,9 +108,7 @@ class _ClientAddressSectionState extends State<ClientAddressSection> {
         ListenableBuilder(
           listenable: Listenable.merge(_allControllers),
           builder: (context, _) {
-            final hasAny = _allControllers.any(
-              (c) => c.text.trim().isNotEmpty,
-            );
+            final hasAny = _allControllers.any((c) => c.text.trim().isNotEmpty);
             if (!hasAny) return const SizedBox.shrink();
             return Align(
               alignment: AlignmentDirectional.centerEnd,

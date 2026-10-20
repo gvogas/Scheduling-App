@@ -70,9 +70,7 @@ Finder _sheetSave() => find.descendant(
 );
 
 Finder _textFieldFor(String label) => find.descendant(
-  of: find.byWidgetPredicate(
-    (w) => w is LabeledTextField && w.label == label,
-  ),
+  of: find.byWidgetPredicate((w) => w is LabeledTextField && w.label == label),
   matching: find.byType(TextField),
 );
 
@@ -231,9 +229,7 @@ void main() {
 
   testWidgets(
     'view mode always offers Save to contacts, even with no details',
-    (
-      tester,
-    ) async {
+    (tester) async {
       tester.view.physicalSize = const Size(800, 2600);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -386,10 +382,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(
-      find.text('Net 30 · Invoice automatically'),
-      findsOneWidget,
-    );
+    expect(find.text('Net 30 · Invoice automatically'), findsOneWidget);
   });
 
   testWidgets('the footer offers Archive, and withholds Delete for a client '
@@ -437,6 +430,22 @@ void main() {
 
     expect(find.widgetWithText(OutlinedButton, 'Unarchive'), findsOneWidget);
     expect(find.widgetWithText(OutlinedButton, 'Archive'), findsNothing);
+  });
+
+  testWidgets('the profile card marks an archived client', (tester) async {
+    // Only the footer button used to flip, so the card read as a live client.
+    tester.view.physicalSize = const Size(800, 2600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      _wrap(
+        repo,
+        ClientRecord.fromMap('c1', {'name': 'Acme', 'archived': true}),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Archived'), findsOneWidget);
   });
 
   testWidgets('archiving keeps the view open and flips the button', (

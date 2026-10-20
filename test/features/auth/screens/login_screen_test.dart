@@ -11,6 +11,7 @@ import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/features/auth/screens/login_screen.dart';
 import 'package:scheduling/features/auth/services/auth_service.dart';
+import 'package:scheduling/features/auth/widgets/auth_banner.dart';
 import 'package:scheduling/features/auth/widgets/auth_fields.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/employees_repository.dart';
@@ -25,7 +26,11 @@ class _MockUserCredential extends Mock implements UserCredential {}
 
 class _MockUser extends Mock implements User {}
 
-Widget _wrap(AuthService auth, EmployeesRepository repo) {
+Widget _wrap(
+  AuthService auth,
+  EmployeesRepository repo, {
+  LoginNotice? notice,
+}) {
   return ProviderScope(
     overrides: [
       authServiceProvider.overrideWithValue(auth),
@@ -41,7 +46,7 @@ Widget _wrap(AuthService auth, EmployeesRepository repo) {
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: lightTheme(),
-        home: const Login(),
+        home: Login(notice: notice),
         onGenerateRoute: (settings) => MaterialPageRoute<void>(
           builder: (_) => Scaffold(
             body: Text(switch (settings.name) {
@@ -219,45 +224,44 @@ void main() {
     },
   );
 
-  testWidgets(
-    'routes to calendar when the profile is found on first read',
-    (tester) async {
-      final credential = _MockUserCredential();
-      final user = _MockUser();
-      when(() => user.uid).thenReturn('u1');
-      when(() => credential.user).thenReturn(user);
-      when(
-        () => auth.signIn(
-          email: any(named: 'email'),
-          password: any(named: 'password'),
-        ),
-      ).thenAnswer((_) async => credential);
-      when(() => repo.findUserByUid('u1')).thenAnswer(
-        (_) async => const UserUidMatch(
-          id: 'doc1',
-          data: <String, dynamic>{
-            'name': 'Active User',
-            'email': 'user@test.com',
-            'status': 'active',
-            'role': 'admin',
-            'uid': 'u1',
-          },
-        ),
-      );
+  testWidgets('routes to calendar when the profile is found on first read', (
+    tester,
+  ) async {
+    final credential = _MockUserCredential();
+    final user = _MockUser();
+    when(() => user.uid).thenReturn('u1');
+    when(() => credential.user).thenReturn(user);
+    when(
+      () => auth.signIn(
+        email: any(named: 'email'),
+        password: any(named: 'password'),
+      ),
+    ).thenAnswer((_) async => credential);
+    when(() => repo.findUserByUid('u1')).thenAnswer(
+      (_) async => const UserUidMatch(
+        id: 'doc1',
+        data: <String, dynamic>{
+          'name': 'Active User',
+          'email': 'user@test.com',
+          'status': 'active',
+          'role': 'admin',
+          'uid': 'u1',
+        },
+      ),
+    );
 
-      await tester.pumpWidget(_wrap(auth, repo));
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(_wrap(auth, repo));
+    await tester.pumpAndSettle();
 
-      await tester.enterText(find.byType(TextField).at(0), 'user@test.com');
-      await tester.enterText(find.byType(TextField).at(1), 'password123');
+    await tester.enterText(find.byType(TextField).at(0), 'user@test.com');
+    await tester.enterText(find.byType(TextField).at(1), 'password123');
 
-      await tester.tap(find.byType(FilledButton).first);
-      await tester.pumpAndSettle();
+    await tester.tap(find.byType(FilledButton).first);
+    await tester.pumpAndSettle();
 
-      expect(find.text('CALENDAR_REACHED'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    },
-  );
+    expect(find.text('CALENDAR_REACHED'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'signs out and shows no-profile error when findUserByUid returns null',
@@ -286,9 +290,44 @@ void main() {
 
       verify(() => auth.signOut()).called(1);
       expect(find.text('CALENDAR_REACHED'), findsNothing);
+      // C5: the actionable string, not the dev-vocabulary "user profile".
+      expect(
+        find.text(
+          "We couldn't find your employee record. Ask your admin to check your account.",
+        ),
+        findsOneWidget,
+      );
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('an account-ready handoff shows as an info banner until submit', (
+    tester,
+  ) async {
+    // U10: after setup or a password change lands but the profile read fails,
+    // the person is signed out; this is the explanation they used to miss.
+    await tester.pumpWidget(
+      _wrap(auth, repo, notice: LoginNotice.accountReady),
+    );
+    await tester.pumpAndSettle();
+
+    final banner = tester.widget<AuthBanner>(find.byType(AuthBanner));
+    expect(banner.tone, AuthBannerTone.info);
+    expect(
+      find.text('Your account is ready. Sign in with your new password.'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byType(FilledButton).first);
+    await tester.pumpAndSettle();
+
+    // Submitting clears the handoff; the empty-field errors take the slot.
+    expect(
+      find.text('Your account is ready. Sign in with your new password.'),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
     'keyboard resubmit while sign-in is loading does not fire a second auth request',
@@ -331,10 +370,7 @@ void main() {
       await tester.pump();
 
       verify(
-        () => auth.signIn(
-          email: 'user@test.com',
-          password: 'password123',
-        ),
+        () => auth.signIn(email: 'user@test.com', password: 'password123'),
       ).called(1);
 
       completer.complete(credential);

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/misc.dart' show Override;
@@ -18,6 +19,7 @@ import 'package:scheduling/features/auth/application/sign_in_controller.dart';
 import 'package:scheduling/features/auth/domain/auth_failure.dart';
 import 'package:scheduling/features/auth/screens/change_password_screen.dart';
 import 'package:scheduling/features/auth/services/auth_service.dart';
+import 'package:scheduling/features/auth/widgets/account_setup/locked_email_panel.dart';
 import 'package:scheduling/features/auth/widgets/auth_banner.dart';
 import 'package:scheduling/features/auth/widgets/auth_fields.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
@@ -30,6 +32,8 @@ import 'package:scheduling/routes/app_routes.dart';
 import '../../../support/account_exit_stubs.dart';
 
 class _MockAuthService extends Mock implements AuthService {}
+
+class _MockUser extends Mock implements User {}
 
 class _MockPush extends Mock implements PushRegistrationController {}
 
@@ -110,6 +114,7 @@ Widget _harness({
   double textScale = 1,
   AnalyticsService? analytics,
   PendingPhotoExit? pendingPhotos,
+  void Function(Object? loginArgs)? onLogin,
 }) {
   return ProviderScope(
     overrides: [
@@ -137,10 +142,19 @@ Widget _harness({
           ).copyWith(textScaler: TextScaler.linear(textScale)),
           child: child ?? const SizedBox.shrink(),
         ),
-        routes: {
-          AppRoutes.login: (_) => const Scaffold(body: Text('login screen')),
-          AppRoutes.mainCalendar: (_) =>
-              const Scaffold(body: Text('main calendar')),
+        onGenerateRoute: (settings) {
+          if (settings.name == AppRoutes.login) {
+            onLogin?.call(settings.arguments);
+          }
+          return MaterialPageRoute<void>(
+            builder: (_) => Scaffold(
+              body: Text(switch (settings.name) {
+                AppRoutes.login => 'login screen',
+                AppRoutes.mainCalendar => 'main calendar',
+                _ => 'other route',
+              }),
+            ),
+          );
         },
         home: ChangePasswordScreen(authService: auth),
       ),
@@ -174,6 +188,7 @@ void main() {
   setUp(() {
     auth = _MockAuthService();
     calls = <String>[];
+    when(() => auth.currentUser).thenReturn(null);
     when(() => auth.completePasswordReset(any())).thenAnswer((_) async {});
     when(() => auth.signOut()).thenAnswer((_) async => calls.add('signOut'));
   });
@@ -278,14 +293,15 @@ void main() {
     expect(find.text('main calendar'), findsOneWidget);
   });
 
-  testWidgets('a pending profile after the change signs out to login', (
-    tester,
-  ) async {
+  testWidgets('a pending profile after the change signs out to login with the '
+      'account-ready notice', (tester) async {
+    Object? loginArgs;
     await tester.pumpWidget(
       _harness(
         auth: auth,
         calls: calls,
         resumeOutcome: const SignInProfilePending(),
+        onLogin: (args) => loginArgs = args,
       ),
     );
     await tester.pumpAndSettle();
@@ -295,6 +311,54 @@ void main() {
 
     expect(calls, _teardownThenSignOut);
     expect(find.text('login screen'), findsOneWidget);
+    // The new password is live (U10); a plain Log out carries no notice.
+    expect(
+      loginArgs,
+      isA<LoginArgs>().having(
+        (a) => a.notice,
+        'notice',
+        LoginNotice.accountReady,
+      ),
+    );
+  });
+
+  testWidgets('a deliberate Log out reaches login without a notice', (
+    tester,
+  ) async {
+    Object? loginArgs = 'unset';
+    await tester.pumpWidget(
+      _harness(auth: auth, calls: calls, onLogin: (args) => loginArgs = args),
+    );
+    await tester.pumpAndSettle();
+    final logOut = find.text('Log out');
+    await tester.ensureVisible(logOut);
+    await tester.pumpAndSettle();
+
+    await tester.tap(logOut);
+    await tester.pumpAndSettle();
+
+    expect(find.text('login screen'), findsOneWidget);
+    expect(loginArgs, isNull);
+  });
+
+  testWidgets('shows whose account is being changed and the must-differ rule', (
+    tester,
+  ) async {
+    // C4: the forced screen opens cold from the splash, so without the address
+    // nothing on it says which account the password is for; and the
+    // starting-password rule used to appear only as a failure after submit.
+    final user = _MockUser();
+    when(() => user.email).thenReturn('alex@example.com');
+    when(() => auth.currentUser).thenReturn(user);
+    await tester.pumpWidget(_harness(auth: auth));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LockedEmailPanel), findsOneWidget);
+    expect(find.text('alex@example.com'), findsOneWidget);
+    expect(
+      find.text('Not the temporary password you were given'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('offline fails fast with a banner and no server call', (

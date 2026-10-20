@@ -539,8 +539,6 @@ class _UploadFailedRow extends StatelessWidget {
           TextButton(
             onPressed: onRetry,
             style: TextButton.styleFrom(
-              minimumSize: Size.zero,
-              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.sp8,
                 vertical: AppSpacing.sp4,

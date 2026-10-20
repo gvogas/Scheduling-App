@@ -14,10 +14,19 @@ abstract class AppointmentsRepository {
   /// How many not-yet-started jobs this employee is still assigned to.
   Future<int> countFutureAssignments(String employeeId);
 
-  Future<void> addAppointment(AppointmentRecord appointment);
+  /// Every write taking [checkConflicts] refuses with
+  /// `CalendarFailureEmployeesBusy` when a written record's crew is already
+  /// booked over its window — one round trip, decided inside the save.
+  Future<void> addAppointment(
+    AppointmentRecord appointment, {
+    bool checkConflicts = false,
+  });
 
   /// Creates every appointment in [appointments] atomically (all-or-nothing).
-  Future<void> addAppointments(List<AppointmentRecord> appointments);
+  Future<void> addAppointments(
+    List<AppointmentRecord> appointments, {
+    bool checkConflicts = false,
+  });
 
   /// All appointments belonging to one repeat series.
   Future<List<AppointmentRecord>> getSeries(String seriesId);
@@ -30,11 +39,13 @@ abstract class AppointmentsRepository {
     required List<AppointmentRecord> copies,
     AppointmentRecord? base,
     List<AppointmentRecord> deleteBases = const [],
+    bool checkConflicts = false,
   });
 
   Future<void> updateAppointment(
     AppointmentRecord appointment, {
     AppointmentRecord? base,
+    bool checkConflicts = false,
   });
 
   /// Consumes the server's merged record after an acknowledged edit.
@@ -47,6 +58,7 @@ abstract class AppointmentsRepository {
   Future<void> updateAppointments(
     List<AppointmentRecord> appointments, {
     List<AppointmentRecord> bases = const [],
+    bool checkConflicts = false,
   });
 
   /// Adds [pictures] to `appointments/{id}/images`.
@@ -152,15 +164,6 @@ abstract class AppointmentsRepository {
     required DateTime end,
     String? excludeAppointmentId,
   });
-
-  /// Optional bounded server batch; null retains the complete local fallback.
-  Future<List<Set<String>>>? findBusyEmployeeIdsForBookings({
-    required List<String> employeeIds,
-    required List<AppointmentRecord> bookings,
-    Set<String> excludeAppointmentIds = const {},
-    List<AppointmentRecord> excludeAppointments = const [],
-    bool excludeOwnBookingIds = false,
-  }) => null;
 
   /// The live appointments standing in the way of [employeeIds] over
   /// [start]–[end], read ONCE.

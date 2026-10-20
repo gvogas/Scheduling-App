@@ -290,10 +290,10 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
 | `waveBootstrap` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` | `WAVE_FULL_ACCESS_TOKEN`, `WAVE_BUSINESS_NAME` | App Check ✓ · admin · durable 10/hr |
 | `waveGetConnection` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (Settings mount) | — | App Check ✓ · admin · durable 60/hr |
 | `waveImportCustomers` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (`syncCustomers`, Settings "Sync with Wave") | `WAVE_FULL_ACCESS_TOKEN` | App Check ✓ · admin · durable 5/hr · 300s |
-| `searchClients` | callable | `onCall` | `indexed_search.js` | `firebase_clients_repository.dart` (`searchClients`, the debounced clients/history search bar) | — | App Check ✓ · `assertAdminCall` (clients are PII) · optional `archived`/`type`/`buildingKey` filters |
+| `searchClients` | callable | `onCall` | `indexed_search.js` | `firebase_clients_repository.dart` (`searchClients`, the debounced clients/history search bar) | — | App Check ✓ · `assertAdminCall` (clients are PII) · optional `archived`/`type`/`buildingKey` filters · `minInstances: 1`, 512 MiB (NOT YET DEPLOYED) |
 | `searchHistory` | callable | `onCall` | `indexed_search.js` | `firebase_appointments_repository.dart` (`searchHistory`, admin History screen) | — | App Check ✓ · `assertAdminCall` · `all:` scope only; `employeeId` accepted and ignored (`#compat-1.63.0`) |
-| `findAppointmentConflicts` | callable | `onCall` | `indexed_search.js` | `firebase_appointments_repository.dart` (`findClashingAppointments`/`findBusyEmployees`, assignee picker; `findBusyEmployeeIdsForBookings`, the batched pre-save check) | — | App Check ✓ · `assertActiveCall` · a non-admin is narrowed to their own doc id · durable 250/min·uid, one unit per window · ≤16 windows, ≤100 exclusions · 120s |
-| `saveAppointmentEdits` | callable | `onCall` | `appointment_edits.js` | `firebase_appointments_repository.dart` (`_commitEdits`: `updateAppointment(s)`, `rewriteSeries`) | — | App Check ✓ · `assertAdminCall` (4 MiB budget) · ≤400 commands · durable 120/min·uid · 120s · **NOT YET DEPLOYED** |
+| `findAppointmentConflicts` | callable | `onCall` | `indexed_search.js` | `firebase_appointments_repository.dart` (`findClashingAppointments`/`findBusyEmployees`, assignee picker and clash dialog; the app sends ONE window per call, the multi-window request shape stays supported server-side) | — | App Check ✓ · `assertActiveCall` · a non-admin is narrowed to their own doc id · durable 250/min·uid, one unit per window · ≤16 windows, ≤100 exclusions · 120s · `minInstances: 1`, 512 MiB (NOT YET DEPLOYED) |
+| `saveAppointmentEdits` | callable | `onCall` | `appointment_edits.js` | `firebase_appointments_repository.dart` (`_commitEdits`: `addAppointment(s)`, `updateAppointment(s)`, `rewriteSeries`) | — | App Check ✓ · `assertAdminCall` (4 MiB budget) · ≤400 commands · optional `checkConflicts` → `failed-precondition`/`appointment-employee-busy` · durable 120/min·uid · 120s · `minInstances: 1`, 512 MiB · **NOT YET DEPLOYED** |
 | `restoreAppointmentStatus` | callable | `onCall` | `appointment_actions.js` | `firebase_appointments_repository.dart` (`restoreAppointmentStatus`, the mark-complete Undo) | — | App Check ✓ · `assertActiveCall` · admin **or assigned** · target must be `pending`/`in_progress` |
 | `deleteClient` | callable | `onCall` | `clients.js` | `firebase_clients_repository.dart` | — | App Check ✓ · admin · durable 20/hr · deletion-token barrier |
 | `syncUsersByUid` | trigger | `onDocumentWritten users/{id}` | `bridge.js` | any `users` doc write | — | `retry: true` · transactional live reconcile |
@@ -713,6 +713,24 @@ stale form cannot overwrite a newer edit. A delete is refused if the doc changed
 since the form loaded. Reopening a closed job deletes `completedAt`. Commands are
 validated before the rate limit is consumed. It is the one callable with a
 non-default byte budget (4 MiB, `.claude/rules/security.md`).
+
+**`checkConflicts: true`** (optional, boolean; anything else is
+`invalid-argument`/`invalid-checkConflicts`) folds the crew clash check into the
+same transaction, so an admin Save is ONE round trip instead of
+`findAppointmentConflicts` followed by the save. Inside the transaction, after
+the merge and the client check, every non-deleted, non-personal command with a
+crew is run through `readConflictWindow` (`indexed_search.js`, the SAME
+`dailyWindowsOverlap` rule and scan cap as the picker's callable, reading
+through `tx.get`) with this operation's own document ids excluded; the first
+clash refuses the whole operation with `failed-precondition` /
+`appointment-employee-busy` and `details: {busyEmployeeIds, startMillis,
+endMillis}`, which the app maps to `CalendarFailureEmployeesBusy` and the
+double-booking prompt ("Book Anyway" re-sends without the key). The rate limit
+is consumed once, before the transaction, so a refused clash costs one slot.
+Without the key the callable behaves exactly as before. All three hot callables
+(`saveAppointmentEdits`, `findAppointmentConflicts`, `searchClients`) now
+declare `minInstances: 1` and `memory: "512MiB"` so a quiet spell no longer
+costs the dispatcher a cold start on Save or the first search keystroke.
 
 The batched mode of `findAppointmentConflicts` (`windows`, up to 16) answers
 `busyEmployeeIds` per window and charges one rate-limit unit per window.

@@ -114,12 +114,7 @@ void main() {
       doc('t0_exact', name: '5145'),
     ], '5145');
 
-    expect(order, [
-      't0_exact',
-      't1_prefix',
-      't2_phonePrefix',
-      't3_substring',
-    ]);
+    expect(order, ['t0_exact', 't1_prefix', 't2_phonePrefix', 't3_substring']);
   });
 
   test('equal-scoring clients are ordered by display name', () {
@@ -179,7 +174,9 @@ void main() {
 
     test('sorting by it puts the exact number first despite the name', () {
       final sorted = [prefix, contains, exact]
-        ..sort((a, b) => score(a, '5145628332').compareTo(score(b, '5145628332')));
+        ..sort(
+          (a, b) => score(a, '5145628332').compareTo(score(b, '5145628332')),
+        );
       expect(sorted.first.id, 'a');
     });
   });

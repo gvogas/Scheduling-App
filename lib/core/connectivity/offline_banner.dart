@@ -6,8 +6,8 @@ import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
 /// Persistent app-level offline indicator, docked at the bottom (opposite
-/// NoticeListener) so the two banners don't cover each other. Reassures the
-/// user that changes will sync once they're back online.
+/// NoticeListener) so the two banners don't cover each other. Tells the user
+/// saving needs a connection (only photos queue).
 class OfflineBanner extends ConsumerWidget {
   const OfflineBanner({super.key});
 

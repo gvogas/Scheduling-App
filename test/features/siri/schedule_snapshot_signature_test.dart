@@ -133,6 +133,33 @@ void main() {
       expect(group.savesOf(mirrorSnapshotKey), 1);
     });
 
+    test('a change deep inside one day is rewritten', () async {
+      final s = service();
+      final day = {
+        'date': '2026-07-19',
+        'appointments': [
+          {'id': 'j1', 'status': 'pending'},
+        ],
+      };
+      await s.writeSnapshot({
+        ...snapshot(),
+        'days': [day],
+      });
+      await s.writeSnapshot({
+        ...snapshot(),
+        'days': [
+          {
+            ...day,
+            'appointments': [
+              {'id': 'j1', 'status': 'done'},
+            ],
+          },
+        ],
+      });
+
+      expect(group.savesOf(mirrorSnapshotKey), 2);
+    });
+
     test(
       'an unchanged schedule is republished after an external write',
       () async {

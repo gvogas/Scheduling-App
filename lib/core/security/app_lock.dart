@@ -3,8 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:scheduling/core/app/account_exit_controller.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
-import 'package:scheduling/core/notices/notice_service.dart';
+import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/security/biometric_auth_service.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/settings/application/app_lock_provider.dart';
@@ -13,9 +14,19 @@ import 'package:scheduling/l10n/l10n.dart';
 /// App-wide biometric gate. Covers the app on cold start, and again whenever
 /// it returns from the background.
 class AppLock extends ConsumerStatefulWidget {
-  const AppLock({required this.child, super.key});
+  const AppLock({
+    required this.child,
+    this.navigatorKey,
+    this.scaffoldMessengerKey,
+    super.key,
+  });
 
   final Widget child;
+
+  /// Both are needed for the overlay's Log out (`AccountExitController`);
+  /// without them the escape is not offered.
+  final GlobalKey<NavigatorState>? navigatorKey;
+  final GlobalKey<ScaffoldMessengerState>? scaffoldMessengerKey;
 
   @override
   ConsumerState<AppLock> createState() => _AppLockState();
@@ -24,6 +35,11 @@ class AppLock extends ConsumerStatefulWidget {
 class _AppLockState extends ConsumerState<AppLock> with WidgetsBindingObserver {
   bool _locked = false;
   bool _authenticating = false;
+  bool _exiting = false;
+
+  /// Biometrics reported unavailable while locked; the overlay says so inline
+  /// and offers Continue, a session-only release that never persists.
+  bool _unavailable = false;
 
   /// True when [_locked] was taken because the flag was UNRESOLVED rather than
   /// because it is on. Resume clears such a lock once the retry settles, so a
@@ -109,12 +125,7 @@ class _AppLockState extends ConsumerState<AppLock> with WidgetsBindingObserver {
   void _afterRetry() {
     if (!mounted) return;
     if (!ref.read(appLockEnabledProvider)) {
-      if (_lockedUnresolved) {
-        setState(() {
-          _locked = false;
-          _lockedUnresolved = false;
-        });
-      }
+      if (_lockedUnresolved) _release();
       return;
     }
     _lockedUnresolved = false;
@@ -125,38 +136,36 @@ class _AppLockState extends ConsumerState<AppLock> with WidgetsBindingObserver {
     }
   }
 
+  void _release() {
+    setState(() {
+      _locked = false;
+      _lockedUnresolved = false;
+      _unavailable = false;
+    });
+  }
+
   Future<void> _authenticate() async {
     if (_authenticating || !mounted) return;
     _authenticating = true;
     // Riverpod 3 throws on `ref.read` from an unmounted consumer, so every
     // provider this path needs is resolved before the first await.
     final logger = ref.read(loggerProvider);
-    final notices = ref.read(noticeServiceProvider);
     final service = ref.read(biometricAuthServiceProvider);
     try {
       final available = await service.isAvailable();
       if (!mounted) return;
       if (!available) {
-        // Session-only release, never persisted: `isAvailable()` is false in the pre-first-unlock window.
+        // Inline on the overlay, never persisted: `isAvailable()` is false in the pre-first-unlock window.
         logger.warn(
-          'APPLOCK unavailable after lock engaged; opening for this session',
+          'APPLOCK unavailable after lock engaged; offering Continue',
         );
-        notices.error(context.l10n.settings_appLockUnavailable);
-        setState(() {
-          _locked = false;
-          _lockedUnresolved = false;
-        });
+        if (!_unavailable) setState(() => _unavailable = true);
         return;
       }
 
       final reason = context.l10n.applock_reason;
       final ok = await service.authenticate(reason);
-      if (ok && mounted) {
-        setState(() {
-          _locked = false;
-          _lockedUnresolved = false;
-        });
-      }
+      if (ok && mounted) _release();
     } catch (e, st) {
       logger.warn('APPLOCK authenticate flow failed', e, st);
     } finally {
@@ -164,8 +173,32 @@ class _AppLockState extends ConsumerState<AppLock> with WidgetsBindingObserver {
     }
   }
 
+  /// Signs out through the shared exit path (ADR-0026), then drops the lock —
+  /// a signed-out app has nothing left to protect.
+  Future<void> _logOut() async {
+    final navigatorKey = widget.navigatorKey;
+    final messengerKey = widget.scaffoldMessengerKey;
+    if (_exiting || navigatorKey == null || messengerKey == null) return;
+    _exiting = true;
+    final exit = ref.read(accountExitControllerProvider);
+    final auth = ref.read(firebaseAuthProvider);
+    try {
+      await exit.exitAccount(
+        selectMessage: (l10n) => l10n.applock_signedOut,
+        navigatorKey: navigatorKey,
+        scaffoldMessengerKey: messengerKey,
+        isMounted: () => mounted,
+      );
+      if (mounted && auth.currentUser == null) _release();
+    } finally {
+      _exiting = false;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final canLogOut =
+        widget.navigatorKey != null && widget.scaffoldMessengerKey != null;
     return Stack(
       children: [
         // The overlay only PAINTS over the child, which stays mounted — so
@@ -177,20 +210,37 @@ class _AppLockState extends ConsumerState<AppLock> with WidgetsBindingObserver {
           child: ExcludeFocus(excluding: _locked, child: widget.child),
         ),
         if (_locked)
-          Positioned.fill(child: _LockOverlay(onUnlock: _authenticate)),
+          Positioned.fill(
+            child: _LockOverlay(
+              unavailable: _unavailable,
+              onUnlock: _authenticate,
+              onContinue: _release,
+              onLogOut: canLogOut ? _logOut : null,
+            ),
+          ),
       ],
     );
   }
 }
 
 class _LockOverlay extends StatelessWidget {
-  const _LockOverlay({required this.onUnlock});
+  const _LockOverlay({
+    required this.unavailable,
+    required this.onUnlock,
+    required this.onContinue,
+    required this.onLogOut,
+  });
 
+  final bool unavailable;
   final Future<void> Function() onUnlock;
+  final VoidCallback onContinue;
+  final Future<void> Function()? onLogOut;
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final l10n = context.l10n;
     return ColoredBox(
       color: scheme.surface,
       child: Center(
@@ -214,16 +264,42 @@ class _LockOverlay extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: AppSpacing.sp16),
-              Text(
-                context.l10n.applock_title,
-                style: Theme.of(context).textTheme.titleMedium,
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  l10n.applock_title,
+                  style: theme.textTheme.titleMedium,
+                ),
               ),
+              if (unavailable) ...[
+                const SizedBox(height: AppSpacing.sp8),
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    l10n.settings_appLockUnavailable,
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: AppSpacing.sp24),
-              FilledButton.icon(
-                onPressed: onUnlock,
-                icon: const Icon(Icons.lock_open_rounded, size: 18),
-                label: Text(context.l10n.applock_unlock),
-              ),
+              if (unavailable)
+                FilledButton(
+                  onPressed: onContinue,
+                  child: Text(l10n.applock_continue),
+                )
+              else
+                FilledButton.icon(
+                  onPressed: onUnlock,
+                  icon: const Icon(Icons.lock_open_rounded, size: 18),
+                  label: Text(l10n.applock_unlock),
+                ),
+              if (onLogOut case final logOut?) ...[
+                const SizedBox(height: AppSpacing.sp8),
+                TextButton(onPressed: logOut, child: Text(l10n.applock_logOut)),
+              ],
             ],
           ),
         ),

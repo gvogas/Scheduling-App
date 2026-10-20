@@ -54,10 +54,15 @@ final dashboardHistoryRangeProvider =
 /// Coalesces a write burst (an overdue review commits per 450-doc chunk).
 const Duration kDashboardHistoryRefreshDebounce = Duration(seconds: 2);
 
-/// One-shot read of the settled weeks, kept warm like the live half.
+/// How long the two one-shot reads outlive the dashboard: they self-invalidate
+/// on write and roll over at midnight, so re-reading ~2k docs after 3 min
+/// bought nothing.
+const Duration kDashboardReadKeepAlive = Duration(hours: 1);
+
+/// One-shot read of the settled weeks, kept warm for the session.
 final dashboardHistoryProvider =
     FutureProvider.autoDispose<List<AppointmentRecord>>((ref) async {
-      keepWarmWithGrace(ref);
+      keepWarmWithGrace(ref, grace: kDashboardReadKeepAlive);
       final range = ref.watch(dashboardHistoryRangeProvider);
       final repo = ref.watch(appointmentsRepositoryProvider);
       final logger = ref.read(loggerProvider);
@@ -92,7 +97,7 @@ final dashboardHistoryProvider =
 final newClientsProvider = FutureProvider.autoDispose<List<ClientRecord>>((
   ref,
 ) async {
-  keepWarmWithGrace(ref);
+  keepWarmWithGrace(ref, grace: kDashboardReadKeepAlive);
   ref.watch(clientsRefreshProvider);
   final range = ref.watch(dashboardRangeProvider);
   final clients = await ref
@@ -198,6 +203,24 @@ final dashboardStatsProvider = Provider.autoDispose<AsyncValue<DashboardStats>>(
     );
   },
 );
+
+/// Pull-to-refresh: re-reads the two one-shot halves (the live half is a
+/// listener and is already current).
+Future<void> refreshDashboardReads(WidgetRef ref) async {
+  final logger = ref.read(loggerProvider);
+  ref
+    ..invalidate(dashboardHistoryProvider)
+    ..invalidate(newClientsProvider);
+  try {
+    await Future.wait([
+      ref.read(dashboardHistoryProvider.future),
+      ref.read(newClientsProvider.future),
+    ]);
+  } catch (e, st) {
+    // The screen's error branch and listener surface it; this only ends the indicator.
+    logger.warn('DASH-LOAD refresh failed', e, st);
+  }
+}
 
 /// Re-fetches the errored sources; invalidating a combiner re-reads their cached error.
 void retryDashboardSources(WidgetRef ref) {

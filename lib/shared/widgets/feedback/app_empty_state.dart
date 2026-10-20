@@ -23,7 +23,9 @@ class AppEmptyState extends StatelessWidget {
     final textTheme = Theme.of(context).textTheme;
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0, end: 1),
-      duration: const Duration(milliseconds: 280),
+      duration: MediaQuery.disableAnimationsOf(context)
+          ? Duration.zero
+          : const Duration(milliseconds: 280),
       curve: Curves.easeOutCubic,
       builder: (context, value, child) => Opacity(
         opacity: value,
@@ -63,8 +65,8 @@ class AppEmptyState extends StatelessWidget {
               ),
               if (actionLabel != null && onAction != null) ...[
                 const SizedBox(height: AppSpacing.sp16),
-                SizedBox(
-                  width: 160,
+                ConstrainedBox(
+                  constraints: const BoxConstraints(minWidth: 160),
                   child: FilledButton(
                     onPressed: onAction,
                     child: Text(actionLabel!),

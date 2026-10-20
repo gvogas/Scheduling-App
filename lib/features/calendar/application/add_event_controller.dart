@@ -12,6 +12,7 @@ import 'package:scheduling/features/calendar/application/appointment_form_concer
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
+import 'package:scheduling/features/calendar/domain/calendar_failure.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_prefill.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/domain/models/repeat_interval.dart';
@@ -412,29 +413,31 @@ class AddEventController extends Notifier<AddEventState>
 
       final toWrite = [...days, ...repeatCopies];
       // Personal clashes are handled by the time-off alert after write.
-      if (!forceBusy && !isPersonal) {
-        final conflict = await findFirstAppointmentConflict(
-          repo: repo,
+      final checkConflicts = !forceBusy && !isPersonal;
+
+      if (ownsWrite?.call() == false) return _releaseStale();
+      try {
+        if (toWrite.length == 1) {
+          await repo.addAppointment(
+            toWrite.single,
+            checkConflicts: checkConflicts,
+          );
+        } else {
+          await repo.addAppointments(toWrite, checkConflicts: checkConflicts);
+        }
+      } on CalendarFailureEmployeesBusy catch (busy) {
+        // Conflicts return to the sheet for a force-through choice.
+        if (ref.mounted) state = state.copyWith(isSubmitting: false);
+        final hit = conflictHitOf(
+          busy,
           candidates: selectedEmployees,
           bookings: toWrite,
         );
-        if (ownsWrite?.call() == false) return _releaseStale();
-        if (conflict != null) {
-          // Conflicts return to the sheet for a force-through choice.
-          if (ref.mounted) state = state.copyWith(isSubmitting: false);
-          return AddEventBusyEmployees(
-            busyEmployees: conflict.busyEmployees,
-            start: conflict.start,
-            end: conflict.end,
-          );
-        }
-      }
-
-      if (ownsWrite?.call() == false) return _releaseStale();
-      if (toWrite.length == 1) {
-        await repo.addAppointment(toWrite.single);
-      } else {
-        await repo.addAppointments(toWrite);
+        return AddEventBusyEmployees(
+          busyEmployees: hit.busyEmployees,
+          start: hit.start,
+          end: hit.end,
+        );
       }
 
       // Draft photos attach to day one.

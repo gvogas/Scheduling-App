@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
@@ -22,12 +23,18 @@ import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_steps.dart';
 import 'package:scheduling/features/feature_tour/widgets/feature_tour_host.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/feedback/offline_form_notice.dart';
 import 'package:scheduling/shared/widgets/feedback/warning_note.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
 import 'package:scheduling/shared/widgets/primitives/mono_section_label.dart';
 import 'package:scheduling/shared/widgets/sheets/app_bottom_sheet.dart';
+import 'package:scheduling/shared/widgets/sheets/form_error_focus.dart';
 import 'package:scheduling/shared/widgets/sheets/form_sheet_frame.dart';
 import 'package:scheduling/shared/widgets/sheets/sheet_widgets.dart';
+
+/// `EmployeeFormValidator`'s error keys in on-screen order.
+FormErrorFocus employeeFormErrorFocus() =>
+    FormErrorFocus(const ['name', 'lastName', 'email', 'hours']);
 
 /// Opens the invite sheet. Resolves to `true` once the account is created and
 /// the admin has dismissed the new-account dialog, null otherwise.
@@ -61,6 +68,10 @@ class _InvitePersonSheetState extends ConsumerState<InvitePersonSheet> {
   JobTitle _jobTitle = JobTitle.unset;
   late int _selectedColor;
   final Map<String, String?> errors = {};
+  final _errorFocus = employeeFormErrorFocus();
+
+  /// The form as seeded (empty fields, the first free colour).
+  late final List<Object?> _baseline;
 
   // Admin-only surface: the Team tab's FAB is the only way in.
   final _tour = TourSteps(const FormTour(TourForm.invitePerson), isAdmin: true);
@@ -76,10 +87,22 @@ class _InvitePersonSheetState extends ConsumerState<InvitePersonSheet> {
           orElse: () => AppColors.crewPalette.first,
         )
         .toARGB32();
+    _baseline = _fingerprint();
     ref
         .read(analyticsServiceProvider)
         .logScreenView(AnalyticsScreens.invitePerson);
   }
+
+  List<Object?> _fingerprint() => [
+    _firstNameController.text,
+    _lastNameController.text,
+    _emailController.text,
+    _phoneController.text,
+    _jobTitle,
+    _selectedColor,
+  ];
+
+  bool _isDirty() => !listEquals(_baseline, _fingerprint());
 
   @override
   void dispose() {
@@ -91,6 +114,7 @@ class _InvitePersonSheetState extends ConsumerState<InvitePersonSheet> {
     ]) {
       controller.dispose();
     }
+    _errorFocus.dispose();
     super.dispose();
   }
 
@@ -119,7 +143,13 @@ class _InvitePersonSheetState extends ConsumerState<InvitePersonSheet> {
         ..clear()
         ..addAll(nextErrors);
     });
-    if (nextErrors.values.any((e) => e != null)) return;
+    if (nextErrors.values.any((e) => e != null)) {
+      _errorFocus.focusFirstError([
+        for (final e in nextErrors.entries)
+          if (e.value != null) e.key,
+      ]);
+      return;
+    }
 
     if (guardedOffline(
       context,
@@ -199,9 +229,11 @@ class _InvitePersonSheetState extends ConsumerState<InvitePersonSheet> {
         primaryLabel: l10n.employees_sendInvite,
         isBusy: activity.isSaving,
         onPrimary: _save,
+        isDirty: _isDirty,
         headerTourWrap: (child) => _tour.stepIf(TourStepId.personCreate, child),
         scrollCacheExtent: kTourScrollCacheExtent,
         children: [
+          const OfflineFormNotice(),
           ..._detailsSection(theme, l10n),
           ..._roleSection(theme, l10n),
           ..._colourSection(theme, l10n),
@@ -232,6 +264,7 @@ class _InvitePersonSheetState extends ConsumerState<InvitePersonSheet> {
             key: const Key('firstName'),
             label: l10n.employees_firstName,
             controller: _firstNameController,
+            focusNode: _errorFocus.nodeFor('name'),
             required: true,
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
@@ -246,6 +279,7 @@ class _InvitePersonSheetState extends ConsumerState<InvitePersonSheet> {
             key: const Key('lastName'),
             label: l10n.employees_lastName,
             controller: _lastNameController,
+            focusNode: _errorFocus.nodeFor('lastName'),
             required: true,
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
@@ -260,6 +294,7 @@ class _InvitePersonSheetState extends ConsumerState<InvitePersonSheet> {
             key: const Key('email'),
             label: l10n.employees_workEmail,
             controller: _emailController,
+            focusNode: _errorFocus.nodeFor('email'),
             required: true,
             keyboard: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,

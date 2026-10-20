@@ -12,6 +12,7 @@ import 'package:scheduling/features/calendar/application/overdue_review_outcome.
 import 'package:scheduling/features/calendar/application/overdue_review_providers.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/utils/sheet_helpers.dart';
+import 'package:scheduling/features/calendar/widgets/views/agenda_sliver_list.dart';
 import 'package:scheduling/features/calendar/widgets/views/overdue_review_action_bar.dart';
 import 'package:scheduling/features/calendar/widgets/views/overdue_review_list.dart';
 import 'package:scheduling/features/navigation/widgets/app_nav_drawer.dart';
@@ -176,7 +177,7 @@ class _OverdueReviewScreenState extends ConsumerState<OverdueReviewScreen> {
 
   Widget _loadingOrError(AsyncValue<List<AppointmentRecord>> value) {
     if (!value.hasError) {
-      return const Center(child: CircularProgressIndicator.adaptive());
+      return const SingleChildScrollView(child: AgendaSkeleton());
     }
     return CenteredErrorText(
       message: composeErrorNotice(

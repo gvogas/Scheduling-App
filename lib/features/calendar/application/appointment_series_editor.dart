@@ -77,13 +77,17 @@ class AppointmentSeriesEditor {
     );
   }
 
-  Future<SeriesRewriteResult> commitRewrite(SeriesRewritePlan plan) async {
+  Future<SeriesRewriteResult> commitRewrite(
+    SeriesRewritePlan plan, {
+    bool checkConflicts = false,
+  }) async {
     await _repo.rewriteSeries(
       updated: plan.updated,
       deleteIds: plan.deleteIds,
       copies: plan.copies,
       base: plan.base,
       deleteBases: plan.deleteBases,
+      checkConflicts: checkConflicts,
     );
     return (
       updated: _repo.takeAcknowledgedWrite(plan.updated.id!) ?? plan.updated,
@@ -163,11 +167,15 @@ class AppointmentSeriesEditor {
     );
   }
 
-  Future<int> commitPropagate(SeriesPropagatePlan plan) async {
-    await _repo.updateAppointments([
-      plan.updated,
-      ...plan.propagated,
-    ], bases: plan.bases);
+  Future<int> commitPropagate(
+    SeriesPropagatePlan plan, {
+    bool checkConflicts = false,
+  }) async {
+    await _repo.updateAppointments(
+      [plan.updated, ...plan.propagated],
+      bases: plan.bases,
+      checkConflicts: checkConflicts,
+    );
     return plan.propagated.length;
   }
 }

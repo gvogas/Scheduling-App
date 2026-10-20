@@ -61,17 +61,20 @@ void main() {
       expect(PhoneQueryPolicy.ladder('514562833'), hasLength(1));
     });
 
-    test('a full ten digits sends canonical, then first seven, then last seven', () {
-      final rungs = PhoneQueryPolicy.ladder('5145628332');
-      expect(rungs.map((r) => r.rung).toList(), [
-        PhoneRung.canonical,
-        PhoneRung.firstSeven,
-        PhoneRung.lastSeven,
-      ]);
-      expect(rungs[0].digits, '5145628332');
-      expect(rungs[1].digits, '5145628');
-      expect(rungs[2].digits, '5628332');
-    });
+    test(
+      'a full ten digits sends canonical, then first seven, then last seven',
+      () {
+        final rungs = PhoneQueryPolicy.ladder('5145628332');
+        expect(rungs.map((r) => r.rung).toList(), [
+          PhoneRung.canonical,
+          PhoneRung.firstSeven,
+          PhoneRung.lastSeven,
+        ]);
+        expect(rungs[0].digits, '5145628332');
+        expect(rungs[1].digits, '5145628');
+        expect(rungs[2].digits, '5628332');
+      },
+    );
 
     test('a leading 1 is absorbed before the ladder is built', () {
       final rungs = PhoneQueryPolicy.ladder('1 (514) 562-8332');
@@ -83,8 +86,16 @@ void main() {
     test('the first-seven rung rescues a transposition in the tail', () {
       const stored = '5145628332';
       final rungs = PhoneQueryPolicy.ladder('5145628233');
-      expect(stored.contains(rungs[0].digits), isFalse, reason: 'canonical misses');
-      expect(stored.contains(rungs[1].digits), isTrue, reason: 'first seven hits');
+      expect(
+        stored.contains(rungs[0].digits),
+        isFalse,
+        reason: 'canonical misses',
+      );
+      expect(
+        stored.contains(rungs[1].digits),
+        isTrue,
+        reason: 'first seven hits',
+      );
     });
 
     // The other direction: a wrong area code with a correct local number.

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
+import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
@@ -35,14 +36,25 @@ class DetailsFieldRecordView extends ConsumerStatefulWidget {
 
 class _DetailsFieldRecordViewState
     extends ConsumerState<DetailsFieldRecordView> {
-  final TextEditingController _notes = TextEditingController();
+  // Seeded from the draft store: a scrim tap dismisses this sheet with no
+  // guard, so the typed note must outlive the controller.
+  late final TextEditingController _notes = TextEditingController(
+    text: ref.read(fieldNoteDraftsProvider.notifier).draftFor(_id),
+  );
 
   bool _isSaving = false;
+
+  String get _id => widget.appointment.id ?? '';
 
   @override
   void dispose() {
     _notes.dispose();
     super.dispose();
+  }
+
+  void _onNoteChanged(String text) {
+    ref.read(fieldNoteDraftsProvider.notifier).set(_id, text);
+    setState(() {});
   }
 
   Future<void> _post() async {
@@ -60,6 +72,7 @@ class _DetailsFieldRecordViewState
     final analytics = ref.read(analyticsServiceProvider);
     final identity = ref.read(activeUserIdentityProvider).value;
     final authorName = ref.read(currentUserNameProvider);
+    final drafts = ref.read(fieldNoteDraftsProvider.notifier);
     final text = _notes.text.trim();
 
     // Disabled while empty, so this is the double-tap race, not a failure.
@@ -100,6 +113,7 @@ class _DetailsFieldRecordViewState
         authorId: identity.docId,
         authorName: authorName,
       );
+      drafts.clear(id);
       if (!mounted) return;
       _notes.clear();
       setState(() => _isSaving = false);
@@ -151,6 +165,7 @@ class _DetailsFieldRecordViewState
         );
       }
       if (accepted.isEmpty) return;
+      final offline = ref.read(isOfflineProvider);
       // Queued FIRST: nothing after this line may be what stops the crew's
       // photos reaching the job.
       await uploader.enqueuePhotos(appointmentId: id, newImages: accepted);
@@ -160,6 +175,10 @@ class _DetailsFieldRecordViewState
         surface: AnalyticsSurfaces.fieldRecord,
         count: accepted.length,
       );
+      // Says where the photos went; the strip badge alone read as a stall.
+      if (offline) {
+        notices.info(l10n.calendar_nPhotosQueuedOffline(accepted.length));
+      }
     } catch (e, st) {
       logger.warn('APPT-FIELDNOTE photo pick failed', e, st);
     }
@@ -202,7 +221,7 @@ class _DetailsFieldRecordViewState
           hint: l10n.calendar_fieldNotesHint,
           maxLines: 4,
           maxLength: TextLimits.appointmentNotes,
-          onChanged: (_) => setState(() {}),
+          onChanged: _onNoteChanged,
         ),
         const SizedBox(height: AppSpacing.sp8),
         Row(

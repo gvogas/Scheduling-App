@@ -1,14 +1,18 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/analytics/analytics_screens.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
+import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/core/utils/sheet_focus.dart';
 import 'package:scheduling/core/validators/phone_format.dart';
 import 'package:scheduling/core/validators/text_limits.dart';
 import 'package:scheduling/features/clients/application/client_form_controller.dart';
+import 'package:scheduling/features/clients/application/clients_providers.dart';
+import 'package:scheduling/features/clients/application/duplicate_phone_check.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/policies/client_form_validator.dart';
@@ -17,6 +21,7 @@ import 'package:scheduling/features/clients/widgets/client_form_state.dart';
 import 'package:scheduling/features/clients/widgets/fields/client_address_section.dart';
 import 'package:scheduling/features/clients/widgets/fields/client_name_phone_lift.dart';
 import 'package:scheduling/features/clients/widgets/fields/client_type_chips.dart';
+import 'package:scheduling/features/clients/widgets/sections/duplicate_phone_notice.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_step_id.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_steps.dart';
@@ -27,11 +32,21 @@ import 'package:scheduling/shared/widgets/feedback/offline_form_notice.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
 import 'package:scheduling/shared/widgets/primitives/mono_section_label.dart';
 import 'package:scheduling/shared/widgets/sheets/app_bottom_sheet.dart';
+import 'package:scheduling/shared/widgets/sheets/form_error_focus.dart';
 import 'package:scheduling/shared/widgets/sheets/form_sheet_frame.dart';
 import 'package:scheduling/shared/widgets/sheets/sheet_widgets.dart';
 
+/// The client validator's error keys in on-screen order; every
+/// `contact_<i>_*` key rides the one `contacts` node.
+FormErrorFocus clientFormErrorFocus() =>
+    FormErrorFocus(const ['name', 'phone', 'email', 'address', 'contacts']);
+
+/// Maps a validator key onto its [clientFormErrorFocus] node key.
+String clientFormFocusKey(String errorKey) =>
+    errorKey.startsWith('contact_') ? 'contacts' : errorKey;
+
 /// What the admin asked to do after the client was created.
-enum AddClientNext { none, bookJob }
+enum AddClientNext { none, bookJob, openExisting }
 
 /// What [showAddClientSheet] resolves to: the created client plus the follow-up
 /// action.
@@ -40,12 +55,14 @@ typedef AddClientResult = ({ClientRecord client, AddClientNext next});
 /// Opens the add-client sheet.
 /// [analyticsSource] is required: this sheet serves the Clients tab and the
 /// booking form's inline add, and telling those apart is what says whether
-/// clients are created deliberately or mid-booking.
+/// clients are created deliberately or mid-booking. [showBookAction] is off
+/// for the inline add — a booking is already in progress there.
 Future<AddClientResult?> showAddClientSheet(
   BuildContext context, {
   required String analyticsSource,
   String? initialName,
   bool settleFocus = false,
+  bool showBookAction = true,
 }) async {
   if (settleFocus) {
     await SheetFocus.settleBeforeSheet();
@@ -56,6 +73,7 @@ Future<AddClientResult?> showAddClientSheet(
     builder: (_) => AddClientSheet(
       initialName: initialName,
       analyticsSource: analyticsSource,
+      showBookAction: showBookAction,
     ),
   );
   if (settleFocus && context.mounted) await SheetFocus.unfocusAfterSheet();
@@ -69,13 +87,17 @@ class AddClientSheet extends ConsumerStatefulWidget {
     required this.analyticsSource,
     super.key,
     this.initialName,
+    this.showBookAction = true,
   });
 
   /// Which surface opened this sheet (see `AnalyticsSources`).
   final String analyticsSource;
 
-  /// Prefills the name field (e.g.
+  /// Prefills the name field (e.g. the booking form's unmatched search).
   final String? initialName;
+
+  /// Renders the "Add and book a job" caption and button.
+  final bool showBookAction;
 
   @override
   ConsumerState<AddClientSheet> createState() => _AddClientSheetState();
@@ -99,8 +121,13 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
   final _countryController = TextEditingController();
 
   final _phoneLift = NamePhoneLift();
+  final _errorFocus = clientFormErrorFocus();
 
   ClientType _type = ClientType.unset;
+
+  /// The form as seeded, after the name's phone lift.
+  late final List<Object?> _baseline;
+  late final DuplicatePhoneCheck _duplicate;
 
   // Admin-only surface: reached from the Clients FAB and the appointment form's
   // inline add-client, both admin-gated.
@@ -110,9 +137,16 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
   void initState() {
     super.initState();
     _nameController.text = widget.initialName ?? '';
+    // Before the lift, so a number lifted out of the seed is checked too.
+    _duplicate = DuplicatePhoneCheck(
+      repository: ref.read(clientsRepositoryProvider),
+      logger: ref.read(loggerProvider),
+      phone: _phoneController,
+    );
     // The seed is a programmatic write, which never fires the name field's
     // `onChanged` — so the lift below has to be run by hand here.
     _phoneLift.apply(name: _nameController, phone: _phoneController);
+    _baseline = _fingerprint();
     // A sheet route has no name, so the observer skips it.
     ref
         .read(analyticsServiceProvider)
@@ -142,8 +176,29 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
     // the day someone adds the field for parity there is no compile-time signal
     // that this line is missing.
     disposeAdditionalContacts();
+    _errorFocus.dispose();
+    _duplicate.dispose();
     super.dispose();
   }
+
+  List<Object?> _fingerprint() => [
+    _nameController.text,
+    _firstNameController.text,
+    _lastNameController.text,
+    _phoneController.text,
+    _emailController.text,
+    _accessNotesController.text,
+    _addressController.text,
+    _aptController.text,
+    _cityController.text,
+    _provinceController.text,
+    _postalCodeController.text,
+    _countryController.text,
+    _type,
+    noFixedAddress,
+  ];
+
+  bool _isDirty() => !listEquals(_baseline, _fingerprint());
 
   String _buildFullAddress() => AddressParser.canonicalFrom(
     street: _addressController.text,
@@ -200,7 +255,20 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
         ..clear()
         ..addAll(nextErrors);
     });
-    if (errors.values.any((e) => e != null)) return;
+    if (errors.values.any((e) => e != null)) {
+      _errorFocus.focusFirstError(_erroredFocusKeys());
+      return;
+    }
+    // A number already on file blocks Add until the row is answered.
+    await _duplicate.ensureChecked();
+    if (!mounted) return;
+    if (_duplicate.blocksSave) {
+      setState(
+        () => errors['phone'] = context.l10n.clients_duplicatePhoneBlocked,
+      );
+      _errorFocus.focusFirstError(_erroredFocusKeys());
+      return;
+    }
 
     final outcome = await ref
         .read(clientFormControllerProvider.notifier)
@@ -249,6 +317,7 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
         heightFactor: 0.88,
         isBusy: isSaving,
         onPrimary: () => _save(next: AddClientNext.none),
+        isDirty: _isDirty,
         headerTourWrap: (child) => _tour.stepIf(TourStepId.clientSave, child),
         scrollCacheExtent: kTourScrollCacheExtent,
         children: [
@@ -263,6 +332,11 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
       ),
     );
   }
+
+  Iterable<String> _erroredFocusKeys() => [
+    for (final e in errors.entries)
+      if (e.value != null) clientFormFocusKey(e.key),
+  ];
 
   /// Label + tour-wrapped body.
   List<Widget> _section(TourStepId id, String label, List<Widget> body) => [
@@ -282,6 +356,7 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
         child: LabeledTextField(
           label: l10n.clients_nameOrBusiness,
           controller: _nameController,
+          focusNode: _errorFocus.nodeFor('name'),
           required: true,
           textCapitalization: TextCapitalization.words,
           textInputAction: TextInputAction.next,
@@ -344,6 +419,7 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
           child: LabeledTextField(
             label: l10n.clients_phone,
             controller: _phoneController,
+            focusNode: _errorFocus.nodeFor('phone'),
             optional: true,
             keyboard: TextInputType.phone,
             inputFormatters: const [PhoneInputFormatter()],
@@ -353,11 +429,19 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
             onChanged: (_) => clearError('phone'),
           ),
         ),
+        DuplicatePhoneNotice(
+          check: _duplicate,
+          onOpen: (existing) => Navigator.pop(context, (
+            client: existing,
+            next: AddClientNext.openExisting,
+          )),
+        ),
         const SizedBox(height: AppSpacing.sp16),
         SheetFocusScroll(
           child: LabeledTextField(
             label: l10n.common_email,
             controller: _emailController,
+            focusNode: _errorFocus.nodeFor('email'),
             optional: true,
             keyboard: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
@@ -391,16 +475,19 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
     ),
     if (!noFixedAddress) ...[
       const SizedBox(height: AppSpacing.sp16),
-      ClientAddressSection(
-        addressController: _addressController,
-        aptController: _aptController,
-        cityController: _cityController,
-        provinceController: _provinceController,
-        postalCodeController: _postalCodeController,
-        countryController: _countryController,
-        isRequired: true,
-        errorText: errors['address'],
-        onAddressErrorCleared: () => clearError('address'),
+      SheetFocusScroll(
+        focusNode: _errorFocus.nodeFor('address'),
+        child: ClientAddressSection(
+          addressController: _addressController,
+          aptController: _aptController,
+          cityController: _cityController,
+          provinceController: _provinceController,
+          postalCodeController: _postalCodeController,
+          countryController: _countryController,
+          isRequired: true,
+          errorText: errors['address'],
+          onAddressErrorCleared: () => clearError('address'),
+        ),
       ),
     ],
     const SizedBox(height: AppSpacing.sp16),
@@ -416,17 +503,18 @@ class _AddClientSheetState extends ConsumerState<AddClientSheet>
       ),
     ),
     const SizedBox(height: AppSpacing.sp24),
-
-    Text(
-      l10n.clients_newClientCaption,
-      style: theme.textTheme.bodySmall?.copyWith(
-        color: theme.palette.textTertiary,
+    if (widget.showBookAction) ...[
+      Text(
+        l10n.clients_newClientCaption,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.palette.textTertiary,
+        ),
       ),
-    ),
-    const SizedBox(height: AppSpacing.sp16),
-    OutlinedButton(
-      onPressed: isSaving ? null : () => _save(next: AddClientNext.bookJob),
-      child: Text(l10n.clients_addAndBookAJob),
-    ),
+      const SizedBox(height: AppSpacing.sp16),
+      OutlinedButton(
+        onPressed: isSaving ? null : () => _save(next: AddClientNext.bookJob),
+        child: Text(l10n.clients_addAndBookAJob),
+      ),
+    ],
   ]);
 }

@@ -13,10 +13,10 @@ import 'package:scheduling/core/utils/firestore_parsing.dart';
 import 'package:scheduling/core/utils/retry.dart';
 import 'package:scheduling/features/calendar/data/appointment_field_notes_store.dart';
 import 'package:scheduling/features/calendar/data/appointment_images_store.dart';
-import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
 import 'package:scheduling/features/calendar/domain/appointment_status_values.dart';
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
 import 'package:scheduling/features/calendar/domain/assignee_availability.dart';
+import 'package:scheduling/features/calendar/domain/calendar_failure.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/domain/models/field_note.dart';
@@ -190,17 +190,32 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   }
 
   @override
-  Future<void> addAppointment(AppointmentRecord appointment) =>
-      addAppointments([appointment]);
+  Future<void> addAppointment(
+    AppointmentRecord appointment, {
+    bool checkConflicts = false,
+  }) => addAppointments([appointment], checkConflicts: checkConflicts);
 
   @override
-  Future<void> addAppointments(List<AppointmentRecord> appointments) async {
+  Future<void> addAppointments(
+    List<AppointmentRecord> appointments, {
+    bool checkConflicts = false,
+  }) async {
+    final records = [
+      for (final appointment in appointments)
+        if (appointment.id == null)
+          appointment.copyWith(id: _appointments.doc().id)
+        else
+          appointment,
+    ];
+    if (_functions != null) {
+      await _commitEdits(creates: records, checkConflicts: checkConflicts);
+      return;
+    }
+    if (checkConflicts) await _refuseLocalClash(records);
     final batch = _appointments.firestore.batch();
     final written = <String, Map<String, dynamic>?>{};
-    for (final appointment in appointments) {
-      final doc = appointment.id == null
-          ? _appointments.doc()
-          : _appointments.doc(appointment.id);
+    for (final appointment in records) {
+      final doc = _appointments.doc(appointment.id);
       written[doc.id] = _toFirestoreMap(appointment);
       batch.set(doc, {
         ..._toFirestoreMap(appointment),
@@ -240,6 +255,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     required List<AppointmentRecord> copies,
     AppointmentRecord? base,
     List<AppointmentRecord> deleteBases = const [],
+    bool checkConflicts = false,
   }) async {
     if (_functions != null) {
       if (base == null || deleteBases.length != deleteIds.length) {
@@ -249,8 +265,15 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
         edits: [(base: base, updated: updated)],
         creates: copies,
         deletes: deleteBases,
+        checkConflicts: checkConflicts,
       );
       return;
+    }
+    if (checkConflicts) {
+      await _refuseLocalClash(
+        [updated, ...copies],
+        excludeIds: {?updated.id, ...deleteIds},
+      );
     }
     final opId = _newSeriesOpId();
     final batch = _appointments.firestore.batch()
@@ -285,14 +308,21 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   Future<void> updateAppointment(
     AppointmentRecord appointment, {
     AppointmentRecord? base,
+    bool checkConflicts = false,
   }) async {
     if (appointment.id == null) return;
     if (_functions != null) {
       if (base == null) {
         throw StateError('Appointment edit requires original record');
       }
-      await _commitEdits(edits: [(base: base, updated: appointment)]);
+      await _commitEdits(
+        edits: [(base: base, updated: appointment)],
+        checkConflicts: checkConflicts,
+      );
       return;
+    }
+    if (checkConflicts) {
+      await _refuseLocalClash([appointment], excludeIds: {appointment.id!});
     }
     await _appointments.doc(appointment.id).update({
       ..._toFirestoreMap(appointment),
@@ -306,6 +336,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   Future<void> updateAppointments(
     List<AppointmentRecord> appointments, {
     List<AppointmentRecord> bases = const [],
+    bool checkConflicts = false,
   }) async {
     if (_functions != null) {
       final original = {for (final record in bases) record.id: record};
@@ -317,6 +348,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
           for (final record in appointments)
             (base: original[record.id]!, updated: record),
         ],
+        checkConflicts: checkConflicts,
       );
       return;
     }
@@ -325,6 +357,12 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
         if (a.id != null) a,
     ];
     if (records.isEmpty) return;
+    if (checkConflicts) {
+      await _refuseLocalClash(
+        records,
+        excludeIds: {for (final record in records) record.id!},
+      );
+    }
     final opId = _newSeriesOpId();
     final written = <String, Map<String, dynamic>?>{};
     await _appointments.firestore.runTransaction((txn) async {
@@ -358,32 +396,42 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   };
 
   Future<void> _commitEdits({
-    required List<({AppointmentRecord base, AppointmentRecord updated})> edits,
+    List<({AppointmentRecord base, AppointmentRecord updated})> edits =
+        const [],
     List<AppointmentRecord> creates = const [],
     List<AppointmentRecord> deletes = const [],
+    bool checkConflicts = false,
   }) async {
     final isCurrent = captureWriteOwner();
     if (isCurrent != null && !isCurrent()) throw StateError('Session ended');
-    final result = await _functions!
-        .httpsCallable('saveAppointmentEdits')
-        .call<Map<String, dynamic>>({
-          'edits': [
-            for (final edit in edits)
-              {
-                'id': edit.updated.id,
-                'base': _editablePayload(edit.base),
-                'data': _editablePayload(edit.updated),
-              },
-          ],
-          'creates': [
-            for (final record in creates)
-              {'id': record.id, 'data': _editablePayload(record)},
-          ],
-          'deletes': [
-            for (final record in deletes)
-              {'id': record.id, 'base': _editablePayload(record)},
-          ],
-        });
+    final HttpsCallableResult<Map<String, dynamic>> result;
+    try {
+      result = await _functions!
+          .httpsCallable('saveAppointmentEdits')
+          .call<Map<String, dynamic>>({
+            if (checkConflicts) 'checkConflicts': true,
+            'edits': [
+              for (final edit in edits)
+                {
+                  'id': edit.updated.id,
+                  'base': _editablePayload(edit.base),
+                  'data': _editablePayload(edit.updated),
+                },
+            ],
+            'creates': [
+              for (final record in creates)
+                {'id': record.id, 'data': _editablePayload(record)},
+            ],
+            'deletes': [
+              for (final record in deletes)
+                {'id': record.id, 'base': _editablePayload(record)},
+            ],
+          });
+    } on FirebaseFunctionsException catch (e) {
+      final busy = _employeesBusyOf(e);
+      if (busy == null) rethrow;
+      throw busy;
+    }
     if (isCurrent != null && !isCurrent()) return;
     if (result.data['appointments'] is! List) {
       throw const FormatException('Missing appointment edit acknowledgement');
@@ -399,6 +447,56 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       for (final record in records) record.id!: _rawOf(record),
       for (final record in deletes) record.id!: null,
     });
+  }
+
+  /// The server's `appointment-employee-busy` refusal as a typed failure.
+  static CalendarFailureEmployeesBusy? _employeesBusyOf(
+    FirebaseFunctionsException e,
+  ) {
+    if (e.code != 'failed-precondition' ||
+        e.message != 'appointment-employee-busy') {
+      return null;
+    }
+    final details = (e.details as Map?)?.cast<String, dynamic>();
+    final start = details?['startMillis'];
+    final end = details?['endMillis'];
+    if (start is! int || end is! int) {
+      throw const FormatException('Malformed busy-employee refusal');
+    }
+    return CalendarFailureEmployeesBusy(
+      busyEmployeeIds: firestoreStringList(details?['busyEmployeeIds']),
+      start: DateTime.fromMillisecondsSinceEpoch(start),
+      end: DateTime.fromMillisecondsSinceEpoch(end),
+    );
+  }
+
+  /// The local twin of the server's folded check, for the no-functions path.
+  Future<void> _refuseLocalClash(
+    List<AppointmentRecord> bookings, {
+    Set<String> excludeIds = const {},
+  }) async {
+    for (final booking in bookings) {
+      if (booking.isPersonal || booking.employeeIds.isEmpty) continue;
+      final clashes = await _findClashingAppointmentsLocal(
+        employeeIds: booking.employeeIds,
+        start: booking.startTime,
+        end: booking.endTime,
+        excludeAppointmentId: null,
+        clientJobsOnly: false,
+      );
+      final busy = {
+        for (final clash in clashes)
+          if (!excludeIds.contains(clash.id))
+            ...clash.employeeIds.where(booking.employeeIds.contains),
+      };
+      if (busy.isNotEmpty) {
+        throw CalendarFailureEmployeesBusy(
+          busyEmployeeIds: busy.toList(),
+          start: booking.startTime,
+          end: booking.endTime,
+        );
+      }
+    }
   }
 
   @override
@@ -521,15 +619,51 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   List<AppointmentRecord> _mapRangeSnapshot(
     QuerySnapshot<Map<String, dynamic>> snapshot,
   ) {
+    _warnAtRangeCap(snapshot);
+    return snapshot.docs
+        .map((doc) => AppointmentRecord.fromMap(doc.id, doc.data()))
+        .toList();
+  }
+
+  void _warnAtRangeCap(QuerySnapshot<Map<String, dynamic>> snapshot) {
     if (snapshot.docs.length >= _rangeStreamLimit) {
       _logger.warn(
         'APPT-LOAD range query hit the $_rangeStreamLimit-doc cap - '
         'appointments beyond it are not shown',
       );
     }
-    return snapshot.docs
-        .map((doc) => AppointmentRecord.fromMap(doc.id, doc.data()))
-        .toList();
+  }
+
+  /// Parses only `docChanges` into [parsed], emitting in the query's order.
+  List<AppointmentRecord> _applyRangeChanges(
+    Map<String, AppointmentRecord> parsed,
+    QuerySnapshot<Map<String, dynamic>> snapshot,
+  ) {
+    _warnAtRangeCap(snapshot);
+    for (final change in snapshot.docChanges) {
+      final doc = change.doc;
+      if (change.type == DocumentChangeType.removed) {
+        parsed.remove(doc.id);
+      } else {
+        parsed[doc.id] = AppointmentRecord.fromMap(doc.id, doc.data() ?? {});
+      }
+    }
+    return [
+      for (final doc in snapshot.docs)
+        parsed[doc.id] ??= AppointmentRecord.fromMap(doc.id, doc.data()),
+    ];
+  }
+
+  /// A fresh parsed map per subscription, so a retry's first snapshot starts clean.
+  Stream<List<AppointmentRecord>> _watchRange(
+    Query<Map<String, dynamic>> query,
+  ) {
+    return retryStream(() {
+      final parsed = <String, AppointmentRecord>{};
+      return query.snapshots().map(
+        (snapshot) => _applyRangeChanges(parsed, snapshot),
+      );
+    });
   }
 
   Query<Map<String, dynamic>> _rangeQuery(
@@ -551,11 +685,8 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   }
 
   @override
-  Stream<List<AppointmentRecord>> watchInRange(AppointmentDateRange range) {
-    return retryStream(
-      () => _rangeQuery(range).snapshots().map(_mapRangeSnapshot),
-    );
-  }
+  Stream<List<AppointmentRecord>> watchInRange(AppointmentDateRange range) =>
+      _watchRange(_rangeQuery(range));
 
   @override
   Stream<List<AppointmentRecord>> watchOverdueOpen(DateTime now) {
@@ -700,105 +831,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   Stream<List<AppointmentRecord>> watchForEmployeeInRange(
     String employeeId,
     AppointmentDateRange range,
-  ) {
-    return retryStream(
-      () => _rangeQuery(
-        range,
-        employeeId: employeeId,
-      ).snapshots().map(_mapRangeSnapshot),
-    );
-  }
-
-  @override
-  Future<List<Set<String>>>? findBusyEmployeeIdsForBookings({
-    required List<String> employeeIds,
-    required List<AppointmentRecord> bookings,
-    Set<String> excludeAppointmentIds = const {},
-    List<AppointmentRecord> excludeAppointments = const [],
-    bool excludeOwnBookingIds = false,
-  }) {
-    if (_functions == null) return null;
-    return _findBusyBookingBatch(
-      employeeIds,
-      bookings,
-      excludeAppointmentIds,
-      excludeAppointments,
-      excludeOwnBookingIds,
-    );
-  }
-
-  Future<List<Set<String>>> _findBusyBookingBatch(
-    List<String> employeeIds,
-    List<AppointmentRecord> bookings,
-    Set<String> excludedIds,
-    List<AppointmentRecord> excludedRecords,
-    bool excludeOwn,
-  ) async {
-    final current = captureWriteOwner() ?? () => true;
-    final result = <Set<String>>[];
-    for (var offset = 0; offset < bookings.length; offset += 16) {
-      if (!current()) throw StateError('Conflict check session changed');
-      final chunk = bookings.skip(offset).take(16).toList();
-      final excluded = {
-        ...excludedIds,
-        ..._idsNear(excludedRecords, chunk),
-      };
-      final response = await _functions!
-          .httpsCallable('findAppointmentConflicts')
-          .call<Map<String, dynamic>>({
-            'employeeIds': employeeIds,
-            'startMillis': chunk.first.startTime.millisecondsSinceEpoch,
-            'endMillis': chunk.first.endTime.millisecondsSinceEpoch,
-            'windows': [
-              for (final booking in chunk)
-                {
-                  'startMillis': booking.startTime.millisecondsSinceEpoch,
-                  'endMillis': booking.endTime.millisecondsSinceEpoch,
-                  if (excludeOwn && booking.id != null)
-                    'excludeAppointmentId': booking.id,
-                },
-            ],
-            if (excluded.isNotEmpty) 'excludeAppointmentIds': excluded.toList(),
-          });
-      if (!current()) throw StateError('Conflict check session changed');
-      final windows = response.data['windows'];
-      if (windows is! List || windows.length != chunk.length) {
-        throw const FormatException('Incomplete conflict batch response');
-      }
-      for (final window in windows) {
-        final ids = window is Map ? window['busyEmployeeIds'] : null;
-        if (ids is! List ||
-            ids.any((id) => id is! String || !employeeIds.contains(id))) {
-          throw const FormatException('Invalid conflict batch response');
-        }
-        result.add(ids.cast<String>().toSet());
-      }
-    }
-    return result;
-  }
-
-  /// Ids of [records] that could overlap a window in [chunk].
-  static Iterable<String> _idsNear(
-    List<AppointmentRecord> records,
-    List<AppointmentRecord> chunk,
-  ) {
-    if (records.isEmpty) return const [];
-    var from = chunk.first.startTime;
-    var to = chunk.first.endTime;
-    for (final booking in chunk) {
-      if (booking.startTime.isBefore(from)) from = booking.startTime;
-      if (booking.endTime.isAfter(to)) to = booking.endTime;
-    }
-    // A record's daily windows end at most a span cap past its start.
-    from = from.subtract(const Duration(days: maxAppointmentSpanDays + 1));
-    return [
-      for (final record in records)
-        if (record.id != null &&
-            record.startTime.isBefore(to) &&
-            record.startTime.isAfter(from))
-          record.id!,
-    ];
-  }
+  ) => _watchRange(_rangeQuery(range, employeeId: employeeId));
 
   @override
   Future<List<EmployeeRecord>> findBusyEmployees({

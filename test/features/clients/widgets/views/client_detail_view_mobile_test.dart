@@ -32,9 +32,7 @@ const _client = ClientRecord(
 void main() {
   testWidgets(
     'client detail view does not overflow on small width at 2x text',
-    (
-      tester,
-    ) async {
+    (tester) async {
       tester.view.physicalSize = const Size(320, 700);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);

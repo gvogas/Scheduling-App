@@ -150,10 +150,9 @@ class DetailsActionBar extends StatelessWidget {
   /// A done job has no mark-done or cancel action left, so this slot is where
   /// its Edit lives — the read view's top chip is hidden for it.
   List<Widget> _doneSlot(BuildContext context, bool compact) {
-    final scheme = Theme.of(context).colorScheme;
-    return [
-      const SizedBox(height: AppSpacing.sp8),
-      if (onEdit != null)
+    if (onEdit != null) {
+      return [
+        const SizedBox(height: AppSpacing.sp8),
         OutlinedButton(
           onPressed: onEdit,
           child: _ActionButtonContent(
@@ -161,25 +160,23 @@ class DetailsActionBar extends StatelessWidget {
             icon: const Icon(Icons.edit_outlined, size: 18),
             label: context.l10n.common_edit,
           ),
-        )
-      else
-        OutlinedButton(
-          style: OutlinedButton.styleFrom(
-            minimumSize: const Size(double.infinity, 48),
-            foregroundColor: scheme.secondary,
-            side: BorderSide(color: scheme.secondary),
-          ),
-          onPressed: null,
-          child: _ActionButtonContent(
-            compact: compact,
-            icon: Icon(
-              Icons.check_circle_outline,
-              size: 18,
-              color: scheme.secondary,
-            ),
-            label: context.l10n.calendar_completed,
+        ),
+      ];
+    }
+    // The header chip already says Complete; a disabled button only reads as
+    // something broken, so plain text fills an otherwise empty bar.
+    if (onBookAgain != null) return const [];
+    final theme = Theme.of(context);
+    return [
+      const SizedBox(height: AppSpacing.sp8),
+      Center(
+        child: Text(
+          context.l10n.calendar_completed,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
           ),
         ),
+      ),
     ];
   }
 

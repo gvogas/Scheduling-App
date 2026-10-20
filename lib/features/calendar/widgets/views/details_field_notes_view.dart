@@ -55,10 +55,9 @@ class DetailsFieldNotesView extends ConsumerWidget {
     // who may not list users).
     final nameMap = ref.watch(employeeNameMapProvider);
 
-    // Hoisted out of the notes: constructing one parses the locale's symbols.
-    final when = DateFormat.MMMd(
+    final when = _noteStampFormatFor(
       Localizations.localeOf(context).toString(),
-    ).add_jm();
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -85,6 +84,15 @@ class DetailsFieldNotesView extends ConsumerWidget {
     );
   }
 }
+
+/// "Sep 6, 8:42 AM" — memoized per locale like `longDateFormatFor`, since
+/// constructing a `DateFormat` parses the locale's symbols on every rebuild.
+final _noteStampCache = <String, DateFormat>{};
+
+DateFormat _noteStampFormatFor(String locale) => _noteStampCache.putIfAbsent(
+  locale,
+  () => DateFormat.MMMd(locale).add_jm(),
+);
 
 class _Note extends StatelessWidget {
   const _Note({

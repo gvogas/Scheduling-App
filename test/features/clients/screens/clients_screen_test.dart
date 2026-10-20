@@ -14,9 +14,12 @@ import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
 import 'package:scheduling/features/clients/screens/clients_screen.dart';
 import 'package:scheduling/features/clients/widgets/sheets/clients_filter_sheet.dart';
 import 'package:scheduling/features/clients/widgets/sheets/edit_client_sheet.dart';
+import 'package:scheduling/features/clients/widgets/views/client_detail_view.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../support/tour_test_support.dart';
 
 class _MockClientsRepo extends Mock implements ClientsRepository {}
 
@@ -202,6 +205,56 @@ void main() {
             as ClientRecord;
     expect(saved.phone, '(514) 555-9999');
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('two-pane: the client just added lands in the detail pane', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 2600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    SharedPreferences.setMockInitialValues({});
+    markFormToursSeen();
+    when(
+      () => repo.fetchClientsPage(
+        after: any(named: 'after'),
+        limit: any(named: 'limit'),
+      ),
+    ).thenAnswer((_) async => const []);
+    when(() => repo.searchClients(any())).thenAnswer((_) async => const []);
+    when(
+      () => repo.watchClient(any()),
+    ).thenAnswer((_) => const Stream<ClientRecord?>.empty());
+    when(() => repo.addClient(any())).thenAnswer(
+      (i) async =>
+          (i.positionalArguments.single as ClientRecord).copyWith(id: 'new'),
+    );
+
+    await tester.pumpWidget(_wrap(repo));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(
+        of: find.byWidgetPredicate(
+          (w) => w is LabeledTextField && w.label == 'Name or business',
+        ),
+        matching: find.byType(TextField),
+      ),
+      'Zed Corp',
+    );
+    await tester.tap(find.byType(SwitchListTile));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.descendant(
+        of: find.byType(ClientDetailView),
+        matching: find.text('Zed Corp'),
+      ),
+      findsOneWidget,
+    );
   });
 
   // The per-type chips were removed 2026-09-11 (owner call): the sheet the

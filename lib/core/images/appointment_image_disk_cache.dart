@@ -36,6 +36,9 @@ class AppointmentImageDiskCache {
   /// Serializes writes, eviction, and clear operations.
   Future<void> _mutations = Future<void>.value();
 
+  /// The last [clear]; a read waits on it alone, never behind queued writes.
+  Future<void> _clearing = Future<void>.value();
+
   /// Bumped by [clear] to drop writes from a previous session.
   int _generation = 0;
 
@@ -54,7 +57,8 @@ class AppointmentImageDiskCache {
     if (key.isEmpty) return null;
     final generation = _generation;
     try {
-      await _mutations;
+      // Keys are independent and a rename is atomic: a same-key race is a miss.
+      await _clearing;
       if (generation != _generation) return null;
       final file = await _fileFor(key);
       final bytes = await file.readAsBytes();
@@ -97,7 +101,7 @@ class AppointmentImageDiskCache {
   /// Deletes every cached photo for the current session.
   Future<void> clear() {
     _generation += 1;
-    return _serialized(() async {
+    return _clearing = _serialized(() async {
       _bytesOnDisk = null;
       final dir = await _directory();
       // Sync metadata checks are cheap; byte work stays async.
@@ -144,7 +148,9 @@ class AppointmentImageDiskCache {
     var total = 0;
     await for (final entity in dir.list()) {
       if (entity is! File) continue;
-      final stat = entity.statSync();
+      // A sync stat per cached photo would block the UI isolate for the sweep.
+      // ignore: avoid_slow_async_io
+      final stat = await entity.stat();
       total += stat.size;
       entries.add((file: entity, size: stat.size, modified: stat.modified));
     }

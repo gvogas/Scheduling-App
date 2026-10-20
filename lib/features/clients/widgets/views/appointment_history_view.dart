@@ -65,6 +65,10 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
         PagedSliverPrefetch<AppointmentHistoryView> {
   static const int _pageSize = 25;
 
+  /// Pages fetched on the user's behalf while a chip filter matches nothing
+  /// loaded, before the empty state is shown: 20 × 25 rows.
+  static const int _emptyFilterFetchCap = 20;
+
   @override
   String searchQueryOf(AppointmentHistoryView widget) => widget.searchQuery;
 
@@ -93,6 +97,7 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
 
   // Recompute filter/search indexes only when pages change.
   List<List<AppointmentRecord>>? _filterOptionsPages;
+  int? _cachedCurrentYear;
   List<int> _cachedYears = const [];
   List<HistoryEmployeeOption> _cachedEmployees = const [];
   List<_HistoryRow> _searchIndex = const [];
@@ -165,10 +170,15 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
     _status = null;
   });
 
-  // Options come from loaded pages so selected chips stay visible.
-  List<int> _yearsOf(List<AppointmentRecord> appointments) {
-    final years = <int>{for (final a in appointments) a.startTime.year};
-    return years.toList()..sort((a, b) => b.compareTo(a));
+  // Every year from the oldest loaded one up to today's, newest first — a gap
+  // year is pickable too; the pager then runs until it is reached or passed.
+  List<int> _yearsOf(List<AppointmentRecord> appointments, int currentYear) {
+    if (appointments.isEmpty) return const [];
+    var oldest = currentYear;
+    for (final a in appointments) {
+      if (a.startTime.year < oldest) oldest = a.startTime.year;
+    }
+    return [for (var y = currentYear; y >= oldest; y--) y];
   }
 
   List<HistoryEmployeeOption> _employeesOf(
@@ -195,6 +205,30 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
 
   bool get _hasChipFilter =>
       _year != null || _employeeId != null || _status != null;
+
+  /// Pages auto-fetched for the current chips while nothing loaded matched.
+  (int?, String?, HistoryStatusFilter?)? _emptyFetchChips;
+  int _emptyFetches = 0;
+
+  // Newest-first pages: once the last loaded row predates the chosen year, no
+  // later page can hold it.
+  bool _yearPassed(List<AppointmentRecord> loaded) =>
+      _year != null && loaded.isNotEmpty && loaded.last.startTime.year < _year!;
+
+  bool _mayAutoFetch(
+    PagingState<int, AppointmentRecord> state,
+    List<AppointmentRecord> loaded,
+  ) {
+    final chips = (_year, _employeeId, _status);
+    if (chips != _emptyFetchChips) {
+      _emptyFetchChips = chips;
+      _emptyFetches = 0;
+    }
+    return state.hasNextPage &&
+        state.error == null &&
+        !_yearPassed(loaded) &&
+        _emptyFetches < _emptyFilterFetchCap;
+  }
 
   bool get _hasActiveFilter =>
       widget.searchQuery.trim().isNotEmpty || _hasChipFilter;
@@ -279,9 +313,11 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
             state.pages,
           ), () => state.items ?? const <AppointmentRecord>[]);
           // Filter options and search index share page identity.
-          if (!identical(state.pages, _filterOptionsPages)) {
+          if (!identical(state.pages, _filterOptionsPages) ||
+              _cachedCurrentYear != currentYear) {
             _filterOptionsPages = state.pages;
-            _cachedYears = _yearsOf(loaded);
+            _cachedCurrentYear = currentYear;
+            _cachedYears = _yearsOf(loaded, currentYear);
             _cachedEmployees = _employeesOf(loaded);
             _searchIndex = [
               for (final a in loaded)
@@ -295,7 +331,13 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
               if (loaded.isNotEmpty) _filterBar(_cachedYears, _cachedEmployees),
               Expanded(
                 child: _hasActiveFilter
-                    ? _buildFiltered(colorMap, currentYear)
+                    ? _buildFiltered(
+                        state,
+                        loaded,
+                        fetchNextPage,
+                        colorMap,
+                        currentYear,
+                      )
                     : _buildPaged(
                         state,
                         loaded,
@@ -355,7 +397,13 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
     );
   }
 
-  Widget _buildFiltered(Map<String, Color> colorMap, int currentYear) {
+  Widget _buildFiltered(
+    PagingState<int, AppointmentRecord> state,
+    List<AppointmentRecord> loaded,
+    void Function() fetchNextPage,
+    Map<String, Color> colorMap,
+    int currentYear,
+  ) {
     final query = widget.searchQuery.trim();
 
     Widget list(List<AppointmentRecord> rows, {required bool inSearch}) {
@@ -373,9 +421,32 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
     List<AppointmentRecord> filteredLoaded() =>
         _filteredRows.of(filterKey, _filterLoaded);
 
-    // Chip-only filtering keeps loaded pages contiguous.
+    // Chip-only filtering is a filter over the PAGER, not over page one: the
+    // footer and prefetch stay wired, and a page with no match fetches the next.
     if (query.isEmpty) {
-      return list(filteredLoaded(), inSearch: false);
+      final rows = filteredLoaded();
+      if (rows.isEmpty) {
+        if (state.isLoading) return _skeleton();
+        if (state.error != null) {
+          return _errorState(state.error!, onRetry: fetchNextPage);
+        }
+        if (!_mayAutoFetch(state, loaded)) return _buildEmptyState(context);
+        _emptyFetches++;
+        requestFirstPage(state, fetchNextPage);
+        return _skeleton();
+      }
+      return _countedList(
+        rows: rows,
+        colorMap: colorMap,
+        currentYear: currentYear,
+        inSearch: false,
+        footer: PagedListFooter<int, AppointmentRecord>(
+          state: state,
+          onRetry: fetchNextPage,
+        ),
+        onRowBuilt: (index) =>
+            maybeFetchNext(state, fetchNextPage, index, rows.length),
+      );
     }
 
     // Local filtering fills the debounce gap.
@@ -416,12 +487,8 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
   Widget _errorState(Object error, {required VoidCallback onRetry}) =>
       AppEmptyState(
         icon: Icons.error_outline,
-        title: context.l10n.error_somethingWentWrong,
-        body: composeErrorNotice(
-          context,
-          intro: context.l10n.error_introLoadHistory,
-          error: error,
-        ),
+        title: context.l10n.error_introLoadHistory,
+        body: errorCauseFor(context.l10n, error),
         actionLabel: context.l10n.common_retry,
         onAction: onRetry,
       );
@@ -463,7 +530,7 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
     if (query.isNotEmpty && !_hasChipFilter) {
       return AppEmptyState(
         icon: Icons.search_off_outlined,
-        title: '${l10n.clients_noAppointmentsMatch} "$query"',
+        title: l10n.clients_noAppointmentsMatchQuery(query),
         body: l10n.common_tryADifferentSearchTerm,
       );
     }

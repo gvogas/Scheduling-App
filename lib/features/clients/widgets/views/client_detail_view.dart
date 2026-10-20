@@ -14,6 +14,7 @@ import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/policies/client_delete_policy.dart';
+import 'package:scheduling/features/clients/widgets/cards/archived_pill.dart';
 import 'package:scheduling/features/clients/widgets/sheets/edit_client_sheet.dart';
 import 'package:scheduling/features/clients/widgets/views/client_actions_host.dart';
 import 'package:scheduling/features/clients/widgets/views/client_view_body.dart';
@@ -241,6 +242,10 @@ class _ProfileCard extends StatelessWidget {
               color: theme.palette.textTertiary,
             ),
           ),
+        ],
+        if (client.archived) ...[
+          const SizedBox(height: AppSpacing.sp8),
+          const ArchivedPill(),
         ],
       ],
     );

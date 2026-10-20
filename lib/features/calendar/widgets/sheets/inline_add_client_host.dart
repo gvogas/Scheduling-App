@@ -13,13 +13,14 @@ mixin InlineAddClientHost<T extends StatefulWidget> on State<T> {
     if (_addingClient) return null;
     _addingClient = true;
     try {
-      // The booking form only wants the client — "Add and book a job" is
-      // meaningless here, since a booking is already in progress.
+      // The booking form only wants the client — a booking is already in
+      // progress, so the sheet hides "Add and book a job".
       final result = await showAddClientSheet(
         context,
         analyticsSource: AnalyticsSources.inlineAddClient,
         initialName: name,
         settleFocus: true,
+        showBookAction: false,
       );
       return result?.client;
     } finally {

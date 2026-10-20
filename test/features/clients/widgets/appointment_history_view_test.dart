@@ -306,9 +306,7 @@ void main() {
     );
 
     testWidgets('drops the month bars', (tester) async {
-      await tester.pumpWidget(
-        _wrap([recentJob, _bobJob], searchQuery: 'Job'),
-      );
+      await tester.pumpWidget(_wrap([recentJob, _bobJob], searchQuery: 'Job'));
       await tester.pumpAndSettle();
 
       expect(find.byType(SliverPersistentHeader), findsNothing);
@@ -320,9 +318,7 @@ void main() {
     testWidgets('the rail speaks the month, and the year only when older', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        _wrap([recentJob, _bobJob], searchQuery: 'Job'),
-      );
+      await tester.pumpWidget(_wrap([recentJob, _bobJob], searchQuery: 'Job'));
       await tester.pumpAndSettle();
 
       // Month instead of weekday: a bare `Tue 11` is ambiguous the moment the

@@ -44,4 +44,10 @@ class CalendarCollapse {
     _collapsed = !_collapsed;
     _travel = 0;
   }
+
+  /// Applies a remembered state (the per-device preference) without a gesture.
+  void restore({required bool collapsed}) {
+    _collapsed = collapsed;
+    _travel = 0;
+  }
 }

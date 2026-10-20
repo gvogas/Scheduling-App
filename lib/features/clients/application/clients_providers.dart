@@ -14,16 +14,55 @@ final clientsRepositoryProvider = Provider<ClientsRepository>((ref) {
   return FirebaseClientsRepository(firestore, functions: functions);
 });
 
-/// Bumped after any client write so paginated list refreshes.
-final clientsRefreshProvider = NotifierProvider<ClientsRefresh, int>(
+/// The last client write, so dependents can refresh (counts, searches, the
+/// building catalog) or patch a loaded page in place (the paginated list).
+///
+/// Instances are deliberately NOT value-equal: two archives of the same client
+/// must both notify.
+sealed class ClientsWrite {
+  ClientsWrite();
+}
+
+/// A new client; the page it belongs on is the server's to decide.
+class ClientsWriteAdded extends ClientsWrite {
+  ClientsWriteAdded(this.client);
+  final ClientRecord client;
+}
+
+/// An edit of an existing client, carrying the record as saved.
+class ClientsWriteUpdated extends ClientsWrite {
+  ClientsWriteUpdated(this.client);
+  final ClientRecord client;
+}
+
+/// An archive / un-archive toggle.
+class ClientsWriteArchived extends ClientsWrite {
+  ClientsWriteArchived(this.clientId, {required this.archived});
+  final String clientId;
+  final bool archived;
+}
+
+/// A delete; the record is gone.
+class ClientsWriteDeleted extends ClientsWrite {
+  ClientsWriteDeleted(this.clientId);
+  final String clientId;
+}
+
+/// A write with no record to patch from — every dependent refreshes.
+class ClientsWriteRefresh extends ClientsWrite {
+  ClientsWriteRefresh();
+}
+
+/// Bumped after any client write; null until the first one.
+final clientsRefreshProvider = NotifierProvider<ClientsRefresh, ClientsWrite?>(
   ClientsRefresh.new,
 );
 
-class ClientsRefresh extends Notifier<int> {
+class ClientsRefresh extends Notifier<ClientsWrite?> {
   @override
-  int build() => 0;
+  ClientsWrite? build() => null;
 
-  void bump() => state++;
+  void bump([ClientsWrite? write]) => state = write ?? ClientsWriteRefresh();
 }
 
 /// Live view of one client doc, keyed by doc id. AutoDispose so the listener is

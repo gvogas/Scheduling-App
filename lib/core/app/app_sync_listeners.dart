@@ -1,14 +1,18 @@
 import 'dart:async';
+import 'dart:ui' show Locale;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:scheduling/core/app/carplay_bridge.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
+import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/platform/ios_platform.dart';
 import 'package:scheduling/core/remote_config/feature_flags.dart';
 import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
+import 'package:scheduling/core/utils/app_language.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
+import 'package:scheduling/features/calendar/application/photo_upload_notifier.dart';
 import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/home_widget/application/widget_sync_service.dart';
 import 'package:scheduling/features/live_activity/application/live_activity_registration_controller.dart';
@@ -16,17 +20,29 @@ import 'package:scheduling/features/notifications/application/push_registration_
 import 'package:scheduling/features/presence/application/presence_sync_controller.dart';
 import 'package:scheduling/features/siri/application/schedule_snapshot_provider.dart';
 import 'package:scheduling/features/siri/application/schedule_snapshot_service.dart';
+import 'package:scheduling/l10n/l10n.dart';
+
+/// The strings of the in-app language, for code that runs above `MaterialApp`.
+AppLocalizations appLocalizationsForCurrentLanguage() =>
+    lookupAppLocalizations(Locale(AppLanguageController.instance.value, 'CA'));
 
 /// Cross-cutting sync wiring for app-wide listeners.
 ///
 /// [registerAll] must be called from `build`, like any `ref.listen`.
 class AppSyncListeners {
-  const AppSyncListeners(this.ref, {this.isIosPlatform = defaultIsIosPlatform});
+  const AppSyncListeners(
+    this.ref, {
+    this.isIosPlatform = defaultIsIosPlatform,
+    this.resolveL10n = appLocalizationsForCurrentLanguage,
+  });
 
   final WidgetRef ref;
 
   /// Injected so the iOS-only mirror listeners can register in a host test.
   final bool Function() isIosPlatform;
+
+  /// Registered ABOVE `MaterialApp`, so there is no `context.l10n` to read.
+  final AppLocalizations Function() resolveL10n;
 
   /// Registers every listener, in the same order as the original inline calls.
   void registerAll() {
@@ -181,6 +197,7 @@ class AppSyncListeners {
         final isSignedIn =
             ref.read(currentUserDocProvider).value?.isNotEmpty ?? false;
         if (previous == true && !next && isSignedIn) {
+          _announceQueuedPhotos();
           _fireAndForget(
             'APP-SYNC photo drain failed',
             () => ref.read(appointmentImageUploadProvider).drainPending(),
@@ -204,6 +221,21 @@ class AppSyncListeners {
           );
         }
       });
+  }
+
+  /// One notice per reconnect, from the count the queue published while
+  /// offline — the drain itself reports nothing a notice could wait for.
+  void _announceQueuedPhotos() {
+    final waiting = ref
+        .read(photoUploadNotifierProvider)
+        .pending
+        .value
+        .values
+        .fold<int>(0, (sum, n) => sum + n);
+    if (waiting == 0) return;
+    ref
+        .read(noticeServiceProvider)
+        .info(resolveL10n().calendar_nPhotosUploading(waiting));
   }
 
   void _featureFlagSync() {

@@ -128,6 +128,27 @@
   "@common_remove": {
     "description": "Accessibility label / tooltip for a remove button."
   },
+  "common_noticeSuccessAnnouncement": "Success: {message}",
+  "@common_noticeSuccessAnnouncement": {
+    "description": "Screen-reader label of a success notice banner; the kind prefix tells VoiceOver what colour alone shows.",
+    "placeholders": {
+      "message": {"type": "String"}
+    }
+  },
+  "common_noticeInfoAnnouncement": "Info: {message}",
+  "@common_noticeInfoAnnouncement": {
+    "description": "Screen-reader label of an info notice banner; the kind prefix tells VoiceOver what colour alone shows.",
+    "placeholders": {
+      "message": {"type": "String"}
+    }
+  },
+  "common_noticeErrorAnnouncement": "Error: {message}",
+  "@common_noticeErrorAnnouncement": {
+    "description": "Screen-reader label of an error notice banner; the kind prefix tells VoiceOver what colour alone shows.",
+    "placeholders": {
+      "message": {"type": "String"}
+    }
+  },
   "common_clearText": "Clear text",
   "@common_clearText": {
     "description": "Tooltip on the x button that empties a text field"
@@ -224,7 +245,7 @@
       }
     }
   },
-  "calendar_closedCount": "Done · {count}",
+  "calendar_closedCount": "Complete · {count}",
   "@calendar_closedCount": {
     "description": "Label on the rule that separates the day's remaining work from the jobs that are finished, in the calendar agenda. Cancelled visits still sink into the same block and render below this rule, but are NOT counted by it (owner call 2026-08-25) — a cancelled job is work that is not happening, so it is not work behind you either. The rule is suppressed entirely when the count would be zero.",
     "placeholders": {
@@ -390,6 +411,24 @@
   "@calendar_photosLimitFull": {
     "description": "Notice shown when a photo pick is refused outright because the job is at its photo limit."
   },
+  "calendar_nPhotosQueuedOffline": "{count, plural, =1{1 photo will upload when you're back online.} other{{count} photos will upload when you're back online.}}",
+  "@calendar_nPhotosQueuedOffline": {
+    "description": "Info notice when the crew adds photos while offline: they are queued, not lost, and send on reconnect.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_nPhotosUploading": "{count, plural, =1{Uploading 1 photo…} other{Uploading {count} photos…}}",
+  "@calendar_nPhotosUploading": {
+    "description": "Info notice on the offline-to-online flip when queued photos start sending. Count is the queue size at that moment.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "calendar_crewNotesLabel": "CREW NOTES",
   "@calendar_crewNotesLabel": {
     "description": "Mono all-caps section label over the thread of notes the crew wrote on a job, shown to admins and crew alike. Already uppercase in source."
@@ -456,9 +495,9 @@
       }
     }
   },
-  "calendar_jobsDoneCount": "{count, plural, =1{1 DONE} other{{count} DONE}}",
+  "calendar_jobsDoneCount": "{count, plural, =1{1 COMPLETE} other{{count} COMPLETE}}",
   "@calendar_jobsDoneCount": {
-    "description": "Appended to the agenda header's job count once some of the day's jobs are FINISHED, reading '3 JOBS · 1 DONE'. Counts finished visits only — a cancelled one is neither a job on the day nor done, and is excluded from this and from the job count beside it (owner call 2026-08-25), matching both the 'Done' rule in the list below and the month grid's dots. Already uppercase in source.",
+    "description": "Appended to the agenda header's job count once some of the day's jobs are FINISHED, reading '3 JOBS · 1 COMPLETE'. Counts finished jobs only — a cancelled one is neither a job on the day nor complete, and is excluded from this and from the job count beside it (owner call 2026-08-25), matching both the 'Complete' rule in the list below and the month grid's dots. Already uppercase in source.",
     "placeholders": {
       "count": {
         "type": "int"
@@ -1227,17 +1266,65 @@
   "@clients_noClientsYet": {
     "description": "No clients yet"
   },
-  "clients_noClientsMatch": "No clients match",
-  "@clients_noClientsMatch": {
-    "description": "No clients match"
+  "clients_noClientsMatchQuery": "No clients match \u201c{query}\u201d",
+  "@clients_noClientsMatchQuery": {
+    "description": "Empty-state title when a clients search finds nothing; the quotes are part of the string so each language picks its own.",
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
+  },
+  "clients_noMatchWithinFilter": "Nothing within {filter} matches \u2014 try a different term or clear the filter.",
+  "@clients_noMatchWithinFilter": {
+    "description": "Empty-state body when a search runs inside a clients filter (a type, Archived or a shared address) and finds nothing.",
+    "placeholders": {
+      "filter": {
+        "type": "String"
+      }
+    }
+  },
+  "clients_buildingFilterHint": "An address is listed here once two or more clients share its street and city.",
+  "@clients_buildingFilterHint": {
+    "description": "Empty-state body when the shared-address filter matches no client."
+  },
+  "clients_noClientsYetHint": "Clients added by an administrator will appear here.",
+  "@clients_noClientsYetHint": {
+    "description": "Empty-state body of the clients list for a technician, who has no add button."
+  },
+  "clients_alreadyOnFile": "Already on file: {name}",
+  "@clients_alreadyOnFile": {
+    "description": "Inline row under the add-client phone field when the typed number already belongs to a client.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "clients_openExistingClient": "Open",
+  "@clients_openExistingClient": {
+    "description": "Button on the duplicate-phone row that leaves the add sheet for the existing client."
+  },
+  "clients_useAnyway": "Use anyway",
+  "@clients_useAnyway": {
+    "description": "Button on the duplicate-phone row that lets the admin create the client despite the matching number."
+  },
+  "clients_duplicatePhoneBlocked": "This number is already on file \u2014 open that client or choose Use anyway.",
+  "@clients_duplicatePhoneBlocked": {
+    "description": "Phone field error when Add is tapped while the duplicate-phone row is still unanswered."
   },
   "common_noAppointmentsFound": "No appointments found",
   "@common_noAppointmentsFound": {
     "description": "No appointments found"
   },
-  "clients_noAppointmentsMatch": "No appointments match",
-  "@clients_noAppointmentsMatch": {
-    "description": "No appointments match"
+  "clients_noAppointmentsMatchQuery": "No appointments match \u201c{query}\u201d",
+  "@clients_noAppointmentsMatchQuery": {
+    "description": "Empty-state title when a history search finds nothing; the quotes are part of the string so each language picks its own.",
+    "placeholders": {
+      "query": {
+        "type": "String"
+      }
+    }
   },
   "error_errorLoadingEmployees": "Error loading employees",
   "@error_errorLoadingEmployees": {
@@ -1350,9 +1437,9 @@
   "@common_offlineFormNotice": {
     "description": "Shown at the top of the add-appointment and add-client forms while the device is offline. The submit controllers already fail fast, so without this the person only finds out at Save; the global offline banner is hidden behind a modal sheet."
   },
-  "common_offlineBanner": "Offline — changes will sync when you're back online",
+  "common_offlineBanner": "Offline — you can view your schedule; saving needs a connection",
   "@common_offlineBanner": {
-    "description": "Persistent app-wide banner shown while the device has no network connection."
+    "description": "Persistent app-wide banner shown while the device has no network connection. Writes are refused offline (only photos queue), so it must not promise a sync."
   },
   "common_featurePaused": "This feature is temporarily unavailable.",
   "@common_featurePaused": {
@@ -1446,14 +1533,6 @@
   "@error_anAccountWithThisEmailAlreadyExistsSignInOrContactAdmin": {
     "description": "Register-screen variant of the email-already-in-use error: includes guidance to sign in or contact admin for a reset."
   },
-  "validation_passwordIsTooWeakUseAtLeast6Characters": "Password is too weak. Use at least 6 characters",
-  "@validation_passwordIsTooWeakUseAtLeast6Characters": {
-    "description": "Password is too weak. Use at least 6 characters"
-  },
-  "validation_passwordMustBeAtLeast8Characters": "Password must be at least 8 characters",
-  "@validation_passwordMustBeAtLeast8Characters": {
-    "description": "Password must be at least 8 characters"
-  },
   "validation_passwordDoesNotMeetAllRequirements": "Password doesn't meet all the requirements below",
   "@validation_passwordDoesNotMeetAllRequirements": {
     "description": "Field error on the create-account password when one or more checklist requirements are unmet."
@@ -1473,6 +1552,10 @@
   "validation_passwordReqNumber": "A number (0–9)",
   "@validation_passwordReqNumber": {
     "description": "Password requirement checklist row: at least one digit."
+  },
+  "validation_passwordReqNotStarting": "Not the temporary password you were given",
+  "@validation_passwordReqNotStarting": {
+    "description": "Password checklist note on setup and change-password: the new password must differ from the admin-issued one. Informational — the app can't verify it until submit."
   },
   "common_clientAdded": "Client added",
   "@common_clientAdded": {
@@ -1510,10 +1593,6 @@
   "@error_thisEmailIsNotAuthorizedToSignUp": {
     "description": "This email is not authorized to sign up"
   },
-  "error_noUserProfileFoundForThisAccount": "No user profile found for this account",
-  "@error_noUserProfileFoundForThisAccount": {
-    "description": "No user profile found for this account"
-  },
   "auth_pleaseLogInAgainAndRetry": "Please log in again and retry",
   "@auth_pleaseLogInAgainAndRetry": {
     "description": "Please log in again and retry"
@@ -1550,9 +1629,9 @@
   "@common_optional": {
     "description": "optional"
   },
-  "error_addressLookupFailed": "Address lookup failed",
+  "error_addressLookupFailed": "Address lookup failed \u2014 keep typing or enter the address manually.",
   "@error_addressLookupFailed": {
-    "description": "Address lookup failed"
+    "description": "Under the address field when the Places lookup errors; the field still accepts a hand-typed address."
   },
   "error_couldNotLoadAddressDetails": "Could not load address details",
   "@error_couldNotLoadAddressDetails": {
@@ -1654,45 +1733,29 @@
   "@applock_reason": {
     "description": "Prompt shown by the OS biometric dialog"
   },
-  "onboarding_slide1Title": "Manage Appointments",
-  "@onboarding_slide1Title": {
-    "description": "Onboarding slide 1 title"
+  "applock_logOut": "Log out",
+  "@applock_logOut": {
+    "description": "Secondary action on the lock overlay: signs the account out instead of unlocking"
   },
-  "onboarding_slide1Body": "Schedule jobs and track them through to done.",
-  "@onboarding_slide1Body": {
-    "description": "Onboarding slide 1 body"
+  "applock_continue": "Continue",
+  "@applock_continue": {
+    "description": "Button on the lock overlay when biometrics are unavailable; opens the app for this session only"
   },
-  "onboarding_slide2Title": "Clients in One Place",
-  "@onboarding_slide2Title": {
-    "description": "Onboarding slide 2 title"
+  "applock_signedOut": "You've been signed out.",
+  "@applock_signedOut": {
+    "description": "Notice on the sign-in screen after Log out from the lock overlay"
   },
-  "onboarding_slide2Body": "Keep client details, contacts, and history together.",
-  "@onboarding_slide2Body": {
-    "description": "Onboarding slide 2 body"
+  "onboarding_welcomeTitle": "Welcome",
+  "@onboarding_welcomeTitle": {
+    "description": "Title of the single first-launch welcome screen shown before sign-in"
   },
-  "onboarding_slide3Title": "Coordinate Your Team",
-  "@onboarding_slide3Title": {
-    "description": "Onboarding slide 3 title"
-  },
-  "onboarding_slide3Body": "Assign employees and see who's booked at a glance.",
-  "@onboarding_slide3Body": {
-    "description": "Onboarding slide 3 body"
-  },
-  "onboarding_skip": "Skip",
-  "@onboarding_skip": {
-    "description": "Skip button on the onboarding flow"
-  },
-  "onboarding_next": "Next",
-  "@onboarding_next": {
-    "description": "Next button on non-final onboarding slides"
+  "onboarding_welcomeBody": "Your jobs, clients and team, all in one place. Sign in to get started.",
+  "@onboarding_welcomeBody": {
+    "description": "Body of the single first-launch welcome screen; role-neutral, since admins and technicians both see it"
   },
   "onboarding_getStarted": "Get Started",
   "@onboarding_getStarted": {
-    "description": "Final-slide button that finishes onboarding"
-  },
-  "onboarding_back": "Back",
-  "@onboarding_back": {
-    "description": "Back button shown after the first onboarding slide"
+    "description": "Button on the welcome screen that finishes onboarding"
   },
   "settings_version": "Version {version} ({buildNumber})",
   "@settings_version": {
@@ -1793,6 +1856,10 @@
   "calendar_cancelledJobsAreSavedToHistory": "Cancelled jobs are saved to history.",
   "@calendar_cancelledJobsAreSavedToHistory": {
     "description": "Cancelled jobs are saved to history."
+  },
+  "calendar_keepAppointment": "Keep appointment",
+  "@calendar_keepAppointment": {
+    "description": "Dismiss button of the cancel-appointment dialog. Deliberately not 'Cancel', which would read as the destructive choice beside 'Cancel Appointment'."
   },
   "calendar_appointmentStatus": "Appointment Status",
   "@calendar_appointmentStatus": {
@@ -2071,6 +2138,10 @@
   "@settings_locationLoading": {
     "description": "Shown while loading the signed-in user's staff-map location document"
   },
+  "settings_locationPermissionRefused": "Location access was refused — allow it for this app in iOS Settings to share your spot.",
+  "@settings_locationPermissionRefused": {
+    "description": "Error notice after Turn on when the iOS location prompt was declined; sharing stays off"
+  },
   "settings_locationUnavailable": "Unavailable",
   "@settings_locationUnavailable": {
     "description": "Shown when the signed-in user's staff-map location document cannot be read"
@@ -2106,6 +2177,18 @@
   "common_discard": "Discard",
   "@common_discard": {
     "description": "Button that throws away unsaved edits and restores the stored values"
+  },
+  "common_discardChangesTitle": "Discard changes?",
+  "@common_discardChangesTitle": {
+    "description": "Title of the confirm shown when an add/edit sheet with unsaved changes is being dismissed"
+  },
+  "common_discardChangesBody": "What you've entered here hasn't been saved and will be lost.",
+  "@common_discardChangesBody": {
+    "description": "Body of the discard-changes confirm on an add/edit sheet"
+  },
+  "common_keepEditing": "Keep editing",
+  "@common_keepEditing": {
+    "description": "Dismiss action of the discard-changes confirm; keeps the sheet open"
   },
   "error_introSaveAvailability": "Couldn't save your availability",
   "@error_introSaveAvailability": {
@@ -2404,7 +2487,7 @@
   "@dashboard_kpiCancelled": {
     "description": "KPI tile label for cancelled jobs in the selected period"
   },
-  "dashboard_visitsToday": "{count, plural, =1{visit today} other{visits today}}",
+  "dashboard_visitsToday": "{count, plural, =1{job today} other{jobs today}}",
   "@dashboard_visitsToday": {
     "description": "Label rendered beside the hero's big count of today's visits; the number itself is a separate Text",
     "placeholders": {
@@ -2471,7 +2554,7 @@
   "@dashboard_upcomingToday": {
     "description": "Section header above the timeline of today's upcoming visits"
   },
-  "dashboard_noVisitsToday": "No upcoming visits today",
+  "dashboard_noVisitsToday": "No upcoming jobs today",
   "@dashboard_noVisitsToday": {
     "description": "Empty state under the next-up header when today has no future visits"
   },
@@ -2587,7 +2670,7 @@
   "@dashboard_allClear": {
     "description": "Shown in the attention section when there are no flags"
   },
-  "dashboard_pendingSoonHeader": "{count, plural, =1{1 pending visit starts within 48 hours} other{{count} pending visits start within 48 hours}}",
+  "dashboard_pendingSoonHeader": "{count, plural, =1{1 pending job starts within 48 hours} other{{count} pending jobs start within 48 hours}}",
   "@dashboard_pendingSoonHeader": {
     "description": "Attention flag group header for pending visits starting within 48 hours",
     "placeholders": {
@@ -2596,7 +2679,7 @@
       }
     }
   },
-  "dashboard_overdueOpenHeader": "{count, plural, =1{1 past visit was never closed} other{{count} past visits were never closed}}",
+  "dashboard_overdueOpenHeader": "{count, plural, =1{1 past job was never closed} other{{count} past jobs were never closed}}",
   "@dashboard_overdueOpenHeader": {
     "description": "Attention flag group header for ended visits never marked done or cancelled",
     "placeholders": {
@@ -2771,6 +2854,42 @@
         "type": "int"
       }
     }
+  },
+  "onboarding_notificationsTitle": "Know when a job is yours",
+  "@onboarding_notificationsTitle": {
+    "description": "Headline of the one-time notifications ask page, shown before the team-map page while iOS has never been asked"
+  },
+  "onboarding_notificationsBody": "Get a heads-up when a job is assigned to you, when it's time to leave, and a rundown of your day.",
+  "@onboarding_notificationsBody": {
+    "description": "One sentence explaining what the push notifications are for"
+  },
+  "onboarding_notificationsOnlyJobs": "Only about your jobs — nothing else",
+  "@onboarding_notificationsOnlyJobs": {
+    "description": "First reassurance on the notifications ask page"
+  },
+  "onboarding_notificationsLeaveOnTime": "Time-to-leave alerts that account for traffic",
+  "@onboarding_notificationsLeaveOnTime": {
+    "description": "Second reassurance on the notifications ask page"
+  },
+  "onboarding_notificationsOffAnytime": "Turn them off anytime in Settings",
+  "@onboarding_notificationsOffAnytime": {
+    "description": "Third reassurance on the notifications ask page"
+  },
+  "onboarding_notificationsTurnOn": "Turn on notifications",
+  "@onboarding_notificationsTurnOn": {
+    "description": "Primary button on the notifications ask page; shows the one-time iOS prompt"
+  },
+  "onboarding_notificationsNotNow": "Not now",
+  "@onboarding_notificationsNotNow": {
+    "description": "Secondary button on the notifications ask page; the page never returns, Settings keeps the row"
+  },
+  "onboarding_shareLocationConsentedTitle": "Finish setting up the team map",
+  "@onboarding_shareLocationConsentedTitle": {
+    "description": "Title of the team-map page for someone who agreed to location sharing in account setup moments ago; the page only completes the iOS step"
+  },
+  "onboarding_shareLocationConsentedBody": "You agreed to share your location during setup. Allow location access so your spot can reach the map.",
+  "@onboarding_shareLocationConsentedBody": {
+    "description": "Body of the team-map page for someone who consented in setup; Turn on then shows the iOS prompt"
   },
   "onboarding_shareLocationTitle": "Be on the team map",
   "@onboarding_shareLocationTitle": {
@@ -3509,6 +3628,36 @@
   "@employees_lastName": {
     "description": "Edit-person field label for the family name"
   },
+  "employees_workEmailHelper": "This is what they sign in with.",
+  "@employees_workEmailHelper": {
+    "description": "Helper line under the Work email field on the edit-person sheet"
+  },
+  "employees_changeEmailConfirmTitle": "Change sign-in email?",
+  "@employees_changeEmailConfirmTitle": {
+    "description": "Title of the confirm shown when an admin saves a different work email for someone"
+  },
+  "employees_changeEmailConfirmBody": "{name} will sign in with {email} from now on, and the old address stops working. Let them know.",
+  "@employees_changeEmailConfirmBody": {
+    "description": "Body of the change-email confirm on the edit-person sheet",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Zoé"
+      },
+      "email": {
+        "type": "String",
+        "example": "zoe@example.com"
+      }
+    }
+  },
+  "employees_changeEmailConfirm": "Change email",
+  "@employees_changeEmailConfirm": {
+    "description": "Confirm button of the change-email confirm on the edit-person sheet"
+  },
+  "employees_emergencyLoading": "Loading emergency contact…",
+  "@employees_emergencyLoading": {
+    "description": "Placeholder in the disabled emergency-contact fields until their separate read lands"
+  },
   "employees_workEmail": "Work email",
   "@employees_workEmail": {
     "description": "Edit-person field label for the account email"
@@ -3575,9 +3724,17 @@
   "@auth_hide": {
     "description": "Text link inside a password field that masks the password again"
   },
-  "auth_noEmailOnAccountNote": "No email on your account? Ask your admin to add one before you reset.",
+  "auth_noEmailOnAccountNote": "If your work email isn't a real inbox, ask your admin to reset your password from the Team screen.",
   "@auth_noEmailOnAccountNote": {
-    "description": "Attention note on the reset-password form for accounts with no email"
+    "description": "Note on the reset-password form and its sent panel: employee emails are often not real inboxes, so the reliable path is an admin reset from the Team screen"
+  },
+  "auth_accountReadySignInAgain": "Your account is ready. Sign in with your new password.",
+  "@auth_accountReadySignInAgain": {
+    "description": "Info banner on the sign-in screen after setup or a password change landed but the profile could not be resolved, so the person was signed out"
+  },
+  "auth_splashOfflineRetrying": "You're offline — retrying…",
+  "@auth_splashOfflineRetrying": {
+    "description": "Splash status while a signed-in cold start cannot reach the server; the session is kept and the check retries when the connection returns"
   },
   "auth_resetSentPanelTitle": "SENT",
   "@auth_resetSentPanelTitle": {
@@ -3635,6 +3792,18 @@
   "employees_accountCreatedTitle": "Account created",
   "@employees_accountCreatedTitle": {
     "description": "Title of the dialog shown after an admin creates an employee account"
+  },
+  "employees_closeWithoutCopyTitle": "Close without copying?",
+  "@employees_closeWithoutCopyTitle": {
+    "description": "Title of the confirm shown when Close is tapped on the new-account dialog before the credentials were copied"
+  },
+  "employees_closeWithoutCopyBody": "You haven't copied these. The temporary password can't be shown again.",
+  "@employees_closeWithoutCopyBody": {
+    "description": "Body of the close-without-copying confirm on the new-account dialog"
+  },
+  "employees_closeAnyway": "Close anyway",
+  "@employees_closeAnyway": {
+    "description": "Destructive confirm button that closes the new-account dialog without copying"
   },
   "employees_shareTheseWith": "Give {name} these to sign in with.",
   "@employees_shareTheseWith": {
@@ -3851,7 +4020,7 @@
   },
   "common_undo": "Undo",
   "@common_undo": {
-    "description": "Reverts a single settled swap back to the original assignee, while the clash dialog is open."
+    "description": "Action label that reverses the thing just done: a settled swap in the clash dialog, a mark-complete, a client archive."
   },
   "calendar_holidayNewYear": "New Year's Day",
   "@calendar_holidayNewYear": {
@@ -4092,7 +4261,7 @@
   },
   "clients_clearFilter": "Clear filter",
   "@clients_clearFilter": {
-    "description": "Semantic label of the dismiss control on the active filter chip."
+    "description": "Semantic label of the dismiss control on the active filter chip, and the button under a filtered search's empty state."
   },
   "clients_searchAllFields": "Name, phone, address, email…",
   "@clients_searchAllFields": {
@@ -4495,6 +4664,10 @@
   "error_causeIncompleteCheck": "The check could not examine all matching records — try a smaller search or date range before confirming.",
   "@error_causeIncompleteCheck": {
     "description": "Explains an explicitly incomplete search or appointment conflict scan."
+  },
+  "error_causeFailedPrecondition": "This can't be done in the record's current state — refresh and check the latest details before trying again.",
+  "@error_causeFailedPrecondition": {
+    "description": "Explains a rejected action whose precondition no longer holds, where retrying unchanged would not help."
   },
   "error_introReviewOverdue": "Couldn't update the jobs",
   "@error_introReviewOverdue": {

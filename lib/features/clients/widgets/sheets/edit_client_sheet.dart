@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
@@ -18,9 +19,11 @@ import 'package:scheduling/features/clients/widgets/fields/client_address_sectio
 import 'package:scheduling/features/clients/widgets/fields/client_name_phone_lift.dart';
 import 'package:scheduling/features/clients/widgets/fields/client_type_chips.dart';
 import 'package:scheduling/features/clients/widgets/sections/additional_contacts_section.dart';
+import 'package:scheduling/features/clients/widgets/sheets/add_client_sheet.dart';
 import 'package:scheduling/features/maps/domain/address_parser.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/cards/sheet_panel.dart';
+import 'package:scheduling/shared/widgets/feedback/offline_form_notice.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
 import 'package:scheduling/shared/widgets/fields/sheet_field_row.dart';
 import 'package:scheduling/shared/widgets/primitives/mono_section_label.dart';
@@ -69,14 +72,19 @@ class _EditClientSheetState extends ConsumerState<EditClientSheet>
   late final TextEditingController _postalCodeController;
 
   final _phoneLift = NamePhoneLift();
+  final _errorFocus = clientFormErrorFocus();
 
   late ClientType _type;
   late bool _autoInvoice;
+
+  /// The form as seeded from the stored record.
+  late final List<Object?> _baseline;
 
   @override
   void initState() {
     super.initState();
     _initControllers();
+    _baseline = _fingerprint();
     ref
         .read(analyticsServiceProvider)
         .logScreenView(AnalyticsScreens.editClient);
@@ -150,8 +158,36 @@ class _EditClientSheetState extends ConsumerState<EditClientSheet>
       controller.dispose();
     }
     disposeAdditionalContacts();
+    _errorFocus.dispose();
     super.dispose();
   }
+
+  List<Object?> _fingerprint() => [
+    _nameController.text,
+    _firstNameController.text,
+    _lastNameController.text,
+    _phoneController.text,
+    _emailController.text,
+    _onSiteManagerController.text,
+    _accessNotesController.text,
+    _billingTermsController.text,
+    _addressController.text,
+    _aptController.text,
+    _cityController.text,
+    _provinceController.text,
+    _countryController.text,
+    _postalCodeController.text,
+    for (final c in additionalContacts) ...[
+      c.nameController.text,
+      c.phoneController.text,
+      c.emailController.text,
+    ],
+    noFixedAddress,
+    _type,
+    _autoInvoice,
+  ];
+
+  bool _isDirty() => !listEquals(_baseline, _fingerprint());
 
   String _buildFullAddress() => AddressParser.canonicalFrom(
     street: _addressController.text,
@@ -252,7 +288,13 @@ class _EditClientSheetState extends ConsumerState<EditClientSheet>
         ..clear()
         ..addAll(nextErrors);
     });
-    if (errors.values.any((e) => e != null)) return;
+    if (errors.values.any((e) => e != null)) {
+      _errorFocus.focusFirstError([
+        for (final e in errors.entries)
+          if (e.value != null) clientFormFocusKey(e.key),
+      ]);
+      return;
+    }
 
     final updated = _buildUpdatedRecord();
 
@@ -294,7 +336,9 @@ class _EditClientSheetState extends ConsumerState<EditClientSheet>
       primaryLabel: l10n.common_save,
       isBusy: isSaving,
       onPrimary: _save,
+      isDirty: _isDirty,
       children: [
+        const OfflineFormNotice(),
         ..._clientSection(theme, l10n),
         ..._contactSection(theme, l10n),
         ..._siteSection(theme, l10n),
@@ -314,6 +358,7 @@ class _EditClientSheetState extends ConsumerState<EditClientSheet>
         child: LabeledTextField(
           label: l10n.clients_nameOrBusiness,
           controller: _nameController,
+          focusNode: _errorFocus.nodeFor('name'),
           required: true,
           textCapitalization: TextCapitalization.words,
           textInputAction: TextInputAction.next,
@@ -387,6 +432,7 @@ class _EditClientSheetState extends ConsumerState<EditClientSheet>
       child: LabeledTextField(
         label: l10n.clients_phone,
         controller: _phoneController,
+        focusNode: _errorFocus.nodeFor('phone'),
         optional: true,
         keyboard: TextInputType.phone,
         inputFormatters: const [PhoneInputFormatter()],
@@ -401,6 +447,7 @@ class _EditClientSheetState extends ConsumerState<EditClientSheet>
       child: LabeledTextField(
         label: l10n.common_email,
         controller: _emailController,
+        focusNode: _errorFocus.nodeFor('email'),
         optional: true,
         keyboard: TextInputType.emailAddress,
         textInputAction: TextInputAction.next,
@@ -421,12 +468,15 @@ class _EditClientSheetState extends ConsumerState<EditClientSheet>
       ),
     ),
     const SizedBox(height: AppSpacing.sp16),
-    AdditionalContactsSection(
-      contacts: additionalContacts,
-      errors: errors,
-      onAddContact: addAdditionalContact,
-      onRemoveContact: removeAdditionalContact,
-      onClearError: clearError,
+    SheetFocusScroll(
+      focusNode: _errorFocus.nodeFor('contacts'),
+      child: AdditionalContactsSection(
+        contacts: additionalContacts,
+        errors: errors,
+        onAddContact: addAdditionalContact,
+        onRemoveContact: removeAdditionalContact,
+        onClearError: clearError,
+      ),
     ),
     const SizedBox(height: AppSpacing.sp16),
   ];
@@ -447,16 +497,19 @@ class _EditClientSheetState extends ConsumerState<EditClientSheet>
     ),
     if (!noFixedAddress) ...[
       const SizedBox(height: AppSpacing.sp16),
-      ClientAddressSection(
-        addressController: _addressController,
-        aptController: _aptController,
-        cityController: _cityController,
-        provinceController: _provinceController,
-        postalCodeController: _postalCodeController,
-        countryController: _countryController,
-        isRequired: true,
-        errorText: errors['address'],
-        onAddressErrorCleared: () => clearError('address'),
+      SheetFocusScroll(
+        focusNode: _errorFocus.nodeFor('address'),
+        child: ClientAddressSection(
+          addressController: _addressController,
+          aptController: _aptController,
+          cityController: _cityController,
+          provinceController: _provinceController,
+          postalCodeController: _postalCodeController,
+          countryController: _countryController,
+          isRequired: true,
+          errorText: errors['address'],
+          onAddressErrorCleared: () => clearError('address'),
+        ),
       ),
     ],
     const SizedBox(height: AppSpacing.sp16),

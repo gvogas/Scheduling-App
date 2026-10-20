@@ -130,24 +130,22 @@ class AppointmentCard extends ConsumerWidget {
             type: MaterialType.transparency,
             child: InkWell(
               onTap: onTap,
-              child: Semantics(
-                label: model.semanticsLabel,
-                excludeSemantics: true,
-                // IntrinsicHeight forbids LayoutBuilder/FittedBox descendants.
-                child: IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(
+              // IntrinsicHeight forbids LayoutBuilder/FittedBox descendants.
+              child: IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    ExcludeSemantics(
+                      child: Container(
                         width: emphasizeToday ? 3 : 4,
                         decoration: _crewBarDecoration(
                           theme,
                           _barColors(theme),
                         ),
                       ),
-                      Expanded(child: _body(theme, model)),
-                    ],
-                  ),
+                    ),
+                    Expanded(child: _body(theme, model)),
+                  ],
                 ),
               ),
             ),
@@ -187,37 +185,45 @@ class AppointmentCard extends ConsumerWidget {
       showChip: showStatusChip,
     );
 
+    Widget merged(Widget child) => Semantics(
+      label: model.semanticsLabel,
+      excludeSemantics: true,
+      child: child,
+    );
+
     if (model.collapsed) {
-      return ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: _kClosedMinHeight),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              titleRow,
-              const SizedBox(height: 5),
-              // Its own line: sharing a Row with the client name split the
-              // width evenly, so "· Day 3 of 5" was ellipsised on exactly the
-              // multi-day rows that need the counter to be distinguishable.
-              Text(
-                model.timeLabel,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: theme.monoType.data.copyWith(
-                  color: theme.palette.textTertiary,
-                ),
-              ),
-              if (crew.isNotEmpty || model.metaLine.isNotEmpty) ...[
+      return merged(
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: _kClosedMinHeight),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                titleRow,
                 const SizedBox(height: 5),
-                _CrewRow(
-                  crew: crew,
-                  label: model.metaLine,
-                  compact: model.compact,
+                // Its own line: sharing a Row with the client name split the
+                // width evenly, so "· Day 3 of 5" was ellipsised on exactly the
+                // multi-day rows that need the counter to be distinguishable.
+                Text(
+                  model.timeLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.monoType.data.copyWith(
+                    color: theme.palette.textTertiary,
+                  ),
                 ),
+                if (crew.isNotEmpty || model.metaLine.isNotEmpty) ...[
+                  const SizedBox(height: 5),
+                  _CrewRow(
+                    crew: crew,
+                    label: model.metaLine,
+                    compact: model.compact,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
       );
@@ -231,16 +237,27 @@ class AppointmentCard extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          titleRow,
-          const SizedBox(height: 7),
-          Text(model.timeLabel, style: theme.monoType.data),
-          if (model.metaLine.isNotEmpty) ...[
-            const SizedBox(height: 7),
-            _CrewRow(crew: crew, label: model.metaLine, compact: model.compact),
-          ],
+          merged(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                titleRow,
+                const SizedBox(height: 7),
+                Text(model.timeLabel, style: theme.monoType.data),
+                if (model.metaLine.isNotEmpty) ...[
+                  const SizedBox(height: 7),
+                  _CrewRow(
+                    crew: crew,
+                    label: model.metaLine,
+                    compact: model.compact,
+                  ),
+                ],
+              ],
+            ),
+          ),
           if (footer != null) ...[
             const SizedBox(height: AppSpacing.sp8),
-            footer!,
+            Semantics(container: true, child: footer),
           ],
         ],
       ),

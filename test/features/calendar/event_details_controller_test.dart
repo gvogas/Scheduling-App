@@ -14,6 +14,7 @@ import 'package:scheduling/features/calendar/application/appointments_providers.
 import 'package:scheduling/features/calendar/application/event_details_controller.dart';
 import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
+import 'package:scheduling/features/calendar/domain/calendar_failure.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/domain/models/repeat_interval.dart';
@@ -106,7 +107,11 @@ void main() {
       employees.watchEmployees,
     ).thenAnswer((_) => Stream.value(const [_employeeA, _employeeB]));
     when(
-      () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      () => appointments.updateAppointment(
+        any(),
+        base: any(named: 'base'),
+        checkConflicts: any(named: 'checkConflicts'),
+      ),
     ).thenAnswer((_) async {});
     when(
       () => appointments.updateAppointmentStatus(
@@ -526,7 +531,11 @@ void main() {
       );
       expect(outcome, isA<EventDetailsInvalid>());
       verifyNever(
-        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       );
     });
 
@@ -546,7 +555,11 @@ void main() {
       expect(outcome, isA<EventDetailsSaveBusy>());
       expect(readState().isSaving, isFalse);
       verifyNever(
-        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       );
     });
 
@@ -557,7 +570,11 @@ void main() {
       await waitForSeed();
       final gate = Completer<void>();
       when(
-        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).thenAnswer((_) => gate.future);
 
       final c = readNotifier();
@@ -580,7 +597,11 @@ void main() {
       gate.complete();
       await first;
       verify(
-        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).called(1);
     });
 
@@ -663,7 +684,11 @@ void main() {
       expect(saved.endTime, DateTime(2026, 5, 10, 16));
 
       verify(
-        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).called(1);
     });
 
@@ -793,7 +818,11 @@ void main() {
       expect(outcome, isA<EventDetailsInvalid>());
       expect(readState().errors, contains('client'));
       verifyNever(
-        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       );
     });
 
@@ -838,6 +867,7 @@ void main() {
           copies: any(named: 'copies'),
           base: any(named: 'base'),
           deleteBases: any(named: 'deleteBases'),
+          checkConflicts: any(named: 'checkConflicts'),
         ),
       ).thenAnswer((_) async {});
 
@@ -867,6 +897,7 @@ void main() {
           copies: captureAny(named: 'copies'),
           base: any(named: 'base'),
           deleteBases: any(named: 'deleteBases'),
+          checkConflicts: any(named: 'checkConflicts'),
         ),
       ).captured;
       expect((captured[1] as List).cast<String>(), isEmpty);
@@ -891,7 +922,11 @@ void main() {
       );
       expect((second as EventDetailsSaved).futureBookings, 0);
       verify(
-        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).called(1);
     });
 
@@ -905,6 +940,7 @@ void main() {
           copies: any(named: 'copies'),
           base: any(named: 'base'),
           deleteBases: any(named: 'deleteBases'),
+          checkConflicts: any(named: 'checkConflicts'),
         ),
       ).thenAnswer((_) async {});
 
@@ -954,6 +990,7 @@ void main() {
           copies: captureAny(named: 'copies'),
           base: any(named: 'base'),
           deleteBases: any(named: 'deleteBases'),
+          checkConflicts: any(named: 'checkConflicts'),
         ),
       ).captured;
       // The edited doc itself and the done visit are preserved.
@@ -981,26 +1018,21 @@ void main() {
         ],
       );
       when(
-        () => appointments.findClashingAppointments(
-          employeeIds: any(named: 'employeeIds'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
+        () => appointments.rewriteSeries(
+          updated: any(named: 'updated'),
+          deleteIds: any(named: 'deleteIds'),
+          copies: any(named: 'copies'),
+          base: any(named: 'base'),
+          deleteBases: any(named: 'deleteBases'),
+          checkConflicts: true,
         ),
-      ).thenAnswer((invocation) async {
-        final start = invocation.namedArguments[#start] as DateTime;
-        if (start != DateTime(2027, 5, 10, 9)) {
-          return const <AppointmentRecord>[];
-        }
-        return [
-          AppointmentRecord(
-            id: 'external',
-            startTime: start,
-            endTime: start.add(const Duration(hours: 1)),
-            employeeIds: const ['e1'],
-            employeeNames: const ['Alex'],
-          ),
-        ];
-      });
+      ).thenThrow(
+        CalendarFailureEmployeesBusy(
+          busyEmployeeIds: const ['e1'],
+          start: DateTime(2027, 5, 10, 9),
+          end: DateTime(2027, 5, 10, 10),
+        ),
+      );
 
       container.listen(
         eventDetailsControllerProvider(EventDetailsKey(repeating)),
@@ -1024,15 +1056,6 @@ void main() {
       final busy = outcome as EventDetailsBusyEmployees;
       expect(busy.busyEmployees, const [_employeeA]);
       expect(busy.start, DateTime(2027, 5, 10, 9));
-      verifyNever(
-        () => appointments.rewriteSeries(
-          updated: any(named: 'updated'),
-          deleteIds: any(named: 'deleteIds'),
-          copies: any(named: 'copies'),
-          base: any(named: 'base'),
-          deleteBases: any(named: 'deleteBases'),
-        ),
-      );
       expect(
         container
             .read(eventDetailsControllerProvider(EventDetailsKey(repeating)))
@@ -1044,8 +1067,11 @@ void main() {
     test('applyToSeries propagates details + time of day to future visits, '
         'keeping each visit date', () async {
       when(
-        () =>
-            appointments.updateAppointments(any(), bases: any(named: 'bases')),
+        () => appointments.updateAppointments(
+          any(),
+          bases: any(named: 'bases'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).thenAnswer((_) async {});
 
       final repeating = _appointment.copyWith(
@@ -1104,6 +1130,7 @@ void main() {
         () => appointments.updateAppointments(
           captureAny(),
           bases: any(named: 'bases'),
+          checkConflicts: any(named: 'checkConflicts'),
         ),
       ).captured.single;
       final batch = (captured as List).cast<AppointmentRecord>();
@@ -1130,6 +1157,7 @@ void main() {
           copies: any(named: 'copies'),
           base: any(named: 'base'),
           deleteBases: any(named: 'deleteBases'),
+          checkConflicts: any(named: 'checkConflicts'),
         ),
       );
     });
@@ -1147,18 +1175,18 @@ void main() {
         ],
       );
       when(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-          excludeAppointmentId: any(named: 'excludeAppointmentId'),
+        () => appointments.updateAppointments(
+          any(),
+          bases: any(named: 'bases'),
+          checkConflicts: true,
         ),
-      ).thenAnswer((invocation) async {
-        final start = invocation.namedArguments[#start] as DateTime;
-        return start == DateTime(2026, 11, 10, 8)
-            ? const [_employeeA]
-            : const <EmployeeRecord>[];
-      });
+      ).thenThrow(
+        CalendarFailureEmployeesBusy(
+          busyEmployeeIds: const ['e1'],
+          start: DateTime(2026, 11, 10, 8),
+          end: DateTime(2026, 11, 10, 9),
+        ),
+      );
 
       container.listen(
         eventDetailsControllerProvider(EventDetailsKey(repeating)),
@@ -1185,10 +1213,8 @@ void main() {
       final busy = outcome as EventDetailsBusyEmployees;
       expect(busy.start, DateTime(2026, 11, 10, 8));
       expect(busy.end, DateTime(2026, 11, 10, 9));
-      verifyNever(
-        () =>
-            appointments.updateAppointments(any(), bases: any(named: 'bases')),
-      );
+      expect(busy.busyEmployees, const [_employeeA]);
+      expect(readState().isSaving, isFalse);
     });
 
     test('applyToSeries false edits only this visit', () async {
@@ -1216,12 +1242,19 @@ void main() {
 
       expect((outcome as EventDetailsSaved).updatedSiblings, 0);
       verify(
-        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).called(1);
       verifyNever(() => appointments.getSeries(any()));
       verifyNever(
-        () =>
-            appointments.updateAppointments(any(), bases: any(named: 'bases')),
+        () => appointments.updateAppointments(
+          any(),
+          bases: any(named: 'bases'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       );
     });
 
@@ -1266,6 +1299,7 @@ void main() {
           copies: any(named: 'copies'),
           base: any(named: 'base'),
           deleteBases: any(named: 'deleteBases'),
+          checkConflicts: any(named: 'checkConflicts'),
         ),
       );
     });
@@ -1287,6 +1321,7 @@ void main() {
           copies: any(named: 'copies'),
           base: any(named: 'base'),
           deleteBases: any(named: 'deleteBases'),
+          checkConflicts: any(named: 'checkConflicts'),
         ),
       );
     });
@@ -1295,7 +1330,11 @@ void main() {
       'returns EventDetailsFailed and resets isSaving when repo throws',
       () async {
         when(
-          () => appointments.updateAppointment(any(), base: any(named: 'base')),
+          () => appointments.updateAppointment(
+            any(),
+            base: any(named: 'base'),
+            checkConflicts: any(named: 'checkConflicts'),
+          ),
         ).thenThrow(Exception('boom'));
         readNotifier();
         await waitForSeed();
@@ -1435,7 +1474,11 @@ void main() {
         expect(outcome, isA<EventDetailsFailed>());
         expect((outcome as EventDetailsFailed).error, isA<SocketException>());
         verifyNever(
-          () => appointments.updateAppointment(any(), base: any(named: 'base')),
+          () => appointments.updateAppointment(
+            any(),
+            base: any(named: 'base'),
+            checkConflicts: any(named: 'checkConflicts'),
+          ),
         );
         expect(
           offline.read(eventDetailsControllerProvider(key)).isSaving,
@@ -1536,13 +1579,18 @@ void main() {
     test('save returns the busy outcome and clears the saving flag', () async {
       await waitForSeed();
       when(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-          excludeAppointmentId: any(named: 'excludeAppointmentId'),
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: true,
         ),
-      ).thenAnswer((_) async => const [_employeeA]);
+      ).thenThrow(
+        CalendarFailureEmployeesBusy(
+          busyEmployeeIds: const ['e1'],
+          start: _appointment.startTime,
+          end: _appointment.endTime,
+        ),
+      );
 
       final outcome = await readNotifier().save(
         _appointment,
@@ -1553,11 +1601,11 @@ void main() {
       );
 
       expect(outcome, isA<EventDetailsBusyEmployees>());
+      expect((outcome as EventDetailsBusyEmployees).busyEmployees, const [
+        _employeeA,
+      ]);
       // The flag must clear or Save stays stuck once the dialog is dismissed.
       expect(readState().isSaving, isFalse);
-      verifyNever(
-        () => appointments.updateAppointment(any(), base: any(named: 'base')),
-      );
     });
 
     test('a PERSONAL save never returns the busy outcome — the clash alert '
@@ -1566,13 +1614,12 @@ void main() {
       // would give.
       await waitForSeed();
       when(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-          excludeAppointmentId: any(named: 'excludeAppointmentId'),
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: true,
         ),
-      ).thenAnswer((_) async => const [_employeeA]);
+      ).thenThrow(StateError('must not be consulted'));
 
       readNotifier().setPersonal(value: true);
       final outcome = await readNotifier().save(
@@ -1584,40 +1631,30 @@ void main() {
       );
 
       expect(outcome, isA<EventDetailsSaved>());
-      verifyNever(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-          excludeAppointmentId: any(named: 'excludeAppointmentId'),
-        ),
-      );
+      verify(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      ).called(1);
     });
 
-    test(
-      'excludes the appointment being edited from its own conflicts',
-      () async {
-        await waitForSeed();
+    test('a client-job save asks the server for the conflict check', () async {
+      await waitForSeed();
 
-        await readNotifier().save(
-          _appointment,
-          title: 'Job',
-          address: '',
-          notes: '',
-          materialsNeeded: '',
-        );
+      await readNotifier().save(
+        _appointment,
+        title: 'Job',
+        address: '',
+        notes: '',
+        materialsNeeded: '',
+      );
 
-        final captured = verify(
-          () => appointments.findBusyEmployees(
-            candidates: any(named: 'candidates'),
-            start: any(named: 'start'),
-            end: any(named: 'end'),
-            excludeAppointmentId: captureAny(named: 'excludeAppointmentId'),
-          ),
-        ).captured.single;
-        expect(captured, 'appt-1');
-      },
-    );
+      verify(
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: true,
+        ),
+      ).called(1);
+    });
 
     test('forceBusy skips the conflict check and writes', () async {
       await waitForSeed();
@@ -1632,14 +1669,9 @@ void main() {
       );
 
       expect(outcome, isA<EventDetailsSaved>());
-      verifyNever(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-          excludeAppointmentId: any(named: 'excludeAppointmentId'),
-        ),
-      );
+      verify(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      ).called(1);
     });
   });
 

@@ -137,6 +137,28 @@ void main() {
       expect(notices.single, isA<NoticeSuccess>());
     });
 
+    testWidgets('the success notice carries an Undo that reverses the toggle', (
+      tester,
+    ) async {
+      // The one action the rules allow on a notice: archive/unarchive is a
+      // symmetric toggle, and a full swipe was the one destructive gesture
+      // with no second chance.
+      final repo = await pump(tester);
+
+      await tester.tap(find.text('archive'));
+      await tester.pumpAndSettle();
+      final action = notices.single.action;
+      expect(action?.label, 'Undo');
+
+      await action!.onPressed();
+      await tester.pumpAndSettle();
+
+      expect(repo.calls, ['archive:c1:true', 'archive:c1:false']);
+      // The host hears the reversal too, so an in-place list removal is undone.
+      expect(log, ['archived:c1:true', 'archived:c1:false']);
+      expect(notices, hasLength(1), reason: 'an undo raises no second notice');
+    });
+
     testWidgets('a failure notices and does NOT call back', (tester) async {
       await pump(tester, onArchive: () async => throw Exception('boom'));
 

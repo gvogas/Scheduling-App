@@ -88,9 +88,7 @@ void main() {
       final errors = validate(
         name: 'Acme',
         address: '1 Main St',
-        additionalContacts: const [
-          ClientContact(name: 'Bob', phone: 'abc'),
-        ],
+        additionalContacts: const [ClientContact(name: 'Bob', phone: 'abc')],
       );
 
       expect(errors['contact_0_phone'], isNotNull);

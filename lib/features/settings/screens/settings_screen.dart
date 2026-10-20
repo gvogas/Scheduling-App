@@ -33,10 +33,9 @@ import 'package:scheduling/features/presence/application/presence_sync_controlle
 import 'package:scheduling/features/settings/application/app_info_provider.dart';
 import 'package:scheduling/features/settings/application/app_lock_provider.dart';
 import 'package:scheduling/features/settings/application/my_details_providers.dart';
-import 'package:scheduling/features/settings/screens/location_sharing_screen.dart';
-import 'package:scheduling/features/settings/screens/text_size_screen.dart';
 import 'package:scheduling/features/settings/widgets/cards/account_settings_card.dart';
 import 'package:scheduling/features/settings/widgets/cards/appearance_settings_card.dart';
+import 'package:scheduling/features/settings/widgets/cards/delete_account_card.dart';
 import 'package:scheduling/features/settings/widgets/cards/legal_settings_card.dart';
 import 'package:scheduling/features/settings/widgets/cards/notifications_settings_card.dart';
 import 'package:scheduling/features/settings/widgets/cards/security_settings_card.dart';
@@ -196,11 +195,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       setState(() => _selectedDetail = _SettingsDetail.textSize);
       return;
     }
-    await Navigator.push<void>(
+    await Navigator.pushNamed(
       context,
-      MaterialPageRoute(
-        builder: (_) =>
-            TextSizeScreen(isAdmin: _isAdmin, employeeId: widget.employeeId),
+      AppRoutes.textSize,
+      arguments: SettingsDetailArgs(
+        isAdmin: _isAdmin,
+        employeeId: widget.employeeId,
       ),
     );
     if (mounted) setState(() {});
@@ -211,13 +211,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       setState(() => _selectedDetail = _SettingsDetail.locationSharing);
       return;
     }
-    await Navigator.push<void>(
+    await Navigator.pushNamed(
       context,
-      MaterialPageRoute(
-        builder: (_) => LocationSharingScreen(
-          isAdmin: _isAdmin,
-          employeeId: widget.employeeId,
-        ),
+      AppRoutes.locationSharing,
+      arguments: SettingsDetailArgs(
+        isAdmin: _isAdmin,
+        employeeId: widget.employeeId,
       ),
     );
     if (mounted) setState(() {});
@@ -468,11 +467,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
       ),
     ),
     const SizedBox(height: AppSpacing.sp12),
-    AccountSettingsCard(
-      isBusy: isAccountExitBusy,
-      onSignOut: signOut,
-      onDeleteAccount: confirmDeleteAccount,
-    ),
+    AccountSettingsCard(isBusy: isAccountExitBusy, onSignOut: signOut),
     const SizedBox(height: AppSpacing.sp24),
     SettingsSectionHeader(label: context.l10n.settings_security.toUpperCase()),
     SecuritySettingsCard(
@@ -530,6 +525,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
     const SizedBox(height: AppSpacing.sp24),
     SettingsSectionHeader(label: context.l10n.settings_help.toUpperCase()),
     _helpCard(scheme),
+    const SizedBox(height: AppSpacing.sp24),
+    // Last on purpose: the irreversible action sits apart from Log out.
+    DeleteAccountCard(
+      isBusy: isAccountExitBusy,
+      onDeleteAccount: confirmDeleteAccount,
+    ),
     const SizedBox(height: AppSpacing.sp24),
   ];
 }

@@ -55,9 +55,13 @@ class DraggableSheetFrame extends StatelessWidget {
 }
 
 class SheetFocusScroll extends StatefulWidget {
-  const SheetFocusScroll({required this.child, super.key});
+  const SheetFocusScroll({required this.child, super.key, this.focusNode});
 
   final Widget child;
+
+  /// Lets a host `requestFocus()` a non-text field (a picker, a panel) so a
+  /// validation error scrolls into view; the host owns and disposes it.
+  final FocusNode? focusNode;
 
   @override
   State<SheetFocusScroll> createState() => _SheetFocusScrollState();
@@ -81,6 +85,8 @@ class _SheetFocusScrollState extends State<SheetFocusScroll> {
   @override
   Widget build(BuildContext context) {
     return Focus(
+      focusNode: widget.focusNode,
+      skipTraversal: widget.focusNode != null,
       onFocusChange: (hasFocus) {
         if (hasFocus) _ensureVisible(++_focusRequest);
       },
@@ -140,10 +146,7 @@ class DetailSheetListView extends StatelessWidget {
         bottom: bottomInset + bottomPadding,
       ),
       children: [
-        if (showHandle) ...[
-          const _SheetHandle(),
-          SizedBox(height: handleGap),
-        ],
+        if (showHandle) ...[const _SheetHandle(), SizedBox(height: handleGap)],
         ...children,
       ],
     );

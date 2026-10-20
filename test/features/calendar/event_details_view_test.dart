@@ -87,17 +87,12 @@ void main() {
       () => appointments.onLocalWrite,
     ).thenAnswer((_) => const Stream.empty());
     when(
-      () => appointments.updateAppointment(any(), base: any(named: 'base')),
-    ).thenAnswer((_) async {});
-    // The edit flow now runs a conflict check before writing; no clash here.
-    when(
-      () => appointments.findBusyEmployees(
-        candidates: any(named: 'candidates'),
-        start: any(named: 'start'),
-        end: any(named: 'end'),
-        excludeAppointmentId: any(named: 'excludeAppointmentId'),
+      () => appointments.updateAppointment(
+        any(),
+        base: any(named: 'base'),
+        checkConflicts: any(named: 'checkConflicts'),
       ),
-    ).thenAnswer((_) async => const <EmployeeRecord>[]);
+    ).thenAnswer((_) async {});
   });
 
   // Tall viewport so the whole lazily-built edit form lays out without scrolling.
@@ -195,6 +190,7 @@ void main() {
               () => appointments.updateAppointment(
                 captureAny(),
                 base: any(named: 'base'),
+                checkConflicts: any(named: 'checkConflicts'),
               ),
             ).captured.single
             as AppointmentRecord;

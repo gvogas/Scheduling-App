@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/notices/app_notice.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
@@ -21,6 +22,8 @@ import 'package:scheduling/features/settings/widgets/sections/my_availability_se
 import 'package:scheduling/features/settings/widgets/sections/my_identity_section.dart';
 import 'package:scheduling/features/settings/widgets/sections/my_scheduling_section.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/feedback/offline_form_notice.dart';
+import 'package:scheduling/shared/widgets/feedback/warning_note.dart';
 
 class _MockRepo extends Mock implements EmployeesRepository {}
 
@@ -112,6 +115,55 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('a cold open shows one spinner, and only after 300 ms', (
+    tester,
+  ) async {
+    // Three sequential full-screen spinners used to flash in a row here.
+    when(
+      () => repo.watchEmergencyContact('me-1'),
+    ).thenAnswer((_) => Stream.value(EmergencyContact.empty));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          employeesRepositoryProvider.overrideWithValue(repo),
+          isOfflineProvider.overrideWithValue(false),
+          activeUserIdentityProvider.overrideWith(
+            (ref) => Completer<Never>().future,
+          ),
+          myEmployeeRecordProvider.overrideWith((ref) => null),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: MyDetailsScreen(),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byType(AdaptiveProgressIndicator), findsNothing);
+
+    await tester.pump(const Duration(milliseconds: 200));
+
+    expect(find.byType(AdaptiveProgressIndicator), findsOneWidget);
+  });
+
+  testWidgets('offline, the form carries the offline notice', (tester) async {
+    await pump(tester, offline: true);
+
+    expect(
+      find.descendant(
+        of: find.byType(OfflineFormNotice),
+        matching: find.byType(WarningNote),
+      ),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('renders the identity and availability sections', (tester) async {
     await pump(tester);

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/adaptive/adaptive_pickers.dart';
@@ -64,6 +65,10 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
   );
   late final Debouncer _clientSearchDebounce;
   late final _provider = addEventControllerProvider(widget.initialDate);
+  final _errorFocus = appointmentFormErrorFocus();
+
+  /// The form as seeded; null until a prefill has landed (clean meanwhile).
+  List<Object?>? _baseline;
 
   // This sheet is only reachable from admin-gated surfaces.
   final _tour = TourSteps(
@@ -87,7 +92,11 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
       _controllers.endDate.text = _controllers.date.text;
     }
     final prefill = widget.prefill;
-    if (prefill != null) _seedFrom(prefill);
+    if (prefill != null) {
+      _seedFrom(prefill);
+    } else {
+      _baseline = _fingerprint(ref.read(_provider));
+    }
     // A sheet route carries no name, so the observer skips it — the form
     // reports itself here. Without this the create funnel has no entry step and
     // only its successful completions are visible.
@@ -112,14 +121,45 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
     // Defer until the family provider is built.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      unawaited(_notifier.applyPrefill(prefill));
+      unawaited(
+        _notifier.applyPrefill(prefill).then((_) {
+          if (mounted) _baseline = _fingerprint(ref.read(_provider));
+        }),
+      );
     });
+  }
+
+  /// Everything the person can change, compared against [_baseline].
+  List<Object?> _fingerprint(AddEventState state) => [
+    _controllers.title.text,
+    _controllers.notes.text,
+    _controllers.materials.text,
+    _controllers.address.text,
+    _controllers.clientSearch.text,
+    state.selectedClient?.id,
+    state.selectedEmployees.map((e) => e.id).join(','),
+    state.selectedDate,
+    state.endDate,
+    state.selectedStartTime,
+    state.selectedEndTime,
+    state.repeat,
+    state.isPersonal,
+    state.isDayOff,
+    state.isAllDay,
+    state.selectedImages.length,
+  ];
+
+  bool _isDirty() {
+    final baseline = _baseline;
+    return baseline != null &&
+        !listEquals(baseline, _fingerprint(ref.read(_provider)));
   }
 
   @override
   void dispose() {
     _clientSearchDebounce.dispose();
     _controllers.dispose();
+    _errorFocus.dispose();
     super.dispose();
   }
 
@@ -280,8 +320,11 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
                 error: error,
               ),
             );
-      // These outcomes already surfaced or intentionally stay silent.
-      case AddEventInvalid() || AddEventBusyEmployees() || AddEventBusy():
+      // Save sits in the fixed header, so the errored field may be off-screen.
+      case AddEventInvalid():
+        _errorFocus.focusFirstError(ref.read(_provider).errors.keys);
+      // Already surfaced by the conflict prompt, or a skipped duplicate.
+      case AddEventBusyEmployees() || AddEventBusy():
         break;
     }
   }
@@ -300,6 +343,7 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
     return AppointmentFormFields(
       controllers: _controllers,
       tourWrap: _tour.stepIf,
+      errorFocus: _errorFocus,
       allEmployees: allEmployees,
       rosterStatus: rosterStatusOf(roster),
       onRetryRoster: () => ref.invalidate(assignableEmployeesProvider),
@@ -388,6 +432,7 @@ class _AddEventSheetState extends ConsumerState<AddEventSheet>
         primaryLabel: context.l10n.common_save,
         isBusy: state.isSubmitting,
         onPrimary: _submit,
+        isDirty: _isDirty,
         headerTourWrap: (child) => _tour.stepIf(TourStepId.apptSave, child),
         scrollCacheExtent: kTourScrollCacheExtent,
         children: [
