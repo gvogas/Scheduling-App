@@ -190,6 +190,16 @@ describe("server appointment transaction", () => {
             .toEqual({millisecondsSinceEpoch: 1234});
       });
 
+  test("every stored timestamp is serialized, not only the schedule keys",
+      async () => {
+        const db = database({"appointments/a": {...stored(),
+          clientSourceUpdatedAt: Timestamp.fromMillis(5678)}});
+        const result = await commitAppointmentEdits(db, {edits: [{id: "a",
+          base: form(), data: form({notes: "mine"})}]});
+        expect(result.appointments[0].data.clientSourceUpdatedAt)
+            .toEqual({millisecondsSinceEpoch: 5678});
+      });
+
   test.each(["done", "completed"])(
       "reopening a %s job deletes its server-owned completedAt",
       async (status) => {

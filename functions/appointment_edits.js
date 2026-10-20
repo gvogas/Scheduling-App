@@ -6,7 +6,7 @@ const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const {assertAdminCall, enforceDurableRateLimit,
   requireDocId} = require("./security");
 const {appointmentHistoryScopes} = require("./search_tokens");
-const {toMillis, isCompletedStatus} = require("./time_utils");
+const {isCompletedStatus, serializeValue} = require("./time_utils");
 const {readEditableRecord, appointmentEditPatch,
   validateEditedAppointment, fieldValue, FIELDS} =
   require("./appointment_edit_policy");
@@ -109,14 +109,7 @@ async function commitAppointmentEdits(
             createdAt: FieldValue.serverTimestamp()});
         }
       }
-      const data = {...next};
-      for (const key of ["startTime", "endTime", "startedAt", "completedAt",
-        "createdAt", "updatedAt"]) {
-        if (data[key] != null) {
-          data[key] = {millisecondsSinceEpoch: toMillis(data[key])};
-        }
-      }
-      records.push({id: command.id, data});
+      records.push({id: command.id, data: serializeValue(next)});
     }
     return {appointments: records};
   });

@@ -62,8 +62,8 @@ const {
   searchClients,
   searchHistory,
   findAppointmentConflicts,
-  serializeValue,
 } = require("../indexed_search");
+const {serializeValue} = require("../time_utils");
 
 const UID = "caller-uid";
 
@@ -352,6 +352,15 @@ describe("searchClients", () => {
     expect(db.probe()[0].where).toContainEqual(
         ["searchTokens", "array-contains", "p:5145551234"]);
     expect(out.clients[0].id).toBe("exact");
+  });
+
+  test("a number stored with its leading 1 still scores as exact", async () => {
+    getFirestore.mockReturnValue(clientsDb([
+      {id: "a", name: "Abel", phone: "(514) 555-1234 ext 9"},
+      {id: "zed", name: "Zed", phone: "1-514-555-1234"},
+    ]));
+    const out = await searchClients.run(req({query: "5145551234"}));
+    expect(out.clients[0].id).toBe("zed");
   });
 
   test("a probe hit already in the window is counted once", async () => {

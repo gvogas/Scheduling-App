@@ -111,6 +111,30 @@ void main() {
     expect(find.byType(ImageViewer), findsNothing);
   });
 
+  testWidgets('a photo that failed to load disables Save and Share', (
+    tester,
+  ) async {
+    final broken = MemoryImage(Uint8List.fromList(const [0, 1, 2, 3]));
+    await tester.runAsync(() async {
+      await _open(
+        tester,
+        images: [MemoryImage(_kTransparentPng), broken],
+        initialIndex: 1,
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    });
+    await tester.pumpAndSettle();
+    VoidCallback? action(IconData icon) => tester
+        .widget<IconButton>(find.widgetWithIcon(IconButton, icon))
+        .onPressed;
+
+    expect([action(Icons.save_alt), action(Icons.ios_share)], [null, null]);
+
+    await tester.drag(find.byType(PageView), const Offset(500, 0));
+    await tester.pumpAndSettle();
+    expect(action(Icons.save_alt), isNotNull);
+  });
+
   test('the refused-photo stand-in is a real image, never empty bytes', () {
     // An empty MemoryImage throws out of the decoder; a blank slot is wanted.
     expect(refusedImage.bytes, isNotEmpty);

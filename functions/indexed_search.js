@@ -9,7 +9,7 @@ const {onCall, HttpsError} = require("firebase-functions/v2/https");
 const logger = require("firebase-functions/logger");
 const {getFirestore} = require("firebase-admin/firestore");
 
-const {clientDisplayName} = require("./client_name_utils");
+const {clientDisplayName, digitsOf} = require("./client_name_utils");
 const {
   APP_CHECK,
   assertActiveCall,
@@ -26,6 +26,7 @@ const {
 } = require("./search_tokens");
 const {
   isTerminalStatus,
+  serializeValue,
   toMillis,
 } = require("./time_utils");
 const {
@@ -50,28 +51,6 @@ const CONFLICT_RATE_MAX = 250;
 const CONFLICT_RATE_WINDOW_MS = 60_000;
 const MIN_SEARCHABLE_MILLIS = Date.UTC(2020, 0, 1);
 const MAX_SEARCHABLE_MILLIS = Date.UTC(2100, 0, 1);
-
-/**
- * Converts Firestore values to JSON values the Flutter callable SDK can parse.
- * @param {*} value Raw Firestore/Admin SDK value.
- * @return {*}
- */
-function serializeValue(value) {
-  if (value == null) return value;
-  if (typeof value.toMillis === "function") {
-    return {millisecondsSinceEpoch: value.toMillis()};
-  }
-  if (value instanceof Date) {
-    return {millisecondsSinceEpoch: value.getTime()};
-  }
-  if (Array.isArray(value)) return value.map(serializeValue);
-  if (typeof value === "object") {
-    return Object.fromEntries(
-        Object.entries(value).map(([k, v]) => [k, serializeValue(v)]),
-    );
-  }
-  return value;
-}
 
 /**
  * @param {!Object} doc Query document.
@@ -132,7 +111,7 @@ const searchClients = onCall(APP_CHECK, async (req) => {
     });
   }
   const queryText = normalize(query);
-  const queryDigits = query.replace(/\D/g, "");
+  const queryDigits = digitsOf(query);
   const scored = [];
   const seen = new Set();
   for (const doc of [...probeSnap.docs, ...windowSnap.docs]) {
@@ -141,7 +120,7 @@ const searchClients = onCall(APP_CHECK, async (req) => {
     const data = doc.data() || {};
     if (!recordMatchesQuery(data, query)) continue;
     const exactPhone = queryDigits && [data.phone, data.mobile].some((value) =>
-      String(value || "").replace(/\D/g, "") === queryDigits);
+      digitsOf(value) === queryDigits);
     scored.push({
       score: exactPhone || normalize(clientDisplayName(data)) === queryText ?
         0 : 1,
@@ -401,5 +380,4 @@ module.exports = {
   searchHistory,
   findAppointmentConflicts,
   blocksProposedWindow,
-  serializeValue,
 };

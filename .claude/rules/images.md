@@ -26,7 +26,7 @@ Loaded when working on the image pipeline. Root context: `../../CLAUDE.md`.
 - Let an entry with no `storagePath` resolve to empty bytes: `load` returns early on the empty key without touching either cache. Keep the rejection/transport branch only to say which happened in the log, and cache neither result — entitlement and the network can change mid-session. (ADR-0001, ADR-0002)
 - Keep a stable provider slot for every photo, including pending/refused ones. `AppointmentStorageImage` retains only its Storage handle and image-session generation; visible thumbnails/slides resolve independently. The viewer includes remote handles before their bytes arrive, so new-file offsets use that provider count. Do not restore all-photo byte retention or a load-all barrier. (ADR-0010; audit T14)
 - Never render a stored photo through a bare `Image.memory` with no cache bound: the strip decodes through `cacheWidth`/`cacheHeight` and the carousel through `ResizeImage` (~0.3 MB vs ~10 MB); only the full-screen viewer decodes at full size.
-- Spool Save/Share bytes to `getTemporaryDirectory()` in `ImageViewer._currentImageFile` (a `MemoryImage` has no file), and exclude the 1×1 refusal stand-in by identity, or Save/Share hands over a blank pixel as the job. (ADR-0003)
+- Spool Save/Share bytes to `getTemporaryDirectory()` in `ImageViewer._currentImageFile` (a `MemoryImage` has no file), and exclude the 1×1 refusal stand-in by identity, or Save/Share hands over a blank pixel as the job. Disable Save/Share while the current slide's load has failed (`_unavailable`, set from `errorBuilder`, cleared on a decoded frame) — a refusal is never cached, so a tap would refetch and file a non-fatal. (ADR-0003)
 
 ## Caches
 

@@ -47,6 +47,9 @@ Safer appointment edits and photo uploads, plus a more accurate home-screen widg
   phone field, not just its first seven digits.
 - **The dashboard stays current past midnight** and after you edit an older job.
 - **Save no longer stays greyed out** after switching accounts mid-save.
+- **Save and Share are greyed out on a photo that couldn't load**, instead of
+  failing with an error when tapped.
+- **Searching a phone number puts a client saved with a leading 1 first.**
 
 ## [1.64.2+96] - 2026-10-14
 

@@ -69,6 +69,9 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
   /// Prevents double-launching save or share.
   bool _busy = false;
 
+  /// Pages whose photo failed to load; Save and Share stay off for them.
+  final Set<int> _unavailable = {};
+
   /// Anchors the iPad share-sheet popover to the share button's frame.
   final GlobalKey _shareButtonKey = GlobalKey();
 
@@ -97,6 +100,17 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
     _transformController.dispose();
     _pageController.dispose();
     super.dispose();
+  }
+
+  /// Records a slide's load outcome after the frame that reported it.
+  void _setUnavailable(int index, {required bool unavailable}) {
+    if (_unavailable.contains(index) == unavailable) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        unavailable ? _unavailable.add(index) : _unavailable.remove(index);
+      });
+    });
   }
 
   void _onTransformChanged() {
@@ -256,6 +270,7 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
           ),
           _ViewerOverlay(
             busy: _busy,
+            canExport: !_unavailable.contains(_currentIndex),
             currentIndex: _currentIndex,
             imageCount: widget.images.length,
             shareButtonKey: _shareButtonKey,
@@ -288,11 +303,18 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
             child: Image(
               image: widget.images[index],
               fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => Icon(
-                Icons.broken_image_outlined,
-                color: foreground.withValues(alpha: 0.54),
-                size: 64,
-              ),
+              frameBuilder: (_, child, frame, _) {
+                if (frame != null) _setUnavailable(index, unavailable: false);
+                return child;
+              },
+              errorBuilder: (_, _, _) {
+                _setUnavailable(index, unavailable: true);
+                return Icon(
+                  Icons.broken_image_outlined,
+                  color: foreground.withValues(alpha: 0.54),
+                  size: 64,
+                );
+              },
             ),
           ),
         );
@@ -305,6 +327,7 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
 class _ViewerOverlay extends StatelessWidget {
   const _ViewerOverlay({
     required this.busy,
+    required this.canExport,
     required this.currentIndex,
     required this.imageCount,
     required this.shareButtonKey,
@@ -315,6 +338,7 @@ class _ViewerOverlay extends StatelessWidget {
   });
 
   final bool busy;
+  final bool canExport;
   final int currentIndex;
   final int imageCount;
   final GlobalKey shareButtonKey;
@@ -342,13 +366,13 @@ class _ViewerOverlay extends StatelessWidget {
                   IconButton(
                     tooltip: context.l10n.calendar_savePhoto,
                     icon: const Icon(Icons.save_alt, color: _foreground),
-                    onPressed: busy ? null : onSave,
+                    onPressed: busy || !canExport ? null : onSave,
                   ),
                   IconButton(
                     key: shareButtonKey,
                     tooltip: context.l10n.common_share,
                     icon: const Icon(Icons.ios_share, color: _foreground),
-                    onPressed: busy ? null : onShare,
+                    onPressed: busy || !canExport ? null : onShare,
                   ),
                 ],
               ),
