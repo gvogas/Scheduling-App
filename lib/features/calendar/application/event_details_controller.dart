@@ -704,7 +704,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
           repo: repo,
           candidates: selectedEmployees,
           bookings: [plan.updated, ...plan.copies],
-          excludeAppointmentIds: plan.deleteIds.toSet(),
+          excludeAppointments: plan.deleteBases,
           excludeOwnBookingIds: true,
         );
         if (conflict != null) return _busyEmployees(conflict);

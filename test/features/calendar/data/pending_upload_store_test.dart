@@ -91,6 +91,27 @@ void main() {
     },
   );
 
+  test('corrupt expiry outcomes do not block pruning the queue', () async {
+    SharedPreferences.setMockInitialValues({'expired_photo_uploads': '[1'});
+    final store = PendingUploadStore();
+    final now = DateTime(2026, 10, 18);
+    await store.add(
+      PendingUpload(
+        appointmentId: 'job',
+        batchId: 'batch',
+        paths: const ['/staged/1.jpg'],
+        enqueuedAtMs: now
+            .subtract(const Duration(days: 8))
+            .millisecondsSinceEpoch,
+        ownerUid: 'A',
+        ownerEmployeeId: 'employee-A',
+      ),
+    );
+
+    expect(await store.prune(now: now), hasLength(1));
+    expect((await store.expiredFor('A')).single.appointmentId, 'job');
+  });
+
   test(
     'does not read an unpersisted receipt from the preferences cache',
     () async {
@@ -142,7 +163,10 @@ void main() {
         });
     final store = PendingUploadStore();
 
-    await expectLater(store.clearAll(), throwsStateError);
+    await expectLater(
+      store.clearOwner('uid-1', isCurrent: () => true),
+      throwsStateError,
+    );
 
     expect((await store.load()).single.paths, entry.paths);
   });
@@ -454,23 +478,6 @@ void main() {
       expect(loaded.single.paths, ['/x/1.jpg']);
     },
   );
-
-  test('clearAll returns existing entries and removes the queue', () async {
-    final store = PendingUploadStore();
-    const entry = PendingUpload(
-      appointmentId: 'a1',
-      paths: ['/x/1.jpg'],
-      enqueuedAtMs: 1,
-      ownerUid: 'uid-1',
-      ownerEmployeeId: 'doc-1',
-    );
-    await store.add(entry);
-
-    final cleared = await store.clearAll();
-
-    expect(cleared.single.id, entry.id);
-    expect(await store.load(), isEmpty);
-  });
 
   test('an overlapping add and remove do not erase each other', () async {
     // Every other test here drives ONE mutation at a time, which is exactly

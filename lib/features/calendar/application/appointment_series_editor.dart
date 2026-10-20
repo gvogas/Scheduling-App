@@ -142,12 +142,15 @@ class AppointmentSeriesEditor {
         isPersonal: changed('isPersonal') ? updated.isPersonal : v.isPersonal,
         isDayOff: changed('isDayOff') ? updated.isDayOff : v.isDayOff,
         startTime: changed('startTime') ? copyStart : v.startTime,
-        endTime: changed('startTime') || changed('endTime')
+        endTime: changed('startTime')
             ? occurrenceEnd(
                 originalStart: start,
                 originalEnd: end,
                 copyStart: copyStart,
               )
+            // A sibling keeping its own start shifts its end by the anchor's.
+            : changed('endTime')
+            ? v.endTime.add(end.difference(appointment.endTime))
             : v.endTime,
         // Normalize each sibling's status so legacy values stay writable.
         status: AppointmentStatus.storedRaw(v.status),

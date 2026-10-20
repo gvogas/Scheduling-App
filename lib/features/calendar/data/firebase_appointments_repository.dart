@@ -13,6 +13,7 @@ import 'package:scheduling/core/utils/firestore_parsing.dart';
 import 'package:scheduling/core/utils/retry.dart';
 import 'package:scheduling/features/calendar/data/appointment_field_notes_store.dart';
 import 'package:scheduling/features/calendar/data/appointment_images_store.dart';
+import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
 import 'package:scheduling/features/calendar/domain/appointment_status_values.dart';
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
 import 'package:scheduling/features/calendar/domain/assignee_availability.dart';
@@ -713,6 +714,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     required List<String> employeeIds,
     required List<AppointmentRecord> bookings,
     Set<String> excludeAppointmentIds = const {},
+    List<AppointmentRecord> excludeAppointments = const [],
     bool excludeOwnBookingIds = false,
   }) {
     if (_functions == null) return null;
@@ -720,6 +722,7 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       employeeIds,
       bookings,
       excludeAppointmentIds,
+      excludeAppointments,
       excludeOwnBookingIds,
     );
   }
@@ -727,15 +730,19 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   Future<List<Set<String>>> _findBusyBookingBatch(
     List<String> employeeIds,
     List<AppointmentRecord> bookings,
-    Set<String> excluded,
+    Set<String> excludedIds,
+    List<AppointmentRecord> excludedRecords,
     bool excludeOwn,
   ) async {
-    final lease = _session?.capture();
-    bool current() => _session == null || lease?.isCurrent == true;
+    final current = captureWriteOwner() ?? () => true;
     final result = <Set<String>>[];
     for (var offset = 0; offset < bookings.length; offset += 16) {
       if (!current()) throw StateError('Conflict check session changed');
       final chunk = bookings.skip(offset).take(16).toList();
+      final excluded = {
+        ...excludedIds,
+        ..._idsNear(excludedRecords, chunk),
+      };
       final response = await _functions!
           .httpsCallable('findAppointmentConflicts')
           .call<Map<String, dynamic>>({
@@ -768,6 +775,29 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
       }
     }
     return result;
+  }
+
+  /// Ids of [records] that could overlap a window in [chunk].
+  static Iterable<String> _idsNear(
+    List<AppointmentRecord> records,
+    List<AppointmentRecord> chunk,
+  ) {
+    if (records.isEmpty) return const [];
+    var from = chunk.first.startTime;
+    var to = chunk.first.endTime;
+    for (final booking in chunk) {
+      if (booking.startTime.isBefore(from)) from = booking.startTime;
+      if (booking.endTime.isAfter(to)) to = booking.endTime;
+    }
+    // A record's daily windows end at most a span cap past its start.
+    from = from.subtract(const Duration(days: maxAppointmentSpanDays + 1));
+    return [
+      for (final record in records)
+        if (record.id != null &&
+            record.startTime.isBefore(to) &&
+            record.startTime.isAfter(from))
+          record.id!,
+    ];
   }
 
   @override

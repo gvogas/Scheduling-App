@@ -10,6 +10,44 @@ All notable changes to this project are documented here.
 The `+N` build number after the version (e.g. `1.1.0+5`) is the store version
 code; it increments by one on every store upload regardless of the semver part.
 
+## [1.65.0+97] - 2026-10-20
+
+Safer appointment edits and photo uploads, plus a more accurate home-screen widget.
+
+### Added
+- **Edits made on two phones no longer overwrite each other.** Saving an
+  appointment now keeps changes someone else made to other fields. If you both
+  changed the same thing, the app says the appointment changed elsewhere and
+  keeps your draft so you can review it before saving again.
+- **You're warned before signing out with photos still uploading.** Choose to
+  stay signed in and retry, or discard the waiting photos and continue. Photos
+  that never finish saving are removed after seven days, and the app tells you
+  which appointments to add them to again.
+- **Client search says when there are more matches than it can show.** The
+  count reads "25+" and suggests adding a name, address or more digits to
+  narrow it down.
+
+### Changed
+- **Photos appear one by one** instead of waiting for the whole set, so a job
+  with many photos opens faster. VoiceOver now reads each photo's position and
+  offers to open it full screen.
+- **Booking a long repeating series checks for clashes much faster.**
+- **Editing a whole series changes only what you edited.** A visit you moved
+  or renamed on its own keeps its own time and details.
+
+### Fixed
+- **A photo interrupted mid-upload is no longer lost.** Upload progress is saved
+  before the original is removed, and one stuck photo no longer holds up the
+  rest of the queue.
+- **The home-screen widget keeps showing a job while it's under way** and shows
+  nothing from a previous account after signing out and back in.
+- **Signing out while offline finishes** instead of waiting on the network.
+- **Reopening a completed job clears its finish time.**
+- **Typing a phone number into a client's name moves the whole number** to the
+  phone field, not just its first seven digits.
+- **The dashboard stays current past midnight** and after you edit an older job.
+- **Save no longer stays greyed out** after switching accounts mid-save.
+
 ## [1.64.2+96] - 2026-10-14
 
 Maintenance release.

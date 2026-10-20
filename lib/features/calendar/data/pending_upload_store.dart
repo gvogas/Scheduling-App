@@ -46,6 +46,17 @@ class PendingUpload {
 
   String get id => batchId ?? '${appointmentId}_$enqueuedAtMs';
 
+  /// Photos not yet linked to the job: unsent paths plus append-only receipts.
+  int get unsavedCount => paths.length + uploaded.length;
+
+  /// Every device file this entry may still own.
+  List<String> get localFiles => [
+    ...paths,
+    ...cleanupPaths,
+    ...stagingSources.values,
+    for (final target in stagingSources.keys) '$target.part',
+  ];
+
   PendingUpload copyWith({
     List<String>? paths,
     List<AppointmentImage>? uploaded,
@@ -238,7 +249,7 @@ class PendingUploadStore {
           final prefs = await SharedPreferences.getInstance();
           final outcomes = _readExpiry(prefs);
           for (final entry in pruned) {
-            final count = entry.paths.length + entry.uploaded.length;
+            final count = entry.unsavedCount;
             if (!entry.hasOwner || count == 0) continue;
             outcomes['${entry.ownerUid}/${entry.id}'] = {
               'owner': entry.ownerUid,
@@ -259,11 +270,18 @@ class PendingUploadStore {
     final raw = prefs.getString(_expiryKey);
     if (raw == null) return {};
     try {
-      return (jsonDecode(raw) as Map).cast<String, dynamic>();
+      final decoded = jsonDecode(raw);
+      if (decoded is Map) return decoded.cast<String, dynamic>();
+      _logger.warn('IMG-UPLOAD expiry outcomes were not a JSON map; reset');
     } on FormatException catch (error, stack) {
-      _logger.warn('IMG-UPLOAD expiry outcomes decode failed', error, stack);
-      rethrow;
+      // Unreadable outcomes can't be shown; resetting keeps the drain alive.
+      _logger.warn(
+        'IMG-UPLOAD expiry outcomes decode failed; reset',
+        error,
+        stack,
+      );
     }
+    return {};
   }
 
   Future<List<PhotoUploadExpiry>> expiredFor(String uid) async {
@@ -299,16 +317,6 @@ class PendingUploadStore {
           throw StateError('photo expiry acknowledgment was not saved');
         }
       });
-
-  Future<List<PendingUpload>> clearAll() => _serialized(() async {
-    final entries = await load();
-    if (entries.isEmpty) return const [];
-    final prefs = await SharedPreferences.getInstance();
-    if (!await prefs.remove(_key)) {
-      throw StateError('pending photo queue was not cleared');
-    }
-    return entries;
-  });
 
   Future<List<PendingUpload>> clearOwner(
     String uid, {

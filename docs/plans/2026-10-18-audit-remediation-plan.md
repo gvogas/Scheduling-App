@@ -1,6 +1,6 @@
 # Audit remediation plan — priority and delivery order
 
-**Status: IN PROGRESS — full local Flutter run: 4,161 passed; backend: 2,256 passed with coverage gates satisfied. Additional mirror/notification/release checks are being verified. Native/device checks, forced-photo outcomes, shared snapshot ownership, creation ambiguity and remaining performance/release work remain open.**
+**Status (swept 2026-10-20): BUILT IN CODE, NOT DEPLOYED, NOT SHIPPED.** The work landed in `33cde361` ("review and cleanup"), hardened by the 2026-10-19 audit (`a851d238`) and the 1.65.0+97 release pass; local runs 4,214 Flutter / 2,324 jest (113 suites). Nothing is live: `saveAppointmentEdits`, the batched `findAppointmentConflicts`, the `propagateClientEdits` rewrite and the new indexes await a `Deploy backend` run (last deploy `0ab3f05c`, 2026-10-11), which must precede the 1.65.0+97 app build. Still open: native/device checks (CI's simulator job only), creation ambiguity, the edit migration / minimum-supported-client policy, and the remaining T13/T14 work. The execution ledger below is the record of each package.
 
 Prepared October 18, 2026 from the [combined audit](../audits/2026-10-18-performance-reliability-review.md). Workspace HEAD at planning: `f19548428066869711cf7eecb6ce9f97e635027a`; the workspace also contains unrelated uncommitted documentation changes. Recheck affected code and deployment/settings before each task. Audit IDs below refer to that dated review, not to confirmed production incidents.
 

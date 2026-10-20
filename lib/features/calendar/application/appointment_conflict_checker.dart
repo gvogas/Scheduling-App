@@ -14,6 +14,7 @@ Future<AppointmentConflictHit?> findFirstAppointmentConflict({
   required List<EmployeeRecord> candidates,
   required Iterable<AppointmentRecord> bookings,
   Set<String> excludeAppointmentIds = const {},
+  List<AppointmentRecord> excludeAppointments = const [],
   bool excludeOwnBookingIds = false,
 }) async {
   if (candidates.isEmpty) return null;
@@ -29,6 +30,7 @@ Future<AppointmentConflictHit?> findFirstAppointmentConflict({
           employeeIds: candidates.map((employee) => employee.id).toList(),
           bookings: planned,
           excludeAppointmentIds: excludeAppointmentIds,
+          excludeAppointments: excludeAppointments,
           excludeOwnBookingIds: excludeOwnBookingIds,
         );
   final busyPerBooking = batch == null
@@ -41,6 +43,7 @@ Future<AppointmentConflictHit?> findFirstAppointmentConflict({
               end: booking.endTime,
               excludeAppointmentIds: {
                 ...excludeAppointmentIds,
+                for (final record in excludeAppointments) ?record.id,
                 if (excludeOwnBookingIds) ?booking.id,
               },
             ),

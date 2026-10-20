@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status (swept 2026-10-18): BUILT; functions DEPLOYED (`29fa4072`, `364d4812`); app half rides 1.64.2+96, not yet shipped.** Left: that build, then Task 17 Step 5's device check. Unticked boxes are unknown, not outstanding.
+**Status (swept 2026-10-20): BUILT; functions DEPLOYED (`29fa4072`, `364d4812`); app half rides 1.65.0+97, not yet shipped (1.64.2+96 never shipped).** Left: that build, then Task 17 Step 5's device check. Unticked boxes are unknown, not outstanding.
 
 **Goal:** Four Remote Config kill switches (address autocomplete, presence/live map, Live Activities, Wave sync) plus a `min_supported_build` forced-update gate, enforced in the app and in Cloud Functions, all failing OPEN.
 

@@ -79,16 +79,6 @@ class AppointmentImageUploadService {
     ).create(recursive: true);
   }
 
-  /// Stages files and starts the background upload.
-  void uploadInBackground({
-    required String appointmentId,
-    required List<File> newImages,
-  }) {
-    unawaited(
-      enqueuePhotos(appointmentId: appointmentId, newImages: newImages),
-    );
-  }
-
   /// Waits for the local handoff attempt; network transfer stays in the drain.
   Future<void> enqueuePhotos({
     required String appointmentId,
@@ -257,7 +247,7 @@ class AppointmentImageUploadService {
           .fold(
             0,
             (count, entry) =>
-                count + entry.paths.length + entry.uploaded.length,
+                count + entry.unsavedCount,
           );
       return PendingPhotoExit(
         pendingCount: count,
@@ -436,6 +426,7 @@ class AppointmentImageUploadService {
       if (!await _deleteQuietly(File(path))) return;
       if (!current()) return;
     }
+    entry = entry.copyWith(cleanupPaths: const []);
     final files = entry.paths
         .map(File.new)
         .where((f) => f.existsSync())
@@ -574,12 +565,7 @@ class AppointmentImageUploadService {
           final expired = await _store.prune(now: DateTime.now());
           if (!current()) continue;
           for (final e in expired) {
-            for (final p in [
-              ...e.paths,
-              ...e.cleanupPaths,
-              ...e.stagingSources.values,
-              for (final target in e.stagingSources.keys) '$target.part',
-            ]) {
+            for (final p in e.localFiles) {
               await _deleteQuietly(File(p));
             }
           }
@@ -606,8 +592,6 @@ class AppointmentImageUploadService {
           // count is never left stale by the failure path.
           if (current()) await _publishPending();
         }
-        _drainOwnerResolved = false;
-        _drainOwner = null;
       } while (_pendingDrain);
     } finally {
       _drainOwnerResolved = false;
@@ -631,12 +615,7 @@ class AppointmentImageUploadService {
     final entries = await _store.clearOwner(lease.uid, isCurrent: current);
     for (final entry in entries) {
       if (!current()) return;
-      for (final path in [
-        ...entry.paths,
-        ...entry.cleanupPaths,
-        ...entry.stagingSources.values,
-        for (final target in entry.stagingSources.keys) '$target.part',
-      ]) {
+      for (final path in entry.localFiles) {
         if (!current()) return;
         await _deleteQuietly(File(path));
       }
@@ -704,9 +683,7 @@ class AppointmentImageUploadService {
           continue;
         }
         counts[entry.appointmentId] =
-            (counts[entry.appointmentId] ?? 0) +
-            entry.paths.length +
-            entry.uploaded.length;
+            (counts[entry.appointmentId] ?? 0) + entry.unsavedCount;
       }
       final expired = owner == null
           ? const <PhotoUploadExpiry>[]

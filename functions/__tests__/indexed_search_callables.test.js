@@ -657,7 +657,7 @@ describe("bounded conflict batches", () => {
       {busyEmployeeIds: []}, {busyEmployeeIds: ["e1"]},
     ]});
     expect(security.enforceDurableRateLimit).toHaveBeenCalledWith(
-        "findAppointmentConflicts", UID, 120, 60000, "uid", 2);
+        "findAppointmentConflicts", UID, 250, 60000, "uid", 2);
     expect(db.calls).toHaveLength(2);
     expect(db.calls.every((call) => call.select.includes("employeeIds")))
         .toBe(true);

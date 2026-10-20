@@ -1,8 +1,12 @@
 # Active plans — index and outstanding work
 
 Swept 2026-08-11, re-swept 2026-08-15, 2026-09-06, 2026-09-09 and 2026-09-12,
-re-swept 2026-09-13, 2026-09-19, 2026-10-01 and **2026-10-18** against what the code, `git log` and the deploy log
-actually say. **The 2026-10-18 pass** moved ten finished plans and four
+re-swept 2026-09-13, 2026-09-19, 2026-10-01, 2026-10-18 and **2026-10-20** against what the code, `git log` and the deploy log
+actually say. **The 2026-10-20 pass** moved the superseded `CODEBASE_AUDIT_2026-10-14.md` to
+`docs/archive/`, found the index one plan behind (the
+2026-10-18 audit remediation plan had no row) and every "rides 1.64.2+96" stale:
+that build was cut and never shipped, and 1.65.0+97 now carries it plus the
+remediation work, whose backend is NOT deployed (§1). **The 2026-10-18 pass** moved ten finished plans and four
 superseded audits to `docs/archive/` (listed below the index), carried their
 unverified owner steps into §6, and found one backend change undeployed (§1).
 **The 2026-10-01 pass** found the index ten days stale: it still
@@ -49,9 +53,10 @@ at the top of each file, not its boxes.
 
 | Doc | State |
 |---|---|
-| `2026-10-06-remote-config-kill-switches-design.md` | **BUILT 2026-10-06; functions DEPLOYED 2026-10-07 (`29fa4072`); app half NOT SHIPPED** (rides 1.64.2+96). (Design approved 2026-10-06.) Remote Config kill switches (address autocomplete, presence/live map, Live Activities, Wave sync) enforced in the app AND the functions, fail-open, plus a `min_supported_build` forced-update screen. Plan: `2026-10-06-remote-config-kill-switches-plan.md`. |
-| `2026-10-06-remote-config-kill-switches-plan.md` | **BUILT 2026-10-06; functions DEPLOYED 2026-10-07 (`29fa4072`, hardened `364d4812`); app half NOT SHIPPED** (rides 1.64.2+96). Archive both kill-switch docs once it ships and the owner's device check (Task 17 Step 5) is done. 17 TDD tasks: functions (policy, loader, Places / Live Activity / Wave gates), then the app (service, providers, five gates, `UpdateGate`), then docs. Apple ID recorded (6788556855). |
-| `2026-09-12-open-followups.md` | **OPEN — two items still blocked** (items 4 and 5 CLOSED; item 2, the street/city address split, backend DEPLOYED 2026-10-11 at `0ab3f05c`, app half rides 1.64.2+96): the split container vocabulary on the appointment form (an owner decision — the declined Option B), and device verification of both rebuilt dropdowns (macOS Accessibility permission). The plan it came from is archived: `docs/archive/2026-09-12-add-appointment-sheet-structure.md`. |
+| `2026-10-06-remote-config-kill-switches-design.md` | **BUILT 2026-10-06; functions DEPLOYED 2026-10-07 (`29fa4072`); app half NOT SHIPPED** (rides 1.65.0+97). (Design approved 2026-10-06.) Remote Config kill switches (address autocomplete, presence/live map, Live Activities, Wave sync) enforced in the app AND the functions, fail-open, plus a `min_supported_build` forced-update screen. Plan: `2026-10-06-remote-config-kill-switches-plan.md`. |
+| `2026-10-06-remote-config-kill-switches-plan.md` | **BUILT 2026-10-06; functions DEPLOYED 2026-10-07 (`29fa4072`, hardened `364d4812`); app half NOT SHIPPED** (rides 1.65.0+97). Archive both kill-switch docs once it ships and the owner's device check (Task 17 Step 5) is done. 17 TDD tasks: functions (policy, loader, Places / Live Activity / Wave gates), then the app (service, providers, five gates, `UpdateGate`), then docs. Apple ID recorded (6788556855). |
+| `2026-09-12-open-followups.md` | **OPEN — two items still blocked** (items 4 and 5 CLOSED; item 2, the street/city address split, backend DEPLOYED 2026-10-11 at `0ab3f05c`, app half rides 1.65.0+97): the split container vocabulary on the appointment form (an owner decision — the declined Option B), and device verification of both rebuilt dropdowns (macOS Accessibility permission). The plan it came from is archived: `docs/archive/2026-09-12-add-appointment-sheet-structure.md`. |
+| `2026-10-18-audit-remediation-plan.md` | **BUILT IN CODE, NOT DEPLOYED, NOT SHIPPED** (`33cde361`, `a851d238`, release 1.65.0+97). Staged packages T00–T14 from `docs/audits/2026-10-18-performance-reliability-review.md`: session fencing, durable photo uploads, `saveAppointmentEdits`, complete conflict checks, mirror ownership. Left: the backend deploy before the app build, native/device checks, creation ambiguity, the edit-migration policy, T13/T14. |
 | `APP_STORE_SUBMISSION.md` | **The live release runbook**, now for updates rather than a launch — the app shipped. Its unticked boxes have never been reconciled against four shipped submissions, so read one as *unknown*, not *outstanding*. |
 
 **Moved to `docs/archive/` on 2026-10-18.** Ten plans, all shipped and
@@ -104,7 +109,18 @@ build record, the device runbook included), complete and owing nothing.
 Everything below is open. This file is a work list; it is not where the history
 goes.
 
-### 1. The app build — 1.63.0+93 SHIPPED, 1.64.2+96 next
+### 1. The app build — 1.63.0+93 SHIPPED, 1.65.0+97 next
+
+**Update (2026-10-20): the next build is 1.65.0+97** (`pubspec.yaml`, release
+pass uncommitted at this sweep). 1.64.2+96 was cut and never shipped, so this
+build carries everything 1.64.2+96 did plus the 2026-10-18 remediation work
+(`33cde361`) and the 2026-10-19 audit (`a851d238`). **Its backend is NOT live,
+and the deploy must come FIRST:** the app sends every admin appointment edit
+through the new `saveAppointmentEdits` callable (32 exports, 31 deployed), and
+the batched `findAppointmentConflicts`, `propagateClientEdits`, the overdue
+`(status ASC, endTime ASC)` index and `afd68870`'s `maintenance_policy.js`
+change are also undeployed. The last deploy is `0ab3f05c` (2026-10-11).
+
 
 **Update (2026-10-14): the next build is 1.64.2+96** (`34938249`; re-ships
 1.64.1+95, which never shipped; 1.64.0+94 didn't either). It carries the kill
@@ -225,7 +241,7 @@ and the post-release `build_env` and Events-page checks.
   dimension.
 - **Carried from the archived 2026-10-09 audit:** B1, the optional prod
   `node functions/scripts/run.js backfill-search-tokens` (dry run, then
-  `--live`), once 1.64 is on every phone. The 2026-10-14 audit carries it too.
+  `--live`), once 1.65.0+97 (which carries the 1.64 changes; 1.64.x never shipped) is on every phone. The archived 2026-10-14 audit carried it too.
 
 - **A hard budget cap for Google Maps Platform is still unset** —
   `docs/audits/AUDIT_FOLLOWUPS.md`, the one item there still open. Needs GCP

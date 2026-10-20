@@ -91,6 +91,31 @@ void main() {
     },
   );
 
+  test('each call sends only the excluded records its windows can meet', () async {
+    await repo.findBusyEmployeeIdsForBookings(
+      employeeIds: ['e1'],
+      bookings: bookings,
+      excludeAppointments: [
+        AppointmentRecord(
+          id: 'near-last-chunk',
+          startTime: DateTime(2026, 11, 21, 9),
+          endTime: DateTime(2026, 11, 21, 10),
+        ),
+        AppointmentRecord(
+          id: 'far-future',
+          startTime: DateTime(2027, 6, 1, 9),
+          endTime: DateTime(2027, 6, 1, 10),
+        ),
+      ],
+    );
+
+    expect(requests.map((request) => request['excludeAppointmentIds']), [
+      null,
+      null,
+      ['near-last-chunk'],
+    ]);
+  });
+
   test('missing window acknowledgments never become false clearance', () async {
     final response = _Result();
     when(() => response.data).thenReturn({'windows': <Object>[]});

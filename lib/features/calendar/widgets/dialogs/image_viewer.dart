@@ -401,20 +401,6 @@ final refusedImage = MemoryImage(
   ]),
 );
 
-/// Whether [provider] is the placeholder [buildImageProviders] substitutes for
-/// a photo Storage refused.
+/// Whether [provider] is the stand-in for a photo Storage refused.
 bool isRefusedImage(ImageProvider provider) =>
     identical(provider, refusedImage);
-
-List<ImageProvider> buildImageProviders({
-  required List<Uint8List> bytes,
-  required List<File> files,
-}) {
-  return [
-    // Empty bytes mean a refused photo, so keep the slot stable.
-    ...bytes.map<ImageProvider>(
-      (b) => b.isEmpty ? refusedImage : MemoryImage(b),
-    ),
-    ...files.map<ImageProvider>(FileImage.new),
-  ];
-}

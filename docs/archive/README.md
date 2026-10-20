@@ -2,7 +2,8 @@
 
 Completed plans/specs and superseded audit snapshots — kept for history, not
 maintained against the current code. Started 2026-07-10; last updated
-**2026-10-18**, when the docs sweep moved in ten finished plans and four
+**2026-10-20**, when the docs sweep moved in one superseded audit
+(`CODEBASE_AUDIT_2026-10-14.md`). On 2026-10-18 the sweep moved in ten finished plans and four
 superseded audits (listed under their own headings below). Before that the
 2026-09-13 sweep moved in four finished plans, and the 2026-09-12 sweep indexed seven files
 already on disk, the 2026-09-09 sweep moved in six plans plus the redesign
@@ -409,12 +410,18 @@ a new verdict, only a missing row. A file moved but not indexed is lost.
 Point-in-time whole-repo audits; each run's findings were implemented at the
 time. Superseded by later audits. `docs/audits/` now holds
 DATED snapshots rather than one rolling action list — the newest is
-`CODEBASE_AUDIT_2026-10-14.md` — and also keeps
+`CODEBASE_AUDIT_2026-10-19.md`, beside the 2026-10-18 performance/reliability
+review and its remediation-verification note — and also keeps
 `SECURITY_ASSESSMENT_2026-08-04.md`, `AUDIT_FOLLOWUPS.md` (the owner-only
 Maps budget cap), `AUDIT_ROLLOUT_2026-09-23.md`, `IPHONE_PERFORMANCE_2026-09-23.md`
 and one read-only repair-audit script, `audit-client-phone-backfill-damage.js`
 (its sibling `audit-renamed-client-names.js` was deleted 2026-09-28 with the
 closed-migration scripts; it is in git history).
+- **Added 2026-10-20:** `CODEBASE_AUDIT_2026-10-14.md` — the audit at
+  `d6e19618`, superseded by the 2026-10-19 one. Its B1 (`purgeExpiredHistory`
+  counting image failures by doc id, `afd68870`) is built but UNDEPLOYED and is
+  carried in `docs/plans/README.md` §1; its optional `backfill-search-tokens`
+  run is carried in §6.
 - **Added 2026-10-18:** `CODEBASE_AUDIT_2026-09-23.md` (fixes deployed at
   `e70b494d`, its rollout runbook stays live in `docs/audits/`),
   `CODEBASE_AUDIT_2026-09-28.md` (deployed `306ed848` / `8739e48c`),

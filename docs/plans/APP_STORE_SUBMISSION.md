@@ -10,7 +10,7 @@ two releases stale (1.46.0+73, then 1.46.1+74); read `pubspec.yaml` and
 >
 > **Recorded 2026-08-11 on the owner's report:** ES Pro was **accepted by Apple**
 > and is on the App Store. Since then 1.61.0+90 and 1.63.0+93 have shipped;
-> 1.63.0+93 is on every phone (owner, 2026-10-09) and 1.64.2+96 is cut (swept
+> 1.63.0+93 is on every phone (owner, 2026-10-09) and 1.64.2+96 was cut but never shipped; 1.65.0+97 is next (swept 2026-10-20; previously swept
 > 2026-10-18). Siri was cancelled 2026-10-09, so Part 13's Siri items are void. Read every "first store cut" / "first upload" instruction below as
 > **history**, not as a pending task.
 >

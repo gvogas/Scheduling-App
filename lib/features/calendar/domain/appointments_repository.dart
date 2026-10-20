@@ -136,8 +136,7 @@ abstract class AppointmentsRepository {
   /// Fires after every local write, including photo and crew-note appends.
   Stream<void> get onLocalWrite;
 
-  /// Fires only after a local write that changed appointment fields: each
-  /// written doc id to its new `startTime`, null for a delete or a status-only write.
+  /// Doc id → new `startTime` (null: delete or status-only) per field write.
   Stream<Map<String, DateTime?>> get onRecordWrite;
 
   Stream<List<AppointmentRecord>> watchForEmployeeInRange(
@@ -159,6 +158,7 @@ abstract class AppointmentsRepository {
     required List<String> employeeIds,
     required List<AppointmentRecord> bookings,
     Set<String> excludeAppointmentIds = const {},
+    List<AppointmentRecord> excludeAppointments = const [],
     bool excludeOwnBookingIds = false,
   }) => null;
 

@@ -87,9 +87,7 @@ class PushRegistrationController with ReentrantSync, SessionFencedSync {
   Future<void> sync() => runCoalesced(_syncGuarded);
 
   Future<void> retryRegistration() {
-    _retryAttempts = 0;
-    _retryTimer?.cancel();
-    _retryTimer = null;
+    _resetRetry();
     return sync();
   }
 
@@ -107,7 +105,7 @@ class PushRegistrationController with ReentrantSync, SessionFencedSync {
     });
   }
 
-  void _acknowledged() {
+  void _resetRetry() {
     _retryTimer?.cancel();
     _retryTimer = null;
     _retryAttempts = 0;
@@ -192,7 +190,7 @@ class PushRegistrationController with ReentrantSync, SessionFencedSync {
       _registeredUid = uid;
       _registeredLocale = locale;
       _registeredLease = lease;
-      _acknowledged();
+      _resetRetry();
       _subscribeRefresh(docId, uid, lease, generation);
     } catch (e, st) {
       // sync() is called unawaited, so don't let a registration failure
@@ -269,7 +267,7 @@ class PushRegistrationController with ReentrantSync, SessionFencedSync {
       if (!current()) return;
       _registeredToken = token;
       _registeredLocale = locale;
-      _acknowledged();
+      _resetRetry();
     } catch (error, stack) {
       _logger.warn('PUSH refresh registration failed', error, stack);
       if (current()) _scheduleRetry(lease);
@@ -280,9 +278,7 @@ class PushRegistrationController with ReentrantSync, SessionFencedSync {
   /// invalidates the FCM token; never throws, so sign-out is never blocked.
   Future<void> unregisterCurrentDevice() async {
     invalidateSync();
-    _retryTimer?.cancel();
-    _retryTimer = null;
-    _retryAttempts = 0;
+    _resetRetry();
     _tokenRevision++;
     _rotationResyncRequested = false;
     final generation = syncGeneration;

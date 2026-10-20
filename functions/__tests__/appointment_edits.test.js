@@ -89,6 +89,12 @@ describe("dirty appointment edits", () => {
         expect(() => validateEditedAppointment(legacy, legacy)).not.toThrow();
       });
 
+  test("a legacy doc with no stored status stays editable", () => {
+    const legacy = stored({});
+    delete legacy.status;
+    expect(() => validateEditedAppointment(legacy, legacy)).not.toThrow();
+  });
+
   test.each([0, 15, 1.5, "2"])("a day label of %j is refused", (value) => {
     expect(() => readEditableRecord(form({dayIndex: value})))
         .toThrow("invalid-appointment-day");

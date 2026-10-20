@@ -118,7 +118,7 @@ struct SchedulePayload: Codable {
                         to: calendar.startOfDay(for: job.start ?? date)) ?? date
                     return (parseInstant(job.endTime) ?? fallbackEnd) > date
                 }
-                return (job.start ?? .distantPast) > date
+                return (parseInstant(job.endTime) ?? job.start ?? .distantPast) > date
             }
         }
         if onTomorrow || (parseInstant(rolloverAt).map { date >= $0 } ?? false) {

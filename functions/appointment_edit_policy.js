@@ -2,7 +2,8 @@
 
 const {HttpsError} = require("firebase-functions/v2/https");
 const {Timestamp} = require("firebase-admin/firestore");
-const {toMillis, MAX_APPOINTMENT_SPAN_DAYS} = require("./time_utils");
+const {toMillis, MAX_APPOINTMENT_SPAN_DAYS, MAX_APPOINTMENT_SPAN_MS} =
+  require("./time_utils");
 
 const TEXT_CAPS = {title: 200, clientId: 128, clientName: 401,
   clientPhone: 40, address: 500, notes: 4000, fieldNotes: 4000,
@@ -116,14 +117,14 @@ function appointmentEditPatch(base, desired, current) {
  */
 function validateEditedAppointment(record, previous) {
   const statuses = ["pending", "in_progress", "done", "cancelled"];
-  if (!statuses.includes(record.status)) {
+  if (!statuses.includes(record.status ?? "pending")) {
     throw new HttpsError("invalid-argument", "invalid-appointment-status");
   }
   const span = toMillis(record.endTime) - toMillis(record.startTime);
   const oldSpan = previous ?
     toMillis(previous.endTime) - toMillis(previous.startTime) : -1;
   if (!Number.isFinite(span) || span < 0 ||
-      (span > 14 * 86400_000 + 2 * 3600_000 && span > oldSpan)) {
+      (span > MAX_APPOINTMENT_SPAN_MS + 2 * 3600_000 && span > oldSpan)) {
     throw new HttpsError("invalid-argument", "invalid-appointment-span");
   }
   const relabelled = !previous ||

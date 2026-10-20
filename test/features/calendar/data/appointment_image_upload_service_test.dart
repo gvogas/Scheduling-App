@@ -927,7 +927,7 @@ void main() {
     });
   });
 
-  group('uploadInBackground', () {
+  group('enqueuePhotos', () {
     test(
       'an old exit pause cannot block the replacement account queue',
       () async {
@@ -974,9 +974,8 @@ void main() {
       final failingStore = _FailingAddStore();
       store = failingStore;
       final source = makeSource('photo.jpg');
-      makeService().uploadInBackground(
-        appointmentId: 'a1',
-        newImages: [source],
+      unawaited(
+        makeService().enqueuePhotos(appointmentId: 'a1', newImages: [source]),
       );
       for (var i = 0; i < 100 && notifier.failureFor('a1') == null; i++) {
         await Future<void>.delayed(const Duration(milliseconds: 5));
@@ -1066,7 +1065,9 @@ void main() {
         return gate.future;
       });
 
-      makeService().uploadInBackground(appointmentId: 'a1', newImages: [src]);
+      unawaited(
+        makeService().enqueuePhotos(appointmentId: 'a1', newImages: [src]),
+      );
 
       await started.future;
       final entries = await store.load();
@@ -1160,20 +1161,22 @@ void main() {
       () async {
         final directory = Completer<Directory>();
         final session = SessionFence(readUid: () => auth.currentUser?.uid);
-        final service =
-            AppointmentImageUploadService(
-              appointments: appointments,
-              notifier: notifier,
-              storage: storage,
-              store: store,
-              auth: auth,
-              stagingDirProvider: () => directory.future,
-              employeeIdForUid: (_) async => 'doc-1',
-              session: session,
-            )..uploadInBackground(
-              appointmentId: 'a1',
-              newImages: [makeSource('photo.jpg')],
-            );
+        final service = AppointmentImageUploadService(
+          appointments: appointments,
+          notifier: notifier,
+          storage: storage,
+          store: store,
+          auth: auth,
+          stagingDirProvider: () => directory.future,
+          employeeIdForUid: (_) async => 'doc-1',
+          session: session,
+        );
+        unawaited(
+          service.enqueuePhotos(
+            appointmentId: 'a1',
+            newImages: [makeSource('photo.jpg')],
+          ),
+        );
         final exit = service.prepareForExit();
         session
           ..beginExit()
@@ -1198,12 +1201,10 @@ void main() {
           stagingDirProvider: () => directory.future,
           employeeIdForUid: (_) async => 'doc-1',
         );
-        final exit =
-            (service..uploadInBackground(
-                  appointmentId: 'a1',
-                  newImages: [source],
-                ))
-                .prepareForExit();
+        unawaited(
+          service.enqueuePhotos(appointmentId: 'a1', newImages: [source]),
+        );
+        final exit = service.prepareForExit();
         directory.complete(stagingDir);
 
         final check = await exit;
