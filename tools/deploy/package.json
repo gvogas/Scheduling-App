@@ -3,7 +3,7 @@
   "private": true,
   "description": "Pins the firebase CLI the deploy workflow runs.",
   "dependencies": {
-    "firebase-tools": "15.33.0"
+    "firebase-tools": "15.34.0"
   },
   "overrides": {
     "basic-ftp": "^6.2.2",
