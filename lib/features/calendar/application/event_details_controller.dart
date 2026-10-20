@@ -52,7 +52,6 @@ abstract class EventDetailsState
     @Default(false) bool isEditing,
 
     /// Existing appointments preserve run length when the start date moves.
-    @Default(true) bool endDateTouched,
     @Default(RepeatInterval.none) RepeatInterval repeat,
     // Changing this value triggers repeat rebooking.
     @Default(RepeatInterval.none) RepeatInterval savedRepeat,
@@ -261,7 +260,6 @@ class EventDetailsController extends Notifier<EventDetailsState>
   void selectEndDate(DateTime date) {
     state = state.copyWith(
       endDate: date,
-      endDateTouched: true,
       errors: withoutKey(state.errors, 'endDate'),
     );
   }

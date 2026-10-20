@@ -1008,8 +1008,8 @@ also defines `compactWidth` (360), `compactTextScale` (1.4), and
 (`width < 360 || textScale > 1.4`) and `context.isNarrowWidth` (the width-only
 variant). Dense horizontal rows — appointment cards/tiles, the appointment
 detail action bar and view body, the add/edit form fields, the employee
-form/details, the settings tiles and drawer, and the shared `InfoCard`,
-`ListItemTile`, and `EntityFormHeader` rows — read `isCompact` to **stack their
+form/details, the settings tiles and drawer, and the shared `InfoCard`
+and `ListItemTile` rows — read `isCompact` to **stack their
 contents vertically** rather than overflow when the screen is narrow or the user
 has turned up the system text size; `isNarrowWidth` is for layouts that should
 fold on screen width alone. `shortViewportHeight` lets bottom sheets and the

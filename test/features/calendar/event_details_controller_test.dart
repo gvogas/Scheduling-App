@@ -415,7 +415,6 @@ void main() {
         eventDetailsControllerProvider(EventDetailsKey(multiDay)),
       );
       expect(state.endDate, DateTime(2026, 8, 5));
-      expect(state.endDateTouched, isTrue);
     });
 
     test('a night shift seeds the last NIGHT, not the morning', () {
@@ -446,10 +445,9 @@ void main() {
       expect(state.endDate, DateTime(2026, 8, 7));
     });
 
-    test('selectEndDate sets the date and marks it touched', () {
+    test('selectEndDate sets the date', () {
       readNotifier().selectEndDate(DateTime(2026, 5, 12));
       expect(readState().endDate, DateTime(2026, 5, 12));
-      expect(readState().endDateTouched, isTrue);
     });
   });
 
