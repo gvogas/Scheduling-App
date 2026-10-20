@@ -11,6 +11,10 @@ const SCRIPTS_DIR = path.join(__dirname, "..", "scripts");
 // parse that line, so a reworded summary must fail HERE rather than make the
 // live gate unreadable (or, worse, read a different number).
 const FRAGMENTS = {
+  "backfill-appointment-is-personal": [
+    "appointments: ${s.scanned} scanned, ",
+    "${s.stamped} stamped isPersonal:false, ",
+  ],
   "backfill-client-address-street": [
     "clients: ${scanned} scanned, ${patched} reduced, ",
   ],
@@ -95,6 +99,10 @@ describe("run.js registry", () => {
 
   // Each sample is the summary as the script's own template renders it.
   test.each([
+    ["backfill-appointment-is-personal",
+      "[dry-run] appointments: 104 scanned, 70 stamped isPersonal:false, " +
+      "34 already had the field\n\nwide client jobs (one document, 2+ work " +
+      "days): 3 — reported only, never modified", [], 70],
     ["backfill-client-address-street",
       "[dry-run] clients: 900 scanned, 12 reduced, 888 left alone", [], 12],
     ["backfill-client-buildings",

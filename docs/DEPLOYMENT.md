@@ -127,6 +127,17 @@ Also check the converse: a **client** cap must not exceed the callable's, or the
 field accepts input the server rejects as `invalid-argument`, which surfaces to
 the user as an unexplained "Something went wrong".
 
+**(d) Does a new query add an equality filter on a field older docs lack?**
+
+Firestore excludes a document missing a filtered field, so a new `where(x, '==')`
+needs its composite `READY` AND a backfill run BEFORE the app build (ADR-0030
+order). Pending example: the `isPersonal` queries (ADR-0189) — deploy
+`firestore:indexes` alone, wait until all three `isPersonal` composites read
+`READY`, run `node functions/scripts/run.js backfill-appointment-is-personal`
+(dry run), then `--live`, read its wide-client-job report, and only then ship
+the build. Reversed, every pre-2026-07-31 overdue job vanishes from the review
+until the backfill finishes.
+
 ## 5. Deploy
 
 **Use the `Deploy backend` workflow** (Actions → Deploy backend → Run workflow;

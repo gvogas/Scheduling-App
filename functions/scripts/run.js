@@ -51,6 +51,11 @@ function bridgeCount(stdout, passthrough) {
 
 const REGISTRY = {
   "audit-wave-contract": {file: "audit-wave-contract.js", kind: "read"},
+  "backfill-appointment-is-personal": {
+    file: "backfill-appointment-is-personal.js", kind: "write",
+    countFrom: firstNumber(
+        /appointments: \d+ scanned, (\d+) stamped isPersonal:false/),
+  },
   "count-multi-day-appointments": {
     file: "count-multi-day-appointments.js", kind: "read",
   },

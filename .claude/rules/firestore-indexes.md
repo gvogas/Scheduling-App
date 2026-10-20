@@ -85,6 +85,8 @@ only by reading `functions_get_logs`, where it was 60 of 60 warnings in a
 removing any composite as a prefix, check what `orderBy` the query ends on —
 and prefer confirming against the logs over reasoning about it.
 
+**Three `isPersonal` composites (2026-10-20, ADR-0189):** `appointments (isPersonal ASC, status ASC, endTime DESC)` serves `watchOverdueOpen` (`in` + `==` + `<` + `orderBy endTime desc`; the old `(status, endTime DESC)` stays for nothing else today but is kept, see the prefix rule above), `(isPersonal ASC, startTime ASC)` the admin range TAIL and `(employeeIds CONTAINS, isPersonal ASC, startTime ASC)` the employee-scoped tail. An equality filter EXCLUDES documents missing the field, so these indexes ship together with `functions/scripts/backfill-appointment-is-personal.js` (dry run, then `--live`) BEFORE the app build; the composites must read `READY` first, since a `CREATING` index fails `FAILED_PRECONDITION`.
+
 **A `fieldOverrides` exemption is not free reach — `createdAt`/`updatedAt` stay
 INDEXED on purpose** (restated 2026-08-31 after a pass exempted them for write
 cost and had to be reverted). They are what you sort and filter by in the

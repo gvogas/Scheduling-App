@@ -195,3 +195,4 @@ not to "fix". Number sequentially from one counter; never renumber.
 | 0186 | `updateFieldNotes` deleted | `.claude/rules/appointments.md` |
 | 0187 | Technician-scoped History retired | `.claude/rules/appointments.md` |
 | 0188 | The assignee `fieldNotes` disjunct narrowed to an `updatedAt`-only touch | `.claude/rules/appointments.md` |
+| 0189 | Range tail query and `isPersonal` equality filters | `.claude/rules/appointments.md` |

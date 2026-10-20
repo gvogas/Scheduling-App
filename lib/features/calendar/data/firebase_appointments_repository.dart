@@ -616,15 +616,6 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     _patchWindow({for (final id in ids) id: null});
   }
 
-  List<AppointmentRecord> _mapRangeSnapshot(
-    QuerySnapshot<Map<String, dynamic>> snapshot,
-  ) {
-    _warnAtRangeCap(snapshot);
-    return snapshot.docs
-        .map((doc) => AppointmentRecord.fromMap(doc.id, doc.data()))
-        .toList();
-  }
-
   void _warnAtRangeCap(QuerySnapshot<Map<String, dynamic>> snapshot) {
     if (snapshot.docs.length >= _rangeStreamLimit) {
       _logger.warn(
@@ -634,8 +625,8 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     }
   }
 
-  /// Parses only `docChanges` into [parsed], emitting in the query's order.
-  List<AppointmentRecord> _applyRangeChanges(
+  /// Parses only `docChanges` into [parsed].
+  void _applyRangeChanges(
     Map<String, AppointmentRecord> parsed,
     QuerySnapshot<Map<String, dynamic>> snapshot,
   ) {
@@ -648,45 +639,96 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
         parsed[doc.id] = AppointmentRecord.fromMap(doc.id, doc.data() ?? {});
       }
     }
+  }
+
+  /// [snapshots] tail first: every tail doc starts before every main doc.
+  List<AppointmentRecord> _orderedRangeRecords(
+    Map<String, AppointmentRecord> parsed,
+    Iterable<QuerySnapshot<Map<String, dynamic>>> snapshots,
+  ) {
+    final seen = <String>{};
     return [
-      for (final doc in snapshot.docs)
-        parsed[doc.id] ??= AppointmentRecord.fromMap(doc.id, doc.data()),
+      for (final snapshot in snapshots)
+        for (final doc in snapshot.docs)
+          if (seen.add(doc.id))
+            parsed[doc.id] ??= AppointmentRecord.fromMap(doc.id, doc.data()),
     ];
   }
 
-  /// A fresh parsed map per subscription, so a retry's first snapshot starts clean.
+  /// One parsed map per subscription fed by both queries; emits on either.
   Stream<List<AppointmentRecord>> _watchRange(
-    Query<Map<String, dynamic>> query,
+    Query<Map<String, dynamic>> main,
+    Query<Map<String, dynamic>> tail,
   ) {
     return retryStream(() {
       final parsed = <String, AppointmentRecord>{};
-      return query.snapshots().map(
-        (snapshot) => _applyRangeChanges(parsed, snapshot),
+      final latest = <QuerySnapshot<Map<String, dynamic>>?>[null, null];
+      final subscriptions = <StreamSubscription<void>>[];
+      late final StreamController<List<AppointmentRecord>> controller;
+      var open = 2;
+      void listen(int slot, Query<Map<String, dynamic>> query) {
+        subscriptions.add(
+          query.snapshots().listen(
+            (snapshot) {
+              latest[slot] = snapshot;
+              _applyRangeChanges(parsed, snapshot);
+              controller.add(_orderedRangeRecords(parsed, latest.nonNulls));
+            },
+            onError: controller.addError,
+            onDone: () {
+              if (--open == 0) unawaited(controller.close());
+            },
+          ),
+        );
+      }
+
+      controller = StreamController(
+        onListen: () {
+          listen(0, tail);
+          listen(1, main);
+        },
+        onCancel: () => Future.wait([
+          for (final subscription in subscriptions) subscription.cancel(),
+        ]),
       );
+      return controller.stream;
     });
   }
+
+  Query<Map<String, dynamic>> _scopedAppointments(String? employeeId) =>
+      employeeId == null
+      ? _appointments
+      : _appointments.where('employeeIds', arrayContains: employeeId);
 
   Query<Map<String, dynamic>> _rangeQuery(
     AppointmentDateRange range, {
     String? employeeId,
-  }) {
-    Query<Map<String, dynamic>> query = _appointments;
-    if (employeeId != null) {
-      query = query.where('employeeIds', arrayContains: employeeId);
-    }
-    return query
-        .where(
-          'startTime',
-          isGreaterThanOrEqualTo: Timestamp.fromDate(range.fetchStart),
-        )
-        .where('startTime', isLessThan: Timestamp.fromDate(range.end))
-        .orderBy('startTime')
-        .limit(_rangeStreamLimit);
-  }
+  }) => _scopedAppointments(employeeId)
+      .where(
+        'startTime',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(range.start),
+      )
+      .where('startTime', isLessThan: Timestamp.fromDate(range.end))
+      .orderBy('startTime')
+      .limit(_rangeStreamLimit);
+
+  /// The 14-day tail: since ADR-0050 only a personal block is one wide document.
+  Query<Map<String, dynamic>> _rangeTailQuery(
+    AppointmentDateRange range, {
+    String? employeeId,
+  }) => _scopedAppointments(employeeId)
+      .where('isPersonal', isEqualTo: true)
+      .where(
+        'startTime',
+        isGreaterThanOrEqualTo: Timestamp.fromDate(range.fetchStart),
+      )
+      .where('startTime', isLessThan: Timestamp.fromDate(range.start))
+      .orderBy('startTime')
+      .limit(_rangeStreamLimit);
 
   @override
   Stream<List<AppointmentRecord>> watchInRange(AppointmentDateRange range) =>
-      _watchRange(_rangeQuery(range));
+      _watchRange(_rangeQuery(range), _rangeTailQuery(range));
 
   @override
   Stream<List<AppointmentRecord>> watchOverdueOpen(DateTime now) {
@@ -694,6 +736,8 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
     return retryStream(
       () => _appointments
           .where('status', whereIn: openStatusQueryValues)
+          // A doc with no `isPersonal` field is dropped here: backfilled, see appointments.md.
+          .where('isPersonal', isEqualTo: false)
           .where('endTime', isLessThan: Timestamp.fromDate(now))
           .orderBy('endTime', descending: true)
           // One past the cap tells a full window from an exactly-full one.
@@ -731,11 +775,17 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   Future<List<AppointmentRecord>> fetchInRange(
     AppointmentDateRange range,
   ) async {
-    final snapshot = await PerformanceTrace.measure(
+    final snapshots = await PerformanceTrace.measure(
       PerformanceOperation.calendarRange,
-      () => retryAsync(() => _rangeQuery(range).get()),
+      () => retryAsync(
+        () => Future.wait([
+          _rangeTailQuery(range).get(),
+          _rangeQuery(range).get(),
+        ]),
+      ),
     );
-    return _mapRangeSnapshot(snapshot);
+    snapshots.forEach(_warnAtRangeCap);
+    return _orderedRangeRecords({}, snapshots);
   }
 
   /// The business-wide terminal archive.
@@ -831,7 +881,10 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
   Stream<List<AppointmentRecord>> watchForEmployeeInRange(
     String employeeId,
     AppointmentDateRange range,
-  ) => _watchRange(_rangeQuery(range, employeeId: employeeId));
+  ) => _watchRange(
+    _rangeQuery(range, employeeId: employeeId),
+    _rangeTailQuery(range, employeeId: employeeId),
+  );
 
   @override
   Future<List<EmployeeRecord>> findBusyEmployees({

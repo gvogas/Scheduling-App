@@ -49,9 +49,9 @@ class DashboardAggregator {
   /// The settled weeks behind [liveRangeAround] — read once, never watched.
   ///
   /// Ends exactly where the live range starts. The two results overlap anyway,
-  /// because each query reaches back to its own `fetchStart` to catch a run
-  /// already under way, so the caller must merge by doc id rather than
-  /// concatenate.
+  /// because each query's personal tail reaches back to its own `fetchStart`
+  /// to catch a block already under way, so the caller must merge by doc id
+  /// rather than concatenate.
   static AppointmentDateRange historyRangeAround(DateTime now) =>
       AppointmentDateRange(start: _windowStart(now), end: mondayOf(now));
 
@@ -85,10 +85,10 @@ class DashboardAggregator {
   /// Merges the live half with the one-shot history half, de-duplicating by
   /// doc id.
   ///
-  /// The two queries deliberately overlap — each reaches back to its own
-  /// `fetchStart` so a run already under way is still fetched — so a plain
-  /// concatenation would double-count roughly a fortnight of jobs in every
-  /// chart. [live] wins any collision: it is the half backed by a listener, so
+  /// The two queries deliberately overlap — each one's personal tail reaches
+  /// back to its own `fetchStart` so a block already under way is still
+  /// fetched — so a plain concatenation would double-count that fortnight's
+  /// blocks in every chart. [live] wins any collision: it is the half backed by a listener, so
   /// it is the half that can be newer.
   static List<AppointmentRecord> mergeById(
     List<AppointmentRecord> live,
@@ -407,8 +407,7 @@ class DashboardAggregator {
   static bool _isCancelled(AppointmentRecord a) =>
       isCancelledStatusRaw(a.status);
 
-  static bool _isTerminal(AppointmentRecord a) =>
-      isTerminalStatusRaw(a.status);
+  static bool _isTerminal(AppointmentRecord a) => isTerminalStatusRaw(a.status);
 
   static DateTime _weekAfter(DateTime weekStart) =>
       DateTime(weekStart.year, weekStart.month, weekStart.day + 7);

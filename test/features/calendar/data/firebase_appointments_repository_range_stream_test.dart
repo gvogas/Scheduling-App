@@ -2,6 +2,8 @@
 // ignore_for_file: subtype_of_sealed_class
 
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -62,8 +64,10 @@ void main() {
   late _MockFirestore firestore;
   late _MockCollection collection;
   late _MockQuery query;
+  late _MockQuery tailQuery;
   late _RecordingLogger logger;
   late StreamController<QuerySnapshot<Map<String, dynamic>>> emissions;
+  late StreamController<QuerySnapshot<Map<String, dynamic>>> tailEmissions;
 
   final day = DateTime(2026, 8, 15);
   final range = AppointmentDateRange(start: day, end: DateTime(2026, 8, 16));
@@ -77,12 +81,37 @@ void main() {
         'employeeIds': const ['e1'],
       });
 
+  /// A wide personal block that started before [day]: what the tail serves.
+  _FakeDoc block(String id, {required int daysAgo}) => _FakeDoc(id, {
+    'title': 'Vacation',
+    'startTime': Timestamp.fromDate(DateTime(2026, 8, 15 - daysAgo, 9)),
+    'endTime': Timestamp.fromDate(DateTime(2026, 8, 20, 17)),
+    'status': 'pending',
+    'isPersonal': true,
+    'employeeIds': const ['e1'],
+  });
+
   /// One emission: [docs] in query order, with [changes] as its delta.
   void emit(List<_FakeDoc> docs, List<_FakeChange> changes) {
     final snapshot = _MockQuerySnapshot();
     when(() => snapshot.docs).thenReturn(docs);
     when(() => snapshot.docChanges).thenReturn(changes);
     emissions.add(snapshot);
+  }
+
+  /// The tail query's emission, same shape.
+  void emitTail(List<_FakeDoc> docs, List<_FakeChange> changes) {
+    final snapshot = _MockQuerySnapshot();
+    when(() => snapshot.docs).thenReturn(docs);
+    when(() => snapshot.docChanges).thenReturn(changes);
+    tailEmissions.add(snapshot);
+  }
+
+  void resetEmissions() {
+    emissions = StreamController<QuerySnapshot<Map<String, dynamic>>>();
+    tailEmissions = StreamController<QuerySnapshot<Map<String, dynamic>>>();
+    when(query.snapshots).thenAnswer((_) => emissions.stream);
+    when(tailQuery.snapshots).thenAnswer((_) => tailEmissions.stream);
   }
 
   _FakeChange added(_FakeDoc d) => _FakeChange(DocumentChangeType.added, d);
@@ -94,10 +123,29 @@ void main() {
     firestore = _MockFirestore();
     collection = _MockCollection();
     query = _MockQuery();
+    tailQuery = _MockQuery();
     logger = _RecordingLogger();
-    emissions = StreamController<QuerySnapshot<Map<String, dynamic>>>();
 
     when(() => firestore.collection('appointments')).thenReturn(collection);
+    // The tail chain opens on `isPersonal == true`, from the collection
+    // (admin) or from the employee-scoped query.
+    when(
+      () => collection.where('isPersonal', isEqualTo: true),
+    ).thenReturn(tailQuery);
+    when(
+      () => query.where('isPersonal', isEqualTo: true),
+    ).thenReturn(tailQuery);
+    when(
+      () => tailQuery.where(
+        'startTime',
+        isGreaterThanOrEqualTo: any(named: 'isGreaterThanOrEqualTo'),
+      ),
+    ).thenReturn(tailQuery);
+    when(
+      () => tailQuery.where('startTime', isLessThan: any(named: 'isLessThan')),
+    ).thenReturn(tailQuery);
+    when(() => tailQuery.orderBy(any())).thenReturn(tailQuery);
+    when(() => tailQuery.limit(any())).thenReturn(tailQuery);
     when(
       () => collection.where(
         'employeeIds',
@@ -121,7 +169,7 @@ void main() {
     ).thenReturn(query);
     when(() => query.orderBy(any())).thenReturn(query);
     when(() => query.limit(any())).thenReturn(query);
-    when(query.snapshots).thenAnswer((_) => emissions.stream);
+    resetEmissions();
   });
 
   FirebaseAppointmentsRepository repo() =>
@@ -134,9 +182,10 @@ void main() {
   ) async {
     final done = stream.toList();
     drive();
-    // Ending the source ends `retryStream`'s `await for`; a bare cancel would
-    // hang until the generator reaches its next `yield`.
+    // Ending BOTH sources ends `retryStream`'s `await for`; a bare cancel
+    // would hang until the generator reaches its next `yield`.
     await emissions.close();
+    await tailEmissions.close();
     return await done;
   }
 
@@ -231,8 +280,7 @@ void main() {
       final first = await collect(r.watchInRange(range), () {
         emit([a], [added(a)]);
       });
-      emissions = StreamController<QuerySnapshot<Map<String, dynamic>>>();
-      when(query.snapshots).thenAnswer((_) => emissions.stream);
+      resetEmissions();
 
       final second = await collect(r.watchInRange(range), () {
         emit([a], [added(a)]);
@@ -243,6 +291,125 @@ void main() {
       // Both subscriptions parsed it: nothing leaks across listeners.
       expect(a.reads, 2);
     });
+  });
+
+  group('the personal tail query feeds the same list', () {
+    test(
+      'a tail block lands ahead of the window, in startTime order',
+      () async {
+        final a = doc('a', hour: 8);
+        final wide = block('wide', daysAgo: 3);
+
+        final lists = await collect(repo().watchInRange(range), () {
+          emit([a], [added(a)]);
+          emitTail([wide], [added(wide)]);
+        });
+
+        // One emission per query, the second one merged.
+        expect(lists, hasLength(2));
+        expect(lists.last.map((r) => r.id), ['wide', 'a']);
+        expect(a.reads, 1);
+        expect(wide.reads, 1);
+      },
+    );
+
+    test('a doc served by both queries appears once', () async {
+      final a = doc('a', hour: 8);
+      final both = block('both', daysAgo: 0);
+
+      final lists = await collect(repo().watchInRange(range), () {
+        emitTail([both], [added(both)]);
+        emit([both, a], [added(both), added(a)]);
+      });
+
+      expect(lists.last.map((r) => r.id), ['both', 'a']);
+    });
+
+    test('a block removed from the tail drops out of the list', () async {
+      final a = doc('a', hour: 8);
+      final wide = block('wide', daysAgo: 3);
+
+      final lists = await collect(repo().watchInRange(range), () {
+        emit([a], [added(a)]);
+        emitTail([wide], [added(wide)]);
+        emitTail([], [removed(wide)]);
+      });
+
+      expect(lists.last.map((r) => r.id), ['a']);
+    });
+
+    test('the main query starts at the window, the tail 14 days back', () {
+      repo().watchInRange(range);
+
+      verify(
+        () => collection.where(
+          'startTime',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(day),
+        ),
+      ).called(1);
+      verify(
+        () => tailQuery.where(
+          'startTime',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(DateTime(2026, 8)),
+        ),
+      ).called(1);
+      verify(
+        () => tailQuery.where('startTime', isLessThan: Timestamp.fromDate(day)),
+      ).called(1);
+      verify(() => tailQuery.limit(3000)).called(1);
+    });
+
+    test('the employee variant scopes the tail on employeeIds too', () async {
+      final a = doc('a', hour: 8);
+      final wide = block('wide', daysAgo: 3);
+
+      final lists = await collect(
+        repo().watchForEmployeeInRange('e1', range),
+        () {
+          emit([a], [added(a)]);
+          emitTail([wide], [added(wide)]);
+        },
+      );
+
+      expect(lists.last.map((r) => r.id), ['wide', 'a']);
+      // Both chains open on the array-contains clause the rules check.
+      verify(
+        () => collection.where('employeeIds', arrayContains: 'e1'),
+      ).called(2);
+      verify(() => query.where('isPersonal', isEqualTo: true)).called(1);
+    });
+
+    test(
+      'the composites both tails and the overdue review need are declared',
+      () {
+        final manifest =
+            jsonDecode(File('firestore.indexes.json').readAsStringSync())
+                as Map<String, dynamic>;
+        final indexes = (manifest['indexes'] as List)
+            .cast<Map<String, dynamic>>();
+        final declared = [
+          for (final index in indexes)
+            if (index['collectionGroup'] == 'appointments')
+              [
+                for (final field
+                    in (index['fields'] as List).cast<Map<String, dynamic>>())
+                  '${field['fieldPath']}:${field['arrayConfig'] ?? field['order']}',
+              ].join(','),
+        ];
+
+        expect(declared, contains('isPersonal:ASCENDING,startTime:ASCENDING'));
+        expect(
+          declared,
+          contains(
+            'employeeIds:CONTAINS,isPersonal:ASCENDING,startTime:ASCENDING',
+          ),
+        );
+        expect(
+          declared,
+          contains('isPersonal:ASCENDING,status:ASCENDING,endTime:DESCENDING'),
+        );
+      },
+    );
   });
 
   test('watchForEmployeeInRange applies docChanges the same way', () async {

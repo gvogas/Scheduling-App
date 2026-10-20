@@ -248,13 +248,13 @@ Everything else is local, test-backed work. P1 and P4–P7 need a backend deploy
 
 ### P4 — Overdue query grows forever with personal blocks and re-issues fresh every 15 min · confidence 80 % · MEDIUM
 
-> **DONE (cheap fix — `overdueReviewBoundary` floors `now` to the quarter hour; refresh aligned to the next boundary). OPEN — structural `isPersonal` where needs a composite index + legacy backfill: your call.**
+> **DONE (cheap fix — `overdueReviewBoundary` floors `now` to the quarter hour; refresh aligned to the next boundary). DONE (structural) — `where('isPersonal', isEqualTo: false)` + `(isPersonal ASC, status ASC, endTime DESC)`; release prerequisite: indexes READY, then `backfill-appointment-is-personal.js` (ADR-0189, `docs/DEPLOYMENT.md` §4d).**
 - **Where:** `overdue_review_providers.dart:19-30`, `firebase_appointments_repository.dart:561-600` (`status in open AND endTime < now`, personal/time-off excluded only in Dart)
 - **Fix (cheap):** round `now` down to the 15-min boundary so re-opens are the same query and resume from cache. **Fix (structural):** `where('isPersonal', isEqualTo: false)` + `(isPersonal, status, endTime DESC)` composite + backfill for legacy docs.
 
 ### P5 — 14-day `fetchStart` lookback on every range query mostly serves personal blocks now · confidence 80 % · LOW-MEDIUM
 
-> **OPEN — needs a `(isPersonal, startTime)` composite index and a legacy-run check before the lookback split; not implemented.**
+> **DONE — main query starts at `range.start`; a second `isPersonal == true` tail query over `[fetchStart, start)` merges in Dart (`_watchRange(main, tail)`); composites `(isPersonal ASC, startTime ASC)` and `(employeeIds CONTAINS, isPersonal ASC, startTime ASC)`. The backfill script's wide-client-job report is the legacy-run check (ADR-0189).**
 - **Where:** `appointment_record.dart:215-216`; since ADR-0050 jobs are one doc per day
 - **Felt as:** calendar window 44 → 58 days (+30 %), mirrors 8 → 22 (+175 %, permanent for admins, feeds P2).
 - **Fix:** second tiny `where('isPersonal', isEqualTo: true)` query over the tail, merged in Dart (needs `(isPersonal, startTime)` composite); mind legacy runs.
