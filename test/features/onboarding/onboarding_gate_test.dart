@@ -78,8 +78,9 @@ void main() {
       await tester.pump(); // Resolve the seen-flag read.
       expect(find.byType(OnboardingScreen), findsOneWidget);
 
-      // "Skip" invokes the same onFinish as the final "Get Started".
-      await tester.tap(find.text('Skip'));
+      // One welcome screen (C20): "Get Started" is the only way out.
+      expect(find.text('Skip'), findsNothing);
+      await tester.tap(find.text('Get Started'));
       await tester.pump(); // _finish: write throws, caught, _seen = true.
       expect(storage.writeAttempts, 1);
 

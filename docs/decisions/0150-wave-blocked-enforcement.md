@@ -13,7 +13,7 @@ create copy had drifted into an unreachable `|| "synced"`. Requeuing a refused d
 in the same call. The trigger stamps only edited docs, so `backfill-wave-blocked.js` replays the contract (live
 2026-09-13: 726 scanned, 1 patched). Audit B1: a `blocked` client edited back to its last-synced values never
 re-ran the contract (the refusal write never touched `lastSyncedHash`). The badge reasons were a `Semantics`
-label only until Phase 2 made them visible text. Plan: `docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`.
+label only until Phase 2 made them visible text. Plan: `docs/archive/2026-09-10-wave-validated-contract-phases-2-4.md`.
 
 ## Decision
 `verdictPatch` over one verdict; enforce at enqueue, dispatch and import; build state and search tokens in
@@ -25,7 +25,7 @@ absent `wave.problems` and a derived empty list as EQUAL (else every clean clien
 and leaves ENTIRELY alone a `blocked` doc that now passes (the push owns the non-blocked state), cancels no queued
 job (the dispatcher refuses it), and stays uncapped (`scanByName`); a live run patching 0 against a non-zero
 advisory count means the comparison is wrong, not the data. Surfaces: `WaveSyncBadge` shows `blocked` and its
-reasons as visible text; `WaveBlockedList` reads `watchBlockedClients()`, admin-only by the read rule.
+reasons as visible text; `WaveBlockedList` reads `watchBlockedClients()`, admin-only by the read rule. A job queued by an earlier edit, or `inflight` when the edit landed, still reaches dispatch holding a client Wave would refuse; dispatch blocks it because dead-lettering is permanent and unrecoverable, and the contract module (not discipline) is the only payload producer.
 
 ## Consequences
 Deploying enforcement before the app leaves shipped builds with no badge for `blocked` clients. A backfill that

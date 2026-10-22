@@ -6,6 +6,7 @@ import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/employees/domain/models/new_account_credentials.dart';
 import 'package:scheduling/features/employees/widgets/fields/credential_line.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/dialogs/confirm_dialog.dart';
 
 /// Shows the credentials the server just issued by a create or a reset.
 Future<void> showNewAccountDialog(
@@ -59,6 +60,21 @@ class _NewAccountDialogState extends State<_NewAccountDialog> {
       password: widget.credentials.password,
     );
     setState(() => _copied = true);
+  }
+
+  /// The password is never persisted, so an uncopied close is confirmed.
+  Future<void> _close() async {
+    if (!_copied) {
+      final l10n = context.l10n;
+      final confirmed = await showConfirmDialog(
+        context,
+        title: l10n.employees_closeWithoutCopyTitle,
+        message: l10n.employees_closeWithoutCopyBody,
+        confirmLabel: l10n.employees_closeAnyway,
+      );
+      if (!confirmed || !mounted) return;
+    }
+    Navigator.pop(context);
   }
 
   Widget _buildBody(BuildContext context) {
@@ -117,7 +133,7 @@ class _NewAccountDialogState extends State<_NewAccountDialog> {
           ),
           CupertinoDialogAction(
             isDefaultAction: true,
-            onPressed: () => Navigator.pop(context),
+            onPressed: _close,
             child: Text(l10n.common_close),
           ),
         ],
@@ -133,10 +149,7 @@ class _NewAccountDialogState extends State<_NewAccountDialog> {
           password: widget.credentials.password,
           onCopy: _copy,
         ),
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text(l10n.common_close),
-        ),
+        TextButton(onPressed: _close, child: Text(l10n.common_close)),
       ],
     );
   }

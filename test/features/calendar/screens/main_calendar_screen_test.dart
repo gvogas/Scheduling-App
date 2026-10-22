@@ -23,7 +23,9 @@ import 'package:scheduling/features/employees/domain/employees_repository.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/app_bars/app_header_pair.dart';
+import 'package:scheduling/shared/widgets/feedback/centered_error_text.dart';
 import 'package:scheduling/shared/widgets/primitives/ghost_control.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class _MockEmployeesRepo extends Mock implements EmployeesRepository {}
 
@@ -56,6 +58,8 @@ Widget _wrap({
   required Stream<List<EmployeeRecord>> allUsers,
   required EmployeesRepository repo,
   Stream<List<AppointmentRecord>>? myAppointments,
+  Stream<List<AppointmentRecord>> Function(AppointmentDateRange range)?
+  appointmentsFor,
   bool isAdmin = true,
   double textScale = 1,
 }) {
@@ -80,8 +84,11 @@ Widget _wrap({
       allUsersStreamProvider.overrideWith((_) => allUsers),
       // is deliberately NOT overridden: the crew-filter sheet must fill itself
       // from the stream this screen already watches.
+      // `appointmentsFor` lets a case answer each RANGE differently (U18).
       appointmentsInRangeProvider.overrideWith(
-        (_, _) => Stream.fromFuture(replayAppointments),
+        (_, range) =>
+            appointmentsFor?.call(range) ??
+            Stream.fromFuture(replayAppointments),
       ),
       myAppointmentsProvider.overrideWith(
         (_, _) => Stream.fromFuture(replayMine),
@@ -144,6 +151,8 @@ void main() {
 
   setUp(() {
     repo = _MockEmployeesRepo();
+    // The view prefs are read on every mount; start each case from defaults.
+    SharedPreferences.setMockInitialValues({});
   });
 
   // The calendar grid lays out at full phone width — size up to a real device
@@ -376,7 +385,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('3 JOBS · 1 DONE'), findsOneWidget);
+    expect(find.text('3 JOBS · 1 COMPLETE'), findsOneWidget);
   });
 
   testWidgets('agenda header stays a bare count while nothing is closed', (
@@ -418,7 +427,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('0 JOBS'), findsOneWidget);
-    expect(find.textContaining('DONE'), findsNothing);
+    expect(find.textContaining('COMPLETE'), findsNothing);
   });
 
   testWidgets('a cancelled job drops out of a mixed day on both sides', (
@@ -439,7 +448,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('2 JOBS · 1 DONE'), findsOneWidget);
+    expect(find.text('2 JOBS · 1 COMPLETE'), findsOneWidget);
   });
 
   testWidgets('a day of only cancellations draws no Done rule', (tester) async {
@@ -748,13 +757,16 @@ void main() {
     expect(find.byTooltip('Hide calendar'), findsOneWidget);
   });
 
-  testWidgets('survives a stream error without crashing (error branch logs)', (
-    tester,
-  ) async {
+  testWidgets('a cold stream error shows the error state with Retry, not an '
+      'empty day', (tester) async {
     await withPhoneViewport(tester);
+    var subscriptions = 0;
     await tester.pumpWidget(
       _wrap(
-        appointments: Stream.error(StateError('boom')),
+        appointments: Stream.value(const []),
+        appointmentsFor: (_) => subscriptions++ == 0
+            ? Stream.error(StateError('boom'))
+            : Stream.value([_appointment(1, DateTime.now())]),
         allUsers: Stream.value(const [_jane]),
         repo: repo,
       ),
@@ -764,7 +776,123 @@ void main() {
     // No app bar, and no go-home pill on the calendar itself.
     expect(find.text('Calendar'), findsNothing);
     expect(find.byType(AppHeaderPair), findsOneWidget);
+    // "No appointments found" would claim a quiet day the query never answered.
+    expect(find.byType(CenteredErrorText), findsOneWidget);
+    expect(find.text("Couldn't load appointments"), findsOneWidget);
+    expect(find.text('No appointments found'), findsNothing);
     expect(tester.takeException(), isNull);
+
+    // Retry re-subscribes the range stream (automatic retry is off app-wide).
+    await tester.tap(find.text('Retry'));
+    await tester.pumpAndSettle();
+    expect(subscriptions, 2);
+    expect(find.byType(CenteredErrorText), findsNothing);
+    expect(find.text('Appt 1'), findsOneWidget);
+  });
+
+  testWidgets('paging the month keeps the held jobs while the new range loads', (
+    tester,
+  ) async {
+    // The new range's provider instance starts EMPTY; before, the dots blanked
+    // and the header read "0 JOBS" until it answered. The 1st of next month
+    // sits inside this month's ±7-day overscan, so the held list already has it.
+    await withPhoneViewport(tester);
+    final now = DateTime.now();
+    final firstOfNext = DateTime(now.year, now.month + 1, 1, 9);
+    final today = DateTime(now.year, now.month, now.day);
+    final initialRange = AppointmentDateRange.forCalendar(
+      focusedDay: today,
+      selectedDay: today,
+    );
+    await tester.pumpWidget(
+      _wrap(
+        appointments: Stream.value(const []),
+        appointmentsFor: (range) => range == initialRange
+            ? Stream.value([_appointment(1, firstOfNext)])
+            : const Stream.empty(),
+        allUsers: Stream.value(const [_jane]),
+        repo: repo,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Appt 1'), findsNothing);
+
+    await tester.drag(find.byType(PageView), const Offset(-400, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.text(_dayHeader(firstOfNext)), findsOneWidget);
+    expect(find.text('1 JOB'), findsOneWidget);
+    expect(find.text('Appt 1'), findsOneWidget);
+    expect(find.byType(AgendaSkeleton), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  group('view preferences', () {
+    testWidgets('a remembered collapse and week mode are restored on mount', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        'calendar_grid_collapsed': true,
+        'calendar_agenda_mode': 'week',
+      });
+      await withPhoneViewport(tester);
+      await tester.pumpWidget(
+        _wrap(
+          appointments: Stream.value(const []),
+          allUsers: Stream.value(const [_jane]),
+          repo: repo,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CalendarWeekStrip), findsOneWidget);
+      expect(find.byType(CalendarMonthPager), findsNothing);
+      expect(find.byKey(WeekDayBar.keyFor(DateTime.now())), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('collapsing and switching to week mode are written back', (
+      tester,
+    ) async {
+      await withPhoneViewport(tester);
+      await tester.pumpWidget(
+        _wrap(
+          appointments: Stream.value(const []),
+          allUsers: Stream.value(const [_jane]),
+          repo: repo,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Hide calendar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Week view'));
+      await tester.pumpAndSettle();
+
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getBool('calendar_grid_collapsed'), isTrue);
+      expect(prefs.getString('calendar_agenda_mode'), 'week');
+    });
+
+    testWidgets('an unknown stored mode falls back to the day agenda', (
+      tester,
+    ) async {
+      SharedPreferences.setMockInitialValues({
+        'calendar_agenda_mode': 'fortnight',
+      });
+      await withPhoneViewport(tester);
+      await tester.pumpWidget(
+        _wrap(
+          appointments: Stream.value(const []),
+          allUsers: Stream.value(const [_jane]),
+          repo: repo,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(WeekDayBar.keyFor(DateTime.now())), findsNothing);
+      expect(find.byType(CalendarMonthPager), findsOneWidget);
+    });
   });
 
   testWidgets('the crew filter button is offered to an admin only', (

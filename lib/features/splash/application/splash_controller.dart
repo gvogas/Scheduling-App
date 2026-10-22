@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:scheduling/core/logging/app_logger.dart';
@@ -43,6 +44,15 @@ class SplashGoToAccountSetup extends SplashDestination {
 /// An active account an admin has reset: keep the session and force a new password.
 class SplashGoToChangePassword extends SplashDestination {
   const SplashGoToChangePassword();
+}
+
+/// Only an auth-shaped failure of the profile read sends a signed-in cold start
+/// to Login; anything else (offline, a cold cache, a server blip) keeps the
+/// session so the splash can retry.
+bool isSplashAuthFailure(Object error) {
+  if (error is FirebaseAuthException) return true;
+  return error is FirebaseException &&
+      (error.code == 'permission-denied' || error.code == 'unauthenticated');
 }
 
 Future<SplashDestination> _signOutToLogin(

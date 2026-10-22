@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show listEquals;
+
 import 'package:scheduling/features/calendar/application/event_series_helpers.dart';
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
@@ -12,12 +14,15 @@ typedef SeriesRewriteResult = ({
 });
 
 typedef SeriesRewritePlan = ({
+  AppointmentRecord base,
+  List<AppointmentRecord> deleteBases,
   AppointmentRecord updated,
   List<String> deleteIds,
   List<AppointmentRecord> copies,
 });
 
 typedef SeriesPropagatePlan = ({
+  List<AppointmentRecord> bases,
   AppointmentRecord updated,
   List<AppointmentRecord> propagated,
 });
@@ -41,7 +46,14 @@ class AppointmentSeriesEditor {
     final existing = appointment.seriesId.isEmpty
         ? const <AppointmentRecord>[]
         : await _repo.getSeries(seriesId);
-    final deleteIds = futureSeriesIds(existing, excludeId: id, after: start);
+    final deleteIds = futureSeriesIds(
+      existing.where((record) => !record.isClosed).toList(),
+      excludeId: id,
+      after: start,
+    );
+    final deleteBases = existing
+        .where((record) => deleteIds.contains(record.id))
+        .toList();
     final copies = [
       for (final copyStart in repeat.occurrenceStartsAfter(start))
         withSeries.copyWith(
@@ -56,17 +68,29 @@ class AppointmentSeriesEditor {
           // New repeat copies start without photo subcollection documents.
         ),
     ];
-    return (updated: withSeries, deleteIds: deleteIds, copies: copies);
+    return (
+      base: appointment,
+      deleteBases: deleteBases,
+      updated: withSeries,
+      deleteIds: deleteIds,
+      copies: copies,
+    );
   }
 
-  Future<SeriesRewriteResult> commitRewrite(SeriesRewritePlan plan) async {
+  Future<SeriesRewriteResult> commitRewrite(
+    SeriesRewritePlan plan, {
+    bool checkConflicts = false,
+  }) async {
     await _repo.rewriteSeries(
       updated: plan.updated,
       deleteIds: plan.deleteIds,
       copies: plan.copies,
+      base: plan.base,
+      deleteBases: plan.deleteBases,
+      checkConflicts: checkConflicts,
     );
     return (
-      updated: plan.updated,
+      updated: _repo.takeAcknowledgedWrite(plan.updated.id!) ?? plan.updated,
       futureBookings: plan.copies.length,
       removedBookings: plan.deleteIds.length,
     );
@@ -87,37 +111,71 @@ class AppointmentSeriesEditor {
       anchor: appointment,
     );
     final propagated = siblings.map((v) {
+      final original = appointment.toMap();
+      final desired = updated.toMap();
+      bool changed(String field) {
+        final before = original[field];
+        final after = desired[field];
+        return before is List && after is List
+            ? !listEquals(before, after)
+            : before != after;
+      }
+
       final copyStart = withTimeOfDay(v.startTime, start);
       return v.copyWith(
-        title: updated.title,
-        clientId: updated.clientId,
-        clientName: updated.clientName,
-        clientPhone: updated.clientPhone,
-        address: updated.address,
-        employeeIds: updated.employeeIds,
-        employeeNames: updated.employeeNames,
-        notes: updated.notes,
-        materialsNeeded: updated.materialsNeeded,
-        repeat: updated.repeat,
+        title: changed('title') ? updated.title : v.title,
+        clientId: changed('clientId') ? updated.clientId : v.clientId,
+        clientName: changed('clientName') ? updated.clientName : v.clientName,
+        clientPhone: changed('clientPhone')
+            ? updated.clientPhone
+            : v.clientPhone,
+        address: changed('address') ? updated.address : v.address,
+        employeeIds: changed('employeeIds')
+            ? updated.employeeIds
+            : v.employeeIds,
+        employeeNames: changed('employeeNames')
+            ? updated.employeeNames
+            : v.employeeNames,
+        notes: changed('notes') ? updated.notes : v.notes,
+        materialsNeeded: changed('materialsNeeded')
+            ? updated.materialsNeeded
+            : v.materialsNeeded,
+        repeat: changed('repeat') ? updated.repeat : v.repeat,
         // Editable schedule flags travel with the propagated instants.
-        isAllDay: updated.isAllDay,
-        isPersonal: updated.isPersonal,
-        isDayOff: updated.isDayOff,
-        startTime: copyStart,
-        endTime: occurrenceEnd(
-          originalStart: start,
-          originalEnd: end,
-          copyStart: copyStart,
-        ),
+        isAllDay: changed('isAllDay') ? updated.isAllDay : v.isAllDay,
+        isPersonal: changed('isPersonal') ? updated.isPersonal : v.isPersonal,
+        isDayOff: changed('isDayOff') ? updated.isDayOff : v.isDayOff,
+        startTime: changed('startTime') ? copyStart : v.startTime,
+        endTime: changed('startTime')
+            ? occurrenceEnd(
+                originalStart: start,
+                originalEnd: end,
+                copyStart: copyStart,
+              )
+            // A sibling keeping its own start shifts its end by the anchor's.
+            : changed('endTime')
+            ? v.endTime.add(end.difference(appointment.endTime))
+            : v.endTime,
         // Normalize each sibling's status so legacy values stay writable.
         status: AppointmentStatus.storedRaw(v.status),
       );
     }).toList();
-    return (updated: updated, propagated: propagated);
+    return (
+      bases: [appointment, ...siblings],
+      updated: updated,
+      propagated: propagated,
+    );
   }
 
-  Future<int> commitPropagate(SeriesPropagatePlan plan) async {
-    await _repo.updateAppointments([plan.updated, ...plan.propagated]);
+  Future<int> commitPropagate(
+    SeriesPropagatePlan plan, {
+    bool checkConflicts = false,
+  }) async {
+    await _repo.updateAppointments(
+      [plan.updated, ...plan.propagated],
+      bases: plan.bases,
+      checkConflicts: checkConflicts,
+    );
     return plan.propagated.length;
   }
 }

@@ -14,10 +14,19 @@ abstract class AppointmentsRepository {
   /// How many not-yet-started jobs this employee is still assigned to.
   Future<int> countFutureAssignments(String employeeId);
 
-  Future<void> addAppointment(AppointmentRecord appointment);
+  /// Every write taking [checkConflicts] refuses with
+  /// `CalendarFailureEmployeesBusy` when a written record's crew is already
+  /// booked over its window — one round trip, decided inside the save.
+  Future<void> addAppointment(
+    AppointmentRecord appointment, {
+    bool checkConflicts = false,
+  });
 
   /// Creates every appointment in [appointments] atomically (all-or-nothing).
-  Future<void> addAppointments(List<AppointmentRecord> appointments);
+  Future<void> addAppointments(
+    List<AppointmentRecord> appointments, {
+    bool checkConflicts = false,
+  });
 
   /// All appointments belonging to one repeat series.
   Future<List<AppointmentRecord>> getSeries(String seriesId);
@@ -28,12 +37,29 @@ abstract class AppointmentsRepository {
     required AppointmentRecord updated,
     required List<String> deleteIds,
     required List<AppointmentRecord> copies,
+    AppointmentRecord? base,
+    List<AppointmentRecord> deleteBases = const [],
+    bool checkConflicts = false,
   });
 
-  Future<void> updateAppointment(AppointmentRecord appointment);
+  Future<void> updateAppointment(
+    AppointmentRecord appointment, {
+    AppointmentRecord? base,
+    bool checkConflicts = false,
+  });
+
+  /// Consumes the server's merged record after an acknowledged edit.
+  AppointmentRecord? takeAcknowledgedWrite(String id);
+
+  /// Captures ownership before asynchronous planning; null for injected test repositories.
+  bool Function()? captureWriteOwner();
 
   /// Atomically update series to propagate edit across visit and future siblings.
-  Future<void> updateAppointments(List<AppointmentRecord> appointments);
+  Future<void> updateAppointments(
+    List<AppointmentRecord> appointments, {
+    List<AppointmentRecord> bases = const [],
+    bool checkConflicts = false,
+  });
 
   /// Adds [pictures] to `appointments/{id}/images`.
   Future<void> appendAppointmentPictures(
@@ -96,10 +122,11 @@ abstract class AppointmentsRepository {
   /// The same query as [watchInRange], read ONCE.
   Future<List<AppointmentRecord>> fetchInRange(AppointmentDateRange range);
 
-  /// One newest-first page of terminal appointments.
+  /// One newest-first page of terminal appointments, [statuses] narrowing it server-side.
   Future<List<AppointmentRecord>> fetchHistoryPage({
     required int limit,
     AppointmentRecord? after,
+    List<String>? statuses,
   });
 
   /// Search terminal appointments by client/employee name or phone,
@@ -122,8 +149,8 @@ abstract class AppointmentsRepository {
   /// Fires after every local write, including photo and crew-note appends.
   Stream<void> get onLocalWrite;
 
-  /// Fires only after a local write that changed appointment fields.
-  Stream<void> get onRecordWrite;
+  /// Doc id → new `startTime` (null: delete or status-only) per field write.
+  Stream<Map<String, DateTime?>> get onRecordWrite;
 
   Stream<List<AppointmentRecord>> watchForEmployeeInRange(
     String employeeId,

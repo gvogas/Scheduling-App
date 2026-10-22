@@ -201,6 +201,7 @@ describe("serializeWidgetJob", () => {
         expect(job).toEqual({
           id: "a1",
           startTime: "2026-07-08T18:00:00.000Z",
+          endTime: "2026-07-08T19:00:00.000Z",
           clientName: "",
           title: "",
           address: "",

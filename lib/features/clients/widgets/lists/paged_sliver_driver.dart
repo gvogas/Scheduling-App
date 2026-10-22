@@ -15,9 +15,10 @@ mixin PagedSliverPrefetch<W extends StatefulWidget> on State<W> {
   /// Remaining-row threshold before fetching the next page.
   static const int prefetchThreshold = 3;
 
-  /// Requests the first page after a paging reset. `PagingController.refresh()`
-  /// only RESETS the state — without this, pull-to-refresh and the first-page
-  /// Retry leave the skeleton shimmering with no request in flight.
+  /// Requests a page with no row to scroll past — after a paging reset
+  /// (`PagingController.refresh()` only RESETS the state — without this,
+  /// pull-to-refresh and the first-page Retry leave the skeleton shimmering with
+  /// no request in flight), or when a chip filter matched nothing loaded.
   void requestFirstPage<K, I>(
     PagingState<K, I> state,
     void Function() fetchNextPage,

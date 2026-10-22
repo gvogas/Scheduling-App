@@ -2,26 +2,10 @@
 
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
-refreshed 2026-10-09 (release 1.64.1+95 — **31 exports**; `placesAutocomplete` adds `structuredFormat` to its field mask and passes suggestions through untouched; `waveSetImportSchedule` removed from `index.js` but still live until the owner deletes it — ADR-0184; `completeEmployeeSetup` now requires `newPassword` — ADR-0185; neither deployed yet). Previously refreshed 2026-10-07 (release 1.64.0+94 — still **32 exports**; source changes NOT yet deployed: `resetEmployeePassword` gained a fresh-reauth gate and refuses admin targets, the kill-switch parsers became strict, `endLiveActivity` keeps tokens while paused, and the FCM message dropped its Android block). Previously refreshed 2026-09-29 (release 1.63.0+93 — **32 exports, all 32 deployed**:
-`resetEmployeePassword` and `completePasswordReset` went live at `306ed848`, and
-the release's review fixes to both bodies at `cc38be5d` the same day — see the
-deploy log; re-checked 2026-10-01, nothing in `functions/` has changed since). Earlier 2026-09-29: `syncClientBuilding` went live at `e70b494d`. Previously refreshed 2026-09-28 (release 1.62.1+92 — **30 exports: `syncClientBuilding` ADDED
-and NOT YET DEPLOYED; the other 29 are deployed at `bec23b85`**, though five of
-their bodies changed in source and are also undeployed: `createEmployeeAccount`
-and `completeEmployeeSetup` (per-account operation lock, optional `newPassword`),
-`syncUsersByUid` (transactional live reconciliation), `deleteClient` (deletion
-barrier) and `searchClients` (optional `archived`/`type`/`buildingKey` filters).
-Deploy ordering — rules, then the nine new client composites READY, then
-functions, then `functions/scripts/backfill-client-buildings.js` — is in
-[audit rollout](audits/AUDIT_ROLLOUT_2026-09-23.md). Previously refreshed 2026-09-19 (release 1.62.0+91 — **still 29 exports, all DEPLOYED**: the
-month-end overdue rider on `sendDailyJobDigest` and Wave Phase 4 (the `worker.js`
-split, the guarded import updates, the cadence deleted and
-`waveSetImportSchedule` retired to a no-op) went live 2026-09-19 16:37Z
-(`608b817a`), ahead of the app build; the audit's stale-block clear in
-`waveUpsertCustomer` followed at ~19:45Z (`bec23b85`).
-Refresh entries older than 2026-09-19 were moved to
-`docs/archive/CLOUD_FUNCTIONS_refresh_history.md` (2026-09-06, 2026-09-13 and
-2026-10-01).
+refreshed 2026-10-21 (release 1.66.0+98 — no export added; `saveAppointmentEdits` accepts an unchanged legacy status). Before that, refreshed 2026-10-20 (release 1.65.0+97 — **32 exports, 31 deployed**: `saveAppointmentEdits` is NEW and NOT yet deployed, and must deploy BEFORE the app build, which calls it for every admin appointment edit; `findAppointmentConflicts` gains a batched `windows` mode, `excludeAppointmentIds` and a per-window rate cost at 250/min; `propagateClientEdits` re-reads each page inside a transaction; none of these are deployed). Previously refreshed 2026-10-18 (release 1.64.2+96 — **31 exports, all deployed** at `0ab3f05c` on 2026-10-11, the 2026-10-07 and 10-09 entries below included, `waveSetImportSchedule` deleted 32 → 31; one source change since is NOT deployed: `afd68870` makes `purgeExpiredHistory` count image failures by doc id, in `maintenance_policy.js`). Previously refreshed 2026-10-09 (release 1.64.1+95 — **31 exports**; `placesAutocomplete` adds `structuredFormat` to its field mask and passes suggestions through untouched; `waveSetImportSchedule` removed from `index.js` but still live until the owner deletes it — ADR-0184; `completeEmployeeSetup` now requires `newPassword` — ADR-0185; neither deployed yet). Previously refreshed 2026-10-07 (release 1.64.0+94 — still **32 exports**; source changes NOT yet deployed: `resetEmployeePassword` gained a fresh-reauth gate and refuses admin targets, the kill-switch parsers became strict, `endLiveActivity` keeps tokens while paused, and the FCM message dropped its Android block).
+Refresh entries older than 2026-10-07 were moved to
+`docs/archive/CLOUD_FUNCTIONS_refresh_history.md` (2026-09-06, 2026-09-13,
+2026-10-01 and 2026-10-18).
 
 **Every callable now enforces App Check** (`enforceAppCheck: true`); the
 earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
@@ -165,10 +149,16 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
   *count* never moved (25 throughout, `index.js` untouched), so a count check
   looked clean for three days while prod ran older bodies — check the deploy
   log, not the count.
+- **32 functions defined, 31 DEPLOYED** (2026-10-21, release 1.66.0+98):
+  unchanged since 1.65.0+97; the backend is still owed before the app build.
+- **32 functions defined, 31 DEPLOYED** (2026-10-20, release 1.65.0+97):
+  `saveAppointmentEdits` was added in source and is not deployed yet; deploy the
+  backend (functions + indexes) before the app build.
+- **31 functions defined, 31 DEPLOYED** (2026-10-11, `0ab3f05c`): the owner
+  deleted `waveSetImportSchedule` (ADR-0184) and the workflow deployed the
+  rest. `maintenance_policy.js` changed since (`afd68870`) and is undeployed.
 - **31 functions defined, 32 DEPLOYED** (2026-10-09): `waveSetImportSchedule`
-  left `index.js` (ADR-0184) and stays live until the owner runs
-  `firebase functions:delete waveSetImportSchedule --region us-central1`; the
-  workflow's export diff refuses to deploy until then.
+  left `index.js` (ADR-0184) and stayed live until the owner deleted it.
 - **32 functions defined, 32 DEPLOYED** (2026-09-29, `306ed848`). Release
   1.63.0+93 then changed the bodies of `resetEmployeePassword` (a failed revoke
   no longer rethrows) and `completePasswordReset` (transactional flag clear) in
@@ -302,9 +292,10 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
 | `waveBootstrap` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` | `WAVE_FULL_ACCESS_TOKEN`, `WAVE_BUSINESS_NAME` | App Check ✓ · admin · durable 10/hr |
 | `waveGetConnection` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (Settings mount) | — | App Check ✓ · admin · durable 60/hr |
 | `waveImportCustomers` | callable | `onCall` | `wave/callables.js` | `wave_service.dart` (`syncCustomers`, Settings "Sync with Wave") | `WAVE_FULL_ACCESS_TOKEN` | App Check ✓ · admin · durable 5/hr · 300s |
-| `searchClients` | callable | `onCall` | `indexed_search.js` | `firebase_clients_repository.dart` (`searchClients`, the debounced clients/history search bar) | — | App Check ✓ · `assertAdminCall` (clients are PII) · optional `archived`/`type`/`buildingKey` filters |
+| `searchClients` | callable | `onCall` | `indexed_search.js` | `firebase_clients_repository.dart` (`searchClients`, the debounced clients/history search bar) | — | App Check ✓ · `assertAdminCall` (clients are PII) · optional `archived`/`type`/`buildingKey` filters · `minInstances: 1`, 512 MiB (NOT YET DEPLOYED) |
 | `searchHistory` | callable | `onCall` | `indexed_search.js` | `firebase_appointments_repository.dart` (`searchHistory`, admin History screen) | — | App Check ✓ · `assertAdminCall` · `all:` scope only; `employeeId` accepted and ignored (`#compat-1.63.0`) |
-| `findAppointmentConflicts` | callable | `onCall` | `indexed_search.js` | `firebase_appointments_repository.dart` (`findClashingAppointments`/`findBusyEmployees`, pre-save clash check + assignee picker) | — | App Check ✓ · `assertActiveCall` · a non-admin is narrowed to their own doc id |
+| `findAppointmentConflicts` | callable | `onCall` | `indexed_search.js` | `firebase_appointments_repository.dart` (`findClashingAppointments`/`findBusyEmployees`, assignee picker and clash dialog; the app sends ONE window per call, the multi-window request shape stays supported server-side) | — | App Check ✓ · `assertActiveCall` · a non-admin is narrowed to their own doc id · durable 250/min·uid, one unit per window · ≤16 windows, ≤100 exclusions · 120s · `minInstances: 1`, 512 MiB (NOT YET DEPLOYED) |
+| `saveAppointmentEdits` | callable | `onCall` | `appointment_edits.js` | `firebase_appointments_repository.dart` (`_commitEdits`: `addAppointment(s)`, `updateAppointment(s)`, `rewriteSeries`) | — | App Check ✓ · `assertAdminCall` (4 MiB budget) · ≤400 commands · optional `checkConflicts` → `failed-precondition`/`appointment-employee-busy` · durable 120/min·uid · 120s · `minInstances: 1`, 512 MiB · **NOT YET DEPLOYED** |
 | `restoreAppointmentStatus` | callable | `onCall` | `appointment_actions.js` | `firebase_appointments_repository.dart` (`restoreAppointmentStatus`, the mark-complete Undo) | — | App Check ✓ · `assertActiveCall` · admin **or assigned** · target must be `pending`/`in_progress` |
 | `deleteClient` | callable | `onCall` | `clients.js` | `firebase_clients_repository.dart` | — | App Check ✓ · admin · durable 20/hr · deletion-token barrier |
 | `syncUsersByUid` | trigger | `onDocumentWritten users/{id}` | `bridge.js` | any `users` doc write | — | `retry: true` · transactional live reconcile |
@@ -351,7 +342,7 @@ dot as a field path, so a dotted key there would create a literal
 Replay the contract over production read-only with
 `functions/scripts/audit-wave-contract.js`. Design:
 `docs/archive/2026-08-30-wave-validated-contract-design.md`; Phases 2-4 plan:
-`docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md`.
+`docs/archive/2026-09-10-wave-validated-contract-phases-2-4.md`.
 
 **Exactly three Cloud Scheduler jobs, and that is deliberate** — only 3 are free
 per billing account. `sendOverdueJobPrompts` (was `every 15 minutes`) is merged
@@ -714,6 +705,41 @@ not parse blocks unconditionally, so a legacy or console-written row can never
 quietly vanish from a booking check. A non-admin caller's `employeeIds` are
 narrowed to their own doc id, so a technician cannot probe the roster's diary.
 
+### `saveAppointmentEdits` — `appointment_edits.js`
+The admin edit path for appointments: one transaction applying up to 400
+`edits`/`creates`/`deletes`. Each edit sends the form's `base` and `desired`
+record; `appointmentEditPatch` (`appointment_edit_policy.js`) writes only the
+fields the form changed, measured against the CURRENT doc, and refuses
+`aborted`/`appointment-edit-conflict` when the same field moved elsewhere, so a
+stale form cannot overwrite a newer edit. A delete is refused if the doc changed
+since the form loaded. Reopening a closed job deletes `completedAt`. The status
+allowlist checks a status the edit sets; an unchanged stored legacy
+`completed`/`confirmed` passes, as `appointmentClosedStatusPreserved` does in the
+rules. Commands are
+validated before the rate limit is consumed. It is the one callable with a
+non-default byte budget (4 MiB, `.claude/rules/security.md`).
+
+**`checkConflicts: true`** (optional, boolean; anything else is
+`invalid-argument`/`invalid-checkConflicts`) folds the crew clash check into the
+same transaction, so an admin Save is ONE round trip instead of
+`findAppointmentConflicts` followed by the save. Inside the transaction, after
+the merge and the client check, every non-deleted, non-personal command with a
+crew is run through `readConflictWindow` (`indexed_search.js`, the SAME
+`dailyWindowsOverlap` rule and scan cap as the picker's callable, reading
+through `tx.get`) with this operation's own document ids excluded; the first
+clash refuses the whole operation with `failed-precondition` /
+`appointment-employee-busy` and `details: {busyEmployeeIds, startMillis,
+endMillis}`, which the app maps to `CalendarFailureEmployeesBusy` and the
+double-booking prompt ("Book Anyway" re-sends without the key). The rate limit
+is consumed once, before the transaction, so a refused clash costs one slot.
+Without the key the callable behaves exactly as before. All three hot callables
+(`saveAppointmentEdits`, `findAppointmentConflicts`, `searchClients`) now
+declare `minInstances: 1` and `memory: "512MiB"` so a quiet spell no longer
+costs the dispatcher a cold start on Save or the first search keystroke.
+
+The batched mode of `findAppointmentConflicts` (`windows`, up to 16) answers
+`busyEmployeeIds` per window and charges one rate-limit unit per window.
+
 ### `restoreAppointmentStatus` — `appointment_actions.js`
 Undo for the mobile "mark complete". Runs in a transaction: the document must
 currently be COMPLETED, the caller must be an admin or assigned (`mayRestore`),
@@ -827,7 +853,10 @@ mocked `{db, messaging, now, logger}`). Recipients are always filtered
 server-side to `role == 'employee' && status == 'active'`; tokens live in
 `users/{docId}/fcmTokens/{token}` (doc id = token, keyed by users **doc id**
 so the send path needs no uid translation), and stale tokens are deleted on
-send failure. Text is localized per token doc (`locale: 'en'|'fr'`) from an
+send failure. A row with `kind: 'fid'` is keyed by a Firebase Installation ID
+and sent as `{fid}` (`messageTargetFor`, `notification_policy.js`); any other
+row is a legacy FCM token sent as `{token}`, and
+`messaging/installation-id-not-registered` prunes a dead FID (ADR-0190). Text is localized per token doc (`locale: 'en'|'fr'`) from an
 inline EN/FR table; every message sets an APNs `sound` so delivery isn't
 silent. **Deployed 2026-07-11**
 — see Deployment status. Design: `docs/archive/2026-07-08-push-notifications.md`.

@@ -9,6 +9,7 @@ import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/core/utils/date_utils_helper.dart';
+import 'package:scheduling/core/utils/presentation_time_provider.dart';
 import 'package:scheduling/features/auth/application/active_user_identity_provider.dart';
 import 'package:scheduling/features/auth/application/is_active_admin_provider.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
@@ -118,6 +119,7 @@ class DetailsViewBody extends ConsumerWidget {
 
   List<Widget> _buildHeaderBlock(
     BuildContext context,
+    AppointmentRecord current,
     _DetailsViewData data,
     EventDetailsController notifier,
   ) {
@@ -133,7 +135,7 @@ class DetailsViewBody extends ConsumerWidget {
           child: DetailsEditChip(onTap: notifier.enterEditing),
         ),
       DetailsHeader(
-        appointment: appointment,
+        appointment: current,
         status: data.displayStatus,
         compact: compactHeader,
       ),
@@ -141,8 +143,8 @@ class DetailsViewBody extends ConsumerWidget {
       // time.
       if (data.hasTimeRecord && !data.isCancelled)
         DetailsTimeRecordRow(
-          startedAt: appointment.startedAt,
-          completedAt: appointment.completedAt,
+          startedAt: current.startedAt,
+          completedAt: current.completedAt,
         ),
       const SizedBox(height: AppSpacing.sp16),
       const Divider(height: 1),
@@ -153,6 +155,7 @@ class DetailsViewBody extends ConsumerWidget {
   Widget _buildActionBar(
     BuildContext context,
     WidgetRef ref,
+    AppointmentRecord current,
     _DetailsViewData data,
     EventDetailsController notifier, {
     required bool isSaving,
@@ -171,7 +174,7 @@ class DetailsViewBody extends ConsumerWidget {
       onStart: (showActions || canRecordFieldWork) && !appointment.isPersonal
           ? () => _onStart(context, ref, notifier)
           : null,
-      onMarkDone: () => _onMarkDone(context, ref, notifier),
+      onMarkDone: () => _onMarkDone(context, ref, notifier, current),
       onCancel: () => _onCancel(context, ref, notifier),
       onBookAgain: _bookAgainCallback(client),
       tourWrap: tourWrap,
@@ -218,9 +221,26 @@ class DetailsViewBody extends ConsumerWidget {
     );
     final client = ref.watch(provider.select((s) => s.client));
     final isSaving = ref.watch(provider.select((s) => s.isSaving));
+    final live = ref.watch(
+      provider.select(
+        (s) => (s.liveStatus, s.liveStartedAt, s.liveCompletedAt),
+      ),
+    );
     final notifier = ref.read(provider.notifier);
 
-    final data = _DetailsViewData.from(appointment, client);
+    // Start job keeps the sheet open, so status and stamps come from what this
+    // sheet last WROTE, never the snapshot it opened with.
+    final current = liveRecord(
+      appointment,
+      status: live.$1,
+      startedAt: live.$2,
+      completedAt: live.$3,
+    );
+    final data = _DetailsViewData.from(
+      current,
+      client,
+      ref.watch(presentationTimeProvider),
+    );
     // Resolved once: it gates the field record below AND the Start button.
     final canRecordFieldWork = _canRecordFieldWork(ref, appointment);
 
@@ -239,7 +259,7 @@ class DetailsViewBody extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ..._buildHeaderBlock(context, data, notifier),
+        ..._buildHeaderBlock(context, current, data, notifier),
         _buildClientSection(context, ref, data, notifier),
         ClientContactsCards(contacts: data.extraContacts, collapsible: true),
         ..._buildSections(
@@ -250,6 +270,7 @@ class DetailsViewBody extends ConsumerWidget {
         _buildActionBar(
           context,
           ref,
+          current,
           data,
           notifier,
           isSaving: isSaving,
@@ -259,6 +280,22 @@ class DetailsViewBody extends ConsumerWidget {
       ],
     );
   }
+
+  /// [appointment] as this sheet last wrote it; the snapshot while it wrote
+  /// nothing.
+  @visibleForTesting
+  static AppointmentRecord liveRecord(
+    AppointmentRecord appointment, {
+    required String? status,
+    required DateTime? startedAt,
+    required DateTime? completedAt,
+  }) => status == null
+      ? appointment
+      : appointment.copyWith(
+          status: status,
+          startedAt: startedAt ?? appointment.startedAt,
+          completedAt: completedAt ?? appointment.completedAt,
+        );
 
   /// Whether Push back is offered.
   ///
@@ -302,8 +339,10 @@ class DetailsViewBody extends ConsumerWidget {
     BuildContext context,
     WidgetRef ref,
     EventDetailsController notifier,
+    AppointmentRecord current,
   ) async {
-    final previousStatus = AppointmentStatus.storedRaw(appointment.status);
+    // From the LIVE record: Start → Complete → Undo must land on in_progress.
+    final previousStatus = AppointmentStatus.storedRaw(current.status);
     // Resolved BEFORE the sheet closes: the Undo runs from a timer after the controller is disposed (ADR-0033).
     final l10n = context.l10n;
     final id = appointment.id;
@@ -611,12 +650,15 @@ class _DetailsViewData {
   factory _DetailsViewData.from(
     AppointmentRecord appointment,
     ClientRecord? client,
+    DateTime now,
   ) {
     final status = AppointmentStatus.fromRaw(appointment.status);
     // The actions (mark-done/cancel/edit) are gated on the real stored status,
     // while the header chip uses the time-derived one instead, so it matches
     // what the card shows.
-    final displayStatus = AppointmentStatus.fromRaw(appointment.displayStatus);
+    final displayStatus = AppointmentStatus.fromRaw(
+      appointment.displayStatusAt(now),
+    );
     final phone = (client?.phone.isNotEmpty ?? false)
         ? client!.phone
         : appointment.clientPhone;

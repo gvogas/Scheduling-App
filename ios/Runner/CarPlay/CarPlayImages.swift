@@ -49,7 +49,7 @@ enum CarPlayImages {
             let background = crewColor(lead.storedColor, style: style)
             let foreground = avatarForeground(on: background, style: style)
             let bounds = CGRect(origin: .zero, size: size)
-            return render(size: size) {
+            return render(size: size, style: style) {
                 let circle = bounds.insetBy(dx: isOwn ? 2 : 0, dy: isOwn ? 2 : 0)
                 if isOwn {
                     UIColor.white.setStroke()
@@ -98,7 +98,7 @@ enum CarPlayImages {
                     systemName: glyphName, withConfiguration: configuration)?
                     .withTintColor(tint, renderingMode: .alwaysOriginal)
             else { return nil }
-            return render(size: size) {
+            return render(size: size, style: style) {
                 glyph.draw(in: centered(glyph.size, in: size))
             }
         }
@@ -200,13 +200,16 @@ enum CarPlayImages {
     // MARK: - Drawing helpers
 
     private static func render(
-        size: CGSize, _ body: () -> Void
+        size: CGSize, style: UIUserInterfaceStyle, _ body: () -> Void
     ) -> UIImage {
         let format = UIGraphicsImageRendererFormat.preferred()
         format.opaque = false
         let renderer = UIGraphicsImageRenderer(size: size, format: format)
-        return renderer.image { _ in body() }
-            .withRenderingMode(.alwaysOriginal)
+        var image: UIImage!
+        UITraitCollection(userInterfaceStyle: style).performAsCurrent {
+            image = renderer.image { _ in body() }
+        }
+        return image.withRenderingMode(.alwaysOriginal)
     }
 
     private static func draw(

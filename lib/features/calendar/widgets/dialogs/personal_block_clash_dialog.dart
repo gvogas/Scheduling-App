@@ -359,7 +359,7 @@ class _PersonalBlockClashDialogState
       addId: person.id,
       addName: person.name,
     );
-    if (await _write(key, updated, previous: previous)) {
+    if (await _write(key, updated, base: _live(job), previous: previous)) {
       setState(() {
         _jobs[updated.id!] = updated;
         _states[key] = _RowDone(took: person);
@@ -379,7 +379,7 @@ class _PersonalBlockClashDialogState
       addId: group.employeeId,
       addName: group.name,
     );
-    if (await _write(key, reverted, previous: state)) {
+    if (await _write(key, reverted, base: _live(job), previous: state)) {
       setState(() {
         _jobs[reverted.id!] = reverted;
         _states[key] = const _RowIdle();
@@ -392,6 +392,7 @@ class _PersonalBlockClashDialogState
   Future<bool> _write(
     String key,
     AppointmentRecord record, {
+    required AppointmentRecord base,
     required _RowState previous,
   }) async {
     if (guardedOffline(
@@ -402,13 +403,15 @@ class _PersonalBlockClashDialogState
       return false;
     }
     final repository = ref.read(appointmentsRepositoryProvider);
+    final isCurrent = repository.captureWriteOwner();
     final logger = ref.read(loggerProvider);
     final notices = ref.read(noticeServiceProvider);
     setState(() => _states[key] = const _RowBusy());
     try {
-      await repository.updateAppointment(record);
+      if (isCurrent != null && !isCurrent()) return false;
+      await repository.updateAppointment(record, base: base);
       // Re-checked: setState on a dismissed dialog is a release FATAL.
-      if (!mounted) return false;
+      if (!mounted || (isCurrent != null && !isCurrent())) return false;
       return true;
     } on Object catch (e, st) {
       logger.warn('APPT-SAVE personal-block swap failed', e, st);

@@ -11,9 +11,12 @@ import 'package:scheduling/features/calendar/screens/day_route_screen.dart';
 import 'package:scheduling/features/calendar/screens/overdue_review_screen.dart';
 import 'package:scheduling/features/clients/screens/history_screen.dart';
 import 'package:scheduling/features/dashboard/screens/dashboard_screen.dart';
+import 'package:scheduling/features/notifications/screens/notification_ask_screen.dart';
 import 'package:scheduling/features/presence/screens/share_location_ask_screen.dart';
+import 'package:scheduling/features/settings/screens/location_sharing_screen.dart';
 import 'package:scheduling/features/settings/screens/my_details_screen.dart';
 import 'package:scheduling/features/settings/screens/settings_screen.dart';
+import 'package:scheduling/features/settings/screens/text_size_screen.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/hub_shell.dart';
 
@@ -31,18 +34,31 @@ class AppRoutes {
   static const String liveMap = '/live-map';
   static const String settings = '/settings';
   static const String myDetails = '/settings/my-details';
+  static const String textSize = '/settings/text-size';
+  static const String locationSharing = '/settings/location-sharing';
   static const String dashboard = '/dashboard';
   static const String dayRoute = '/day-route';
+  static const String notificationAsk = '/notification-ask';
   static const String shareLocationAsk = '/share-location';
   static const String overdueReview = '/overdue-review';
 
   static Route<dynamic>? onGenerateRoute(RouteSettings settings) {
     switch (settings.name) {
       case login:
-        return AppPageRoute(settings: settings, builder: (_) => const Login());
+        // Optional: a mistyped argument drops the notice, never the screen.
+        final args = _args<LoginArgs>(settings);
+        return AppPageRoute(
+          settings: settings,
+          builder: (_) => Login(notice: args?.notice),
+        );
 
       case forgotPassword:
-        final args = settings.arguments as ForgotPasswordArgs?;
+        // Null is a legal open (no prefill); a wrong type is not.
+        final raw = settings.arguments;
+        if (raw != null && raw is! ForgotPasswordArgs) {
+          return _invalidRoute(settings);
+        }
+        final args = raw as ForgotPasswordArgs?;
         return AppPageRoute(
           settings: settings,
           builder: (_) =>
@@ -88,6 +104,7 @@ class AppRoutes {
           builder: (_) => DayRouteScreen(
             isAdmin: args.isAdmin,
             employeeId: args.employeeId,
+            initialDay: args.initialDay,
           ),
         );
 
@@ -161,6 +178,12 @@ class AppRoutes {
           employeeId: args.employeeId,
         );
 
+      case notificationAsk:
+        return AppPageRoute(
+          settings: settings,
+          builder: (_) => const NotificationAskScreen(),
+        );
+
       case shareLocationAsk:
         return AppPageRoute(
           settings: settings,
@@ -171,6 +194,28 @@ class AppRoutes {
         return AppPageRoute(
           settings: settings,
           builder: (_) => const MyDetailsScreen(),
+        );
+
+      case AppRoutes.textSize:
+        final args = _args<SettingsDetailArgs>(settings);
+        if (args == null) return _invalidRoute(settings);
+        return AppPageRoute(
+          settings: settings,
+          builder: (_) => TextSizeScreen(
+            isAdmin: args.isAdmin,
+            employeeId: args.employeeId,
+          ),
+        );
+
+      case AppRoutes.locationSharing:
+        final args = _args<SettingsDetailArgs>(settings);
+        if (args == null) return _invalidRoute(settings);
+        return AppPageRoute(
+          settings: settings,
+          builder: (_) => LocationSharingScreen(
+            isAdmin: args.isAdmin,
+            employeeId: args.employeeId,
+          ),
         );
 
       case AppRoutes.settings:
@@ -319,6 +364,14 @@ class ForgotPasswordArgs {
   final String? initialEmail;
 }
 
+/// Typed, not a string, so the sign-in screen localizes it at render time.
+enum LoginNotice { accountReady }
+
+class LoginArgs {
+  const LoginArgs({this.notice});
+  final LoginNotice? notice;
+}
+
 class AccountSetupArgs {
   const AccountSetupArgs({this.firstName = '', this.lastName = ''});
 
@@ -353,9 +406,16 @@ class OverdueReviewArgs {
 }
 
 class DayRouteArgs {
-  const DayRouteArgs({required this.isAdmin, required this.employeeId});
+  const DayRouteArgs({
+    required this.isAdmin,
+    required this.employeeId,
+    this.initialDay,
+  });
   final bool isAdmin;
   final String employeeId;
+
+  /// The day the route opens on; null means today.
+  final DateTime? initialDay;
 }
 
 class DashboardArgs {
@@ -369,6 +429,13 @@ class DashboardArgs {
   final String employeeId;
   final String? userName;
   final String? email;
+}
+
+/// The two Settings sub-screens (text size, location sharing).
+class SettingsDetailArgs {
+  const SettingsDetailArgs({required this.isAdmin, required this.employeeId});
+  final bool isAdmin;
+  final String employeeId;
 }
 
 class SettingsArgs {

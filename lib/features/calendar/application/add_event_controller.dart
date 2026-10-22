@@ -12,6 +12,7 @@ import 'package:scheduling/features/calendar/application/appointment_form_concer
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
+import 'package:scheduling/features/calendar/domain/calendar_failure.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_prefill.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/domain/models/repeat_interval.dart';
@@ -282,10 +283,11 @@ class AddEventController extends Notifier<AddEventState>
       isAllDay: value
           ? state.selectedStartTime == null && state.selectedEndTime == null
           : state.isAllDay,
-      errors: withoutKeys(
-        state.errors,
-        const ['client', 'startTime', 'endTime'],
-      ),
+      errors: withoutKeys(state.errors, const [
+        'client',
+        'startTime',
+        'endTime',
+      ]),
     );
   }
 
@@ -327,22 +329,17 @@ class AddEventController extends Notifier<AddEventState>
     }
 
     final repo = ref.read(appointmentsRepositoryProvider);
+    final ownsWrite = repo.captureWriteOwner();
     // Read dependencies before any await.
     final logger = ref.read(loggerProvider);
     final uploader = ref.read(appointmentImageUploadProvider);
     // Snapshot form state before async work starts.
-    final images = state.selectedImages;
-    final client = state.selectedClient;
-    final isPersonal = state.isPersonal;
-    final isDayOff = state.isDayOff;
-    final isAllDay = state.isAllDay;
-    final selectedEmployees = state.selectedEmployees;
-    final repeat = state.repeat;
+    final form = state;
 
     final (:start, :end) = appointmentSpan(
       date: state.selectedDate!,
       endDate: state.endDate ?? state.selectedDate!,
-      isAllDay: isAllDay,
+      isAllDay: form.isAllDay,
       startTime: state.selectedStartTime,
       endTime: state.selectedEndTime,
     );
@@ -357,24 +354,24 @@ class AddEventController extends Notifier<AddEventState>
         title: title.trim(),
         startTime: start,
         endTime: end,
-        clientId: client?.id ?? '',
-        clientName: client?.displayName ?? '',
-        clientPhone: client?.phone ?? '',
+        clientId: form.selectedClient?.id ?? '',
+        clientName: form.selectedClient?.displayName ?? '',
+        clientPhone: form.selectedClient?.phone ?? '',
         // Day off hides the address field, so it saves blank.
-        address: isDayOff ? '' : address.trim(),
-        isPersonal: isPersonal,
-        isDayOff: isDayOff,
-        isAllDay: isAllDay,
-        employeeIds: selectedEmployees.map((e) => e.id).toList(),
-        employeeNames: selectedEmployees.map((e) => e.name).toList(),
+        address: form.isDayOff ? '' : address.trim(),
+        isPersonal: form.isPersonal,
+        isDayOff: form.isDayOff,
+        isAllDay: form.isAllDay,
+        employeeIds: form.selectedEmployees.map((e) => e.id).toList(),
+        employeeNames: form.selectedEmployees.map((e) => e.name).toList(),
         notes: notes.trim(),
         materialsNeeded: materialsNeeded.trim(),
-        repeat: repeat,
-        seriesId: repeat == RepeatInterval.none ? '' : docId,
+        repeat: form.repeat,
+        seriesId: form.repeat == RepeatInterval.none ? '' : docId,
       );
 
       // Multi-day client jobs split into daily documents; personal blocks stay wide.
-      final runWindows = isPersonal
+      final runWindows = form.isPersonal
           ? [(start: start, end: end)]
           : expandRunWindows(start, end);
       final dayCount = runWindows.length;
@@ -396,7 +393,7 @@ class AddEventController extends Notifier<AddEventState>
       final repeatCopies = dayCount > 1
           ? const <AppointmentRecord>[]
           : [
-              for (final copyStart in repeat.occurrenceStartsAfter(start))
+              for (final copyStart in form.repeat.occurrenceStartsAfter(start))
                 days.first.copyWith(
                   id: repo.newDocId(),
                   startTime: copyStart,
@@ -410,32 +407,40 @@ class AddEventController extends Notifier<AddEventState>
 
       final toWrite = [...days, ...repeatCopies];
       // Personal clashes are handled by the time-off alert after write.
-      if (!forceBusy && !isPersonal) {
-        final conflict = await findFirstAppointmentConflict(
-          repo: repo,
-          candidates: selectedEmployees,
+      final checkConflicts = !forceBusy && !form.isPersonal;
+
+      if (ownsWrite?.call() == false) return _releaseStale();
+      try {
+        if (toWrite.length == 1) {
+          await repo.addAppointment(
+            toWrite.single,
+            checkConflicts: checkConflicts,
+          );
+        } else {
+          await repo.addAppointments(toWrite, checkConflicts: checkConflicts);
+        }
+      } on CalendarFailureEmployeesBusy catch (busy) {
+        // Conflicts return to the sheet for a force-through choice.
+        if (ref.mounted) state = state.copyWith(isSubmitting: false);
+        final hit = conflictHitOf(
+          busy,
+          candidates: form.selectedEmployees,
           bookings: toWrite,
         );
-        if (conflict != null) {
-          // Conflicts return to the sheet for a force-through choice.
-          if (ref.mounted) state = state.copyWith(isSubmitting: false);
-          return AddEventBusyEmployees(
-            busyEmployees: conflict.busyEmployees,
-            start: conflict.start,
-            end: conflict.end,
-          );
-        }
-      }
-
-      if (toWrite.length == 1) {
-        await repo.addAppointment(toWrite.single);
-      } else {
-        await repo.addAppointments(toWrite);
+        return AddEventBusyEmployees(
+          busyEmployees: hit.busyEmployees,
+          start: hit.start,
+          end: hit.end,
+        );
       }
 
       // Draft photos attach to day one.
-      if (images.isNotEmpty) {
-        uploader.uploadInBackground(appointmentId: docId, newImages: images);
+      if (ownsWrite?.call() == false) return _releaseStale();
+      if (form.selectedImages.isNotEmpty) {
+        await uploader.enqueuePhotos(
+          appointmentId: docId,
+          newImages: form.selectedImages,
+        );
       }
 
       return AddEventSubmitted(
@@ -448,6 +453,12 @@ class AddEventController extends Notifier<AddEventState>
       if (ref.mounted) state = state.copyWith(isSubmitting: false);
       return AddEventFailed(e);
     }
+  }
+
+  /// A stale session lease still frees Save, or the sheet sticks disabled.
+  AddEventBusy _releaseStale() {
+    if (ref.mounted) state = state.copyWith(isSubmitting: false);
+    return const AddEventBusy();
   }
 }
 

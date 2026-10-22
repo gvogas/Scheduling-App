@@ -3,6 +3,7 @@ import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/validators/email_format.dart';
@@ -20,6 +21,7 @@ final authServiceProvider = Provider<AuthService>(
     employeesRepository: ref.watch(employeesRepositoryProvider),
     authCache: ref.watch(authCacheProvider),
     logger: ref.watch(loggerProvider),
+    sessionForExit: () => ref.read(sessionFenceProvider),
   ),
 );
 
@@ -29,17 +31,20 @@ class AuthService {
     EmployeesRepository? employeesRepository,
     AuthCache? authCache,
     AppLogger? logger,
+    SessionFence Function()? sessionForExit,
   }) : _auth = firebaseAuth ?? FirebaseAuth.instance,
        _employees =
            employeesRepository ??
            FirebaseEmployeesRepository(FirebaseFirestore.instance),
        _authCache = authCache ?? AuthCache(),
-       _logger = logger ?? AppLogger();
+       _logger = logger ?? AppLogger(),
+       _sessionForExit = sessionForExit;
 
   final FirebaseAuth _auth;
   final EmployeesRepository _employees;
   final AuthCache _authCache;
   final AppLogger _logger;
+  final SessionFence Function()? _sessionForExit;
 
   User? get currentUser => _auth.currentUser;
 
@@ -213,6 +218,8 @@ class AuthService {
   }
 
   Future<void> signOut() async {
+    final session = _sessionForExit?.call();
+    final lease = session?.beginExit();
     Object? signOutError;
     StackTrace? signOutStack;
     try {
@@ -238,6 +245,7 @@ class AuthService {
       );
       return;
     }
+    if (lease?.isCurrent == true) session?.resume();
     Error.throwWithStackTrace(signOutError, signOutStack!);
   }
 }

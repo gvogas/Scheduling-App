@@ -9,12 +9,15 @@ import 'package:mocktail/mocktail.dart';
 import 'package:scheduling/core/app/app_sync_listeners.dart';
 import 'package:scheduling/core/app/carplay_bridge.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
+import 'package:scheduling/core/notices/app_notice.dart';
+import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/remote_config/feature_flags.dart';
 import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/core/utils/current_day_provider.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
 import 'package:scheduling/features/auth/application/active_user_identity_provider.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
+import 'package:scheduling/features/calendar/application/photo_upload_notifier.dart';
 import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
@@ -126,6 +129,7 @@ void main() {
     widgetPayloads = StreamController<Map<String, dynamic>?>.broadcast();
     snapshotPayloads = StreamController<Map<String, dynamic>?>.broadcast();
     when(() => push.sync()).thenAnswer((_) async {});
+    when(() => push.retryRegistration()).thenAnswer((_) async {});
     when(() => presence.sync()).thenAnswer((_) async {});
     when(() => liveActivity.sync()).thenAnswer((_) async {});
     when(() => uploads.drainPending()).thenAnswer((_) async {});
@@ -150,11 +154,14 @@ void main() {
   Future<ProviderContainer> pump(
     WidgetTester tester, {
     bool isIos = true,
+    PhotoUploadNotifier? photos,
   }) async {
     late ProviderContainer container;
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          if (photos != null)
+            photoUploadNotifierProvider.overrideWithValue(photos),
           currentUserDocProvider.overrideWith((ref) => accountDocs.stream),
           isOfflineProvider.overrideWith((ref) => ref.watch(_offline)),
           pushRegistrationControllerProvider.overrideWithValue(push),
@@ -268,6 +275,7 @@ void main() {
       await tester.pump();
 
       verify(() => uploads.drainPending()).called(1);
+      verify(() => push.retryRegistration()).called(1);
     });
 
     testWidgets('does NOT drain when signed out', (tester) async {
@@ -295,6 +303,44 @@ void main() {
       await tester.pump();
 
       verifyNever(() => uploads.drainPending());
+    });
+
+    testWidgets('announces the queued photos the reconnect drain sends', (
+      tester,
+    ) async {
+      // The queue drained silently: the crew who photographed offline got no
+      // word that the photos were on their way.
+      final photos = PhotoUploadNotifier()..reportPending({'a1': 2, 'a2': 1});
+      addTearDown(photos.dispose);
+      final container = await pump(tester, photos: photos);
+      accountDocs.add(_account);
+      await tester.pump();
+      final notices = <AppNotice>[];
+      container.read(noticeServiceProvider).stream.listen(notices.add);
+
+      container.read(_offline.notifier).goOffline();
+      await tester.pump();
+      container.read(_offline.notifier).goOnline();
+      await tester.pump();
+
+      expect(notices, hasLength(1));
+      expect(notices.single, isA<NoticeInfo>());
+      expect(notices.single.message, 'Uploading 3 photos…');
+    });
+
+    testWidgets('an empty queue reconnects in silence', (tester) async {
+      final container = await pump(tester);
+      accountDocs.add(_account);
+      await tester.pump();
+      final notices = <AppNotice>[];
+      container.read(noticeServiceProvider).stream.listen(notices.add);
+
+      container.read(_offline.notifier).goOffline();
+      await tester.pump();
+      container.read(_offline.notifier).goOnline();
+      await tester.pump();
+
+      expect(notices, isEmpty);
     });
   });
 

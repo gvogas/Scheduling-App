@@ -3,6 +3,7 @@
 // LayoutBuilder, so the title has to stay a plain Text.
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:scheduling/core/animations/tap_scale.dart';
@@ -95,17 +96,19 @@ AppointmentRecord _overdueAppt() => AppointmentRecord(
   employeeIds: const ['e1'],
 );
 
-Widget _wrap(Widget child, {double width = 375}) => MaterialApp(
-  localizationsDelegates: const [
-    AppLocalizations.delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ],
-  supportedLocales: AppLocalizations.supportedLocales,
-  theme: lightTheme(),
-  home: Scaffold(
-    body: Center(
-      child: SizedBox(width: width, child: child),
+Widget _wrap(Widget child, {double width = 375}) => ProviderScope(
+  child: MaterialApp(
+    localizationsDelegates: const [
+      AppLocalizations.delegate,
+      GlobalMaterialLocalizations.delegate,
+      GlobalWidgetsLocalizations.delegate,
+    ],
+    supportedLocales: AppLocalizations.supportedLocales,
+    theme: lightTheme(),
+    home: Scaffold(
+      body: Center(
+        child: SizedBox(width: width, child: child),
+      ),
     ),
   ),
 );
@@ -466,6 +469,31 @@ void main() {
     // No crew, so the meta line falls back to the client alone.
     expect(find.text('Marchetti Residence'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a footer keeps its own semantics node outside the card label', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      _wrap(
+        AppointmentCard(
+          appointment: _appt(),
+          crew: _theo,
+          footer: TextButton(onPressed: () {}, child: const Text('Navigate')),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final footer = tester.getSemantics(find.text('Navigate'));
+    expect(footer.label, 'Navigate');
+    expect(footer.flagsCollection.isButton, isTrue);
+    expect(
+      find.bySemanticsLabel(RegExp('Water heater swap.*Theo Bell')),
+      findsOneWidget,
+    );
+    handle.dispose();
   });
 
   testWidgets('the whole card carries one coherent semantics label', (

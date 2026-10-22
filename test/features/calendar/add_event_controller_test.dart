@@ -12,6 +12,7 @@ import 'package:scheduling/features/calendar/application/add_event_controller.da
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
+import 'package:scheduling/features/calendar/domain/calendar_failure.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_prefill.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
@@ -62,6 +63,7 @@ void main() {
     registerFallbackValue(DateTime(2026));
     registerFallbackValue(<AppointmentImage>[]);
     registerFallbackValue(<AppointmentRecord>[]);
+    registerFallbackValue(<File>[]);
   });
 
   late _MockAppointmentsRepo appointments;
@@ -75,6 +77,12 @@ void main() {
     clients = _MockClientsRepo();
     employees = _MockEmployeesRepo();
     uploader = _MockUploader();
+    when(
+      () => uploader.enqueuePhotos(
+        appointmentId: any(named: 'appointmentId'),
+        newImages: any(named: 'newImages'),
+      ),
+    ).thenAnswer((_) async {});
 
     // The roster a prefill resolves its crew against: two crew, one dispatcher.
     when(employees.watchEmployees).thenAnswer(
@@ -82,7 +90,12 @@ void main() {
     );
 
     when(appointments.newDocId).thenReturn('appt-1');
-    when(() => appointments.addAppointment(any())).thenAnswer((_) async {});
+    when(
+      () => appointments.addAppointment(
+        any(),
+        checkConflicts: any(named: 'checkConflicts'),
+      ),
+    ).thenAnswer((_) async {});
     when(
       () => appointments.findBusyEmployees(
         candidates: any(named: 'candidates'),
@@ -147,29 +160,23 @@ void main() {
       expect(readState().endDate, DateTime(2026, 8, 4));
     });
 
-    test(
-      'once touched, moving the start shifts the end by the same days',
-      () {
-        final c = readNotifier()
-          ..selectDate(DateTime(2026, 8))
-          ..selectEndDate(DateTime(2026, 8, 5));
-        expect(readState().endDateTouched, isTrue);
+    test('once touched, moving the start shifts the end by the same days', () {
+      final c = readNotifier()
+        ..selectDate(DateTime(2026, 8))
+        ..selectEndDate(DateTime(2026, 8, 5));
+      expect(readState().endDateTouched, isTrue);
 
-        c.selectDate(DateTime(2026, 8, 3));
-        expect(readState().endDate, DateTime(2026, 8, 7));
-      },
-    );
+      c.selectDate(DateTime(2026, 8, 3));
+      expect(readState().endDate, DateTime(2026, 8, 7));
+    });
 
-    test(
-      'a start date moved past a touched end date drags the end along',
-      () {
-        readNotifier()
-          ..selectDate(DateTime(2026, 8))
-          ..selectEndDate(DateTime(2026, 8, 2))
-          ..selectDate(DateTime(2026, 8, 10));
-        expect(readState().endDate, DateTime(2026, 8, 11));
-      },
-    );
+    test('a start date moved past a touched end date drags the end along', () {
+      readNotifier()
+        ..selectDate(DateTime(2026, 8))
+        ..selectEndDate(DateTime(2026, 8, 2))
+        ..selectDate(DateTime(2026, 8, 10));
+      expect(readState().endDate, DateTime(2026, 8, 11));
+    });
 
     test('selectEndDate clears any endDate error', () async {
       final c = readNotifier()
@@ -247,13 +254,16 @@ void main() {
       expect(readState().isSearchingClient, isFalse);
     });
 
-    test('a digits-only query under seven digits never hits the repository', () async {
-      await readNotifier().searchClients('514');
-      await readNotifier().searchClients('514562');
-      verifyNever(() => clients.searchClients(any()));
-      expect(readState().clientSearchStatus.isHolding, isTrue);
-      expect(readState().clientSearchStatus.digitsTyped, 6);
-    });
+    test(
+      'a digits-only query under seven digits never hits the repository',
+      () async {
+        await readNotifier().searchClients('514');
+        await readNotifier().searchClients('514562');
+        verifyNever(() => clients.searchClients(any()));
+        expect(readState().clientSearchStatus.isHolding, isTrue);
+        expect(readState().clientSearchStatus.digitsTyped, 6);
+      },
+    );
 
     test('a text query still searches from the first character', () async {
       when(() => clients.searchClients(any())).thenAnswer((_) async => []);
@@ -276,15 +286,19 @@ void main() {
       verify(() => clients.searchClients('5145628332')).called(1);
     });
 
-    test('extra digits narrow the previous answer with no second call', () async {
-      when(() => clients.searchClients('5145628'))
-          .thenAnswer((_) async => [marie, jp]);
-      await readNotifier().searchClients('5145628');
-      await readNotifier().searchClients('5145628332');
-      verify(() => clients.searchClients('5145628')).called(1);
-      verifyNever(() => clients.searchClients('5145628332'));
-      expect(readState().clientResults, [marie]);
-    });
+    test(
+      'extra digits narrow the previous answer with no second call',
+      () async {
+        when(
+          () => clients.searchClients('5145628'),
+        ).thenAnswer((_) async => [marie, jp]);
+        await readNotifier().searchClients('5145628');
+        await readNotifier().searchClients('5145628332');
+        verify(() => clients.searchClients('5145628')).called(1);
+        verifyNever(() => clients.searchClients('5145628332'));
+        expect(readState().clientResults, [marie]);
+      },
+    );
 
     // F5
     test('a truncated answer is re-queried rather than narrowed', () async {
@@ -292,17 +306,46 @@ void main() {
         25,
         (i) => ClientRecord(id: 'c$i', name: '514562$i', phone: '514562$i'),
       );
-      when(() => clients.searchClients('5145628')).thenAnswer((_) async => full);
-      when(() => clients.searchClients('5145628332'))
-          .thenAnswer((_) async => [marie]);
+      when(
+        () => clients.searchClients('5145628'),
+      ).thenAnswer((_) async => full);
+      when(
+        () => clients.searchClients('5145628332'),
+      ).thenAnswer((_) async => [marie]);
       await readNotifier().searchClients('5145628');
       await readNotifier().searchClients('5145628332');
       verify(() => clients.searchClients('5145628332')).called(1);
     });
 
+    test(
+      'a stale in-flight answer is dropped once a newer search lands',
+      () async {
+        final slow = Completer<List<ClientRecord>>();
+        when(
+          () => clients.searchClients('5145628'),
+        ).thenAnswer((_) => slow.future);
+        when(
+          () => clients.searchClients('4385551'),
+        ).thenAnswer((_) async => [jp]);
+
+        final first = readNotifier().searchClients('5145628');
+        await readNotifier().searchClients('4385551');
+        expect(readState().clientResults, [jp]);
+
+        slow.complete([marie]);
+        await first;
+        expect(readState().clientResults, [jp]);
+        expect(readState().isSearchingClient, isFalse);
+      },
+    );
+
     test('a miss at ten digits falls back to the first seven', () async {
-      when(() => clients.searchClients('5145628233')).thenAnswer((_) async => []);
-      when(() => clients.searchClients('5145628')).thenAnswer((_) async => [marie]);
+      when(
+        () => clients.searchClients('5145628233'),
+      ).thenAnswer((_) async => []);
+      when(
+        () => clients.searchClients('5145628'),
+      ).thenAnswer((_) async => [marie]);
       await readNotifier().searchClients('5145628233');
       expect(readState().clientResults, [marie]);
       expect(readState().clientSearchStatus.answeredRung, PhoneRung.firstSeven);
@@ -324,21 +367,31 @@ void main() {
       expect(readState().isSearchingClient, isFalse);
     });
 
-    test('starting a new search clears the previous rows immediately', () async {
-      when(() => clients.searchClients('5145628')).thenAnswer((_) async => [marie]);
-      await readNotifier().searchClients('5145628');
-      expect(readState().clientResults, isNotEmpty);
+    test(
+      'starting a new search clears the previous rows immediately',
+      () async {
+        when(
+          () => clients.searchClients('5145628'),
+        ).thenAnswer((_) async => [marie]);
+        await readNotifier().searchClients('5145628');
+        expect(readState().clientResults, isNotEmpty);
 
-      final gate = Completer<List<ClientRecord>>();
-      when(() => clients.searchClients('4385551')).thenAnswer((_) => gate.future);
-      final pending = readNotifier().searchClients('4385551');
-      expect(readState().clientResults, isEmpty,
-          reason: 'stale rows must not stay tappable behind the spinner');
-      expect(readState().isSearchingClient, isTrue);
-      gate.complete([jp]);
-      await pending;
-      expect(readState().clientResults, [jp]);
-    });
+        final gate = Completer<List<ClientRecord>>();
+        when(
+          () => clients.searchClients('4385551'),
+        ).thenAnswer((_) => gate.future);
+        final pending = readNotifier().searchClients('4385551');
+        expect(
+          readState().clientResults,
+          isEmpty,
+          reason: 'stale rows must not stay tappable behind the spinner',
+        );
+        expect(readState().isSearchingClient, isTrue);
+        gate.complete([jp]);
+        await pending;
+        expect(readState().clientResults, [jp]);
+      },
+    );
   });
 
   group('selectClient', () {
@@ -388,70 +441,109 @@ void main() {
           readState().errors.keys,
           containsAll(['title', 'client', 'employees']),
         );
-        verifyNever(() => appointments.addAppointment(any()));
-      },
-    );
-
-    test(
-      'returns AddEventBusyEmployees when busy check finds conflicts',
-      () async {
-        when(
-          () => appointments.findBusyEmployees(
-            candidates: any(named: 'candidates'),
-            start: any(named: 'start'),
-            end: any(named: 'end'),
-          ),
-        ).thenAnswer((_) async => const [_employeeA]);
-
-        final c = readNotifier();
-        fillValid(c);
-
-        final outcome = await c.submit(
-          title: 'Leak fix',
-          address: '999 Maple',
-          notes: '',
-          materialsNeeded: '',
-        );
-
-        expect(outcome, isA<AddEventBusyEmployees>());
-        verifyNever(() => appointments.addAppointment(any()));
-      },
-    );
-
-    test(
-      'a PERSONAL save never returns the busy outcome — the clash alert '
-      'handles it after the write',
-      () async {
-        // Both would fire otherwise, giving two dialogs about the same clash
-        // back to back.
-        when(
-          () => appointments.findBusyEmployees(
-            candidates: any(named: 'candidates'),
-            start: any(named: 'start'),
-            end: any(named: 'end'),
-          ),
-        ).thenAnswer((_) async => const [_employeeA]);
-
-        final c = readNotifier();
-        fillValid(c);
-        c.setPersonal(value: true);
-
-        final outcome = await c.submit(
-          title: 'Dentist',
-          address: '',
-          notes: '',
-          materialsNeeded: '',
-        );
-
-        expect(outcome, isA<AddEventSubmitted>());
         verifyNever(
-          () => appointments.findBusyEmployees(
-            candidates: any(named: 'candidates'),
-            start: any(named: 'start'),
-            end: any(named: 'end'),
+          () => appointments.addAppointment(
+            any(),
+            checkConflicts: any(named: 'checkConflicts'),
           ),
         );
-        verify(() => appointments.addAppointment(any())).called(1);
+      },
+    );
+
+    test('maps the save refusal to AddEventBusyEmployees', () async {
+      when(
+        () => appointments.addAppointment(any(), checkConflicts: true),
+      ).thenThrow(
+        CalendarFailureEmployeesBusy(
+          busyEmployeeIds: const ['e1'],
+          start: DateTime(2026, 5, 10, 9),
+          end: DateTime(2026, 5, 10, 10),
+        ),
+      );
+
+      final c = readNotifier();
+      fillValid(c);
+
+      final outcome = await c.submit(
+        title: 'Leak fix',
+        address: '999 Maple',
+        notes: '',
+        materialsNeeded: '',
+      );
+
+      expect(outcome, isA<AddEventBusyEmployees>());
+      final busy = outcome as AddEventBusyEmployees;
+      expect(busy.busyEmployees, const [_employeeA]);
+      expect(busy.start, DateTime(2026, 5, 10, 9));
+      expect(busy.end, DateTime(2026, 5, 10, 10));
+      expect(readState().isSubmitting, isFalse);
+    });
+
+    test('a PERSONAL save never asks for the busy check — the clash alert '
+        'handles it after the write', () async {
+      // Both would fire otherwise, giving two dialogs about the same clash
+      // back to back.
+      when(
+        () => appointments.addAppointment(any(), checkConflicts: true),
+      ).thenThrow(StateError('must not be consulted'));
+
+      final c = readNotifier();
+      fillValid(c);
+      c.setPersonal(value: true);
+
+      final outcome = await c.submit(
+        title: 'Dentist',
+        address: '',
+        notes: '',
+        materialsNeeded: '',
+      );
+
+      expect(outcome, isA<AddEventSubmitted>());
+      // A bare matcher records the default `checkConflicts: false` — pinned.
+      verify(() => appointments.addAppointment(any())).called(1);
+    });
+
+    test(
+      'waits for local photo handoff before reporting the created appointment',
+      () async {
+        final controller = readNotifier();
+        fillValid(controller);
+        controller.addImages([File('picked.jpg')]);
+        final entered = Completer<void>();
+        final handoff = Completer<void>();
+        when(
+          () => uploader.enqueuePhotos(
+            appointmentId: any(named: 'appointmentId'),
+            newImages: any(named: 'newImages'),
+          ),
+        ).thenAnswer((_) {
+          entered.complete();
+          return handoff.future;
+        });
+        var completed = false;
+        final saving = controller
+            .submit(
+              title: 'Leak fix',
+              address: '1 Main St',
+              notes: '',
+              materialsNeeded: '',
+            )
+            .then((outcome) {
+              completed = true;
+              return outcome;
+            });
+        await entered.future;
+        expect(completed, isFalse);
+        verify(
+          () => appointments.addAppointment(
+            any(),
+            checkConflicts: any(named: 'checkConflicts'),
+          ),
+        ).called(1);
+
+        handoff.complete();
+
+        expect(await saving, isA<AddEventSubmitted>());
       },
     );
 
@@ -477,10 +569,15 @@ void main() {
       expect(saved.employeeIds, [_employeeA.id]);
       expect(saved.status, 'pending');
 
-      verify(() => appointments.addAppointment(any())).called(1);
+      verify(
+        () => appointments.addAppointment(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      ).called(1);
       // No images were selected, so the uploader should never run.
       verifyNever(
-        () => uploader.uploadInBackground(
+        () => uploader.enqueuePhotos(
           appointmentId: any(named: 'appointmentId'),
           newImages: any(named: 'newImages'),
         ),
@@ -658,7 +755,10 @@ void main() {
       // indistinguishable from a form that failed validation.
       final gate = Completer<void>();
       when(
-        () => appointments.addAppointment(any()),
+        () => appointments.addAppointment(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).thenAnswer((_) => gate.future);
 
       final c = readNotifier()
@@ -683,7 +783,12 @@ void main() {
       expect(second, isA<AddEventBusy>());
       gate.complete();
       await first;
-      verify(() => appointments.addAppointment(any())).called(1);
+      verify(
+        () => appointments.addAppointment(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      ).called(1);
     });
 
     test('turning Personal off clears the day-off flag', () {
@@ -738,12 +843,8 @@ void main() {
 
     test('skips busy check on forceBusy and writes the appointment', () async {
       when(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-        ),
-      ).thenAnswer((_) async => const [_employeeA]);
+        () => appointments.addAppointment(any(), checkConflicts: true),
+      ).thenThrow(StateError('must not be consulted'));
 
       final c = readNotifier();
       fillValid(c);
@@ -757,20 +858,19 @@ void main() {
       );
 
       expect(outcome, isA<AddEventSubmitted>());
-      verifyNever(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-        ),
-      );
+      // A bare matcher records the default `checkConflicts: false` — pinned.
       verify(() => appointments.addAppointment(any())).called(1);
     });
 
     test('books repeat occurrences atomically with the appointment', () async {
       var nextId = 0;
       when(appointments.newDocId).thenAnswer((_) => 'appt-${++nextId}');
-      when(() => appointments.addAppointments(any())).thenAnswer((_) async {});
+      when(
+        () => appointments.addAppointments(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      ).thenAnswer((_) async {});
 
       final c = readNotifier();
       fillValid(c);
@@ -789,7 +889,10 @@ void main() {
       expect((outcome as AddEventSubmitted).futureBookings, 15);
 
       final captured = verify(
-        () => appointments.addAppointments(captureAny()),
+        () => appointments.addAppointments(
+          captureAny(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).captured.single;
       final series = (captured as List).cast<AppointmentRecord>();
       expect(series, hasLength(16));
@@ -806,24 +909,27 @@ void main() {
       );
       // …and shares the series key (the first visit's doc id).
       expect(series.every((a) => a.seriesId == 'appt-1'), isTrue);
-      verifyNever(() => appointments.addAppointment(any()));
+      verifyNever(
+        () => appointments.addAppointment(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      );
     });
 
     test('checks repeat copies and reports a future conflict', () async {
       var nextId = 0;
       when(appointments.newDocId).thenAnswer((_) => 'appt-${++nextId}');
+      // The server names the FIRST clashing window of the batch.
       when(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
+        () => appointments.addAppointments(any(), checkConflicts: true),
+      ).thenThrow(
+        CalendarFailureEmployeesBusy(
+          busyEmployeeIds: const ['e1'],
+          start: DateTime(2026, 9, 10, 9),
+          end: DateTime(2026, 9, 10, 10),
         ),
-      ).thenAnswer((invocation) async {
-        final start = invocation.namedArguments[#start] as DateTime;
-        return start == DateTime(2026, 9, 10, 9)
-            ? const [_employeeA]
-            : const <EmployeeRecord>[];
-      });
+      );
 
       final c = readNotifier();
       fillValid(c);
@@ -841,15 +947,20 @@ void main() {
       expect(busy.busyEmployees, const [_employeeA]);
       expect(busy.start, DateTime(2026, 9, 10, 9));
       expect(busy.end, DateTime(2026, 9, 10, 10));
-      verifyNever(() => appointments.addAppointment(any()));
-      verifyNever(() => appointments.addAppointments(any()));
+      expect(readState().isSubmitting, isFalse);
+      verify(
+        () => appointments.addAppointments(any(), checkConflicts: true),
+      ).called(1);
     });
 
     test(
       'returns AddEventFailed and resets isSubmitting when repo throws',
       () async {
         when(
-          () => appointments.addAppointment(any()),
+          () => appointments.addAppointment(
+            any(),
+            checkConflicts: any(named: 'checkConflicts'),
+          ),
         ).thenThrow(Exception('boom'));
 
         final c = readNotifier();
@@ -866,6 +977,58 @@ void main() {
         expect(readState().isSubmitting, isFalse);
       },
     );
+
+    test('a lease already stale at the write returns Busy and frees '
+        'isSubmitting', () async {
+      var current = true;
+      when(() => appointments.captureWriteOwner()).thenReturn(() => current);
+
+      final c = readNotifier();
+      fillValid(c);
+      current = false;
+      final outcome = await c.submit(
+        title: 'Leak fix',
+        address: '999 Maple',
+        notes: '',
+        materialsNeeded: '',
+      );
+
+      expect(outcome, isA<AddEventBusy>());
+      expect(readState().isSubmitting, isFalse);
+      verifyNever(
+        () => appointments.addAppointment(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      );
+    });
+
+    test('a lease gone stale after the write returns Busy and frees '
+        'isSubmitting', () async {
+      var current = true;
+      when(() => appointments.captureWriteOwner()).thenReturn(() => current);
+      when(
+        () => appointments.addAppointment(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      ).thenAnswer((_) async {
+        current = false;
+      });
+
+      final c = readNotifier();
+      fillValid(c);
+      final outcome = await c.submit(
+        title: 'Leak fix',
+        address: '999 Maple',
+        notes: '',
+        materialsNeeded: '',
+        forceBusy: true,
+      );
+
+      expect(outcome, isA<AddEventBusy>());
+      expect(readState().isSubmitting, isFalse);
+    });
 
     test(
       'offline fails fast without touching the repo or the busy flag',
@@ -895,7 +1058,12 @@ void main() {
 
         expect(outcome, isA<AddEventFailed>());
         expect((outcome as AddEventFailed).error, isA<SocketException>());
-        verifyNever(() => appointments.addAppointment(any()));
+        verifyNever(
+          () => appointments.addAppointment(
+            any(),
+            checkConflicts: any(named: 'checkConflicts'),
+          ),
+        );
         verifyNever(
           () => appointments.findBusyEmployees(
             candidates: any(named: 'candidates'),
@@ -915,7 +1083,12 @@ void main() {
     test('a 3-day job writes three linked one-day documents', () async {
       var nextId = 0;
       when(appointments.newDocId).thenAnswer((_) => 'appt-${++nextId}');
-      when(() => appointments.addAppointments(any())).thenAnswer((_) async {});
+      when(
+        () => appointments.addAppointments(
+          any(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      ).thenAnswer((_) async {});
 
       final c = readNotifier();
       fillValid(c);
@@ -935,7 +1108,10 @@ void main() {
       expect(outcome.runDays, 3);
 
       final captured = verify(
-        () => appointments.addAppointments(captureAny()),
+        () => appointments.addAppointments(
+          captureAny(),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
       ).captured.single;
       final run = (captured as List).cast<AppointmentRecord>();
       expect(run, hasLength(3));
@@ -965,7 +1141,10 @@ void main() {
 
       final captured =
           verify(
-                () => appointments.addAppointment(captureAny()),
+                () => appointments.addAppointment(
+                  captureAny(),
+                  checkConflicts: any(named: 'checkConflicts'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(captured.seriesId, '');
@@ -992,7 +1171,10 @@ void main() {
 
       final captured =
           verify(
-                () => appointments.addAppointment(captureAny()),
+                () => appointments.addAppointment(
+                  captureAny(),
+                  checkConflicts: any(named: 'checkConflicts'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(captured.startTime, DateTime(2026, 5, 10, 9));
@@ -1152,7 +1334,10 @@ void main() {
       expect(outcome, isA<AddEventSubmitted>());
       final written =
           verify(
-                () => appointments.addAppointment(captureAny()),
+                () => appointments.addAppointment(
+                  captureAny(),
+                  checkConflicts: any(named: 'checkConflicts'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(

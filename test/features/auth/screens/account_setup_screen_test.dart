@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/app/pending_photo_exit.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
@@ -23,6 +24,8 @@ import 'package:scheduling/features/auth/widgets/auth_fields.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
+
+import '../../../support/account_exit_stubs.dart';
 
 class _MockAuthService extends Mock implements AuthService {}
 
@@ -46,9 +49,12 @@ Widget _harness({
   required AuthService auth,
   bool offline = false,
   SignInOutcome? resumeOutcome,
+  PendingPhotoExit? pendingPhotos,
+  void Function(Object? loginArgs)? onLogin,
 }) {
   return ProviderScope(
     overrides: [
+      ...accountExitStubOverrides(pendingPhotos: pendingPhotos),
       isOfflineProvider.overrideWithValue(offline),
       if (resumeOutcome != null)
         signInControllerProvider.overrideWith(
@@ -65,10 +71,19 @@ Widget _harness({
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
         theme: lightTheme(),
-        routes: {
-          AppRoutes.login: (_) => const Scaffold(body: Text('login screen')),
-          AppRoutes.mainCalendar: (_) =>
-              const Scaffold(body: Text('main calendar')),
+        onGenerateRoute: (settings) {
+          if (settings.name == AppRoutes.login) {
+            onLogin?.call(settings.arguments);
+          }
+          return MaterialPageRoute<void>(
+            builder: (_) => Scaffold(
+              body: Text(switch (settings.name) {
+                AppRoutes.login => 'login screen',
+                AppRoutes.mainCalendar => 'main calendar',
+                _ => 'other route',
+              }),
+            ),
+          );
         },
         home: AccountSetupScreen(authService: auth),
       ),
@@ -236,6 +251,31 @@ void main() {
   });
 
   group('the setup sign-out path', () {
+    testWidgets('pending photos can keep the user signed in during setup', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _harness(
+          auth: auth,
+          pendingPhotos: const PendingPhotoExit(pendingCount: 1),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final logOut = find.widgetWithText(TextButton, 'Log out');
+      await tester.ensureVisible(logOut);
+      await tester.pumpAndSettle();
+      await tester.tap(logOut);
+      // The setup submit button remains busy behind the modal.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(find.text('Stay and retry'));
+      await tester.pumpAndSettle();
+
+      verifyNever(() => auth.signOut());
+      expect(find.text('login screen'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('signing out returns to login', (tester) async {
       when(() => auth.signOut()).thenAnswer((_) async {});
       await tester.pumpWidget(_harness(auth: auth));
@@ -320,21 +360,37 @@ void main() {
   });
 
   group('post-setup recovery', () {
-    testWidgets('a pending resume routes back to login for a clean retry', (
-      tester,
-    ) async {
-      await tester.pumpWidget(
-        _harness(auth: auth, resumeOutcome: const SignInProfilePending()),
-      );
-      await tester.pumpAndSettle();
-      await _fillForm(tester);
-      await _consent(tester);
+    testWidgets(
+      'a pending resume routes back to login TELLING them the account is ready',
+      (tester) async {
+        // The password change landed before the resume ran, so a bare Login
+        // with the remembered (old) password was a silent dead end (U10).
+        Object? loginArgs;
+        await tester.pumpWidget(
+          _harness(
+            auth: auth,
+            resumeOutcome: const SignInProfilePending(),
+            onLogin: (args) => loginArgs = args,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await _fillForm(tester);
+        await _consent(tester);
 
-      await _submit(tester);
-      await tester.pumpAndSettle();
+        await _submit(tester);
+        await tester.pumpAndSettle();
 
-      expect(find.text('login screen'), findsOneWidget);
-    });
+        expect(find.text('login screen'), findsOneWidget);
+        expect(
+          loginArgs,
+          isA<LoginArgs>().having(
+            (a) => a.notice,
+            'notice',
+            LoginNotice.accountReady,
+          ),
+        );
+      },
+    );
 
     testWidgets(
       'unexpected resume outcomes re-enable the screen instead of leaving it stuck loading',

@@ -21,6 +21,7 @@ import 'package:scheduling/features/calendar/data/appointment_image_upload_servi
 import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
 import 'package:scheduling/features/calendar/domain/assignee_resolver.dart';
+import 'package:scheduling/features/calendar/domain/calendar_failure.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/domain/models/repeat_interval.dart';
@@ -51,7 +52,6 @@ abstract class EventDetailsState
     @Default(false) bool isEditing,
 
     /// Existing appointments preserve run length when the start date moves.
-    @Default(true) bool endDateTouched,
     @Default(RepeatInterval.none) RepeatInterval repeat,
     // Changing this value triggers repeat rebooking.
     @Default(RepeatInterval.none) RepeatInterval savedRepeat,
@@ -65,6 +65,12 @@ abstract class EventDetailsState
     @Default(<AppointmentImage>[]) List<AppointmentImage> removedExistingImages,
     @Default(<File>[]) List<File> newImages,
     @Default(false) bool isSaving,
+
+    /// The status this sheet WROTE, over the record it opened with. Start job
+    /// keeps the sheet open, so the opening snapshot is stale from then on.
+    String? liveStatus,
+    DateTime? liveStartedAt,
+    DateTime? liveCompletedAt,
     ClientRecord? client,
     ClientRecord? selectedClient,
     @Default(<ClientRecord>[]) List<ClientRecord> clientResults,
@@ -254,7 +260,6 @@ class EventDetailsController extends Notifier<EventDetailsState>
   void selectEndDate(DateTime date) {
     state = state.copyWith(
       endDate: date,
-      endDateTouched: true,
       errors: withoutKey(state.errors, 'endDate'),
     );
   }
@@ -397,6 +402,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
     final logger = ref.read(loggerProvider);
     final selectedEmployees = state.selectedEmployees;
     final shift = Duration(minutes: minutes);
+    final isCurrent = repo.captureWriteOwner();
     final updated = appointment.copyWith(
       startTime: appointment.startTime.add(shift),
       endTime: appointment.endTime.add(shift),
@@ -404,17 +410,20 @@ class EventDetailsController extends Notifier<EventDetailsState>
       status: AppointmentStatus.storedRaw(appointment.status),
     );
     try {
-      if (!forceBusy && !appointment.isPersonal) {
-        final conflict = await findFirstAppointmentConflict(
-          repo: repo,
-          candidates: selectedEmployees,
-          bookings: [updated],
-          excludeOwnBookingIds: true,
-        );
-        if (conflict != null) return _busyEmployees(conflict);
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
       }
-      await repo.updateAppointment(updated);
-      return EventDetailsSaved(updated);
+      await repo.updateAppointment(
+        updated,
+        base: appointment,
+        checkConflicts: !forceBusy && !appointment.isPersonal,
+      );
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
+      }
+      return EventDetailsSaved(repo.takeAcknowledgedWrite(id) ?? updated);
+    } on CalendarFailureEmployeesBusy catch (busy) {
+      return _busyEmployees(busy, selectedEmployees, [updated]);
     } catch (e, st) {
       logger.warn('APPT-SAVE delayAppointment failed', e, st);
       return EventDetailsFailed(e);
@@ -488,6 +497,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
     try {
       await repo.updateAppointmentStatus(id: id, status: status);
       // Live activity cleanup is server-owned.
+      if (ref.mounted) _recordLiveStatus(appointment, status);
       return const EventDetailsActionOk();
     } catch (e, st) {
       logger.warn('APPT-STATUS updateAppointmentStatus($status) failed', e, st);
@@ -495,6 +505,20 @@ class EventDetailsController extends Notifier<EventDetailsState>
     } finally {
       if (ref.mounted) state = state.copyWith(isSaving: false);
     }
+  }
+
+  /// Mirrors `lifecycleStamps` locally: the server stamps the transition into
+  /// `in_progress`/`done` on a client job only, so the row shows the same pair.
+  void _recordLiveStatus(AppointmentRecord appointment, String status) {
+    final now = DateTime.now();
+    final stamps = !appointment.isPersonal;
+    state = state.copyWith(
+      liveStatus: status,
+      liveStartedAt: stamps && status == 'in_progress'
+          ? now
+          : state.liveStartedAt,
+      liveCompletedAt: stamps && status == 'done' ? now : state.liveCompletedAt,
+    );
   }
 
   void setSaving({required bool busy}) {
@@ -546,6 +570,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
     final repo = ref.read(appointmentsRepositoryProvider);
     final logger = ref.read(loggerProvider);
     final pipeline = _pipeline();
+    final isCurrent = repo.captureWriteOwner();
     // Avoid touching Storage when no new photos exist.
     final uploader = state.newImages.isEmpty
         ? null
@@ -585,22 +610,18 @@ class EventDetailsController extends Notifier<EventDetailsState>
     );
 
     // Snapshot form state before async writes.
-    final removedImages = state.removedExistingImages;
-    final newImages = state.newImages;
-    final selectedEmployees = state.selectedEmployees;
-    final selectedClient = state.selectedClient;
-    final editingStatus = state.editingStatus;
-    final repeat = state.repeat;
-    final savedRepeat = state.savedRepeat;
-    final isPersonal = state.isPersonal;
-    final isDayOff = state.isDayOff;
+    final form = state;
 
     try {
       final assignees = await _resolveAssignees(
         appointment,
         pipeline,
-        selectedEmployees,
+        form.selectedEmployees,
       );
+      if (isCurrent != null && !isCurrent()) {
+        if (ref.mounted) state = state.copyWith(isSaving: false);
+        return const EventDetailsSaveBusy();
+      }
       final updated = pipeline.buildUpdatedRecord(
         appointment,
         id: id,
@@ -611,11 +632,11 @@ class EventDetailsController extends Notifier<EventDetailsState>
         start: start,
         end: end,
         assignees: assignees,
-        selectedClient: selectedClient,
-        status: editingStatus,
-        repeat: repeat,
-        isPersonal: isPersonal,
-        isDayOff: isDayOff,
+        selectedClient: form.selectedClient,
+        status: form.editingStatus,
+        repeat: form.repeat,
+        isPersonal: form.isPersonal,
+        isDayOff: form.isDayOff,
         isAllDay: isAllDay,
       );
 
@@ -627,24 +648,29 @@ class EventDetailsController extends Notifier<EventDetailsState>
         start: start,
         end: end,
         applyToSeries: applyToSeries,
-        repeat: repeat,
-        savedRepeat: savedRepeat,
-        selectedEmployees: selectedEmployees,
-        checkConflicts: !forceBusy && !isPersonal,
+        repeat: form.repeat,
+        savedRepeat: form.savedRepeat,
+        selectedEmployees: form.selectedEmployees,
+        checkConflicts: !forceBusy && !form.isPersonal,
+        isCurrent: isCurrent,
       );
       if (saved is! EventDetailsSaved) {
         if (ref.mounted) state = state.copyWith(isSaving: false);
         return saved;
       }
 
+      if (isCurrent != null && !isCurrent()) {
+        if (ref.mounted) state = state.copyWith(isSaving: false);
+        return const EventDetailsSaveBusy();
+      }
       await pipeline.applyPhotoChanges(
         id: id,
         uploader: uploader,
-        removedImages: removedImages,
-        newImages: newImages,
+        removedImages: form.removedExistingImages,
+        newImages: form.newImages,
         // Move the repeat baseline after the record write.
         onRecordWritten: () {
-          if (ref.mounted) state = state.copyWith(savedRepeat: repeat);
+          if (ref.mounted) state = state.copyWith(savedRepeat: form.repeat);
         },
       );
 
@@ -669,6 +695,7 @@ class EventDetailsController extends Notifier<EventDetailsState>
     required RepeatInterval savedRepeat,
     required List<EmployeeRecord> selectedEmployees,
     required bool checkConflicts,
+    bool Function()? isCurrent,
   }) async {
     final seriesEditor = AppointmentSeriesEditor(repo);
     // A run member never rewrites its series.
@@ -681,17 +708,24 @@ class EventDetailsController extends Notifier<EventDetailsState>
         end: end,
         repeat: repeat,
       );
-      if (checkConflicts) {
-        final conflict = await findFirstAppointmentConflict(
-          repo: repo,
-          candidates: selectedEmployees,
-          bookings: [plan.updated, ...plan.copies],
-          excludeAppointmentIds: plan.deleteIds.toSet(),
-          excludeOwnBookingIds: true,
-        );
-        if (conflict != null) return _busyEmployees(conflict);
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
       }
-      final result = await seriesEditor.commitRewrite(plan);
+      final SeriesRewriteResult result;
+      try {
+        result = await seriesEditor.commitRewrite(
+          plan,
+          checkConflicts: checkConflicts,
+        );
+      } on CalendarFailureEmployeesBusy catch (busy) {
+        return _busyEmployees(busy, selectedEmployees, [
+          plan.updated,
+          ...plan.copies,
+        ]);
+      }
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
+      }
       return EventDetailsSaved(
         result.updated,
         futureBookings: result.futureBookings,
@@ -707,39 +741,57 @@ class EventDetailsController extends Notifier<EventDetailsState>
         start: start,
         end: end,
       );
-      if (checkConflicts) {
-        final conflict = await findFirstAppointmentConflict(
-          repo: repo,
-          candidates: selectedEmployees,
-          bookings: [plan.updated, ...plan.propagated],
-          excludeOwnBookingIds: true,
-        );
-        if (conflict != null) return _busyEmployees(conflict);
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
       }
-      final updatedSiblings = await seriesEditor.commitPropagate(plan);
-      return EventDetailsSaved(updated, updatedSiblings: updatedSiblings);
-    }
-
-    if (checkConflicts) {
-      final conflict = await findFirstAppointmentConflict(
-        repo: repo,
-        candidates: selectedEmployees,
-        bookings: [updated],
-        excludeOwnBookingIds: true,
+      final int updatedSiblings;
+      try {
+        updatedSiblings = await seriesEditor.commitPropagate(
+          plan,
+          checkConflicts: checkConflicts,
+        );
+      } on CalendarFailureEmployeesBusy catch (busy) {
+        return _busyEmployees(busy, selectedEmployees, [
+          plan.updated,
+          ...plan.propagated,
+        ]);
+      }
+      if (isCurrent != null && !isCurrent()) {
+        return const EventDetailsSaveBusy();
+      }
+      return EventDetailsSaved(
+        repo.takeAcknowledgedWrite(id) ?? updated,
+        updatedSiblings: updatedSiblings,
       );
-      if (conflict != null) return _busyEmployees(conflict);
     }
 
-    await repo.updateAppointment(updated);
-    return EventDetailsSaved(updated);
+    if (isCurrent != null && !isCurrent()) return const EventDetailsSaveBusy();
+    try {
+      await repo.updateAppointment(
+        updated,
+        base: appointment,
+        checkConflicts: checkConflicts,
+      );
+    } on CalendarFailureEmployeesBusy catch (busy) {
+      return _busyEmployees(busy, selectedEmployees, [updated]);
+    }
+    if (isCurrent != null && !isCurrent()) return const EventDetailsSaveBusy();
+    return EventDetailsSaved(repo.takeAcknowledgedWrite(id) ?? updated);
   }
 
-  EventDetailsBusyEmployees _busyEmployees(AppointmentConflictHit conflict) =>
-      EventDetailsBusyEmployees(
-        busyEmployees: conflict.busyEmployees,
-        start: conflict.start,
-        end: conflict.end,
-      );
+  /// The server's refusal as the sheet's busy outcome; callers reset `isSaving`.
+  EventDetailsBusyEmployees _busyEmployees(
+    CalendarFailureEmployeesBusy busy,
+    List<EmployeeRecord> candidates,
+    List<AppointmentRecord> bookings,
+  ) {
+    final hit = conflictHitOf(busy, candidates: candidates, bookings: bookings);
+    return EventDetailsBusyEmployees(
+      busyEmployees: hit.busyEmployees,
+      start: hit.start,
+      end: hit.end,
+    );
+  }
 
   /// Waits for seeding, validates the saved snapshot, and returns a stop
   /// outcome on errors.

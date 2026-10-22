@@ -12,6 +12,7 @@ import 'package:scheduling/features/auth/data/auth_error_mapper.dart';
 import 'package:scheduling/features/auth/domain/auth_failure.dart';
 import 'package:scheduling/features/auth/services/auth_service.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
+import 'package:scheduling/features/employees/domain/employees_repository.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
 
 /// Outcome of a sign-in attempt, or of resuming a session right after setup.
@@ -69,6 +70,11 @@ class SignInNeedsPasswordChange extends SignInOutcome {
 class SignInError extends SignInOutcome {
   const SignInError(this.failure);
   final AuthFailure failure;
+}
+
+/// The activated `users` doc is missing or not yet `active` on this read.
+class _ProfileStillStale implements Exception {
+  const _ProfileStillStale();
 }
 
 /// Busy flag for the sign-in flow.
@@ -196,6 +202,10 @@ class SignInController extends Notifier<SignInState> {
   }
 
   /// Routes a just-activated, still-signed-in person straight into the app.
+  ///
+  /// A missing or still-stale doc walks the SAME `kAuthPropagationDelays`
+  /// ladder as a permission-denied: the activation just landed, so the read
+  /// can lag the write for the same few seconds (ADR-0035).
   Future<SignInOutcome> resumeAfterSignUp() async {
     final auth = ref.read(authServiceProvider);
     final employees = ref.read(employeesRepositoryProvider);
@@ -204,24 +214,39 @@ class SignInController extends Notifier<SignInState> {
     final user = auth.currentUser;
     if (user == null) return const SignInNoSession();
     try {
-      final userDoc = await retryAsync(() => employees.findUserByUid(user.uid));
-      if (userDoc == null) return const SignInProfilePending();
-      final employee = EmployeeRecord.fromMap(userDoc.id, userDoc.data);
-      // A stale read can still show `invited` here (root CLAUDE.md, Auth).
-      if (!employee.isActive || employee.passwordResetRequired) {
-        return const SignInProfilePending();
-      }
+      final employee = await retryAsync(
+        () => _readActivatedProfile(employees, user.uid),
+        retryWhen: (e) => e is _ProfileStillStale || isAuthPropagationDenied(e),
+        onRetry: (attempt, e, st) =>
+            logger.breadcrumb('AUTH-SETUP resume retry $attempt'),
+      );
       unawaited(
         authCache.save(employee).catchError((Object e, StackTrace st) {
           logger.warn('AUTH-SETUP resume identity cache save failed', e, st);
         }),
       );
       return SignInSuccess(employee);
+    } on _ProfileStillStale {
+      return const SignInProfilePending();
     } catch (error, stackTrace) {
       // Already active server-side; a normal sign-in recovers.
       logger.warn('AUTH-SETUP resume after setup failed', error, stackTrace);
       return const SignInProfilePending();
     }
+  }
+
+  Future<EmployeeRecord> _readActivatedProfile(
+    EmployeesRepository employees,
+    String uid,
+  ) async {
+    final userDoc = await employees.findUserByUid(uid);
+    if (userDoc == null) throw const _ProfileStillStale();
+    final employee = EmployeeRecord.fromMap(userDoc.id, userDoc.data);
+    // A stale read can still show `invited` or the reset flag (root CLAUDE.md).
+    if (!employee.isActive || employee.passwordResetRequired) {
+      throw const _ProfileStillStale();
+    }
+    return employee;
   }
 
   void _settle() {

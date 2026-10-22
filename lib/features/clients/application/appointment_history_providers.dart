@@ -2,8 +2,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
+import 'package:scheduling/features/calendar/domain/appointment_status_values.dart';
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
+import 'package:scheduling/features/clients/domain/history_grouping.dart';
 
 /// A thin facade over calendar-owned appointment history, so this file only
 /// needs the calendar domain import for the record type.
@@ -20,9 +22,24 @@ class HistoryPager {
   Future<List<AppointmentRecord>> fetchPage({
     required int limit,
     AppointmentRecord? after,
+    HistoryStatusFilter? status,
   }) {
-    return _repo.fetchHistoryPage(after: after, limit: limit);
+    return _repo.fetchHistoryPage(
+      after: after,
+      limit: limit,
+      statuses: status == null ? null : _rawStatusesOf(status),
+    );
   }
+
+  /// Every stored spelling the chip matches, legacy `completed` included.
+  static List<String> _rawStatusesOf(HistoryStatusFilter status) => [
+    for (final raw in terminalStatusQueryValues)
+      if (switch (status) {
+        HistoryStatusFilter.complete => isCompletedStatusRaw(raw),
+        HistoryStatusFilter.cancelled => isCancelledStatusRaw(raw),
+      })
+        raw,
+  ];
 }
 
 /// Database-backed history search across the whole window, keyed by query.

@@ -73,6 +73,7 @@ Widget _wrap(
       () => repo.fetchHistoryPage(
         limit: any(named: 'limit'),
         after: any(named: 'after'),
+        statuses: any(named: 'statuses'),
       ),
     ).thenAnswer((_) async => history);
   }
@@ -306,9 +307,7 @@ void main() {
     );
 
     testWidgets('drops the month bars', (tester) async {
-      await tester.pumpWidget(
-        _wrap([recentJob, _bobJob], searchQuery: 'Job'),
-      );
+      await tester.pumpWidget(_wrap([recentJob, _bobJob], searchQuery: 'Job'));
       await tester.pumpAndSettle();
 
       expect(find.byType(SliverPersistentHeader), findsNothing);
@@ -320,9 +319,7 @@ void main() {
     testWidgets('the rail speaks the month, and the year only when older', (
       tester,
     ) async {
-      await tester.pumpWidget(
-        _wrap([recentJob, _bobJob], searchQuery: 'Job'),
-      );
+      await tester.pumpWidget(_wrap([recentJob, _bobJob], searchQuery: 'Job'));
       await tester.pumpAndSettle();
 
       // Month instead of weekday: a bare `Tue 11` is ambiguous the moment the
@@ -393,6 +390,7 @@ void main() {
       () => repo.fetchHistoryPage(
         limit: any(named: 'limit'),
         after: any(named: 'after'),
+        statuses: any(named: 'statuses'),
       ),
     ).thenAnswer((_) async {
       if (calls++ == 0) throw Exception('boom');
@@ -423,6 +421,7 @@ void main() {
       () => repo.fetchHistoryPage(
         limit: any(named: 'limit'),
         after: any(named: 'after'),
+        statuses: any(named: 'statuses'),
       ),
     ).thenAnswer((_) async => [_aliceJob]);
     when(() => repo.searchHistory(any())).thenThrow(Exception('boom'));

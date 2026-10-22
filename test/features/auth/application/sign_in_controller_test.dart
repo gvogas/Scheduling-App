@@ -1,9 +1,11 @@
+import 'package:fake_async/fake_async.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/core/storage/secure_storage_service.dart';
+import 'package:scheduling/core/utils/retry.dart';
 import 'package:scheduling/features/auth/application/sign_in_controller.dart';
 import 'package:scheduling/features/auth/data/auth_cache.dart';
 import 'package:scheduling/features/auth/domain/auth_failure.dart';
@@ -434,22 +436,36 @@ void main() {
   });
 
   group('resumeAfterSignUp', () {
+    void stubResumeUser() {
+      final user = _MockUser();
+      when(() => user.uid).thenReturn('u1');
+      when(() => auth.currentUser).thenReturn(user);
+    }
+
+    /// Runs the resume under a fake clock, walking the whole shared ladder.
+    SignInOutcome resumeThroughLadder(FakeAsync async) {
+      SignInOutcome? outcome;
+      notifier().resumeAfterSignUp().then((o) => outcome = o);
+      async.flushMicrotasks();
+      for (final delay in kAuthPropagationDelays) {
+        expect(outcome, isNull, reason: 'must not give up mid-ladder');
+        async.elapse(delay);
+      }
+      async.flushMicrotasks();
+      return outcome!;
+    }
+
     test(
       'a still-flagged doc reports a pending profile, never success',
-      () async {
-        final user = _MockUser();
-        when(() => user.uid).thenReturn('u1');
-        when(() => auth.currentUser).thenReturn(user);
+      () => fakeAsync((async) {
+        stubResumeUser();
         when(
           () => repo.findUserByUid('u1'),
         ).thenAnswer((_) async => _flaggedDoc);
 
-        expect(
-          await notifier().resumeAfterSignUp(),
-          isA<SignInProfilePending>(),
-        );
+        expect(resumeThroughLadder(async), isA<SignInProfilePending>());
         verifyNever(() => cache.save(any()));
-      },
+      }),
     );
 
     test('reports no session when nobody is signed in', () async {
@@ -458,14 +474,39 @@ void main() {
       expect(await notifier().resumeAfterSignUp(), isA<SignInNoSession>());
     });
 
-    test('reports a pending profile when the users doc is not readable '
-        'yet', () async {
-      final user = _MockUser();
-      when(() => user.uid).thenReturn('u1');
-      when(() => auth.currentUser).thenReturn(user);
-      when(() => repo.findUserByUid('u1')).thenAnswer((_) async => null);
+    test(
+      'a missing doc walks the SHARED ladder before reporting pending (U10)',
+      () => fakeAsync((async) {
+        // The activation just landed, so the read can lag the write for a few
+        // seconds; giving up on the first null read signed people out to Login
+        // with no explanation. Same `kAuthPropagationDelays` as the
+        // permission-denied race — no local delay list (ADR-0035).
+        stubResumeUser();
+        var reads = 0;
+        when(() => repo.findUserByUid('u1')).thenAnswer((_) async {
+          reads++;
+          return null;
+        });
 
-      expect(await notifier().resumeAfterSignUp(), isA<SignInProfilePending>());
+        expect(resumeThroughLadder(async), isA<SignInProfilePending>());
+        expect(reads, kAuthPropagationDelays.length + 1);
+        expect(async.elapsed, const Duration(milliseconds: 4100));
+      }),
+    );
+
+    test('a doc that turns active mid-ladder resolves to success', () async {
+      stubResumeUser();
+      var reads = 0;
+      when(() => repo.findUserByUid('u1')).thenAnswer((_) async {
+        reads++;
+        return reads == 1 ? _invitedDoc : _activeDoc;
+      });
+
+      final outcome = await notifier().resumeAfterSignUp();
+
+      expect(outcome, isA<SignInSuccess>());
+      expect(reads, 2);
+      verify(() => cache.save(any())).called(1);
     });
 
     test('resolves the signed-in employee, retrying on '
@@ -495,23 +536,18 @@ void main() {
 
     test(
       'a still-invited doc reports a pending profile, never success',
-      () async {
+      () => fakeAsync((async) {
         // Mirrors signIn's gate. A stale read (offline persistence, or the
         // permission-denied retry served from cache) would otherwise walk an
         // invited person into the hub, where every rules gate denies them.
-        final user = _MockUser();
-        when(() => user.uid).thenReturn('u1');
-        when(() => auth.currentUser).thenReturn(user);
+        stubResumeUser();
         when(
           () => repo.findUserByUid('u1'),
         ).thenAnswer((_) async => _invitedDoc);
 
-        expect(
-          await notifier().resumeAfterSignUp(),
-          isA<SignInProfilePending>(),
-        );
+        expect(resumeThroughLadder(async), isA<SignInProfilePending>());
         verifyNever(() => cache.save(any()));
-      },
+      }),
     );
 
     test(
@@ -534,17 +570,28 @@ void main() {
       },
     );
 
-    test('maps a throwing profile read to a pending profile instead of '
-        'escaping to the zone handler', () async {
-      final user = _MockUser();
-      when(() => user.uid).thenReturn('u1');
-      when(() => auth.currentUser).thenReturn(user);
-      // This simulates two denials: the propagation retry only absorbs the first, so
-      // the second one rethrows. The account was already created, though, so the user
-      // needs the "sign in normally" path here, not a silent crash.
-      when(() => repo.findUserByUid('u1')).thenThrow(
-        FirebaseException(plugin: 'cloud_firestore', code: 'permission-denied'),
-      );
+    test(
+      'maps a throwing profile read to a pending profile instead of '
+      'escaping to the zone handler',
+      () => fakeAsync((async) {
+        stubResumeUser();
+        // Every read is denied: the ladder absorbs three, the fourth rethrows.
+        // The account was already created, though, so the user needs the "sign
+        // in normally" path here, not a silent crash.
+        when(() => repo.findUserByUid('u1')).thenThrow(
+          FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'permission-denied',
+          ),
+        );
+
+        expect(resumeThroughLadder(async), isA<SignInProfilePending>());
+      }),
+    );
+
+    test('a non-retryable read failure reports pending at once', () async {
+      stubResumeUser();
+      when(() => repo.findUserByUid('u1')).thenThrow(Exception('offline'));
 
       expect(await notifier().resumeAfterSignUp(), isA<SignInProfilePending>());
     });

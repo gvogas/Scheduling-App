@@ -65,6 +65,7 @@ function serializeWidgetJob(slice) {
   const job = {
     id: String(r.id == null ? "" : r.id),
     startTime: new Date(slice.windowStartMs).toISOString(),
+    endTime: new Date(slice.windowEndMs).toISOString(),
     clientName: String(r.clientName == null ? "" : r.clientName),
     title: String(r.title == null ? "" : r.title),
     address: String(r.address == null ? "" : r.address),

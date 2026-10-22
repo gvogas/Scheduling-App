@@ -11,6 +11,7 @@ import 'package:scheduling/features/calendar/application/appointments_providers.
 import 'package:scheduling/features/calendar/application/event_details_controller.dart';
 import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
+import 'package:scheduling/features/calendar/domain/calendar_failure.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
@@ -99,7 +100,13 @@ void main() {
     when(
       () => appointments.onLocalWrite,
     ).thenAnswer((_) => const Stream.empty());
-    when(() => appointments.updateAppointment(any())).thenAnswer((_) async {});
+    when(
+      () => appointments.updateAppointment(
+        any(),
+        base: any(named: 'base'),
+        checkConflicts: any(named: 'checkConflicts'),
+      ),
+    ).thenAnswer((_) async {});
     when(
       () => appointments.updateAppointmentStatus(
         id: any(named: 'id'),
@@ -160,6 +167,68 @@ void main() {
         ),
       );
     });
+
+    test('records in_progress on the state the open sheet reads', () async {
+      // Start keeps the sheet open, so the snapshot it opened with is stale
+      // from here on: the chip, the Start button and the time record all read
+      // the live pair instead.
+      final c = makeContainer();
+      expect(stateOf(c).liveStatus, isNull);
+
+      await notifierOf(c).startJob(_appointment);
+
+      expect(stateOf(c).liveStatus, 'in_progress');
+      expect(stateOf(c).liveStartedAt, isNotNull);
+      expect(stateOf(c).liveCompletedAt, isNull);
+    });
+
+    test(
+      'Start then Mark done leaves in_progress as the prior status',
+      () async {
+        final c = makeContainer();
+        await notifierOf(c).startJob(_appointment);
+        final beforeDone = stateOf(c).liveStatus;
+
+        await notifierOf(c).markAsDone(_appointment);
+
+        // The Undo's `previousStatus` is what the sheet read right before the
+        // close — in_progress, never the snapshot's pending.
+        expect(beforeDone, 'in_progress');
+        expect(stateOf(c).liveStatus, 'done');
+        expect(stateOf(c).liveStartedAt, isNotNull);
+        expect(stateOf(c).liveCompletedAt, isNotNull);
+      },
+    );
+
+    test('a refused write records nothing', () async {
+      when(
+        () => appointments.updateAppointmentStatus(
+          id: any(named: 'id'),
+          status: any(named: 'status'),
+        ),
+      ).thenThrow(StateError('permission-denied'));
+      final c = makeContainer();
+
+      final outcome = await notifierOf(c).startJob(_appointment);
+
+      expect(outcome, isA<EventDetailsActionFailed>());
+      expect(stateOf(c).liveStatus, isNull);
+      expect(stateOf(c).liveStartedAt, isNull);
+    });
+
+    test('a personal block completes with no time record', () async {
+      // `lifecycleStamps` never stamps a personal job, so neither does the
+      // local mirror — or the sheet would show a finish time the server
+      // never wrote.
+      final c = makeContainer();
+
+      await notifierOf(
+        c,
+      ).markAsDone(_appointment.copyWith(isPersonal: true, clientId: ''));
+
+      expect(stateOf(c).liveStatus, 'done');
+      expect(stateOf(c).liveCompletedAt, isNull);
+    });
   });
 
   group('delayAppointment', () {
@@ -173,7 +242,11 @@ void main() {
       expect(outcome, isA<EventDetailsSaved>());
       final written =
           verify(
-                () => appointments.updateAppointment(captureAny()),
+                () => appointments.updateAppointment(
+                  captureAny(),
+                  base: any(named: 'base'),
+                  checkConflicts: any(named: 'checkConflicts'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(written.startTime, DateTime(2026, 5, 10, 9, 30));
@@ -188,7 +261,11 @@ void main() {
 
       final written =
           verify(
-                () => appointments.updateAppointment(captureAny()),
+                () => appointments.updateAppointment(
+                  captureAny(),
+                  base: any(named: 'base'),
+                  checkConflicts: any(named: 'checkConflicts'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(written.status, 'pending');
@@ -196,13 +273,18 @@ void main() {
 
     test('a clash returns the busy outcome and clears isSaving', () async {
       when(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-          excludeAppointmentId: any(named: 'excludeAppointmentId'),
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: true,
         ),
-      ).thenAnswer((_) async => const [_employeeA]);
+      ).thenThrow(
+        CalendarFailureEmployeesBusy(
+          busyEmployeeIds: const ['e1'],
+          start: DateTime(2026, 5, 10, 9, 30),
+          end: DateTime(2026, 5, 10, 10, 30),
+        ),
+      );
       final c = makeContainer();
       await settle();
 
@@ -211,17 +293,18 @@ void main() {
       ).delayAppointment(_appointment, minutes: 30);
 
       expect(outcome, isA<EventDetailsBusyEmployees>());
+      final busy = outcome as EventDetailsBusyEmployees;
+      expect(busy.busyEmployees, const [_employeeA]);
+      expect(busy.start, DateTime(2026, 5, 10, 9, 30));
       expect(stateOf(c).isSaving, isFalse);
-      verifyNever(() => appointments.updateAppointment(any()));
     });
 
     test('forceBusy skips the clash check and writes', () async {
       when(
-        () => appointments.findBusyEmployees(
-          candidates: any(named: 'candidates'),
-          start: any(named: 'start'),
-          end: any(named: 'end'),
-          excludeAppointmentId: any(named: 'excludeAppointmentId'),
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: true,
         ),
       ).thenThrow(StateError('must not be consulted'));
       final c = makeContainer();
@@ -232,7 +315,9 @@ void main() {
       ).delayAppointment(_appointment, minutes: 60, forceBusy: true);
 
       expect(outcome, isA<EventDetailsSaved>());
-      verify(() => appointments.updateAppointment(any())).called(1);
+      verify(
+        () => appointments.updateAppointment(any(), base: any(named: 'base')),
+      ).called(1);
     });
 
     test('a second tap while saving is Busy, not a second write', () async {
@@ -245,7 +330,13 @@ void main() {
       ).delayAppointment(_appointment, minutes: 15);
 
       expect(outcome, isA<EventDetailsSaveBusy>());
-      verifyNever(() => appointments.updateAppointment(any()));
+      verifyNever(
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      );
     });
 
     test('is refused offline before the flag is set', () async {

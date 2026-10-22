@@ -24,7 +24,6 @@ const {
   OPEN_STATUSES,
   TIMED_RECIPIENT_ROLES,
   toIdList,
-  nowMillis,
   selectOverdueCandidates,
   isLastDayOfBusinessMonth,
   selectMonthEndOverdue,
@@ -34,6 +33,7 @@ const {
   contextFor: _contextFor,
 } = require("./notification_policy");
 const {scanAppointmentWindow} = require("./appointment_scan");
+const {scanOverduePage} = require("./overdue_scan");
 const {
   sendToEmployee,
   sendToActiveAdmins,
@@ -51,26 +51,11 @@ const {
 async function runOverduePromptSweep(deps) {
   const {db, now} = deps;
   const nowDate = now || new Date();
-  const nowMs = nowMillis(nowDate);
-  const windowStart = new Date(nowMs - OVERDUE_LOOKBACK_MS);
-  // Bounds mirror selectOverdueCandidates EXACTLY — `> floor`, `<= now` — so
-  // the query is the rule rather than a superset of it.
-  const candidates = selectOverdueCandidates(
-      await scanAppointmentWindow(db, {
-        statuses: OPEN_STATUSES,
-        field: "endTime",
-        lo: windowStart,
-        loOp: ">",
-        hi: nowDate,
-        hiOp: "<=",
-        descending: true,
-        cap: OVERDUE_SWEEP_MAX,
-        logger: deps.logger,
-        label: "runOverduePromptSweep",
-        consequence: "oldest jobs deferred to a later run",
-      }),
-      nowDate,
-  );
+  const page = await scanOverduePage(db, nowDate);
+  if (page.records.length === OVERDUE_SWEEP_MAX) {
+    deps.logger.warn("overdue: full page; cursor continues next sweep");
+  }
+  const candidates = selectOverdueCandidates(page.records, nowDate);
   const cache = new Map();
   // One flat list of (candidate, assignee) pairs, delivered concurrently.
   const deliveries = [];
@@ -88,6 +73,7 @@ async function runOverduePromptSweep(deps) {
         appointmentId: String(c.id),
         employeeDocId,
         kind: "doneCheck",
+        validUntil: endMs + OVERDUE_LOOKBACK_MS,
         buildMsg: (locale) =>
           buildNotificationMessage("doneCheck", ctx, locale),
         nowDate,
@@ -99,6 +85,7 @@ async function runOverduePromptSweep(deps) {
   // Count recipients actually prompted — a job with N assignees can prompt up
   // to N of them.
   const prompted = results.filter((delivered) => delivered > 0).length;
+  await page.commit();
   return {prompted};
 }
 

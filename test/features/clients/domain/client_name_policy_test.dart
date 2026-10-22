@@ -74,10 +74,7 @@ void main() {
       // Load-bearing: this is what lets displayFor fall through to the halves
       // rather than rendering a phone number as somebody's name.
       expect(
-        ClientNamePolicy.stripPhone(
-          '(514) 555-1234',
-          phone: '(514) 555-1234',
-        ),
+        ClientNamePolicy.stripPhone('(514) 555-1234', phone: '(514) 555-1234'),
         '',
       );
     });
@@ -85,10 +82,7 @@ void main() {
     test('is idempotent', () {
       const stored = 'Marc Tremblay (514) 555-1234';
       final once = ClientNamePolicy.stripPhone(stored, phone: '(514) 555-1234');
-      expect(
-        ClientNamePolicy.stripPhone(once, phone: '(514) 555-1234'),
-        once,
-      );
+      expect(ClientNamePolicy.stripPhone(once, phone: '(514) 555-1234'), once);
     });
   });
 
@@ -193,10 +187,7 @@ void main() {
       // A blank name floats the doc to the top of the name-ordered client list
       // and leaves its avatar with no initial.
       expect(
-        ClientNamePolicy.composeStored(
-          baseName: '',
-          phone: '(514) 555-1234',
-        ),
+        ClientNamePolicy.composeStored(baseName: '', phone: '(514) 555-1234'),
         '5145551234',
       );
     });
@@ -454,10 +445,7 @@ void main() {
   group('isBusiness', () {
     test('the two organization types', () {
       expect(ClientNamePolicy.isBusiness(type: ClientType.commercial), isTrue);
-      expect(
-        ClientNamePolicy.isBusiness(type: ClientType.building),
-        isTrue,
-      );
+      expect(ClientNamePolicy.isBusiness(type: ClientType.building), isTrue);
     });
 
     test('a residential or untyped client is a person', () {

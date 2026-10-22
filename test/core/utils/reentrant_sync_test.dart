@@ -91,6 +91,26 @@ void main() {
   // re-registration SUCCEEDS — putting back the push token, presence row or
   // Live Activity registration of a device that just signed out.
   group('generation guard', () {
+    test(
+      'a new generation runs while an old request remains stalled',
+      () async {
+        final host = _Host();
+        final old = host.sync();
+        host.invalidateSync();
+        final current = host.sync();
+        expect(host.started, 2);
+        host.release();
+        await old;
+        unawaited(host.sync());
+        expect(host.started, 2);
+        host.release();
+        await current;
+        await Future<void>.delayed(Duration.zero);
+        expect(host.started, 3);
+        host.release();
+        await Future<void>.delayed(Duration.zero);
+      },
+    );
     test('a body that ran to completion never looked stale', () async {
       final host = _GenerationHost()..release.complete();
       await host.sync();

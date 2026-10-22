@@ -37,6 +37,8 @@ void main() {
   late _MockQuery query;
   late _MockQuerySnapshot snapshot;
 
+  setUpAll(() => registerFallbackValue(_MockDocSnap()));
+
   _MockDocSnap doc(Map<String, dynamic> data, {String id = 'appt'}) {
     final d = _MockDocSnap();
     when(() => d.id).thenReturn(id);
@@ -391,6 +393,23 @@ void main() {
       'employeeIds': const ['e0'],
     }, id: 'c$i');
 
+    void withRows(List<_MockDocSnap> docs) {
+      var offset = 0;
+      var limit = 0;
+      when(() => query.limit(any())).thenAnswer((call) {
+        limit = call.positionalArguments.single as int;
+        return query;
+      });
+      when(() => query.startAfterDocument(any())).thenAnswer((call) {
+        offset =
+            docs.indexOf(call.positionalArguments.single as _MockDocSnap) + 1;
+        return query;
+      });
+      when(
+        () => snapshot.docs,
+      ).thenAnswer((_) => docs.skip(offset).take(limit).toList());
+    }
+
     test('it names a ceiling, once per 30-id chunk', () async {
       await repo().findClashingAppointments(
         employeeIds: const ['e0'],
@@ -398,36 +417,39 @@ void main() {
         end: end,
       );
 
-      verify(() => query.limit(1000)).called(1);
+      verify(() => query.limit(500)).called(1);
     });
 
-    test('a snapshot that comes back AT the cap warns', () async {
+    test('a scan beyond the cap refuses to clear the booking', () async {
       final logger = _RecordingLogger();
       // Built BEFORE the stub: `clash` itself calls `when`, which mocktail
       // refuses inside a stub response.
-      final docs = [for (var i = 0; i < 1000; i++) clash(i)];
-      when(() => snapshot.docs).thenReturn(docs);
+      final docs = [for (var i = 0; i < 1001; i++) clash(i)];
+      withRows(docs);
 
-      await FirebaseAppointmentsRepository(
-        firestore,
-        logger: logger,
-      ).findClashingAppointments(
-        employeeIds: const ['e0'],
-        start: start,
-        end: end,
+      await expectLater(
+        FirebaseAppointmentsRepository(
+          firestore,
+          logger: logger,
+        ).findClashingAppointments(
+          employeeIds: const ['e0'],
+          start: start,
+          end: end,
+        ),
+        throwsStateError,
       );
 
       expect(logger.warnings, hasLength(1));
       expect(logger.warnings.single, startsWith('APPT-BUSY'));
-      expect(logger.warnings.single, contains('1000'));
+      expect(logger.warnings.single, contains('incomplete'));
     });
 
-    test('a short snapshot is silent', () async {
+    test('an exactly complete scan at the cap is silent', () async {
       final logger = _RecordingLogger();
       // Built BEFORE the stub: `clash` itself calls `when`, which mocktail
       // refuses inside a stub response.
-      final docs = [for (var i = 0; i < 999; i++) clash(i)];
-      when(() => snapshot.docs).thenReturn(docs);
+      final docs = [for (var i = 0; i < 1000; i++) clash(i)];
+      withRows(docs);
 
       await FirebaseAppointmentsRepository(
         firestore,
@@ -439,6 +461,25 @@ void main() {
       );
 
       expect(logger.warnings, isEmpty);
+    });
+
+    test('the only open clash beyond a terminal first page is found', () async {
+      withRows([
+        for (var i = 0; i < 500; i++)
+          doc({
+            'startTime': Timestamp.fromDate(start),
+            'endTime': Timestamp.fromDate(end),
+            'status': 'done',
+            'employeeIds': const ['e0'],
+          }, id: 'done$i'),
+        clash(500),
+      ]);
+      final result = await repo().findClashingAppointments(
+        employeeIds: const ['e0'],
+        start: start,
+        end: end,
+      );
+      expect(result.map((job) => job.id), ['c500']);
     });
   });
 }

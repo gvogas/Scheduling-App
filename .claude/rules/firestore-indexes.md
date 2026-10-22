@@ -17,11 +17,14 @@ one file every rule below is about.
 console-only state: `firebase deploy --only firestore:indexes` treats any prod
 field override missing from that file as drift and DELETES it (this removed all
 5 live TTL policies once, on 2026-07-21 — never pass `--force` to a deploy).
-Keep real single-field indexes on those entries rather than the Firebase docs'
-`"indexes": []` example — `live_activity_registry.js` `_pruneExpired` queries
+Keep real single-field indexes on the **queried** expiry entries —
+`live_activity_registry.js` `_pruneExpired` queries
 `.where("expiresAt", "<=", now)`, and the token sweep is a **collection-group**
 query, so `liveActivityTokens.expiresAt` needs a `COLLECTION_GROUP`-scoped index
-or the reaper fails `FAILED_PRECONDITION` into a swallowed no-op. The live
+or the reaper fails `FAILED_PRECONDITION` into a swallowed no-op. The six other
+TTL collections use ID/transaction lookups rather than expiry queries; their
+expiry indexes are exempted while `ttl: true` remains declared. Recheck consumers
+before adding an expiry query. The live
 map's admin `presence` collection-group read orders by `updatedAt`, so the
 `COLLECTION_GROUP`-scoped `presence.updatedAt` override stays too.
 
@@ -81,6 +84,8 @@ only by reading `functions_get_logs`, where it was 60 of 60 warnings in a
 2.5-hour window. **Restored 2026-08-31; do not delete it again.** Before
 removing any composite as a prefix, check what `orderBy` the query ends on —
 and prefer confirming against the logs over reasoning about it.
+
+**Three `isPersonal` composites (2026-10-20, ADR-0189):** `appointments (isPersonal ASC, status ASC, endTime DESC)` serves `watchOverdueOpen` (`in` + `==` + `<` + `orderBy endTime desc`; the old `(status, endTime DESC)` stays for nothing else today but is kept, see the prefix rule above), `(isPersonal ASC, startTime ASC)` the admin range TAIL and `(employeeIds CONTAINS, isPersonal ASC, startTime ASC)` the employee-scoped tail. An equality filter EXCLUDES documents missing the field, so these indexes ship together with `functions/scripts/backfill-appointment-is-personal.js` (dry run, then `--live`) BEFORE the app build; the composites must read `READY` first, since a `CREATING` index fails `FAILED_PRECONDITION`.
 
 **A `fieldOverrides` exemption is not free reach — `createdAt`/`updatedAt` stay
 INDEXED on purpose** (restated 2026-08-31 after a pass exempted them for write

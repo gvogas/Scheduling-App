@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -20,6 +21,9 @@ enum _ErrorCause {
   signedOut,
   tooManyAttempts,
   invalidData,
+  editConflict,
+  incompleteCheck,
+  failedPrecondition,
   unknown,
 }
 
@@ -32,9 +36,22 @@ _ErrorCause _classifyError(Object error) {
       'permission-denied' => _ErrorCause.permissionDenied,
       'not-found' => _ErrorCause.notFound,
       'unauthenticated' || 'user-token-expired' => _ErrorCause.signedOut,
+      'resource-exhausted'
+          when const [
+            'conflict-scan-incomplete',
+            'client-search-incomplete',
+          ].contains(error.message) =>
+        _ErrorCause.incompleteCheck,
       'resource-exhausted' ||
       'too-many-requests' => _ErrorCause.tooManyAttempts,
+      // Callables only: Firestore's means a missing index, feature-disabled a pause.
+      'failed-precondition'
+          when error is FirebaseFunctionsException &&
+              error.message != 'feature-disabled' =>
+        _ErrorCause.failedPrecondition,
       'invalid-argument' || 'already-exists' => _ErrorCause.invalidData,
+      'aborted' when error.message == 'appointment-edit-conflict' =>
+        _ErrorCause.editConflict,
       _ => _ErrorCause.unknown,
     };
   }
@@ -53,8 +70,10 @@ _ErrorCause _classifyError(Object error) {
 /// The three sites testing `next is! AsyncError || previous is AsyncError`
 /// therefore re-logged and re-pushed a notice on every retry — the rebuild
 /// spam `ref.listen` exists to avoid.
-bool isFirstAsyncError(AsyncValue<Object?>? previous, AsyncValue<Object?> next) =>
-    next.hasError && !(previous?.hasError ?? false);
+bool isFirstAsyncError(
+  AsyncValue<Object?>? previous,
+  AsyncValue<Object?> next,
+) => next.hasError && !(previous?.hasError ?? false);
 
 /// Composes "{intro}. {cause}" — what failed, then why and what to do next.
 ///
@@ -77,17 +96,22 @@ String composeErrorNoticeFor(
   AppLocalizations l10n, {
   required String intro,
   required Object error,
-}) {
-  final cause = switch (_classifyError(error)) {
+}) => l10n.error_noticeWithCause(intro, errorCauseFor(l10n, error));
+
+/// The cause sentence alone, for a surface whose title already carries the intro.
+String errorCauseFor(AppLocalizations l10n, Object error) {
+  return switch (_classifyError(error)) {
     _ErrorCause.offline => l10n.error_causeOffline,
     _ErrorCause.permissionDenied => l10n.error_causePermissionDenied,
     _ErrorCause.notFound => l10n.error_causeNotFound,
     _ErrorCause.signedOut => l10n.error_causeSignedOut,
     _ErrorCause.tooManyAttempts => l10n.error_causeTooManyAttempts,
     _ErrorCause.invalidData => l10n.error_causeInvalidData,
+    _ErrorCause.editConflict => l10n.error_causeEditConflict,
+    _ErrorCause.incompleteCheck => l10n.error_causeIncompleteCheck,
+    _ErrorCause.failedPrecondition => l10n.error_causeFailedPrecondition,
     _ErrorCause.unknown => l10n.error_causeUnknown,
   };
-  return l10n.error_noticeWithCause(intro, cause);
 }
 
 /// Fails a write fast when the device is offline, surfacing the standard

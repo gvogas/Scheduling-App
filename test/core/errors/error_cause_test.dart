@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -53,6 +54,50 @@ void main() {
       );
     });
 
+    testWidgets('a callable failed-precondition maps to its own cause', (
+      tester,
+    ) async {
+      await pumpHost(tester);
+      expect(
+        noticeFor(
+          FirebaseFunctionsException(
+            code: 'failed-precondition',
+            message: 'client-has-history',
+          ),
+        ),
+        expected(l10n.error_causeFailedPrecondition),
+      );
+      expect(
+        l10n.error_causeFailedPrecondition,
+        isNot(l10n.error_causeUnknown),
+      );
+    });
+
+    testWidgets('a Firestore failed-precondition (missing index) is unknown', (
+      tester,
+    ) async {
+      await pumpHost(tester);
+      expect(
+        noticeFor(_fb('failed-precondition')),
+        expected(l10n.error_causeUnknown),
+      );
+    });
+
+    testWidgets('a paused callable (feature-disabled) is unknown', (
+      tester,
+    ) async {
+      await pumpHost(tester);
+      expect(
+        noticeFor(
+          FirebaseFunctionsException(
+            code: 'failed-precondition',
+            message: 'feature-disabled',
+          ),
+        ),
+        expected(l10n.error_causeUnknown),
+      );
+    });
+
     testWidgets('permission-denied maps to permissionDenied', (tester) async {
       await pumpHost(tester);
       expect(
@@ -66,9 +111,7 @@ void main() {
       expect(noticeFor(_fb('not-found')), expected(l10n.error_causeNotFound));
     });
 
-    testWidgets('socket and timeout exceptions map to offline', (
-      tester,
-    ) async {
+    testWidgets('socket and timeout exceptions map to offline', (tester) async {
       await pumpHost(tester);
       expect(
         noticeFor(const SocketException('x')),
@@ -112,6 +155,37 @@ void main() {
       await pumpHost(tester);
       expect(noticeFor(Exception('boom')), expected(l10n.error_causeUnknown));
       expect(noticeFor(_fb('aborted')), expected(l10n.error_causeUnknown));
+      expect(
+        noticeFor(
+          FirebaseException(
+            plugin: 'cloud_functions',
+            code: 'aborted',
+            message: 'appointment-edit-conflict',
+          ),
+        ),
+        expected(l10n.error_causeEditConflict),
+      );
+    });
+
+    testWidgets('an incomplete scan is distinct from rate limiting', (
+      tester,
+    ) async {
+      await pumpHost(tester);
+      for (final message in [
+        'conflict-scan-incomplete',
+        'client-search-incomplete',
+      ]) {
+        expect(
+          noticeFor(
+            FirebaseException(
+              plugin: 'cloud_functions',
+              code: 'resource-exhausted',
+              message: message,
+            ),
+          ),
+          expected(l10n.error_causeIncompleteCheck),
+        );
+      }
     });
   });
 
@@ -200,10 +274,7 @@ void main() {
       expect(notice, isA<NoticeError>());
       // The caller's intro, then the shared offline cause — the same sentence
       // composeErrorNotice builds for a real SocketException.
-      expect(
-        notice.message,
-        'Intro. ${l10n.error_causeOffline}',
-      );
+      expect(notice.message, 'Intro. ${l10n.error_causeOffline}');
     });
   });
 

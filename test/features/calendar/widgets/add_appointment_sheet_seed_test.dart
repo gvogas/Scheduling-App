@@ -82,6 +82,44 @@ void main() {
     expect(draftOf(tester).useCustomAddress, isFalse);
   });
 
+  testWidgets('a landed prefill is the baseline, so Cancel asks nothing', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      _harness(prefill: const AppointmentPrefill(client: _client)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsNothing);
+
+    await tester.enterText(find.byType(TextField).first, 'Leak fix');
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+  });
+
+  testWidgets('a failed Save focuses the first errored field', (tester) async {
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(_harness());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(draftOf(tester).errors, contains('title'));
+    expect(controllersOf(tester).title.text, isEmpty);
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'title');
+  });
+
   testWidgets('no prefill leaves the client field empty', (tester) async {
     tester.view.physicalSize = const Size(800, 2400);
     tester.view.devicePixelRatio = 1.0;

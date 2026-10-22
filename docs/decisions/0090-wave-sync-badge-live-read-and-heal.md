@@ -15,7 +15,7 @@ push was queued. Separately, two edits that put the mapped fields BACK left a jo
 `ClientDetailView` watches `clientStreamProvider` (`autoDispose.family` over `ClientsRepository.watchClient`),
 falling back to the handed-in record. That listener does not patch the search cache. The noop path calls
 `healSyncState`, which re-reads and re-hashes inside the transaction and writes `syncState`/`syncError`
-only, never `lastSyncedAt`. `tallyUpsert` counts `noop` as nothing.
+only, never `lastSyncedAt`; it runs only when the doc already read is not `synced`, because a no-op is the steady state and the transaction's second read would return immediately. `tallyUpsert` counts `noop` as nothing.
 
 ## Consequences
 An optimistic client-side `pending` would fork `mappedFieldsHash`'s projection into Dart. Trusting the

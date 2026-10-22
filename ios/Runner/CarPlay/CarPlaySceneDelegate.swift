@@ -27,6 +27,10 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     private var bridgeObserver: NSObjectProtocol?
     private var isSceneActive = false
     private var rebuildIsPending = false
+    private var sceneGeneration = 0
+    private var selectionGeneration = 0
+    private var snapshotOwner: String?
+    private var snapshotEpoch: String?
     /// A `CPTextButton` has no disabled state, so a driver can tap Start or
     /// Mark complete again while the first write is still in flight — and
     /// offline they all commit at once on reconnect. The bridge answers every
@@ -41,6 +45,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         _ templateApplicationScene: CPTemplateApplicationScene,
         didConnect interfaceController: CPInterfaceController
     ) {
+        sceneGeneration += 1
+        selectionGeneration += 1
         templateScene = templateApplicationScene
         self.interfaceController = interfaceController
         interfaceController.delegate = self
@@ -48,6 +54,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         // onChange first: activate() reloads and fires it.
         store.onChange = { [weak self] in self?.rebuild() }
         store.activate()
+        snapshotOwner = store.snapshot?.ownerUid
+        snapshotEpoch = store.snapshot?.sessionEpoch
 
         bridgeObserver = NotificationCenter.default.addObserver(
             forName: .carPlayBridgeAvailabilityChanged,
@@ -68,6 +76,8 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         didDisconnectInterfaceController interfaceController: CPInterfaceController
     ) {
         isSceneActive = false
+        sceneGeneration += 1
+        selectionGeneration += 1
         rebuildIsPending = false
         statusWriteIsInFlight = false
         store.deactivate()
@@ -115,22 +125,47 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func actions() -> CarPlayActions {
-        CarPlayActions(
+        let generation = sceneGeneration
+        return CarPlayActions(
             select: { [weak self] appointment in
+                guard self?.sceneGeneration == generation else { return }
                 self?.showDetail(for: appointment)
             },
             directions: { [weak self] appointment in
+                guard self?.sceneGeneration == generation else { return }
                 self?.openDirections(to: appointment)
             },
             setStatus: { [weak self] appointment, status in
+                guard self?.sceneGeneration == generation else { return }
                 self?.writeStatus(status, for: appointment)
             },
-            call: { [weak self] url in self?.open(url) },
-            dismissAlert: { [weak self] in self?.dismissAlert() })
+            call: { [weak self] url in
+                guard self?.sceneGeneration == generation else { return }
+                self?.open(url)
+            },
+            dismissAlert: { [weak self] in
+                guard self?.sceneGeneration == generation else { return }
+                self?.dismissAlert()
+            })
     }
 
     private func rebuild() {
         guard isSceneActive, todayTab != nil || weekTab != nil else { return }
+        if store.snapshot == nil || snapshotOwner != store.snapshot?.ownerUid ||
+            snapshotEpoch != store.snapshot?.sessionEpoch {
+            snapshotOwner = store.snapshot?.ownerUid
+            snapshotEpoch = store.snapshot?.sessionEpoch
+            sceneGeneration += 1
+            selectionGeneration += 1
+            statusWriteIsInFlight = false
+            detail = nil
+            let hadAlert = presentedAlert != nil
+            presentedAlert = nil
+            if hadAlert {
+                interfaceController?.dismissTemplate(animated: false, completion: nil)
+            }
+            interfaceController?.popToRootTemplate(animated: false, completion: nil)
+        }
         // A rebuild under a pushed detail pops the driver out of it, and one
         // under an alert races the answer they are reading.
         guard detail == nil, presentedAlert == nil else {
@@ -165,14 +200,28 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     /// decides whether Call renders and what it opens.
     private func showDetail(for appointment: SnapshotAppointment) {
         guard isSceneActive else { return }
+        selectionGeneration += 1
+        let selection = selectionGeneration
+        let generation = sceneGeneration
+        guard let current = latestAppointment(id: appointment.id) else { return }
         guard CarPlayBridge.shared.isConnected else {
-            pushDetail(for: appointment, dialableURI: nil)
+            pushDetail(for: current, dialableURI: nil)
             return
         }
         CarPlayBridge.shared.dialableNumber(for: appointment.id) {
             [weak self] uri in
-            self?.pushDetail(for: appointment, dialableURI: uri)
+            guard let self, self.isSceneActive,
+                  self.sceneGeneration == generation,
+                  self.selectionGeneration == selection,
+                  let latest = self.latestAppointment(id: appointment.id) else { return }
+            self.pushDetail(for: latest, dialableURI: uri)
         }
+    }
+
+    private func latestAppointment(id: String) -> SnapshotAppointment? {
+        let matches = store.snapshot?.days.flatMap(\.appointments).filter { $0.id == id } ?? []
+        return matches.first { Calendar.current.isDate($0.start, inSameDayAs: Date()) }
+            ?? matches.first { $0.end > Date() } ?? matches.last
     }
 
     private func pushDetail(
@@ -187,11 +236,15 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
             dialableURI: dialableURI,
             actions: actions())
         detail = template
+        let generation = sceneGeneration
+        let selection = selectionGeneration
         // pushTemplate FAILS at the depth cap rather than throwing back here,
         // so the completion is the only place that failure is visible.
         interfaceController.pushTemplate(template, animated: true) {
             [weak self] pushed, _ in
-            guard let self, !pushed else { return }
+            guard let self, self.sceneGeneration == generation,
+                  self.selectionGeneration == selection, self.detail === template,
+                  !pushed else { return }
             self.detail = nil
             self.present(self.failureAlert(CarPlayStrings.couldNotOpenJob))
         }
@@ -200,12 +253,15 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     // MARK: - Actions
 
     private func writeStatus(_ status: String, for appointment: SnapshotAppointment) {
-        guard !statusWriteIsInFlight else { return }
+        guard isSceneActive, store.snapshot != nil, !statusWriteIsInFlight else { return }
+        let generation = sceneGeneration
+        let selection = selectionGeneration
         statusWriteIsInFlight = true
         CarPlayBridge.shared.setAppointmentStatus(
             id: appointment.id, status: status
         ) { [weak self] written in
-            guard let self else { return }
+            guard let self, self.isSceneActive, self.sceneGeneration == generation,
+                  self.selectionGeneration == selection else { return }
             self.statusWriteIsInFlight = false
             guard written else {
                 self.present(self.failureAlert(CarPlayStrings.couldNotUpdateJob))
@@ -250,9 +306,11 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
         guard isSceneActive, let interfaceController, presentedAlert == nil
         else { return }
         presentedAlert = alert
+        let generation = sceneGeneration
         interfaceController.presentTemplate(alert, animated: true) {
             [weak self] presented, _ in
-            guard let self, !presented else { return }
+            guard let self, self.sceneGeneration == generation,
+                  self.presentedAlert === alert, !presented else { return }
             self.presentedAlert = nil
             self.rebuildIfPending()
         }
@@ -267,6 +325,7 @@ final class CarPlaySceneDelegate: UIResponder, CPTemplateApplicationSceneDelegat
     }
 
     private func popToRoot() {
+        selectionGeneration += 1
         detail = nil
         guard let interfaceController else { return }
         interfaceController.popToRootTemplate(animated: true) {

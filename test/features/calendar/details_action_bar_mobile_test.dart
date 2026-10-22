@@ -82,8 +82,34 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // Plain text, never a disabled button: a technician's bar would otherwise
+    // hold one control that does nothing.
     expect(find.text('Complete'), findsOneWidget);
+    expect(find.byType(OutlinedButton), findsNothing);
     expect(find.text('Cancel Appointment'), findsNothing);
+  });
+
+  testWidgets('a done job with Book again renders no Complete slot at all', (
+    tester,
+  ) async {
+    // The header chip already says Complete; the text only fills an
+    // otherwise empty bar.
+    await tester.pumpWidget(
+      _wrap(
+        DetailsActionBar(
+          isDone: true,
+          isCancelled: false,
+          isSaving: false,
+          onMarkDone: () {},
+          onCancel: () {},
+          onBookAgain: () {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Complete'), findsNothing);
+    expect(find.text('Book again'), findsOneWidget);
   });
 
   testWidgets('done appointment offers Edit in place of the indicator', (

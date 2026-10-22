@@ -1,7 +1,11 @@
+import 'dart:async';
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:scheduling/core/app/session_fence.dart';
+import 'package:scheduling/features/auth/data/auth_cache.dart';
 
 import 'package:scheduling/features/auth/domain/auth_failure.dart';
 import 'package:scheduling/features/auth/services/auth_service.dart';
@@ -12,6 +16,8 @@ class _MockFirebaseAuth extends Mock implements FirebaseAuth {}
 class _MockUser extends Mock implements User {}
 
 class _MockEmployeesRepository extends Mock implements EmployeesRepository {}
+
+class _MockAuthCache extends Mock implements AuthCache {}
 
 class _FakeAuthCredential extends Fake implements AuthCredential {}
 
@@ -47,6 +53,37 @@ void main() {
       return _FakeUserCredential();
     });
   });
+
+  test(
+    'a failed sign-out restores new work while old work stays fenced',
+    () async {
+      final release = Completer<void>();
+      final session = SessionFence(readUid: () => auth.currentUser?.uid);
+      final oldWork = session.capture()!;
+      final cache = _MockAuthCache();
+      when(cache.clear).thenAnswer((_) async {});
+      when(auth.signOut).thenAnswer((_) => release.future);
+      final guarded = AuthService(
+        firebaseAuth: auth,
+        employeesRepository: employees,
+        authCache: cache,
+        sessionForExit: () => session,
+      );
+      final pending = guarded.signOut();
+      expect(oldWork.isCurrent, isFalse);
+      expect(session.capture(), isNull);
+      final checked = expectLater(
+        pending,
+        throwsA(isA<FirebaseAuthException>()),
+      );
+      release.completeError(
+        FirebaseAuthException(code: 'network-request-failed'),
+      );
+      await checked;
+      expect(session.capture()!.isCurrent, isTrue);
+      expect(oldWork.isCurrent, isFalse);
+    },
+  );
 
   /// Mocktail compares the whole invocation, so the stub has to name every
   /// argument the call site passes.

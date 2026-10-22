@@ -86,7 +86,7 @@ void main() {
 
     expect(find.widgetWithText(TextButton, 'Undo'), findsOneWidget);
 
-    await tester.pump(AppMotion.noticeCycle);
+    await tester.pump(AppMotion.noticeActionFloor);
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
   });
@@ -122,7 +122,7 @@ void main() {
     );
 
     await tester.pumpAndSettle();
-    await tester.pump(AppMotion.noticeCycle);
+    await tester.pump(AppMotion.noticeActionFloor);
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
   });
@@ -148,6 +148,101 @@ void main() {
     expect(find.text('Marked as complete'), findsNothing);
 
     await tester.pump(AppMotion.noticeCycle);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+  });
+
+  testWidgets('an action notice holds 6 s, not the 2.6 s cycle', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    service(tester).successWithAction(
+      'Marked as complete',
+      actionLabel: 'Undo',
+      onAction: () {},
+    );
+    await showBanner(tester);
+
+    await tester.pump(AppMotion.noticeCycle);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(find.widgetWithText(TextButton, 'Undo'), findsOneWidget);
+
+    await tester.pump(AppMotion.noticeActionFloor - AppMotion.noticeCycle);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(find.text('Marked as complete'), findsNothing);
+  });
+
+  testWidgets('a later info notice waits behind the Undo, then shows', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    service(tester).successWithAction(
+      'Marked as complete',
+      actionLabel: 'Undo',
+      onAction: () {},
+    );
+    await showBanner(tester);
+
+    service(tester).info('Photos queued');
+    await showBanner(tester);
+    expect(find.widgetWithText(TextButton, 'Undo'), findsOneWidget);
+    expect(find.text('Photos queued'), findsNothing);
+
+    await tester.pump(AppMotion.noticeActionFloor);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await showBanner(tester);
+    expect(find.text('Marked as complete'), findsNothing);
+    expect(find.text('Photos queued'), findsOneWidget);
+
+    await tester.pump(AppMotion.noticeCycle);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+  });
+
+  testWidgets('only the latest parked notice survives the Undo', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    service(tester).successWithAction(
+      'Marked as complete',
+      actionLabel: 'Undo',
+      onAction: () {},
+    );
+    await showBanner(tester);
+
+    service(tester)
+      ..info('first')
+      ..info('second');
+    await tester.pump(AppMotion.noticeActionFloor);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    await showBanner(tester);
+    expect(find.text('first'), findsNothing);
+    expect(find.text('second'), findsOneWidget);
+
+    await tester.pump(AppMotion.noticeCycle);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+  });
+
+  testWidgets('an error still pre-empts the Undo', (tester) async {
+    await pumpApp(tester);
+    service(tester).successWithAction(
+      'Marked as complete',
+      actionLabel: 'Undo',
+      onAction: () {},
+    );
+    await showBanner(tester);
+
+    service(tester).error('Lost connection');
+    await showBanner(tester);
+    expect(find.text('Marked as complete'), findsNothing);
+    expect(find.text('Lost connection'), findsOneWidget);
+
+    await tester.pump(const Duration(seconds: 10));
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
   });

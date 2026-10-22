@@ -6,6 +6,7 @@ import 'package:scheduling/core/validators/auth_validators.dart';
 import 'package:scheduling/core/validators/email_format.dart';
 import 'package:scheduling/core/validators/text_limits.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/feedback/offline_form_notice.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
 import 'package:scheduling/shared/widgets/sheets/app_bottom_sheet.dart';
 import 'package:scheduling/shared/widgets/sheets/form_sheet_frame.dart';
@@ -50,6 +51,7 @@ class _ChangeEmailSheet extends StatefulWidget {
 
 class _ChangeEmailSheetState extends State<_ChangeEmailSheet> {
   ChangeEmailDraft? _draft;
+  bool _isDirty = false;
 
   @override
   Widget build(BuildContext context) {
@@ -59,10 +61,13 @@ class _ChangeEmailSheetState extends State<_ChangeEmailSheet> {
       onPrimary: _draft == null
           ? null
           : () => Navigator.of(context).pop(_draft),
+      isDirty: () => _isDirty,
       children: [
+        const OfflineFormNotice(),
         ChangeEmailDialogBody(
           currentEmail: widget.currentEmail,
           onDraftChanged: (draft) => setState(() => _draft = draft),
+          onDirtyChanged: (dirty) => _isDirty = dirty,
         ),
       ],
     );
@@ -91,12 +96,16 @@ class ChangeEmailDialogBody extends StatefulWidget {
     required this.currentEmail,
     required this.onDraftChanged,
     super.key,
+    this.onDirtyChanged,
   });
 
   final String currentEmail;
 
   /// Null whenever the form is incomplete or the two addresses disagree.
   final ValueChanged<ChangeEmailDraft?> onDraftChanged;
+
+  /// True while any field holds text — what the sheet's discard guard asks.
+  final ValueChanged<bool>? onDirtyChanged;
 
   @override
   State<ChangeEmailDialogBody> createState() => _ChangeEmailDialogBodyState();
@@ -131,6 +140,7 @@ class _ChangeEmailDialogBodyState extends State<ChangeEmailDialogBody> {
   void _onChanged() {
     setState(() {});
     widget.onDraftChanged(_draft);
+    widget.onDirtyChanged?.call(_controllers.any((c) => c.text.isNotEmpty));
   }
 
   /// The callable lowercases anyway, so a case- or whitespace-only difference

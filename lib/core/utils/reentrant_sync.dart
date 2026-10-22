@@ -11,9 +11,9 @@ import 'dart:async';
 /// `unregister()`, capture it at the top of the guarded body, and re-check
 /// after each await.
 mixin ReentrantSync {
-  bool _syncBusy = false;
   bool _syncPending = false;
   int _syncGeneration = 0;
+  Object? _activeRun;
 
   /// Read this at the top of a guarded body and pass it to [isSyncStale].
   int get syncGeneration => _syncGeneration;
@@ -26,21 +26,24 @@ mixin ReentrantSync {
   void invalidateSync() {
     _syncGeneration += 1;
     _syncPending = false;
+    _activeRun = null;
   }
 
   Future<void> runCoalesced(Future<void> Function() body) async {
-    if (_syncBusy) {
+    if (_activeRun != null) {
       _syncPending = true;
       return;
     }
-    _syncBusy = true;
+    final run = _activeRun = Object();
     try {
       await body();
     } finally {
-      _syncBusy = false;
-      if (_syncPending) {
-        _syncPending = false;
-        unawaited(runCoalesced(body));
+      if (identical(_activeRun, run)) {
+        _activeRun = null;
+        if (_syncPending) {
+          _syncPending = false;
+          unawaited(runCoalesced(body));
+        }
       }
     }
   }

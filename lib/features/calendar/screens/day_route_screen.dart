@@ -45,10 +45,14 @@ class DayRouteScreen extends ConsumerStatefulWidget {
     required this.isAdmin,
     required this.employeeId,
     super.key,
+    this.initialDay,
   });
 
   final bool isAdmin;
   final String employeeId;
+
+  /// The calendar's selected day; null opens on today.
+  final DateTime? initialDay;
 
   @override
   ConsumerState<DayRouteScreen> createState() => _DayRouteScreenState();
@@ -65,7 +69,7 @@ class _DayRouteScreenState extends ConsumerState<DayRouteScreen> {
   @override
   void initState() {
     super.initState();
-    _day = DateTime.now().dateOnly;
+    _day = (widget.initialDay ?? DateTime.now()).dateOnly;
     _selectedEmployeeId = widget.employeeId;
   }
 

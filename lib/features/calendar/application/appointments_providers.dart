@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
@@ -14,6 +15,7 @@ final appointmentsRepositoryProvider = Provider<AppointmentsRepository>((ref) {
   final repository = FirebaseAppointmentsRepository(
     firestore,
     functions: functions,
+    session: ref.watch(sessionFenceProvider),
   );
   ref.onDispose(repository.dispose);
   return repository;

@@ -1,6 +1,7 @@
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
@@ -15,6 +16,7 @@ final accountDeletionServiceProvider = Provider<AccountDeletionService>(
     firebaseAuth: ref.watch(firebaseAuthProvider),
     authCache: ref.watch(authCacheProvider),
     logger: ref.watch(loggerProvider),
+    sessionForExit: () => ref.read(sessionFenceProvider),
   ),
 );
 
@@ -24,15 +26,18 @@ class AccountDeletionService {
     FirebaseFunctions? functions,
     AuthCache? authCache,
     AppLogger? logger,
+    SessionFence Function()? sessionForExit,
   }) : _auth = firebaseAuth ?? FirebaseAuth.instance,
        _functions = functions ?? FirebaseFunctions.instance,
        _authCache = authCache ?? AuthCache(),
-       _logger = logger ?? AppLogger();
+       _logger = logger ?? AppLogger(),
+       _sessionForExit = sessionForExit;
 
   final FirebaseAuth _auth;
   final FirebaseFunctions _functions;
   final AuthCache _authCache;
   final AppLogger _logger;
+  final SessionFence Function()? _sessionForExit;
 
   Future<void> reauthenticateWithPassword(String password) async {
     final user = _auth.currentUser;
@@ -52,6 +57,11 @@ class AccountDeletionService {
   }
 
   Future<void> deleteAccount() async {
+    final session = _sessionForExit?.call();
+    final lease = session?.capture(duringExit: true);
+    if (session != null && lease == null) {
+      throw const AuthFailureRequiresRecentLogin();
+    }
     try {
       await _functions
           .httpsCallable(
@@ -75,6 +85,7 @@ class AccountDeletionService {
       _logger.warn('ACCT-DEL deleteAccount failed', e, st);
       throw const AuthFailureUnknown();
     }
+    if (lease != null && !lease.isCurrent) return;
     try {
       await _auth.signOut();
     } catch (e, st) {
@@ -83,10 +94,12 @@ class AccountDeletionService {
       // restore registrations for an account that no longer exists.
       _logger.warn('ACCT-DEL local signOut failed after deletion', e, st);
     } finally {
-      try {
-        await _authCache.clear();
-      } catch (e, st) {
-        _logger.warn('ACCT-DEL auth cache clear failed', e, st);
+      if (lease == null || _auth.currentUser == null || lease.isCurrent) {
+        try {
+          await _authCache.clear();
+        } catch (e, st) {
+          _logger.warn('ACCT-DEL auth cache clear failed', e, st);
+        }
       }
     }
   }

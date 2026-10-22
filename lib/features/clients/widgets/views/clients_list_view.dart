@@ -10,9 +10,11 @@ import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/client_grouping.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
+import 'package:scheduling/features/clients/domain/models/client_search_results.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
+import 'package:scheduling/features/clients/domain/policies/client_building.dart';
 import 'package:scheduling/features/clients/domain/policies/client_delete_policy.dart';
 import 'package:scheduling/features/clients/domain/policies/client_search_policy.dart';
 import 'package:scheduling/features/clients/widgets/cards/client_tile.dart';
@@ -26,6 +28,7 @@ import 'package:scheduling/features/clients/widgets/views/row_cache.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/app_empty_state.dart';
 import 'package:scheduling/shared/widgets/feedback/skeleton_loader.dart';
+import 'package:scheduling/shared/widgets/feedback/warning_note.dart';
 import 'package:scheduling/shared/widgets/primitives/fade_in_item.dart';
 
 class ClientsListView extends ConsumerStatefulWidget {
@@ -42,6 +45,7 @@ class ClientsListView extends ConsumerStatefulWidget {
     this.onCountChanged,
     this.grouped = false,
     this.buildingLabel,
+    this.onClearFilter,
   });
 
   final String searchQuery;
@@ -77,6 +81,10 @@ class ClientsListView extends ConsumerStatefulWidget {
   /// scan itself.
   final String? buildingLabel;
 
+  /// Drops the active filter; the empty state of a search run inside one
+  /// offers it, since the filter is what is narrowing the answer.
+  final VoidCallback? onClearFilter;
+
   @override
   ConsumerState<ClientsListView> createState() => _ClientsListViewState();
 }
@@ -105,13 +113,28 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   @override
   String get analyticsSurface => AnalyticsSurfaces.clients;
 
+  /// Whether the last page came back full AS FETCHED — an in-place removal
+  /// shortens the stored page, which must not read as the end of the list.
+  bool _lastPageFull = false;
+
+  /// The last row as FETCHED: the repository caches the stored sort value only
+  /// for that doc, so an in-place removal or edit must not move the cursor.
+  ClientRecord? _cursor;
+
+  /// Bumped by [_refresh], so a fetch the refresh superseded can't set [_cursor].
+  int _fetchGeneration = 0;
+
+  /// Rows this list dropped on archive, by id, with where they sat, so an Undo
+  /// puts each back in place instead of refreshing to page one.
+  final Map<String, (int page, int row, ClientRecord client)> _removedRows = {};
+
   late final PagingController<int, ClientRecord> _pagingController =
       PagingController<int, ClientRecord>(
         getNextPageKey: (state) {
           final pages = state.pages;
           if (pages == null) return 1;
 
-          if (pages.isNotEmpty && pages.last.length < _pageSize) return null;
+          if (pages.isNotEmpty && !_lastPageFull) return null;
           return (state.keys?.last ?? 0) + 1;
         },
         fetchPage: _fetchPage,
@@ -123,17 +146,19 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
     // of the real failure, losing the CLI-LIST breadcrumb entirely.
     final repository = ref.read(clientsRepositoryProvider);
     final logger = ref.read(loggerProvider);
+    final generation = _fetchGeneration;
     try {
-      final items = _pagingController.value.items;
-      final after = (pageKey == 1 || items == null || items.isEmpty)
-          ? null
-          : items.last;
-      return await repository.fetchClientsPage(
-        after: after,
+      final page = await repository.fetchClientsPage(
+        after: pageKey == 1 ? null : _cursor,
         limit: _pageSize,
         sort: widget.sort,
         filter: widget.filter,
       );
+      if (generation == _fetchGeneration) {
+        _lastPageFull = page.length >= _pageSize;
+        if (page.isNotEmpty) _cursor = page.last;
+      }
+      return page;
     } catch (e, st) {
       logger.warn('CLI-LIST clients page fetch error', e, st);
       rethrow;
@@ -146,8 +171,101 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   void didUpdateWidget(ClientsListView oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sort != widget.sort || oldWidget.filter != widget.filter) {
-      _pagingController.refresh();
+      _refresh();
     }
+  }
+
+  void _refresh() {
+    _fetchGeneration++;
+    _cursor = null;
+    _removedRows.clear();
+    _pagingController.refresh();
+  }
+
+  // A write patches the loaded pages in place where it can — an edit or an
+  // archive — so fixing a typo on row 180 does not drop the admin back to page
+  // one; add and delete still refresh, since only the server knows the page.
+  void _applyWrite(ClientsWrite? write) {
+    switch (write) {
+      case ClientsWriteUpdated(:final client):
+        _patchRow(client);
+      case ClientsWriteArchived(:final clientId, :final archived):
+        _patchArchived(clientId, archived: archived);
+      case ClientsWriteAdded() ||
+          ClientsWriteDeleted() ||
+          ClientsWriteRefresh() ||
+          null:
+        _refresh();
+    }
+  }
+
+  bool _matchesFilter(ClientRecord client) => switch (widget.filter) {
+    ClientsFilterAll() => !client.archived,
+    ClientsFilterArchived() => client.archived,
+    ClientsFilterType(:final type) => !client.archived && client.type == type,
+    // Derived from the edited address, as the server's `buildingFor` will be.
+    ClientsFilterBuilding(:final key) =>
+      !client.archived && buildingKeyFor(client) == key,
+  };
+
+  void _setPages(List<List<ClientRecord>> pages) {
+    _pagingController.value = _pagingController.value.copyWith(pages: pages);
+  }
+
+  void _patchRow(ClientRecord client) {
+    final pages = _pagingController.value.pages;
+    if (pages == null || _locate(pages, client.id) == null) return;
+    final keep = _matchesFilter(client);
+    _setPages([
+      for (final page in pages)
+        [
+          for (final row in page)
+            if (row.id != client.id) row else if (keep) client,
+        ],
+    ]);
+  }
+
+  (int, int)? _locate(List<List<ClientRecord>> pages, String id) {
+    for (var p = 0; p < pages.length; p++) {
+      final r = pages[p].indexWhere((row) => row.id == id);
+      if (r != -1) return (p, r);
+    }
+    return null;
+  }
+
+  void _patchArchived(String id, {required bool archived}) {
+    final pages = _pagingController.value.pages;
+    if (pages == null) return;
+    final belongs = archived == (widget.filter is ClientsFilterArchived);
+    final at = _locate(pages, id);
+    if (!belongs) {
+      if (at == null) return;
+      final (p, r) = at;
+      _removedRows[id] = (p, r, pages[p][r]);
+      _setPages([
+        for (var i = 0; i < pages.length; i++)
+          if (i == p) [...pages[i]]..removeAt(r) else pages[i],
+      ]);
+      return;
+    }
+    if (at != null) return;
+    final removed = _removedRows.remove(id);
+    // A row this list never held — un-archived from another surface, say.
+    if (removed == null || removed.$1 >= pages.length) {
+      _refresh();
+      return;
+    }
+    final (p, r, client) = removed;
+    _setPages([
+      for (var i = 0; i < pages.length; i++)
+        if (i == p)
+          [...pages[i]]..insert(
+            r.clamp(0, pages[i].length),
+            client.copyWith(archived: archived),
+          )
+        else
+          pages[i],
+    ]);
   }
 
   @override
@@ -175,14 +293,12 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
     await showClientDetailSheet(context, client);
   }
 
-  // An archived client leaves this list and a deleted one is gone, so both are
-  // the same refresh here.
+  // Both already reached the list through clientsRefreshProvider (_applyWrite).
   @override
-  void onClientArchived(ClientRecord client, {required bool archived}) =>
-      _pagingController.refresh();
+  void onClientArchived(ClientRecord client, {required bool archived}) {}
 
   @override
-  void onClientDeleted(ClientRecord client) => _pagingController.refresh();
+  void onClientDeleted(ClientRecord client) {}
 
   // The Slidable wraps the tile HERE so ClientTile itself can never archive.
   Widget _clientTile(ClientRecord client, int index) {
@@ -247,20 +363,41 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   }
 
   Widget _emptyState({required String query}) {
+    if (query.isNotEmpty) return _noMatchState(query);
+    // Only an admin has the + this copy points at.
     return AppEmptyState(
-      icon: query.isEmpty ? Icons.people_outline : Icons.search_off_outlined,
-      title: query.isEmpty
-          ? context.l10n.clients_noClientsYet
-          : '${context.l10n.clients_noClientsMatch} "$query"',
-      body: query.isEmpty
+      icon: Icons.people_outline,
+      title: context.l10n.clients_noClientsYet,
+      body: widget.isAdmin
           ? context.l10n.clients_tapToAddYourFirstClient
-          : context.l10n.common_tryADifferentSearchTerm,
-      actionLabel: query.isEmpty && widget.isAdmin
-          ? context.l10n.clients_addClient
+          : context.l10n.clients_noClientsYetHint,
+      actionLabel: widget.isAdmin ? context.l10n.clients_addClient : null,
+      onAction: widget.isAdmin ? () => runAddClientFlow(context) : null,
+    );
+  }
+
+  /// A search that found nothing — within the active filter, when there is
+  /// one, which is then offered for clearing.
+  Widget _noMatchState(String query) {
+    final l10n = context.l10n;
+    final filterLabel = switch (widget.filter) {
+      ClientsFilterAll() => null,
+      ClientsFilterArchived() => l10n.clients_filterArchived,
+      ClientsFilterType(:final type) => clientTypeLabel(l10n, type),
+      ClientsFilterBuilding() =>
+        widget.buildingLabel ?? l10n.clients_filterSectionAddress,
+    };
+    final clear = widget.onClearFilter;
+    return AppEmptyState(
+      icon: Icons.search_off_outlined,
+      title: l10n.clients_noClientsMatchQuery(query),
+      body: filterLabel == null
+          ? l10n.common_tryADifferentSearchTerm
+          : l10n.clients_noMatchWithinFilter(filterLabel),
+      actionLabel: filterLabel != null && clear != null
+          ? l10n.clients_clearFilter
           : null,
-      onAction: query.isEmpty && widget.isAdmin
-          ? () => runAddClientFlow(context)
-          : null,
+      onAction: filterLabel != null && clear != null ? clear : null,
     );
   }
 
@@ -329,20 +466,35 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   }
 
   // Instant fallback over the already-loaded pages while the comprehensive
-  // server search resolves, matching the full field set via the shared policy.
+  // server search resolves, matching the full field set via the shared policy
+  // and ranked the way the repository ranks the server answer, so the debounce
+  // commit rarely reorders what is on screen.
   List<ClientRecord> _localFilter(String query) {
     final q = ClientSearchPolicy.normalize(query);
     final qDigits = ClientSearchPolicy.digitsOnly(query);
     if (q.isEmpty && qDigits.isEmpty) return const [];
-    return [
-      for (final entry in _loadedSearchIndex())
-        if (ClientSearchPolicy.entryMatches(
-          entry,
-          queryText: q,
-          queryDigits: qDigits,
-        ))
-          entry.client,
-    ];
+    final ranked =
+        [
+          for (final entry in _loadedSearchIndex())
+            if (ClientSearchPolicy.entryMatches(
+              entry,
+              queryText: q,
+              queryDigits: qDigits,
+            ))
+              (
+                score: ClientSearchPolicy.scoreRecord(
+                  entry.client,
+                  queryText: q,
+                  queryDigits: qDigits,
+                ),
+                sortKey: entry.client.displayName.toLowerCase(),
+                client: entry.client,
+              ),
+        ]..sort((a, b) {
+          final byScore = a.score.compareTo(b.score);
+          return byScore != 0 ? byScore : a.sortKey.compareTo(b.sortKey);
+        });
+    return [for (final entry in ranked) entry.client];
   }
 
   // The full search runs on the debounced, committed query across all fields
@@ -358,9 +510,13 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
     return ref
         .watch(clientSearchProvider((query, widget.filter)))
         .when(
-          data: (results) => results.isEmpty
+          // Local hits outrank an empty server answer: the index can lag a
+          // write the loaded page already shows.
+          data: (results) => results.isNotEmpty
+              ? _searchResults(results)
+              : local.isEmpty
               ? _emptyState(query: query)
-              : _resultsList(results),
+              : _resultsList(local),
           loading: () =>
               local.isEmpty ? _fittedSkeleton() : _resultsList(local),
           // A failed search must not look like "no such client" — show an error
@@ -370,27 +526,39 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
         );
   }
 
-  Widget _typeEmptyState({required ClientType type, required String query}) =>
-      AppEmptyState(
-        icon: Icons.filter_list_off_outlined,
-        title: query.isEmpty
-            ? context.l10n.clients_noClientsOfType(
-                clientTypeLabel(context.l10n, type),
-              )
-            : '${context.l10n.clients_noClientsMatch} "$query"',
-        body: query.isEmpty
-            ? context.l10n.clients_typeFilterHint
-            : context.l10n.common_tryADifferentSearchTerm,
-      );
+  Widget _searchResults(List<ClientRecord> results) {
+    final list = _resultsList(results);
+    if (results is! ClientSearchResults || !results.truncated) return list;
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(AppSpacing.sp12),
+          child: WarningNote(
+            message: results.matchedCountIsLowerBound
+                ? context.l10n.clients_searchTruncatedAtLeast(results.length)
+                : context.l10n.clients_searchTruncated(
+                    results.length,
+                    results.matchedCount,
+                  ),
+          ),
+        ),
+        Expanded(child: list),
+      ],
+    );
+  }
 
-  Widget _archivedEmptyState(String query) => AppEmptyState(
+  Widget _typeEmptyState(ClientType type) => AppEmptyState(
+    icon: Icons.filter_list_off_outlined,
+    title: context.l10n.clients_noClientsOfType(
+      clientTypeLabel(context.l10n, type),
+    ),
+    body: context.l10n.clients_typeFilterHint,
+  );
+
+  Widget _archivedEmptyState() => AppEmptyState(
     icon: Icons.inventory_2_outlined,
-    title: query.isEmpty
-        ? context.l10n.clients_noArchivedClients
-        : '${context.l10n.clients_noClientsMatch} "$query"',
-    body: query.isEmpty
-        ? context.l10n.clients_archivedFilterHint
-        : context.l10n.common_tryADifferentSearchTerm,
+    title: context.l10n.clients_noArchivedClients,
+    body: context.l10n.clients_archivedFilterHint,
   );
 
   // Retry re-runs the failed search by invalidating its provider instance; this
@@ -403,24 +571,16 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   Widget _errorState(Object error, {required VoidCallback onRetry}) =>
       AppEmptyState(
         icon: Icons.error_outline,
-        title: context.l10n.error_somethingWentWrong,
-        body: composeErrorNotice(
-          context,
-          intro: context.l10n.error_introLoadClients,
-          error: error,
-        ),
+        title: context.l10n.error_introLoadClients,
+        body: errorCauseFor(context.l10n, error),
         actionLabel: context.l10n.common_retry,
         onAction: onRetry,
       );
 
-  Widget _buildingEmptyState({required String query}) => AppEmptyState(
+  Widget _buildingEmptyState() => AppEmptyState(
     icon: Icons.apartment_outlined,
-    title: query.isEmpty
-        ? context.l10n.clients_noClientsAtAddress
-        : '${context.l10n.clients_noClientsMatch} "$query"',
-    body: query.isEmpty
-        ? context.l10n.clients_typeFilterHint
-        : context.l10n.common_tryADifferentSearchTerm,
+    title: context.l10n.clients_noClientsAtAddress,
+    body: context.l10n.clients_buildingFilterHint,
   );
 
   List<ClientRecord>? _groupedSource;
@@ -460,21 +620,21 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
 
   @override
   Widget build(BuildContext context) {
-    ref.listen(clientsRefreshProvider, (_, _) => _pagingController.refresh());
+    ref.listen(clientsRefreshProvider, (_, write) => _applyWrite(write));
 
     final query = widget.searchQuery.trim();
     if (query.isNotEmpty) return _buildSearchResults(query);
 
     return RefreshIndicator.adaptive(
-      onRefresh: () async => _pagingController.refresh(),
+      onRefresh: () async => _refresh(),
       child: widget.grouped ? _groupedPagedList() : _pagedList(),
     );
   }
 
   Widget _filteredEmptyState() => switch (widget.filter) {
-    ClientsFilterArchived() => _archivedEmptyState(''),
-    ClientsFilterType(:final type) => _typeEmptyState(type: type, query: ''),
-    ClientsFilterBuilding() => _buildingEmptyState(query: ''),
+    ClientsFilterArchived() => _archivedEmptyState(),
+    ClientsFilterType(:final type) => _typeEmptyState(type),
+    ClientsFilterBuilding() => _buildingEmptyState(),
     ClientsFilterAll() => _emptyState(query: ''),
   };
 
@@ -495,7 +655,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
           PagingStatus.loadingFirstPage => _skeleton(),
           PagingStatus.firstPageError => _errorState(
             state.error ?? Exception('clients page load failed'),
-            onRetry: _pagingController.refresh,
+            onRetry: _refresh,
           ),
           _ => _filteredEmptyState(),
         };
@@ -528,7 +688,7 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
           firstPageProgressIndicatorBuilder: (_) => _skeleton(),
           firstPageErrorIndicatorBuilder: (_) => _errorState(
             state.error ?? Exception('clients page load failed'),
-            onRetry: _pagingController.refresh,
+            onRetry: _refresh,
           ),
           noItemsFoundIndicatorBuilder: (_) => _filteredEmptyState(),
         ),

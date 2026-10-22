@@ -16,6 +16,35 @@ Widget _wrap(Widget child) => MaterialApp(
   home: Scaffold(body: child),
 );
 
+/// Hosts a guarded frame in a real modal sheet; [dirty] is read at dismiss time.
+Widget _guardedHost({required ValueGetter<bool> dirty}) => _wrap(
+  Builder(
+    builder: (context) => ElevatedButton(
+      onPressed: () => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        builder: (_) => FormSheetFrame(
+          title: 'New job',
+          primaryLabel: 'Save',
+          isDirty: dirty,
+          children: const [Text('body')],
+        ),
+      ),
+      child: const Text('open'),
+    ),
+  ),
+);
+
+Future<void> _openGuarded(
+  WidgetTester tester, {
+  required ValueGetter<bool> dirty,
+}) async {
+  await tester.pumpWidget(_guardedHost(dirty: dirty));
+  await tester.tap(find.text('open'));
+  await tester.pumpAndSettle();
+  expect(find.text('body'), findsOneWidget);
+}
+
 void main() {
   testWidgets('renders Cancel, the title and the primary verb', (tester) async {
     await tester.pumpWidget(
@@ -149,5 +178,101 @@ void main() {
     await tester.tap(find.text('Cancel'));
     await tester.pumpAndSettle();
     expect(find.text('body'), findsNothing);
+  });
+
+  group('discard guard', () {
+    testWidgets('a clean sheet dismisses on Cancel with no confirm', (
+      tester,
+    ) async {
+      await _openGuarded(tester, dirty: () => false);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard changes?'), findsNothing);
+      expect(find.text('body'), findsNothing);
+    });
+
+    testWidgets('a dirty sheet asks on Cancel; Keep editing keeps it open', (
+      tester,
+    ) async {
+      await _openGuarded(tester, dirty: () => true);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsOneWidget);
+
+      await tester.tap(find.text('Keep editing'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsNothing);
+      expect(find.text('body'), findsOneWidget);
+    });
+
+    testWidgets('confirming Discard pops the sheet', (tester) async {
+      await _openGuarded(tester, dirty: () => true);
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Discard'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('body'), findsNothing);
+    });
+
+    testWidgets('a scrim tap on a dirty sheet asks first', (tester) async {
+      await _openGuarded(tester, dirty: () => true);
+
+      // The frame fills 92% of the height, so the top strip is the barrier.
+      await tester.tapAt(const Offset(400, 10));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard changes?'), findsOneWidget);
+      expect(find.text('body'), findsOneWidget);
+    });
+
+    testWidgets('a scrim tap on a clean sheet dismisses it', (tester) async {
+      await _openGuarded(tester, dirty: () => false);
+
+      await tester.tapAt(const Offset(400, 10));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard changes?'), findsNothing);
+      expect(find.text('body'), findsNothing);
+    });
+
+    testWidgets('a fling down on the bar asks when dirty', (tester) async {
+      await _openGuarded(tester, dirty: () => true);
+
+      await tester.fling(find.text('New job'), const Offset(0, 200), 2000);
+      await tester.pumpAndSettle();
+      expect(find.text('Discard changes?'), findsOneWidget);
+
+      await tester.tap(find.text('Keep editing'));
+      await tester.pumpAndSettle();
+      expect(find.text('body'), findsOneWidget);
+    });
+
+    testWidgets('a fling down on the bar pops a clean sheet', (tester) async {
+      await _openGuarded(tester, dirty: () => false);
+
+      await tester.fling(find.text('New job'), const Offset(0, 200), 2000);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard changes?'), findsNothing);
+      expect(find.text('body'), findsNothing);
+    });
+
+    testWidgets('dirtiness is read at dismiss time, not at build', (
+      tester,
+    ) async {
+      var dirty = false;
+      await _openGuarded(tester, dirty: () => dirty);
+      dirty = true;
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Discard changes?'), findsOneWidget);
+    });
   });
 }

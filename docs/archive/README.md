@@ -2,8 +2,10 @@
 
 Completed plans/specs and superseded audit snapshots — kept for history, not
 maintained against the current code. Started 2026-07-10; last updated
-**2026-09-13**, when the docs sweep moved in four finished plans (listed under
-their own heading below). Before that the 2026-09-12 sweep indexed seven files
+**2026-10-20**, when the docs sweep moved in one superseded audit
+(`CODEBASE_AUDIT_2026-10-14.md`). On 2026-10-18 the sweep moved in ten finished plans and four
+superseded audits (listed under their own headings below). Before that the
+2026-09-13 sweep moved in four finished plans, and the 2026-09-12 sweep indexed seven files
 already on disk, the 2026-09-09 sweep moved in six plans plus the redesign
 program, and on **2026-09-06** the docs sweep moved in fourteen documents whose work had
 shipped (the simplified-auth pair, the four August calendar/day-off designs, the
@@ -143,8 +145,35 @@ this one".
   date rail under a sticky month bar, replacing the bold year separator, with
   the shared `AppointmentCard` untouched. `HistoryMonthBar`, `HistoryDateRail`,
   `clients/domain/history_grouping.dart`. Its build record is P7 phase D in
-  `docs/plans/redesign-subdocs/2026-08-11-p7-dashboard-history.md`, which stays
-  active-adjacent with the rest of the redesign sub-docs.
+  `redesign-subdocs/2026-08-11-p7-dashboard-history.md` in this folder, archived
+  with the rest of the redesign sub-docs on 2026-09-09.
+
+### Added by the 2026-10-18 sweep
+
+- `2026-09-28-admin-password-reset.md` / `-plan.md` — admin reset of an ACTIVE
+  employee's password (temp password, sign-out everywhere, forced Change
+  password). Backend `306ed848` + `cc38be5d` (2026-09-29), S4 `8739e48c`;
+  shipped in 1.63.0+93.
+- `2026-10-06-rules-docs-cut-down.md` — all 15 `.claude/rules/` files cut to
+  invariants, history moved to ADR-0001..0183 (2026-10-07; `appointments.md`
+  move 2026-10-08). No deploy.
+- `2026-10-07-followups.md` — the cut-down's code follow-ups, all done
+  2026-10-08 (`3000b7e4`..`8d296a04`); its rules change deployed 2026-10-11.
+- `2026-10-06-shared-dart-js-fixtures.md` — nine hand-mirrored Dart/JS pairs on
+  one fixture each under `test/fixtures/shared/` (2026-10-07). Tests only.
+- `2026-10-06-repeatable-deploys.md` — the `Deploy backend` workflow, its
+  checkers and `functions/scripts/run.js`; first workflow deploy 2026-10-07
+  (`61811650`), used for every deploy since.
+- `2026-09-07-analytics-followups.md` — Firebase Analytics follow-ups; code
+  complete and device-verified 2026-09-10. Its off-repo checks are carried in
+  `docs/plans/README.md` §5.
+- `2026-09-10-wave-validated-contract-phases-2-4.md` — Wave contract Phases 2-4,
+  deployed `38c8225b` / `608b817a`; `waveSetImportSchedule` deleted 2026-10-11
+  (`0ab3f05c`).
+- `2026-09-12-live-map-improvements.md` — the live map rework (peek team
+  sheet); shipped in 1.63.0+93, no backend.
+- `2026-09-12-month-end-overdue-review.md` — the month-end overdue review and
+  its digest rider; functions `608b817a`, shipped in 1.63.0+93.
 
 ### Cancelled by the owner 2026-10-09 (not needed)
 
@@ -381,12 +410,24 @@ a new verdict, only a missing row. A file moved but not indexed is lost.
 Point-in-time whole-repo audits; each run's findings were implemented at the
 time. Superseded by later audits. `docs/audits/` now holds
 DATED snapshots rather than one rolling action list — the newest is
-`CODEBASE_AUDIT_2026-09-28.md` — and also keeps
+`CODEBASE_AUDIT_2026-10-19.md`, beside the 2026-10-18 performance/reliability
+review and its remediation-verification note — and also keeps
 `SECURITY_ASSESSMENT_2026-08-04.md`, `AUDIT_FOLLOWUPS.md` (the owner-only
 Maps budget cap), `AUDIT_ROLLOUT_2026-09-23.md`, `IPHONE_PERFORMANCE_2026-09-23.md`
 and one read-only repair-audit script, `audit-client-phone-backfill-damage.js`
 (its sibling `audit-renamed-client-names.js` was deleted 2026-09-28 with the
 closed-migration scripts; it is in git history).
+- **Added 2026-10-20:** `CODEBASE_AUDIT_2026-10-14.md` — the audit at
+  `d6e19618`, superseded by the 2026-10-19 one. Its B1 (`purgeExpiredHistory`
+  counting image failures by doc id, `afd68870`) is built but UNDEPLOYED and is
+  carried in `docs/plans/README.md` §1; its optional `backfill-search-tokens`
+  run is carried in §6.
+- **Added 2026-10-18:** `CODEBASE_AUDIT_2026-09-23.md` (fixes deployed at
+  `e70b494d`, its rollout runbook stays live in `docs/audits/`),
+  `CODEBASE_AUDIT_2026-09-28.md` (deployed `306ed848` / `8739e48c`),
+  `CODEBASE_AUDIT_2026-10-07.md` (deployed `364d4812` / `0ab3f05c`; app half
+  rides 1.64.2+96) and `CODEBASE_AUDIT_2026-10-09.md` (deployed `0ab3f05c`; its
+  B1 backfill is carried in `docs/plans/README.md` §6).
 - `CODEBASE_AUDIT_2026-09-19.md` — **added 2026-10-01.** The audit at
   `608b817a`: 20 done, 3 kept, 1 not a defect, 1 by design; its backend half
   deployed at `bec23b85` (2026-09-19). Two owner items outlived it and moved to

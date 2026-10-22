@@ -46,6 +46,8 @@ class AppointmentImageLoader {
   final FirebaseStorage? _injectedStorage;
   final AppLogger _logger;
   final AppointmentImageDiskCache _disk;
+  int get generation => _disk.generation;
+  _ImageFetchPool _fetchPool = _ImageFetchPool();
 
   /// Returns photo bytes, or empty bytes when there is no usable handle.
   Future<Uint8List> load(AppointmentImage image) {
@@ -67,13 +69,40 @@ class AppointmentImageLoader {
     final generation = _disk.generation;
 
     final onDisk = await _disk.read(key);
+    if (generation != _disk.generation) return Uint8List(0);
     if (onDisk != null) return onDisk;
 
-    final bytes = await _fetch(() => _refFor(image), key);
+    final bytes = await _fetchBounded(image, key, generation);
+    if (generation != _disk.generation) return Uint8List(0);
     if (bytes.isNotEmpty) {
       unawaited(_disk.write(key, bytes, generation: generation));
     }
     return bytes;
+  }
+
+  Future<Uint8List> _fetchBounded(
+    AppointmentImage image,
+    String key,
+    int generation,
+  ) async {
+    final pool = _fetchPool;
+    if (pool.active >= _maxConcurrentLoads) {
+      final ready = Completer<void>();
+      pool.waiting.add(ready);
+      await ready.future;
+    } else {
+      pool.active++;
+    }
+    try {
+      if (generation != _disk.generation) return Uint8List(0);
+      return await _fetch(() => _refFor(image), key);
+    } finally {
+      if (pool.waiting.isEmpty) {
+        pool.active--;
+      } else {
+        pool.waiting.removeAt(0).complete();
+      }
+    }
   }
 
   /// Returns the `storagePath` cache key, or `''` for an unusable photo.
@@ -97,6 +126,7 @@ class AppointmentImageLoader {
 
   /// Forgets every cached photo, in memory and on disk.
   Future<void> clear() async {
+    _fetchPool = _ImageFetchPool();
     _cache.clear();
     _sizes.clear();
     _cachedBytes = 0;
@@ -141,4 +171,9 @@ class AppointmentImageLoader {
       _cache.remove(oldest);
     }
   }
+}
+
+class _ImageFetchPool {
+  int active = 0;
+  final waiting = <Completer<void>>[];
 }

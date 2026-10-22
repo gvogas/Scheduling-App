@@ -37,10 +37,13 @@ struct NthAppointmentIntent: AppIntent {
             return .result(dialog: IntentDialog(
                 stringLiteral: SiriStrings.noData))
         }
-        let appointments = snapshot.today?.appointments ?? []
+        guard let bucket = snapshot.today else {
+            return .result(dialog: IntentDialog(stringLiteral: SiriStrings.noData))
+        }
+        let appointments = bucket.appointments
         guard position >= 1, position <= appointments.count else {
             return .result(dialog: IntentDialog(
-                stringLiteral: SiriStrings.nthOutOfRange(
+                stringLiteral: bucket.isPartial ? SiriStrings.partialSchedule : SiriStrings.nthOutOfRange(
                     count: appointments.count, admin: snapshot.isAdmin)))
         }
         let appointment = appointments[position - 1]

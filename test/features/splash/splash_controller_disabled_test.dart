@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:fake_async/fake_async.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,6 +27,44 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() => registerFallbackValue(const EmployeeRecord(id: '_')));
 
+  group('isSplashAuthFailure (U24)', () {
+    // Only an auth-shaped failure may bounce a signed-in cold start to Login;
+    // offline and a cold cache keep the session so the splash can retry.
+    test('a rules rejection after the ladder is an auth failure', () {
+      expect(
+        isSplashAuthFailure(
+          FirebaseException(
+            plugin: 'cloud_firestore',
+            code: 'permission-denied',
+          ),
+        ),
+        isTrue,
+      );
+      expect(
+        isSplashAuthFailure(
+          FirebaseException(plugin: 'cloud_firestore', code: 'unauthenticated'),
+        ),
+        isTrue,
+      );
+      expect(
+        isSplashAuthFailure(FirebaseAuthException(code: 'user-token-expired')),
+        isTrue,
+      );
+    });
+
+    test('offline, timeouts and server blips are NOT auth failures', () {
+      expect(
+        isSplashAuthFailure(
+          FirebaseException(plugin: 'cloud_firestore', code: 'unavailable'),
+        ),
+        isFalse,
+      );
+      expect(isSplashAuthFailure(const SocketException('offline')), isFalse);
+      expect(isSplashAuthFailure(TimeoutException('slow')), isFalse);
+      expect(isSplashAuthFailure(Exception('network down')), isFalse);
+    });
+  });
+
   group('splashDestinationProvider — disabled account', () {
     late _MockFirebaseAuth mockAuth;
     late _MockUser mockUser;
@@ -38,6 +79,9 @@ void main() {
       mockCache = _MockAuthCache();
       when(() => mockCache.save(any())).thenAnswer((_) async {});
       when(() => mockAuth.currentUser).thenReturn(mockUser);
+      when(
+        mockAuth.authStateChanges,
+      ).thenAnswer((_) => Stream.value(mockAuth.currentUser));
       when(() => mockUser.uid).thenReturn('uid1');
       when(() => mockAuth.signOut()).thenAnswer((_) async {});
     });

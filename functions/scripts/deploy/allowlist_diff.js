@@ -8,7 +8,8 @@ const {readFileSync} = require("fs");
 const CALL = /\b(assertAdminCall|assertActiveCall|assertPayloadShape)\s*\(/g;
 const ARGS = new RegExp(
     /\s*req(?:\.data)?\s*,\s*new Set\(\s*/.source +
-    /(?:\[([^\]]*)\]\s*)?\)\s*,?\s*\)/.source, "y");
+    /(?:\[([^\]]*)\]\s*)?\)\s*/.source +
+    /(?:,\s*[0-9][0-9_ *+()]*\s*)?,?\s*\)/.source, "y");
 const OWNER = /(?:function\s+(\w+)\s*\(|const\s+(\w+)\s*=\s*onCall\()/g;
 const EXCLUDED_DIR = /^(?:node_modules|__tests__|scripts|coverage)\//;
 const EXCLUDED_FILE = /^(?:security|jest\.config|\.eslintrc)\.js$/;

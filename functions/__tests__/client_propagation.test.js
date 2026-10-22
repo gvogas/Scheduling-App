@@ -19,10 +19,13 @@ const {MAX_APPOINTMENT_SPAN_MS} = require("../time_utils");
  * Minimal Firestore double: one page of appointment docs, capturing the
  * query's startTime floor and every batch update.
  * @param {!Array<!Object>} docs Appointment doc data, each with an `id`.
+ * @param {Object=} currentClient The live client document.
  * @return {!Object}
  */
-function makeDb(docs) {
-  const captured = {floor: null, updates: []};
+function makeDb(docs, currentClient = {name: "Bea", phone: "555"}) {
+  const captured = {floor: null, updates: [], currentClient};
+  const currentDocs = new Map(docs.map((data) =>
+    [data.id, {clientId: "c1", ...data}]));
   const snapDocs = docs.map((data) => ({
     data: () => data,
     ref: {id: data.id},
@@ -39,11 +42,27 @@ function makeDb(docs) {
   };
   return {
     captured,
-    collection: () => query,
-    batch: () => ({
-      update: (ref, patch) => captured.updates.push({id: ref.id, patch}),
-      commit: async () => {},
-    }),
+    currentDocs,
+    collection: (name) => name === "clients" ?
+      {doc: (id) => ({id, source: true})} : query,
+    runTransaction: async (body) => {
+      const writes = [];
+      const result = await body({
+        get: async (ref) => ({
+          exists: ref.source ? captured.currentClient !== null :
+            currentDocs.has(ref.id),
+          ref, updateTime: new Date("2026-08-04T11:59:00Z"),
+          data: () => ref.source ? captured.currentClient :
+            currentDocs.get(ref.id),
+        }),
+        update: (ref, patch) => writes.push({id: ref.id, patch}),
+      });
+      for (const write of writes) {
+        captured.updates.push(write);
+        Object.assign(currentDocs.get(write.id), write.patch);
+      }
+      return result;
+    },
   };
 }
 
@@ -244,6 +263,48 @@ describe("propagateClientChange has-work-left gate", () => {
   const before = {name: "Ada", phone: "555"};
   const after = {name: "Bea", phone: "555"};
   const logger = {info: () => {}};
+
+  test("a delayed old event uses current client values and is idempotent",
+      async () => {
+        const db = makeDb([{
+          id: "job", clientName: "Ada", clientPhone: "111",
+          address: "1 Old St",
+          startTime: new Date("2026-08-06T13:00:00Z"),
+        }], {name: "Current", phone: "333", address: "3 Current St"});
+        const original = {name: "Ada", phone: "111", address: "1 Old St"};
+        const outdated = {name: "Bea", phone: "222", address: "2 Old St"};
+        await propagateClientChange("c1", original, outdated,
+            {db, now, logger});
+        expect(db.currentDocs.get("job")).toMatchObject({
+          clientName: "Current", clientPhone: "333", address: "3 Current St",
+        });
+        const replay = await propagateClientChange("c1", original, outdated,
+            {db, now, logger});
+        expect(replay.updated).toBe(0);
+      });
+
+  test("the transaction preserves a custom address edited after the query",
+      async () => {
+        const db = makeDb([{
+          id: "job", address: "1 Old St",
+          startTime: new Date("2026-08-06T13:00:00Z"),
+        }], {name: "Current", phone: "333", address: "3 Current St"});
+        db.currentDocs.get("job").address = "custom job address";
+        await propagateClientChange("c1", {address: "1 Old St"},
+            {address: "2 Old St"}, {db, now, logger});
+        expect(db.currentDocs.get("job").address).toBe("custom job address");
+      });
+
+  test("a deleted or reassigned appointment is not updated", async () => {
+    const db = makeDb([
+      {id: "gone", startTime: new Date("2026-08-06T13:00:00Z")},
+      {id: "moved", startTime: new Date("2026-08-06T13:00:00Z")},
+    ]);
+    db.currentDocs.delete("gone");
+    db.currentDocs.get("moved").clientId = "other";
+    expect((await propagateClientChange("c1", before, after,
+        {db, now, logger})).updated).toBe(0);
+  });
 
   test("queries back a full appointment span, not from now", async () => {
     const db = makeDb([]);

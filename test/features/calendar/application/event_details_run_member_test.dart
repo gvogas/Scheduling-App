@@ -85,7 +85,13 @@ void main() {
     when(
       employees.watchEmployees,
     ).thenAnswer((_) => Stream.value(const [_employeeA]));
-    when(() => appointments.updateAppointment(any())).thenAnswer((_) async {});
+    when(
+      () => appointments.updateAppointment(
+        any(),
+        base: any(named: 'base'),
+        checkConflicts: any(named: 'checkConflicts'),
+      ),
+    ).thenAnswer((_) async {});
     when(
       () => appointments.fetchAppointmentPictures(any()),
     ).thenAnswer((_) async => const <AppointmentImage>[]);
@@ -148,10 +154,19 @@ void main() {
           updated: any(named: 'updated'),
           deleteIds: any(named: 'deleteIds'),
           copies: any(named: 'copies'),
+          base: any(named: 'base'),
+          deleteBases: any(named: 'deleteBases'),
+          checkConflicts: any(named: 'checkConflicts'),
         ),
       );
       // It saves as a plain single-document update instead.
-      verify(() => appointments.updateAppointment(any())).called(1);
+      verify(
+        () => appointments.updateAppointment(
+          any(),
+          base: any(named: 'base'),
+          checkConflicts: any(named: 'checkConflicts'),
+        ),
+      ).called(1);
     });
 
     test('clearing the repeat is also refused a rewrite', () async {
@@ -172,6 +187,9 @@ void main() {
           updated: any(named: 'updated'),
           deleteIds: any(named: 'deleteIds'),
           copies: any(named: 'copies'),
+          base: any(named: 'base'),
+          deleteBases: any(named: 'deleteBases'),
+          checkConflicts: any(named: 'checkConflicts'),
         ),
       );
     });
@@ -191,7 +209,11 @@ void main() {
 
       final written =
           verify(
-                () => appointments.updateAppointment(captureAny()),
+                () => appointments.updateAppointment(
+                  captureAny(),
+                  base: any(named: 'base'),
+                  checkConflicts: any(named: 'checkConflicts'),
+                ),
               ).captured.single
               as AppointmentRecord;
       expect(written.dayIndex, 3);

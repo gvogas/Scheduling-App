@@ -67,6 +67,12 @@ void main() {
     clients = _MockClientsRepo();
     employees = _MockEmployeesRepo();
     uploader = _MockUploader();
+    when(
+      () => uploader.enqueuePhotos(
+        appointmentId: any(named: 'appointmentId'),
+        newImages: any(named: 'newImages'),
+      ),
+    ).thenAnswer((_) async {});
     storage = _MockStorage();
     // Empty client id short-circuits the seed lookup; empty employee stream
     // keeps build()'s microtasks from blocking.

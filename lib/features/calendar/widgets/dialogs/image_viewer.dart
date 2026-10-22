@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:saver_gallery/saver_gallery.dart';
+import 'package:scheduling/core/images/appointment_storage_image.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/permissions/media_permission_service.dart';
@@ -68,6 +69,9 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
   /// Prevents double-launching save or share.
   bool _busy = false;
 
+  /// Pages whose photo failed to load; Save and Share stay off for them.
+  final Set<int> _unavailable = {};
+
   /// Anchors the iPad share-sheet popover to the share button's frame.
   final GlobalKey _shareButtonKey = GlobalKey();
 
@@ -98,6 +102,17 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
     super.dispose();
   }
 
+  /// Records a slide's load outcome after the frame that reported it.
+  void _setUnavailable(int index, {required bool unavailable}) {
+    if (_unavailable.contains(index) == unavailable) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() {
+        unavailable ? _unavailable.add(index) : _unavailable.remove(index);
+      });
+    });
+  }
+
   void _onTransformChanged() {
     final zoomed = _transformController.value.getMaxScaleOnAxis() > 1.01;
     if (zoomed != _zoomed) setState(() => _zoomed = zoomed);
@@ -126,10 +141,14 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
     if (provider is FileImage) return provider.file;
     // Refused photos use a placeholder that should not be exported.
     if (isRefusedImage(provider)) return null;
-    if (provider is MemoryImage) {
+    if (provider is MemoryImage || provider is AppointmentStorageImage) {
+      final bytes = provider is AppointmentStorageImage
+          ? await provider.loadBytes()
+          : (provider as MemoryImage).bytes;
+      if (bytes.isEmpty) return null;
       final dir = await getTemporaryDirectory();
       final file = File(_pathIn(dir.path, _photoFileName()));
-      return await file.writeAsBytes(provider.bytes);
+      return await file.writeAsBytes(bytes);
     }
     return null;
   }
@@ -251,6 +270,7 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
           ),
           _ViewerOverlay(
             busy: _busy,
+            canExport: !_unavailable.contains(_currentIndex),
             currentIndex: _currentIndex,
             imageCount: widget.images.length,
             shareButtonKey: _shareButtonKey,
@@ -283,11 +303,18 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
             child: Image(
               image: widget.images[index],
               fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => Icon(
-                Icons.broken_image_outlined,
-                color: foreground.withValues(alpha: 0.54),
-                size: 64,
-              ),
+              frameBuilder: (_, child, frame, _) {
+                if (frame != null) _setUnavailable(index, unavailable: false);
+                return child;
+              },
+              errorBuilder: (_, _, _) {
+                _setUnavailable(index, unavailable: true);
+                return Icon(
+                  Icons.broken_image_outlined,
+                  color: foreground.withValues(alpha: 0.54),
+                  size: 64,
+                );
+              },
             ),
           ),
         );
@@ -300,6 +327,7 @@ class _ImageViewerState extends ConsumerState<ImageViewer> {
 class _ViewerOverlay extends StatelessWidget {
   const _ViewerOverlay({
     required this.busy,
+    required this.canExport,
     required this.currentIndex,
     required this.imageCount,
     required this.shareButtonKey,
@@ -310,6 +338,7 @@ class _ViewerOverlay extends StatelessWidget {
   });
 
   final bool busy;
+  final bool canExport;
   final int currentIndex;
   final int imageCount;
   final GlobalKey shareButtonKey;
@@ -337,13 +366,13 @@ class _ViewerOverlay extends StatelessWidget {
                   IconButton(
                     tooltip: context.l10n.calendar_savePhoto,
                     icon: const Icon(Icons.save_alt, color: _foreground),
-                    onPressed: busy ? null : onSave,
+                    onPressed: busy || !canExport ? null : onSave,
                   ),
                   IconButton(
                     key: shareButtonKey,
                     tooltip: context.l10n.common_share,
                     icon: const Icon(Icons.ios_share, color: _foreground),
-                    onPressed: busy ? null : onShare,
+                    onPressed: busy || !canExport ? null : onShare,
                   ),
                 ],
               ),
@@ -396,20 +425,6 @@ final refusedImage = MemoryImage(
   ]),
 );
 
-/// Whether [provider] is the placeholder [buildImageProviders] substitutes for
-/// a photo Storage refused.
+/// Whether [provider] is the stand-in for a photo Storage refused.
 bool isRefusedImage(ImageProvider provider) =>
     identical(provider, refusedImage);
-
-List<ImageProvider> buildImageProviders({
-  required List<Uint8List> bytes,
-  required List<File> files,
-}) {
-  return [
-    // Empty bytes mean a refused photo, so keep the slot stable.
-    ...bytes.map<ImageProvider>(
-      (b) => b.isEmpty ? refusedImage : MemoryImage(b),
-    ),
-    ...files.map<ImageProvider>(FileImage.new),
-  ];
-}

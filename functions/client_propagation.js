@@ -188,12 +188,6 @@ async function propagateClientChange(clientId, before, after, deps = {}) {
   let updated = 0;
   let pages = 0;
   let cursor = null;
-  // The previous page's commit, deliberately left in flight while the next
-  // page is fetched. The two touch different documents, so there is nothing
-  // to serialise for, and at most one commit is ever outstanding. It is
-  // settled through the same `Promise.all` that awaits the fetch, so a
-  // rejection always has a handler attached in the tick it was created in.
-  let inFlight = null;
   for (;;) {
     let query = db.collection("appointments")
         .where("clientId", "==", clientId)
@@ -201,32 +195,39 @@ async function propagateClientChange(clientId, before, after, deps = {}) {
         .orderBy("startTime")
         .limit(PAGE_SIZE);
     if (cursor) query = query.startAfter(cursor);
-    const [snap] = await Promise.all([query.get(), inFlight]);
-    inFlight = null;
+    const snap = await query.get();
     const docs = snap && Array.isArray(snap.docs) ? snap.docs : [];
     if (docs.length === 0) break;
     pages += 1;
 
-    const batch = db.batch();
-    let ops = 0;
-    for (const doc of docs) {
-      const data = doc.data() || {};
-      // The widened floor pulls in runs that already finished; drop those.
-      if (!hasWorkLeft(data, nowMs)) continue;
-      const patch = buildAppointmentPatch(change, data);
-      if (!patch) continue;
-      batch.update(doc.ref, patch);
-      ops += 1;
-    }
-    if (ops > 0) {
-      inFlight = batch.commit();
-      updated += ops;
-    }
+    updated += await db.runTransaction(async (tx) => {
+      const source = await tx.get(db.collection("clients").doc(clientId));
+      if (!source.exists) return 0;
+      const current = source.data() || {};
+      const currentChange = relevantClientChange(before, current) || {};
+      currentChange.clientName = clientDisplayName(current);
+      currentChange.clientPhone = typeof current.phone === "string" ?
+        current.phone.trim() : "";
+      const freshDocs = await Promise.all(docs.map((doc) => tx.get(doc.ref)));
+      let ops = 0;
+      for (const doc of freshDocs) {
+        if (!doc.exists) continue;
+        const data = doc.data() || {};
+        if (data.clientId !== clientId || !hasWorkLeft(data, nowMs)) continue;
+        const patch = buildAppointmentPatch(currentChange, data);
+        if (!patch) continue;
+        tx.update(doc.ref, {
+          ...patch,
+          clientSourceUpdatedAt: source.updateTime,
+        });
+        ops += 1;
+      }
+      return ops;
+    });
 
     if (docs.length < PAGE_SIZE) break;
     cursor = docs[docs.length - 1];
   }
-  await inFlight;
 
   if (updated > 0) {
     logger.info("propagateClientEdits: appointments updated", {

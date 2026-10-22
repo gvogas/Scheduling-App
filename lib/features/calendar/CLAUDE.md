@@ -26,12 +26,21 @@ Pure-Flutter rendering rules for the calendar surfaces, with no `functions/` han
 - Keep portrait as TWO scroll areas, so reading down the day never moves the grid: the grid fixed above, the agenda in its own `CustomScrollView` with its own `ScrollController` — explicitly controlled, so not primary and off the app-wide `Scrollbar`'s single controller. (ADR-0155)
 - Collapse only through `CollapseHandle` (`widgets/views/collapse_handle.dart`): divider drag plus tap-toggle, carrying the Hide/Show calendar tooltip the widget tests find it by. `CalendarCollapse` (`domain/collapse_state.dart`) banks drag past `dragThreshold` (24px); only `onDragDelta` returns a bool ("flag flipped", so the caller rebuilds per transition), and `toggle()` stays `void`. Collapse is portrait-only (`_splitCalendar` short-circuits the strip). (ADR-0155)
 - Never let the grid scroll: its `SingleChildScrollView` has `NeverScrollableScrollPhysics`, pure overflow protection. The handle is the ONLY thing that moves it; don't restore scrollable physics to "fix" a clipped month. (ADR-0155)
+- Persist the collapse flag and the day/week agenda mode through `CalendarViewPrefs` (`calendar/data/calendar_view_prefs.dart`, SharedPreferences, per device): `_restoreViewPrefs` applies them after mount via `CalendarCollapse.restore`, every write is fire-and-forget and a failure is log-only under `SETTINGS` — a convenience, never a gate; an unknown stored mode falls back to day.
 - Bound that viewport with a `ConstrainedBox` at `_kMaxGridShare` (0.7) of a `LayoutBuilder`'s `constraints.maxHeight` (`_portraitContent`), NEVER a `Flexible` — as a flex-1 sibling of the agenda's `Expanded` it caps the grid at half the pane and silently clips six-week months. `main_calendar_screen_test.dart` pins 390x844 WITH real insets and 2x text at 375x667; raising `_kMaxGridShare` or growing the handle or agenda header spends the overflow margin. (ADR-0155)
 
 ## Header
 
 - Head the screen with `CalendarHeaderBlock`, the one screen with no `AppTopBar` (`.claude/rules/frontend.md`): it sets its own `AnnotatedRegion` from the surface colour (`overlayStyleFor`), never theme brightness, and stacks title and controls under `context.isCompact`. (ADR-0156)
 - Measure the month label, never gate it on text scale: the screen passes `monthLabel` and `monthLabelShort` and `_MonthRow` takes the short one when the full name won't fit (`measureTextWidth`) — the in-app XL scale is exactly 1.4, which `isCompact`'s `> 1.4` misses. The semantics label always speaks the full month. (ADR-0156)
+
+## Agenda: loading, error and held data
+
+- Keep the last delivered list and its range (`_held`, `_prepareBuild`) on screen while a new range's provider instance is still loading — a month swipe, Today or day↔week forks a fresh `appointmentsInRangeProvider(range)` that starts empty, which blanked the dots and read "0 JOBS"; the skeleton shows only for a selected day the held range doesn't cover. `_refreshDayIndex` keys on source AND range.
+- Render a COLD stream error (`hasError && !hasValue`) as `AgendaSliverList.errorState` (`CenteredErrorText` + Retry → `ref.invalidate` of the range provider), in both the day and week agendas; a data→error transition keeps the cards and surfaces only as the `APPT-LOAD` notice. Never fall back to the empty state there.
+- Keep `findChildIndexCallback` on the agenda's `SliverList.builder`: a stream emission that inserts or re-sinks a card shifts indexes, and without the key lookup every shifted `FadeInItem` is re-inflated and re-staggers. A new day's cards are new keys and still fade in.
+- Open the day route on the calendar's day: `DayRouteArgs.initialDay` carries `_selectedDay ?? _focusedDay`; null (the drawer) means today.
+- Pass `cancelLabel: calendar_keepAppointment` on the one-off cancel confirm, so the two buttons don't both start with "Cancel"; the run-scope variant already dismisses with `common_back`.
 
 ## Agenda: closed jobs and counts
 

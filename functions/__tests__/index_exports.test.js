@@ -43,6 +43,7 @@ const EXPECTED_EXPORTS = [
   "recountClientJobs",
   "resetEmployeePassword",
   "restoreAppointmentStatus",
+  "saveAppointmentEdits",
   "searchClients",
   "searchHistory",
   "sendDailyJobDigest",

@@ -162,7 +162,7 @@ async function main() {
   assert.equal(await request("DELETE", admin), 204, "admin may delete photo");
   console.log("Storage rules: 12 emulator checks passed.");
   await verifyBridge(project);
-  await verifySafety(project, firestore, auth, admin);
+  await verifySafety(project, firestore, auth, admin, employee, outsider);
 }
 
 main().catch((error) => {

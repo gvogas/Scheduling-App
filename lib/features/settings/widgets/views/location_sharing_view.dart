@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
-import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
+import 'package:scheduling/core/permissions/location_permission_service.dart';
 import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
+import 'package:scheduling/core/theme/button_styles.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/presence/application/presence_sync_controller.dart';
 import 'package:scheduling/features/settings/application/my_details_providers.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feature_paused_notice.dart';
+import 'package:scheduling/shared/widgets/feedback/warning_note.dart';
+import 'package:scheduling/shared/widgets/primitives/busy_button_icon.dart';
 
 class LocationSharingView extends ConsumerStatefulWidget {
   const LocationSharingView({super.key, this.onApplied});
@@ -23,8 +26,29 @@ class LocationSharingView extends ConsumerStatefulWidget {
       _LocationSharingViewState();
 }
 
-class _LocationSharingViewState extends ConsumerState<LocationSharingView> {
+class _LocationSharingViewState extends ConsumerState<LocationSharingView>
+    with WidgetsBindingObserver {
   bool? _pendingValue;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Back from iOS Settings: the blocked line must follow the real permission.
+    if (state == AppLifecycleState.resumed && mounted) {
+      ref.invalidate(locationPermissionStatusProvider);
+    }
+  }
 
   Future<void> _setLocationSharing({required bool value}) async {
     if (_pendingValue != null) return;
@@ -95,6 +119,12 @@ class _LocationSharingViewState extends ConsumerState<LocationSharingView> {
     final enabled = _pendingValue ?? record?.locationSharingEnabled ?? false;
     final paused = !ref.watch(featureFlagsProvider.select((f) => f.presence));
     final isBusy = _pendingValue != null || record == null;
+    final permission = ref.watch(locationPermissionStatusProvider).value;
+    // On with the OS permission missing is the one state the switch alone misreads.
+    final blocked =
+        enabled &&
+        permission != null &&
+        permission != LocationPermissionResult.granted;
     final fix = ref.watch(myPresenceFixProvider);
     final lastUploaded = fix.when(
       data: (value) => _formatUploadedAt(context, value?.updatedAt),
@@ -115,6 +145,14 @@ class _LocationSharingViewState extends ConsumerState<LocationSharingView> {
           paused,
           lastUploaded,
         ),
+        if (blocked) ...[
+          const SizedBox(height: AppSpacing.sp12),
+          WarningNote(
+            key: const Key('locationBlockedNote'),
+            message: context.l10n.onboarding_shareLocationBlocked,
+            icon: Icons.location_off_rounded,
+          ),
+        ],
         const SizedBox(height: AppSpacing.sp12),
         Text(
           context.l10n.settings_locationSharingBlurb,
@@ -123,24 +161,9 @@ class _LocationSharingViewState extends ConsumerState<LocationSharingView> {
           ),
         ),
         const SizedBox(height: AppSpacing.sp24),
-        OutlinedButton.icon(
-          key: const Key('clearLocationButton'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: scheme.error,
-            side: BorderSide(color: scheme.error),
-            minimumSize: const Size.fromHeight(48),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppRadius.r12),
-            ),
-          ),
-          onPressed: isBusy ? null : _clearLocation,
-          icon: isBusy
-              ? const SizedBox.square(
-                  dimension: 18,
-                  child: AdaptiveProgressIndicator(),
-                )
-              : const Icon(Icons.location_disabled_rounded),
-          label: Text(context.l10n.settings_clearMyLocation),
+        _ClearLocationButton(
+          isBusy: isBusy,
+          onPressed: _clearLocation,
         ),
       ],
     );
@@ -187,6 +210,30 @@ class _LocationSharingViewState extends ConsumerState<LocationSharingView> {
     if (uploadedAt == null) return context.l10n.settings_locationNone;
     final locale = Localizations.localeOf(context).toString();
     return DateFormat.yMMMd(locale).add_jm().format(uploadedAt);
+  }
+}
+
+class _ClearLocationButton extends StatelessWidget {
+  const _ClearLocationButton({required this.isBusy, required this.onPressed});
+
+  final bool isBusy;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return OutlinedButton.icon(
+      key: const Key('clearLocationButton'),
+      style: destructiveOutlinedButtonStyle(
+        context,
+        minimumSize: const Size.fromHeight(48),
+      ),
+      onPressed: isBusy ? null : onPressed,
+      icon: BusyButtonIcon(
+        isBusy: isBusy,
+        icon: Icons.location_disabled_rounded,
+      ),
+      label: Text(context.l10n.settings_clearMyLocation),
+    );
   }
 }
 

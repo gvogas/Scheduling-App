@@ -6,10 +6,7 @@ void main() {
     test('maps each stored value to its enum member', () {
       expect(ClientType.fromRaw('residential'), ClientType.residential);
       expect(ClientType.fromRaw('commercial'), ClientType.commercial);
-      expect(
-        ClientType.fromRaw('building'),
-        ClientType.building,
-      );
+      expect(ClientType.fromRaw('building'), ClientType.building);
     });
 
     test('maps empty, null and unknown values to unset', () {

@@ -9,6 +9,7 @@ import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/features/notifications/application/push_registration_controller.dart';
 import 'package:scheduling/features/settings/screens/settings_screen.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/routes/app_routes.dart';
 
 import '../../../support/tour_test_support.dart';
 
@@ -141,6 +142,77 @@ void main() {
       expect(find.text('On'), findsOneWidget);
       expect(find.text('Off'), findsNothing);
     });
+  });
+
+  testWidgets('Delete account is the last card, below Help, and Log out is '
+      'not styled as destructive', (tester) async {
+    await pumpTall(tester);
+
+    final deleteY = tester.getTopLeft(find.text('Delete account')).dy;
+    expect(deleteY, greaterThan(tester.getTopLeft(find.text('HELP')).dy));
+    expect(deleteY, greaterThan(tester.getTopLeft(find.text('Log out')).dy));
+
+    final scheme = Theme.of(tester.element(find.text('Log out'))).colorScheme;
+    expect(
+      tester.widget<Text>(find.text('Log out')).style?.color,
+      isNot(scheme.error),
+    );
+    expect(
+      tester.widget<Text>(find.text('Delete account')).style?.color,
+      scheme.error,
+    );
+  });
+
+  testWidgets('the sub-screens are pushed by route name, through '
+      'onGenerateRoute', (tester) async {
+    // A bare MaterialPageRoute skipped AppPageRoute's reduced-motion handling.
+    addTearDown(tester.view.reset);
+    tester.view.physicalSize = const Size(390, 2400);
+    tester.view.devicePixelRatio = 1;
+    final pushed = <String?>[];
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          notificationAuthStatusProvider.overrideWith(
+            (ref) async => AuthorizationStatus.authorized,
+          ),
+        ],
+        child: ThemeNotifier(
+          themeMode: ThemeMode.light,
+          toggleTheme: () {},
+          textScale: 1,
+          setTextScale: (_) {},
+          setLanguage: (_) {},
+          child: MaterialApp(
+            localizationsDelegates: const [
+              AppLocalizations.delegate,
+              GlobalMaterialLocalizations.delegate,
+              GlobalWidgetsLocalizations.delegate,
+            ],
+            supportedLocales: AppLocalizations.supportedLocales,
+            onGenerateRoute: (settings) {
+              pushed.add(settings.name);
+              return MaterialPageRoute<void>(
+                settings: settings,
+                builder: (_) => const Scaffold(body: Text('detail')),
+              );
+            },
+            home: const SettingsScreen(
+              name: 'Test User',
+              email: 'test@example.com',
+              employeeId: 'e1',
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Text Size'));
+    await tester.pumpAndSettle();
+
+    expect(pushed, [AppRoutes.textSize]);
+    expect(find.text('detail'), findsOneWidget);
   });
 
   // The setup screen's consent link is shown once, only to a new employee, so

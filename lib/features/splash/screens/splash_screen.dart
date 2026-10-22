@@ -4,11 +4,13 @@ import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:scheduling/core/animations/app_animation_constants.dart';
+import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/auth/data/auth_cache.dart';
 import 'package:scheduling/features/splash/application/splash_controller.dart';
+import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
 import 'package:scheduling/shared/widgets/branding/brand_logo.dart';
 
@@ -27,6 +29,9 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   bool _splashRemoved = false;
   bool _navigated = false;
   bool _useAuthoritative = false;
+
+  /// The authoritative read failed for a non-auth reason; the session is kept.
+  bool _retryable = false;
 
   @override
   void initState() {
@@ -113,6 +118,22 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
     });
   }
 
+  /// Login only for an auth failure; anything else keeps the session (U24).
+  void _onResolutionFailed(Object e, StackTrace st) {
+    ref.read(loggerProvider).warn('SPLASH resolution failed', e, st);
+    if (isSplashAuthFailure(e)) {
+      _go(const SplashGoToLogin());
+      return;
+    }
+    if (!_retryable) setState(() => _retryable = true);
+  }
+
+  void _retry() {
+    if (_navigated) return;
+    setState(() => _retryable = false);
+    ref.invalidate(splashDestinationProvider);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_useAuthoritative) {
@@ -120,14 +141,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         _,
         next,
       ) {
-        next.when(
-          data: _go,
-          error: (e, st) {
-            ref.read(loggerProvider).warn('SPLASH resolution failed', e, st);
-            _go(const SplashGoToLogin());
-          },
-          loading: () {},
-        );
+        next.when(data: _go, error: _onResolutionFailed, loading: () {});
+      });
+      // Back online while waiting: retry without a tap.
+      ref.listen<bool>(isOfflineProvider, (was, offline) {
+        if (was == true && !offline && _retryable) _retry();
       });
 
       ref.read(splashDestinationProvider).whenData(_go);
@@ -143,14 +161,20 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             Expanded(child: Center(child: _buildHero(theme))),
             Padding(
               padding: const EdgeInsets.only(bottom: 48, left: 48, right: 48),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(AppRadius.rFull),
-                child: LinearProgressIndicator(
-                  backgroundColor: scheme.onPrimary.withValues(alpha: 0.2),
-                  valueColor: AlwaysStoppedAnimation<Color>(scheme.onPrimary),
-                  minHeight: 3,
-                ),
-              ),
+              child: _retryable
+                  ? _OfflineStatus(onRetry: _retry)
+                  : ClipRRect(
+                      borderRadius: BorderRadius.circular(AppRadius.rFull),
+                      child: LinearProgressIndicator(
+                        backgroundColor: scheme.onPrimary.withValues(
+                          alpha: 0.2,
+                        ),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          scheme.onPrimary,
+                        ),
+                        minHeight: 3,
+                      ),
+                    ),
             ),
           ],
         ),
@@ -194,6 +218,41 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
           wordmark,
         ],
       ),
+    );
+  }
+}
+
+/// Replaces the progress bar once the profile read failed for a non-auth reason.
+class _OfflineStatus extends StatelessWidget {
+  const _OfflineStatus({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final onPrimary = theme.colorScheme.onPrimary;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Semantics(
+          liveRegion: true,
+          child: Text(
+            context.l10n.auth_splashOfflineRetrying,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyMedium?.copyWith(color: onPrimary),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.sp12),
+        OutlinedButton(
+          onPressed: onRetry,
+          style: OutlinedButton.styleFrom(
+            foregroundColor: onPrimary,
+            side: BorderSide(color: onPrimary),
+          ),
+          child: Text(context.l10n.common_retry),
+        ),
+      ],
     );
   }
 }

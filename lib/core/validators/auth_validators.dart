@@ -19,20 +19,15 @@ abstract final class AuthValidators {
     return null;
   }
 
-  static const int minPasswordLength = PasswordRequirement.minLengthChars;
-
+  /// Sign-in: non-empty only — legacy credentials predate the 8-char policy.
   static String? password(BuildContext context, String value) {
     if (value.trim().isEmpty) {
       return context.l10n.validation_pleaseEnterYourPassword;
     }
-    if (value.length < minPasswordLength) {
-      return context.l10n.validation_passwordMustBeAtLeast8Characters;
-    }
     return null;
   }
 
-  /// Strict variant for the create-account flow. Sign-in uses the looser
-  /// [password] check instead, so existing credentials aren't blocked.
+  /// Strict variant for new passwords (setup, change password).
   static String? newPassword(BuildContext context, String value) {
     if (value.trim().isEmpty) {
       return context.l10n.validation_pleaseEnterYourPassword;

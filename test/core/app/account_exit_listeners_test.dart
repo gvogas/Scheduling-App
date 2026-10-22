@@ -3,6 +3,8 @@
 // needs the credential sign-out revokes) and the one-exit-at-a- time guard
 // (three listeners can fire for a single underlying event).
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +12,7 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/core/app/account_exit_controller.dart';
 import 'package:scheduling/core/app/device_deregistration.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/features/auth/services/auth_service.dart';
 import 'package:scheduling/features/live_activity/application/live_activity_registration_controller.dart';
@@ -69,6 +72,8 @@ void main() {
   Future<AccountExitController> pumpController(
     WidgetTester tester, {
     bool signedIn = true,
+    SessionFence? session,
+    int pendingPhotos = 0,
   }) async {
     late AccountExitController controller;
     await tester.pumpWidget(
@@ -80,7 +85,7 @@ void main() {
             liveActivity,
           ),
           authServiceProvider.overrideWithValue(auth),
-          ...accountExitStubOverrides(),
+          ...accountExitStubOverrides(session: session),
         ],
         child: MaterialApp(
           navigatorKey: navigatorKey,
@@ -104,6 +109,8 @@ void main() {
                   DeviceDeregistrationDeps.from(ref.read),
                 ),
                 isSignedIn: () => signedIn,
+                sessionForExit: session == null ? null : () => session,
+                pendingPhotoCount: () => pendingPhotos,
               );
               return const Scaffold(body: SizedBox.shrink());
             },
@@ -114,6 +121,51 @@ void main() {
     await tester.pumpAndSettle();
     return controller;
   }
+
+  testWidgets('forced exit discloses known unsaved photo work', (tester) async {
+    final controller = await pumpController(tester, pendingPhotos: 2);
+    await controller.exitAccount(
+      selectMessage: (_) => 'disabled',
+      navigatorKey: navigatorKey,
+      scaffoldMessengerKey: messengerKey,
+      isMounted: () => true,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Some photos had not finished saving.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'a forced exit cannot sign out the next user after held cleanup',
+    (tester) async {
+      String? uid = 'A';
+      final session = SessionFence(readUid: () => uid);
+      final entered = Completer<void>();
+      final release = Completer<void>();
+      when(push.unregisterCurrentDevice).thenAnswer((_) {
+        entered.complete();
+        return release.future;
+      });
+      final controller = await pumpController(tester, session: session);
+      final pending = controller.exitAccount(
+        selectMessage: (_) => 'disabled',
+        navigatorKey: navigatorKey,
+        scaffoldMessengerKey: messengerKey,
+        isMounted: () => true,
+      );
+      await entered.future;
+      uid = 'B';
+      release.complete();
+      await pending;
+      await tester.pumpAndSettle();
+      verifyNever(auth.signOut);
+      expect(pushedRoutes, isEmpty);
+      expect(session.capture()!.uid, 'B');
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('tears every registration down BEFORE signing out', (
     tester,
@@ -158,6 +210,49 @@ void main() {
 
     verify(() => auth.signOut()).called(1);
     expect(calls.where((c) => c == 'signOut').length, 1);
+  });
+
+  testWidgets('a forced exit during a voluntary teardown is ignored', (
+    tester,
+  ) async {
+    final controller = await pumpController(tester);
+    final release = Completer<void>();
+
+    final voluntary = controller.runVoluntaryTeardown(() => release.future);
+    await controller.exitAccount(
+      selectMessage: (l10n) => 'disabled',
+      navigatorKey: navigatorKey,
+      scaffoldMessengerKey: messengerKey,
+      isMounted: () => true,
+    );
+    release.complete();
+
+    expect(await voluntary, isTrue);
+    expect(calls, isEmpty);
+  });
+
+  testWidgets('a voluntary teardown during a forced exit does not run', (
+    tester,
+  ) async {
+    final controller = await pumpController(tester);
+    final release = Completer<void>();
+    when(push.unregisterCurrentDevice).thenAnswer((_) => release.future);
+
+    final forced = controller.exitAccount(
+      selectMessage: (l10n) => 'disabled',
+      navigatorKey: navigatorKey,
+      scaffoldMessengerKey: messengerKey,
+      isMounted: () => true,
+    );
+    var ran = false;
+    final voluntary = await controller.runVoluntaryTeardown(
+      () async => ran = true,
+    );
+    release.complete();
+    await forced;
+    await tester.pumpAndSettle();
+
+    expect((voluntary, ran), (false, false));
   });
 
   testWidgets('does nothing when nobody is signed in', (tester) async {

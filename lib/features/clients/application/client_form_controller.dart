@@ -105,7 +105,7 @@ class ClientFormController extends Notifier<bool> {
     state = true;
     try {
       final saved = await repo.addClient(client);
-      refresh.bump();
+      refresh.bump(ClientsWriteAdded(saved));
       return ClientSaved(saved);
     } catch (e, st) {
       logger.warn('CLI-ADD addClient failed', e, st);
@@ -131,7 +131,7 @@ class ClientFormController extends Notifier<bool> {
     state = true;
     try {
       await repo.updateClient(client);
-      refresh.bump();
+      refresh.bump(ClientsWriteUpdated(client));
       await updateLinkedPhoneContact(
         linkStore: linkStore,
         logger: logger,
@@ -160,7 +160,7 @@ class ClientFormController extends Notifier<bool> {
     state = true;
     try {
       await repo.setClientArchived(clientId, archived: archived);
-      refresh.bump();
+      refresh.bump(ClientsWriteArchived(clientId, archived: archived));
       return ClientArchived(archived: archived);
     } catch (e, st) {
       logger.warn('CLI-ARCH setArchived failed', e, st);
@@ -192,7 +192,7 @@ class ClientFormController extends Notifier<bool> {
       } catch (e, st) {
         logger.warn('CLI-DEL contact unlink failed', e, st);
       }
-      refresh.bump();
+      refresh.bump(ClientsWriteDeleted(clientId));
       return const ClientDeleted();
     } catch (e, st) {
       logger.warn('CLI-DEL deleteClient failed', e, st);

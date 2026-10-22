@@ -350,6 +350,8 @@ enum CarPlayTemplateBuilder {
     ) -> [CPListSection] {
         var budget = maxRowsPerTemplate
         var sections: [CPListSection] = []
+        let calendar = Calendar.current
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: now)
         for day in upcomingDays(in: snapshot, from: now) {
             let open = day.appointments
                 .filter { !storedState($0).isTerminal }
@@ -357,7 +359,10 @@ enum CarPlayTemplateBuilder {
             let drawn = fit(open, into: &budget)
             if drawn.isEmpty { continue }
             let date = CarPlayTemplateBuilder.date(fromDayKey: day.date)
-            let isTomorrow = date.map(Calendar.current.isDateInTomorrow) ?? false
+            // Against `now`, not the wall clock: `isDateInTomorrow` ignores the injected time.
+            let isTomorrow = date.flatMap { d in
+                tomorrow.map { calendar.isDate(d, inSameDayAs: $0) }
+            } ?? false
             let header = isTomorrow
                 ? CarPlayStrings.tomorrowSection
                 : date.map(CarPlayStrings.weekday) ?? day.date

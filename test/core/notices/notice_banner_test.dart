@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:scheduling/core/notices/app_notice.dart';
+import 'package:scheduling/core/notices/notice_hold.dart';
 import 'package:scheduling/core/notices/notice_listener.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
@@ -116,7 +118,16 @@ void main() {
     expect(find.text('short lived'), findsNothing);
   });
 
-  testWidgets('the notice renders on the inverse surface with a kind dot', (
+  Icon kindIcon(WidgetTester tester) =>
+      tester.widget<Icon>(find.byKey(const ValueKey('notice-icon')));
+
+  Future<void> flush(WidgetTester tester, Duration hold) async {
+    await tester.pump(hold);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+  }
+
+  testWidgets('the notice renders on the inverse surface with a kind icon', (
     tester,
   ) async {
     await pumpApp(tester);
@@ -131,14 +142,98 @@ void main() {
     );
     expect(surface.color, lightTheme().colorScheme.inverseSurface);
 
-    final dot = tester.widget<Container>(
-      find.byKey(const ValueKey('notice-dot')),
+    final icon = kindIcon(tester);
+    expect(icon.icon, Icons.check_circle_outline_rounded);
+    expect(icon.color, lightTheme().palette.noticeMint);
+
+    await flush(tester, AppMotion.noticeCycle);
+  });
+
+  testWidgets('info and error carry their own icon and tint', (tester) async {
+    // A2: colour is never the only cue — each kind has a glyph as well.
+    await pumpApp(tester);
+    service(tester).info('heads up');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(kindIcon(tester).icon, Icons.info_outline_rounded);
+    expect(kindIcon(tester).color, lightTheme().palette.noticeInfo);
+
+    service(tester).error('boom');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(kindIcon(tester).icon, Icons.error_outline_rounded);
+    expect(kindIcon(tester).color, lightTheme().palette.noticeRed);
+
+    await flush(
+      tester,
+      noticeHoldFor(const AppNotice.error('boom'), accessible: false),
     );
-    final decoration = dot.decoration! as BoxDecoration;
-    expect(decoration.color, lightTheme().palette.noticeMint);
+  });
+
+  testWidgets('the live region reads the kind before the message', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    await pumpApp(tester);
+
+    service(tester).error("Couldn't save");
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel("Error: Couldn't save"), findsOneWidget);
+    // The plain message is not announced a second time.
+    expect(find.bySemanticsLabel("Couldn't save"), findsNothing);
+
+    service(tester).success('Saved');
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('Success: Saved'), findsOneWidget);
+
+    service(tester).info('Photos queued');
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel('Info: Photos queued'), findsOneWidget);
+
+    await flush(tester, AppMotion.noticeCycle);
+    semantics.dispose();
+  });
+
+  testWidgets('an error outlives the success cycle and then dismisses', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    const message = "Couldn't save the appointment. Someone else edited it.";
+    service(tester).error(message);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
 
     await tester.pump(AppMotion.noticeCycle);
     await tester.pump(const Duration(milliseconds: 400));
     await tester.pump();
+    expect(find.text(message), findsOneWidget);
+
+    final hold = noticeHoldFor(
+      const AppNotice.error(message),
+      accessible: false,
+    );
+    await flush(tester, hold - AppMotion.noticeCycle);
+    expect(find.text(message), findsNothing);
+  });
+
+  testWidgets('a finger on the banner pauses the hold until it lifts', (
+    tester,
+  ) async {
+    await pumpApp(tester);
+    service(tester).success('hold me');
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.text('hold me')),
+    );
+    await tester.pump(AppMotion.noticeCycle * 3);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+    expect(find.text('hold me'), findsOneWidget);
+
+    await gesture.up();
+    await flush(tester, AppMotion.noticeCycle);
+    expect(find.text('hold me'), findsNothing);
   });
 }

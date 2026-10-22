@@ -182,11 +182,35 @@ void main() {
       final r = repo();
       await r.searchHistory('sophie');
       searchCalls();
+      final edit = _MockCallable();
+      final result = _MockSearchResult();
+      when(
+        () => functions.httpsCallable('saveAppointmentEdits'),
+      ).thenReturn(edit);
+      when(() => edit.call<Map<String, dynamic>>(any<Object?>())).thenAnswer((
+        invocation,
+      ) async {
+        final payload = invocation.positionalArguments.single as Map;
+        final command = (payload['edits'] as List).single as Map;
+        when(() => result.data).thenReturn({
+          'appointments': [
+            {'id': 'a1', 'data': command['data']},
+          ],
+        });
+        return result;
+      });
 
       await r.updateAppointment(
         AppointmentRecord(
           id: 'a1',
           clientName: 'Marc Tremblay',
+          status: 'done',
+          startTime: DateTime(2026, 6, 24, 9),
+          endTime: DateTime(2026, 6, 24, 10),
+        ),
+        base: AppointmentRecord(
+          id: 'a1',
+          clientName: 'Sophie Tremblay',
           status: 'done',
           startTime: DateTime(2026, 6, 24, 9),
           endTime: DateTime(2026, 6, 24, 10),

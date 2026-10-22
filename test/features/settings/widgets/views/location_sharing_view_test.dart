@@ -4,9 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/notices/app_notice.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
+import 'package:scheduling/core/permissions/location_permission_service.dart';
 import 'package:scheduling/core/remote_config/feature_flags.dart';
 import 'package:scheduling/core/remote_config/feature_flags_providers.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
@@ -51,16 +53,23 @@ void main() {
     WidgetTester tester, {
     required bool cleared,
     bool presenceOn = true,
+    LocationPermissionResult permission = LocationPermissionResult.granted,
   }) async {
     when(presence.unregister).thenAnswer((_) async => cleared);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
+          locationPermissionStatusProvider.overrideWith(
+            (ref) async => permission,
+          ),
           employeesRepositoryProvider.overrideWithValue(repo),
           presenceSyncControllerProvider.overrideWithValue(presence),
           myEmployeeRecordProvider.overrideWith((ref) => _me),
           myPresenceFixProvider.overrideWith((ref) => Stream.value(null)),
           isOfflineProvider.overrideWithValue(false),
+          sessionFenceProvider.overrideWithValue(
+            SessionFence(readUid: () => 'test-uid'),
+          ),
           featureFlagsProvider.overrideWithValue(
             FeatureFlags(
               addressAutocomplete: true,
@@ -87,6 +96,29 @@ void main() {
     );
     await tester.pumpAndSettle();
   }
+
+  testWidgets('sharing on without the OS permission shows the blocked line', (
+    tester,
+  ) async {
+    // The switch alone would read "On" over a map that never hears from them.
+    await pump(
+      tester,
+      cleared: true,
+      permission: LocationPermissionResult.permanentlyDenied,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('locationBlockedNote')), findsOneWidget);
+  });
+
+  testWidgets('sharing on with location allowed shows no blocked line', (
+    tester,
+  ) async {
+    await pump(tester, cleared: true);
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('locationBlockedNote')), findsNothing);
+  });
 
   testWidgets('a refused erase reports paused, never cleared', (tester) async {
     // Sharing is off either way; only the ERASED half can fail, and the screen

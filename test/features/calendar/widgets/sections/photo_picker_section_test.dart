@@ -11,6 +11,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:ui' show SemanticsAction;
 
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/material.dart';
@@ -29,19 +30,35 @@ import 'package:scheduling/l10n/l10n.dart';
 
 class _MockStorage extends Mock implements FirebaseStorage {}
 
-/// Hands out a `Completer` per `loadAll` call so a test can hold the fetch
-/// open — which is the state the widget spends real time in.
+/// Groups deferred per-photo responses by the test's widget revision.
 class _FakeLoader extends AppointmentImageLoader {
   _FakeLoader() : super(storage: _MockStorage(), logger: AppLogger());
 
   final calls = <Completer<List<Uint8List>>>[];
+  final _pending = <String, Future<Uint8List>>{};
+  bool individualLoads = false;
+  final individual = <String, Completer<Uint8List>>{};
 
-  @override
-  Future<List<Uint8List>> loadAll(List<AppointmentImage> images) {
+  void beginBatch(List<AppointmentImage> images) {
+    _pending.clear();
+    if (individualLoads) return;
+    if (images.isEmpty) return;
     final completer = Completer<List<Uint8List>>();
     calls.add(completer);
-    return completer.future;
+    for (var i = 0; i < images.length; i++) {
+      final index = i;
+      _pending[images[i].storagePath] = completer.future.then(
+        (bytes) => bytes[index],
+      );
+    }
   }
+
+  @override
+  Future<Uint8List> load(AppointmentImage image) => individualLoads
+      ? individual
+            .putIfAbsent(image.storagePath, Completer<Uint8List>.new)
+            .future
+      : _pending[image.storagePath]!;
 }
 
 /// Empty bytes are the REFUSAL sentinel; anything non-empty renders.
@@ -100,18 +117,20 @@ void main() {
     bool isEditing = true,
     int failedCount = 0,
     VoidCallback? onRetry,
+    String language = 'en',
+    void Function(int)? onRemoveExisting,
   }) async {
     tester.view.physicalSize = const Size(375, 667);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    loader.beginBatch(existingImages);
 
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [
-          appointmentImageLoaderProvider.overrideWithValue(loader),
-        ],
+        overrides: [appointmentImageLoaderProvider.overrideWithValue(loader)],
         child: MaterialApp(
+          locale: Locale(language),
           localizationsDelegates: const [
             AppLocalizations.delegate,
             GlobalMaterialLocalizations.delegate,
@@ -127,7 +146,7 @@ void main() {
                 failedCount: failedCount,
                 isEditing: isEditing,
                 onPickImages: () {},
-                onRemoveExisting: (_) {},
+                onRemoveExisting: onRemoveExisting ?? (_) {},
                 onRemoveNew: (_) {},
                 onRetry: onRetry,
               ),
@@ -137,6 +156,107 @@ void main() {
       ),
     );
     await tester.pump();
+  }
+
+  for (final language in ['en', 'fr']) {
+    final position = language == 'en' ? 'Photo 1 of 1' : 'Photo 1 sur 1';
+    final openHint = language == 'en'
+        ? 'Open full screen'
+        : 'Ouvrir en plein écran';
+    testWidgets(
+      '$language photo loading and refusal are named without activation',
+      (tester) async {
+        await pumpSection(
+          tester,
+          existingImages: [_imageA],
+          language: language,
+        );
+        await settle(tester);
+        var data = tester
+            .getSemantics(find.bySemanticsLabel(position))
+            .getSemanticsData();
+        expect(
+          data.value,
+          language == 'en' ? 'Loading photo' : 'Chargement de la photo',
+        );
+        expect(data.hasAction(SemanticsAction.tap), isFalse);
+
+        loader.calls.single.complete([_refused]);
+        await tester.pumpAndSettle();
+        data = tester
+            .getSemantics(find.bySemanticsLabel(position))
+            .getSemanticsData();
+        expect(
+          data.value,
+          language == 'en' ? 'Photo unavailable' : 'Photo indisponible',
+        );
+        expect(data.hasAction(SemanticsAction.tap), isFalse);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      '$language loaded carousel photo opens through its semantic action',
+      (tester) async {
+        await pumpSection(
+          tester,
+          existingImages: [_imageA],
+          isEditing: false,
+          language: language,
+        );
+        loader.calls.single.complete([_photo]);
+        await tester.pumpAndSettle();
+        final node = tester.getSemantics(find.bySemanticsLabel(position));
+        expect(node.getSemanticsData().hint, openHint);
+        expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+        node.owner!.performAction(node.id, SemanticsAction.tap);
+        await tester.pumpAndSettle();
+        expect(find.byType(ImageViewer), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      '$language editable photos have positions and a separate removal action',
+      (tester) async {
+        int? removed;
+        await pumpSection(
+          tester,
+          existingImages: [_imageA],
+          newImages: [newPhoto('picked.png')],
+          language: language,
+          onRemoveExisting: (index) => removed = index,
+        );
+        loader.calls.single.complete([_photo]);
+        await tester.pumpAndSettle();
+        final first = language == 'en' ? 'Photo 1 of 2' : 'Photo 1 sur 2';
+        final second = language == 'en' ? 'Photo 2 of 2' : 'Photo 2 sur 2';
+        for (final label in [first, second]) {
+          final node = tester.getSemantics(find.bySemanticsLabel(label));
+          expect(node.getSemanticsData().hint, openHint);
+          expect(
+            node.getSemanticsData().hasAction(SemanticsAction.tap),
+            isTrue,
+          );
+        }
+        final remove = find.bySemanticsLabel(
+          language == 'en' ? 'Remove' : 'Retirer',
+        );
+        final node = tester.getSemantics(remove.first);
+        expect(node.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+        node.owner!.performAction(node.id, SemanticsAction.tap);
+        await tester.pumpAndSettle();
+        expect(removed, 0);
+        final photo = tester.getSemantics(find.bySemanticsLabel(second));
+        photo.owner!.performAction(photo.id, SemanticsAction.tap);
+        await tester.pumpAndSettle();
+        expect(
+          tester.widget<ImageViewer>(find.byType(ImageViewer)).initialIndex,
+          1,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 
   testWidgets('editing photo strip exposes add-more as an InkWell surface', (
@@ -151,7 +271,10 @@ void main() {
   testWidgets('upload failures expose retry as a TextButton', (tester) async {
     await pumpSection(tester, failedCount: 1, onRetry: () {});
 
-    expect(find.widgetWithText(TextButton, 'Retry'), findsOneWidget);
+    final retry = find.widgetWithText(TextButton, 'Retry');
+    expect(retry, findsOneWidget);
+    // The 48 px floor: it was shrink-wrapped to its label.
+    expect(tester.getSize(retry).height, greaterThanOrEqualTo(48));
     expect(tester.takeException(), isNull);
   });
 
@@ -228,6 +351,22 @@ void main() {
     });
   });
 
+  testWidgets('first visible photo renders while a 30-photo job waits', (
+    tester,
+  ) async {
+    loader.individualLoads = true;
+    final photos = [
+      for (var i = 0; i < 30; i++) AppointmentImage(storagePath: 'photo/$i'),
+    ];
+    await pumpSection(tester, existingImages: photos, isEditing: false);
+    expect(loader.individual.length, lessThan(5));
+    loader.individual['photo/0']!.complete(_photo);
+    await settle(tester);
+    expect(find.byType(Image), findsWidgets);
+    expect(loader.individual.length, lessThan(5));
+    expect(tester.takeException(), isNull);
+  });
+
   group('empty bytes are a REFUSAL, not a pending load', () {
     testWidgets('renders the error tile rather than a spinner', (tester) async {
       await pumpSection(tester, existingImages: const [_imageA]);
@@ -280,10 +419,7 @@ void main() {
     testWidgets('a new photo is offset by the entries the viewer is handed', (
       tester,
     ) async {
-      // While the load is outstanding the viewer is handed the FILES only,
-      // so counting `existingImages` instead points one past this photo — two
-      // new photos are what make that visible, since with one the viewer's own
-      // clamp would quietly absorb the off-by-one and open the same file.
+      // Remote handles keep their slots even before their bytes arrive.
       await pumpSection(
         tester,
         existingImages: const [_imageA],
@@ -294,9 +430,9 @@ void main() {
       await settle(tester);
 
       final viewer = tester.widget<ImageViewer>(find.byType(ImageViewer));
-      expect(viewer.images, hasLength(2));
-      expect(viewer.initialIndex, 0);
-      expect(find.text('1 / 2'), findsOneWidget);
+      expect(viewer.images, hasLength(3));
+      expect(viewer.initialIndex, 1);
+      expect(find.text('2 / 3'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

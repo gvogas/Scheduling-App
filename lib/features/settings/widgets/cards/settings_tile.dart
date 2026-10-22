@@ -46,14 +46,20 @@ class SettingsTile extends StatelessWidget {
           )
         : null;
 
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.r8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sp12),
-        child: narrowOrLarge
-            ? _buildStacked(theme, leading)
-            : _buildInline(theme, leading),
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        enabled: onTap != null,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.r8),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sp12),
+            child: narrowOrLarge
+                ? _buildStacked(theme, leading)
+                : _buildInline(theme, leading),
+          ),
+        ),
       ),
     );
   }

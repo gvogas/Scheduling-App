@@ -23,6 +23,7 @@ import 'package:scheduling/features/employees/domain/models/new_account_credenti
 import 'package:scheduling/features/employees/domain/policies/work_schedule_policy.dart';
 import 'package:scheduling/features/employees/widgets/sheets/edit_person_sheet.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/feedback/offline_form_notice.dart';
 
 class _MockRepo extends Mock implements EmployeesRepository {}
 
@@ -167,7 +168,63 @@ void main() {
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
+    // A sign-in identity moves only past a confirm naming the new address.
+    expect(find.text('Change sign-in email?'), findsOneWidget);
+    expect(find.textContaining('new@x.com'), findsWidgets);
+    await tester.tap(find.text('Change email'));
+    await tester.pumpAndSettle();
+
     expect(capturedSave().email, 'new@x.com');
+  });
+
+  testWidgets('cancelling the email confirm saves nothing', (tester) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(
+      wrap(
+        const EmployeeRecord(
+          id: 'e1',
+          name: 'Theo',
+          email: 'old@x.com',
+          uid: 'auth-uid',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('email')), 'new@x.com');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel').last);
+    await tester.pumpAndSettle();
+
+    verifyNoSave();
+    expect(find.byType(EditPersonSheet), findsOneWidget);
+  });
+
+  testWidgets('an unchanged email saves without a confirm, and the field '
+      'says what it is for', (tester) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(
+      wrap(
+        const EmployeeRecord(
+          id: 'e1',
+          name: 'Theo',
+          email: 'old@x.com',
+          uid: 'auth-uid',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('This is what they sign in with.'), findsOneWidget);
+
+    // Case and whitespace alone are not a change.
+    await tester.enterText(find.byKey(const Key('email')), ' Old@X.com ');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Change sign-in email?'), findsNothing);
+    expect(capturedSave().email, 'old@x.com');
   });
 
   testWidgets('a legacy single-name doc seeds First and survives a save', (
@@ -208,7 +265,41 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Must be after start time'), findsOneWidget);
+    // The availability panel is far below the fold; the failed Save focuses
+    // its node so the error scrolls into view.
+    expect(FocusManager.instance.primaryFocus?.debugLabel, 'hours');
     verifyNoSave();
+  });
+
+  testWidgets('offline, the form says so up front', (tester) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(
+      wrap(const EmployeeRecord(id: 'e1', name: 'Theo'), offline: true),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byType(OfflineFormNotice), findsOneWidget);
+    expect(find.textContaining("You're offline"), findsOneWidget);
+  });
+
+  testWidgets('Cancel asks only once the stored values have been edited', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(
+      wrap(const EmployeeRecord(id: 'e1', name: 'Theo', email: 't@x.com')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsNothing);
+
+    await tester.tap(find.byKey(const Key('adminAccess')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
   });
 
   testWidgets('the test account switch is saved with the record', (
@@ -463,6 +554,35 @@ void main() {
     // The users doc still saves — only the emergency write is withheld.
     capturedSave();
     verifyNever(() => repo.saveEmergencyContact(any(), any()));
+  });
+
+  testWidgets('the emergency fields say they are loading until the read '
+      'lands, then open up', (tester) async {
+    final contact = StreamController<EmergencyContact>();
+    addTearDown(contact.close);
+    when(
+      () => repo.watchEmergencyContact(any()),
+    ).thenAnswer((_) => contact.stream);
+
+    useTallViewport(tester);
+    await tester.pumpWidget(
+      wrap(const EmployeeRecord(id: 'e1', name: 'Theo', email: 'theo@x.com')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Loading emergency contact…'), findsNWidgets(2));
+
+    contact.add(EmergencyContact.empty);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Loading emergency contact…'), findsNothing);
+    final field = tester.widget<TextField>(
+      find.descendant(
+        of: find.byKey(const Key('emergencyPhone')),
+        matching: find.byType(TextField),
+      ),
+    );
+    expect(field.readOnly, isFalse);
   });
 
   testWidgets('a loaded emergency contact is written back on save', (

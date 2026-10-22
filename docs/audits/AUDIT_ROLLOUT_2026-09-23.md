@@ -1,7 +1,7 @@
 # Audit rollout and recovery
 
-Steps 1–5 are DONE (backend deployed and backfill run 2026-09-29, see the
-`docs/DEPLOYMENT.md` log). Step 6, the app release, has not been performed. Follow the existing [release runbook](../DEPLOYMENT.md) as well
+**Rollout COMPLETE** (swept 2026-10-18): steps 1–5 deployed and backfill run 2026-09-29 (`e70b494d`, see the
+`docs/DEPLOYMENT.md` log); step 6, the app release, shipped in 1.63.0+93. Kept for the account-lock / interrupted-deletion recovery and rollback rules below. Follow the existing [release runbook](../DEPLOYMENT.md) as well
 as this change-specific ordering.
 
 ## Release order

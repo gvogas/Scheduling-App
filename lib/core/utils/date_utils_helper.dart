@@ -12,10 +12,13 @@ abstract final class DateUtilsHelper {
 
   static String get _locale => Intl.defaultLocale ?? 'en_CA';
 
+  /// The device's 24-hour clock setting, set from the app shell's MediaQuery.
+  static bool use24Hour = false;
+
   static String formatTime(DateTime date) {
     final format = _timeFormats.putIfAbsent(
-      _locale,
-      () => DateFormat.jm(_locale),
+      '$_locale|$use24Hour',
+      () => use24Hour ? DateFormat.Hm(_locale) : DateFormat.jm(_locale),
     );
     return format.format(date);
   }

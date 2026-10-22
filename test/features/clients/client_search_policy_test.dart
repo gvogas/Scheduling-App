@@ -283,6 +283,18 @@ void main() {
       expect(score, 0);
     });
 
+    test('a number stored with its NANP leading 1 is still exact', () {
+      final score = ClientSearchPolicy.relevanceScore(
+        displayName: 'marie tremblay',
+        personName: 'marie tremblay',
+        phoneDigits: const ['15145628332'],
+        contactsDigits: const [],
+        queryText: '5145628332',
+        queryDigits: '5145628332',
+      );
+      expect(score, 0);
+    });
+
     test('a prefix of the mobile reaches the prefix tier', () {
       final score = ClientSearchPolicy.relevanceScore(
         displayName: 'marie tremblay',

@@ -9,19 +9,29 @@ import 'package:scheduling/core/notices/app_notice.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/application/photo_upload_notifier.dart';
+import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
+import 'package:scheduling/features/calendar/domain/models/photo_upload_expiry.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
 class _MockRepo extends Mock implements AppointmentsRepository {}
 
+class _MockUploads extends Mock implements AppointmentImageUploadService {}
+
 void main() {
   late _MockRepo repository;
   late ProviderContainer container;
+  late _MockUploads uploads;
 
   setUp(() {
     repository = _MockRepo();
+    uploads = _MockUploads();
+    when(() => uploads.acknowledgeExpiry(any())).thenAnswer((_) async {});
     container = ProviderContainer(
-      overrides: [appointmentsRepositoryProvider.overrideWithValue(repository)],
+      overrides: [
+        appointmentsRepositoryProvider.overrideWithValue(repository),
+        appointmentImageUploadProvider.overrideWithValue(uploads),
+      ],
     );
     addTearDown(container.dispose);
   });
@@ -39,6 +49,29 @@ void main() {
         home: Scaffold(body: PhotoUploadFailureListener(child: SizedBox())),
       ),
     ),
+  );
+
+  testWidgets(
+    'expiry notice survives a missing listener and acknowledges only shown outcomes',
+    (tester) async {
+      final notices = <AppNotice>[];
+      container.read(noticeServiceProvider).stream.listen(notices.add);
+      container.read(photoUploadNotifierProvider).expired.value = const [
+        PhotoUploadExpiry(id: 'batch', appointmentId: 'job', count: 2),
+      ];
+      await pumpListener(tester);
+      await tester.pumpAndSettle();
+      expect(
+        notices.single.message,
+        contains('2 photos did not finish saving'),
+      );
+      verify(() => uploads.acknowledgeExpiry({'batch'})).called(1);
+      container.read(photoUploadNotifierProvider).expired.value = const [
+        PhotoUploadExpiry(id: 'batch', appointmentId: 'job', count: 2),
+      ];
+      await tester.pumpAndSettle();
+      expect(notices, hasLength(1));
+    },
   );
 
   void report() => container

@@ -29,6 +29,7 @@ const MAX_DELAY_MS = 10_000;
 // We clamp the Retry-After header to this so a rogue or misconfigured
 // server can't stall the function past its Cloud Run timeout.
 const MAX_RETRY_AFTER_MS = 60_000;
+const DEFAULT_REQUEST_TIMEOUT_MS = 20_000;
 
 // ---------------------------------------------------------------------------
 // WaveApiError
@@ -93,16 +94,6 @@ function retryAfterMs(headers) {
 }
 
 /**
- * Returns a Promise that resolves after `ms` milliseconds using `sleepFn`.
- * @param {function(number): Promise<void>} sleepFn Injected delay function.
- * @param {number} ms Milliseconds to wait.
- * @return {!Promise<void>}
- */
-function sleep(sleepFn, ms) {
-  return sleepFn(ms);
-}
-
-/**
  * Drains a response body so its socket isn't pinned across the retry loop —
  * Undici/Node fetch requires this. We swallow any errors here since this is
  * just a resource release, not something worth failing over.
@@ -134,13 +125,13 @@ async function discardBody(response) {
  * @param {string} requestBody Serialized GraphQL request body.
  * @param {!Object} requestHeaders Request headers including Authorization.
  * @param {!Function} fetchImpl Fetch implementation.
- * @param {!Function} sleepFn Injected delay function.
  * @param {number} maxRetries Maximum retries after the first attempt.
+ * @param {!Object} budget Signal and remaining deadline function.
  * @return {!Promise<*>} The 2xx fetch Response.
  * @throws {WaveApiError}
  */
 async function postWithRetry(
-    requestBody, requestHeaders, fetchImpl, sleepFn, maxRetries) {
+    requestBody, requestHeaders, fetchImpl, maxRetries, budget) {
   let attempt = 0;
   // `attempt` counts total tries. We allow up to maxRetries retries after
   // the first attempt, so the loop runs at most maxRetries + 1 times.
@@ -149,10 +140,14 @@ async function postWithRetry(
     let fetchError = null;
 
     try {
+      if (budget.remaining() <= 0 || budget.signal.aborted) {
+        throw new WaveApiError("network", "Wave request deadline exceeded.");
+      }
       response = await fetchImpl(WAVE_GQL_URL, {
         method: "POST",
         headers: requestHeaders,
         body: requestBody,
+        signal: budget.signal,
       });
     } catch (err) {
       fetchError = err;
@@ -161,7 +156,7 @@ async function postWithRetry(
     // Network / fetch rejection → retry or throw.
     if (fetchError !== null) {
       if (attempt < maxRetries) {
-        await sleep(sleepFn, backoffMs(attempt));
+        await budget.sleep(backoffMs(attempt), "network");
         attempt++;
         continue;
       }
@@ -196,7 +191,7 @@ async function postWithRetry(
         const delay = headerDelay == null ?
           backoffMs(attempt) :
           Math.min(headerDelay, MAX_RETRY_AFTER_MS);
-        await sleep(sleepFn, delay);
+        await budget.sleep(delay, "rateLimited");
         attempt++;
         continue;
       }
@@ -211,7 +206,7 @@ async function postWithRetry(
     if (status >= 500 && status <= 599) {
       await discardBody(response);
       if (attempt < maxRetries) {
-        await sleep(sleepFn, backoffMs(attempt));
+        await budget.sleep(backoffMs(attempt), "network");
         attempt++;
         continue;
       }
@@ -302,6 +297,22 @@ async function graphql(query, variables = {}, options = {}) {
     options.maxRetries : DEFAULT_MAX_RETRIES;
   const sleepFn = options.sleepFn || ((ms) =>
     new Promise((resolve) => setTimeout(resolve, ms)));
+  const clock = options.wallClock || Date.now;
+  const timeoutMs = options.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+  const deadline = Math.min(clock() + timeoutMs,
+      options.deadlineMs ?? Infinity);
+  const remaining = () => deadline - clock();
+  if (remaining() <= 0) {
+    throw new WaveApiError("network", "Wave request deadline exceeded.");
+  }
+  const controller = new AbortController();
+  const budget = {signal: controller.signal, remaining,
+    sleep: async (ms, kind) => {
+      if (ms >= remaining() || controller.signal.aborted) {
+        throw new WaveApiError(kind, "Wave retry exceeds request deadline.");
+      }
+      await sleepFn(ms);
+    }};
 
   const requestBody = JSON.stringify({query, variables});
   const requestHeaders = {
@@ -309,9 +320,21 @@ async function graphql(query, variables = {}, options = {}) {
     "Content-Type": "application/json",
   };
 
-  const response = await postWithRetry(
-      requestBody, requestHeaders, fetchImpl, sleepFn, maxRetries);
-  return parseGraphqlResponse(response);
+  let timer;
+  const expired = new Promise((resolve, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new WaveApiError("network", "Wave request deadline exceeded."));
+    }, remaining());
+  });
+  try {
+    const request = postWithRetry(requestBody, requestHeaders, fetchImpl,
+        maxRetries, budget).then(parseGraphqlResponse);
+    return await Promise.race([request, expired]);
+  } finally {
+    clearTimeout(timer);
+    controller.abort();
+  }
 }
 
 // ---------------------------------------------------------------------------

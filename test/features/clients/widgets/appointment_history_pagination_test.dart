@@ -25,6 +25,7 @@ class _FakeHistoryRepo implements AppointmentsRepository {
   int? failOnCall;
 
   final List<AppointmentRecord?> cursors = [];
+  final List<List<String>?> statusFilters = [];
   int calls = 0;
 
   @override
@@ -34,17 +35,22 @@ class _FakeHistoryRepo implements AppointmentsRepository {
   Future<List<AppointmentRecord>> fetchHistoryPage({
     required int limit,
     AppointmentRecord? after,
+    List<String>? statuses,
   }) async {
     calls += 1;
     cursors.add(after);
+    statusFilters.add(statuses);
     if (failOnCall == calls) {
       failOnCall = null;
       throw Exception('history page load failed');
     }
+    final rows = statuses == null
+        ? all
+        : all.where((a) => statuses.contains(a.status)).toList();
     final start = after == null
         ? 0
-        : all.indexWhere((a) => a.id == after.id) + 1;
-    return all.skip(start).take(limit).toList();
+        : rows.indexWhere((a) => a.id == after.id) + 1;
+    return rows.skip(start).take(limit).toList();
   }
 
   @override
@@ -55,17 +61,23 @@ class _FakeHistoryRepo implements AppointmentsRepository {
 /// [count] terminal jobs, newest first, walking backwards a day at a time from
 /// 2025-05-25 so the run spans more than one month — which is what puts real
 /// month bars between the rows.
-List<AppointmentRecord> _history(int count) => [
+List<AppointmentRecord> _history(
+  int count, {
+  String Function(int i)? statusAt,
+  DateTime Function(int i)? startAt,
+}) => [
   for (var i = 0; i < count; i++)
     AppointmentRecord(
       id: 'a$i',
       title: 'Job ${i.toString().padLeft(2, '0')}',
-      startTime: DateTime(2025, 5, 25 - i, 9),
-      endTime: DateTime(2025, 5, 25 - i, 10),
+      startTime: startAt?.call(i) ?? DateTime(2025, 5, 25 - i, 9),
+      endTime: (startAt?.call(i) ?? DateTime(2025, 5, 25 - i, 9)).add(
+        const Duration(hours: 1),
+      ),
       clientName: 'Client $i',
       employeeIds: const ['e1'],
       employeeNames: const ['Alice'],
-      status: 'done',
+      status: statusAt?.call(i) ?? 'done',
     ),
 ];
 
@@ -99,6 +111,14 @@ Future<void> _scrollToEnd(WidgetTester tester, {int drags = 12}) async {
     );
     await tester.pumpAndSettle();
   }
+}
+
+/// The year chip sits past the phone's right edge in the horizontal chip row.
+Future<void> _openYearChip(WidgetTester tester) async {
+  await tester.ensureVisible(find.text('All years'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('All years'));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -179,6 +199,142 @@ void main() {
 
     expect(find.text('Job ${_pageSize + 4}'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  group('chip filters stay paginated', () {
+    testWidgets('the Cancelled chip pages on until a match turns up', (
+      tester,
+    ) async {
+      // Chip filters used to filter PAGE ONE: with the only cancelled job two
+      // pages down, the screen said "No appointments match your filters".
+      final repo = _FakeHistoryRepo(
+        _history(
+          _pageSize + 10,
+          statusAt: (i) => i == 30 ? 'cancelled' : 'done',
+        ),
+      );
+      await pumpView(tester, repo);
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Cancelled'));
+      await tester.pumpAndSettle();
+
+      expect(repo.statusFilters.last, ['cancelled']);
+      expect(find.text('Job 30'), findsOneWidget);
+      expect(find.text('Job 00'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the Complete chip asks the server for both done spellings', (
+      tester,
+    ) async {
+      final repo = _FakeHistoryRepo(_history(_pageSize));
+      await pumpView(tester, repo);
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Complete'));
+      await tester.pumpAndSettle();
+
+      expect(repo.statusFilters.last, ['done', 'completed']);
+      expect(repo.cursors.last, isNull);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a status chip with no match costs one read, not 20 pages', (
+      tester,
+    ) async {
+      final repo = _FakeHistoryRepo(_history(_pageSize * 3));
+      await pumpView(tester, repo);
+      final before = repo.calls;
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Cancelled'));
+      await tester.pumpAndSettle();
+
+      expect(repo.calls - before, 1);
+      // The chips stay up, so the filter can be undone in place.
+      expect(find.widgetWithText(FilterChip, 'Cancelled'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('clearing the status chip re-pages the whole archive', (
+      tester,
+    ) async {
+      final repo = _FakeHistoryRepo(
+        _history(_pageSize, statusAt: (i) => i == 3 ? 'cancelled' : 'done'),
+      );
+      await pumpView(tester, repo);
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Cancelled'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilterChip, 'Cancelled'));
+      await tester.pumpAndSettle();
+
+      expect(repo.statusFilters.last, isNull);
+      expect(find.text('Job 00'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a chip list keeps the pager footer and prefetch wired', (
+      tester,
+    ) async {
+      // Every third job is complete; the filtered rows span two pages, so the
+      // scroll trigger has to keep fetching under the chip too.
+      final repo = _FakeHistoryRepo(
+        _history(
+          _pageSize * 2 + 5,
+          statusAt: (i) => i % 3 == 0 ? 'done' : 'cancelled',
+        ),
+      );
+      await pumpView(tester, repo);
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Complete'));
+      await tester.pumpAndSettle();
+      await _scrollToEnd(tester);
+
+      expect(find.text('Job 54'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the Year chip offers the gap years up to the current one', (
+      tester,
+    ) async {
+      // Page one holds 2025 and 2023 — 2024 is pickable too, and so is every
+      // year up to today's, rather than only the years already loaded.
+      final repo = _FakeHistoryRepo(
+        _history(
+          _pageSize,
+          startAt: (i) => i == _pageSize - 1
+              ? DateTime(2023, 2, 1, 9)
+              : DateTime(2025, 5, 25 - i, 9),
+        ),
+      );
+      await pumpView(tester, repo);
+
+      await _openYearChip(tester);
+
+      expect(find.text('2024'), findsOneWidget);
+      expect(find.text('${DateTime.now().year}'), findsOneWidget);
+    });
+
+    testWidgets('a year the pager has already passed stops at the empty '
+        'state without fetching on', (tester) async {
+      final repo = _FakeHistoryRepo(
+        _history(
+          _pageSize + 10,
+          startAt: (i) => i == _pageSize - 1
+              ? DateTime(2023, 2, 1, 9)
+              : DateTime(2025, 5, 25 - i, 9),
+        ),
+      );
+      await pumpView(tester, repo);
+
+      await _openYearChip(tester);
+      final callsBefore = repo.calls;
+      await tester.tap(find.text('2024'));
+      await tester.pumpAndSettle();
+
+      // Newest-first: the last loaded row is 2023, so no later page holds 2024.
+      expect(find.text('No appointments match your filters'), findsOneWidget);
+      expect(repo.calls, callsBefore);
+    });
   });
 
   group('refresh', () {

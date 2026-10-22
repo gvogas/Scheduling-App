@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 
 import 'package:scheduling/core/deep_links/deep_link_target.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
@@ -13,9 +14,13 @@ class DeepLinkDispatcher {
   DeepLinkDispatcher({
     required this.logger,
     required this.openAppointment,
-  });
+    this.session,
+    AppLinks? appLinks,
+  }) : _appLinks = appLinks;
 
   final AppLogger logger;
+  final SessionFence? session;
+  final AppLinks? _appLinks;
 
   /// The existing signed-in-only appointment opener, guards unchanged.
   final Future<void> Function(String appointmentId) openAppointment;
@@ -28,9 +33,10 @@ class DeepLinkDispatcher {
   void start() {
     if (_started || _disposed) return;
     _started = true;
+    final lease = session?.capture();
     unawaited(() async {
       try {
-        final appLinks = AppLinks();
+        final appLinks = _appLinks ?? AppLinks();
         if (_disposed) return;
         _subscription = appLinks.uriLinkStream.listen(
           handleLink,
@@ -43,6 +49,7 @@ class DeepLinkDispatcher {
           _subscription = null;
           return;
         }
+        if (session != null && lease?.isCurrent != true) return;
         if (initial != null) await handleLink(initial);
       } catch (e, st) {
         await _subscription?.cancel();
@@ -63,6 +70,7 @@ class DeepLinkDispatcher {
   /// FATAL crash — same posture as the widget/push tap handlers.
   @visibleForTesting
   Future<void> handleLink(Uri uri) async {
+    if (_disposed) return;
     try {
       switch (classifyDeepLink(uri)) {
         case AppointmentLink(:final id):

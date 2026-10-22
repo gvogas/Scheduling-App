@@ -12,12 +12,12 @@ import 'package:scheduling/features/calendar/widgets/cards/appointment_card.dart
 import 'package:scheduling/features/calendar/widgets/views/holiday_agenda_row.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/feedback/app_empty_state.dart';
+import 'package:scheduling/shared/widgets/feedback/centered_error_text.dart';
 import 'package:scheduling/shared/widgets/feedback/skeleton_loader.dart';
 import 'package:scheduling/shared/widgets/primitives/fade_in_item.dart';
 
-
-/// The day's agenda rows as slivers — the skeleton, the empty state or the card
-/// list.
+/// The day's agenda rows as slivers — the error state, the skeleton, the empty
+/// state or the card list.
 class AgendaSliverList extends StatelessWidget {
   const AgendaSliverList({
     required this.events,
@@ -27,6 +27,8 @@ class AgendaSliverList extends StatelessWidget {
     super.key,
     this.isAdmin = true,
     this.isLoading = false,
+    this.hasError = false,
+    this.onRetry,
     this.onAppointmentTap,
     this.selectedAppointmentId,
     this.bottomClearance = 0,
@@ -40,6 +42,12 @@ class AgendaSliverList extends StatelessWidget {
   final Map<String, Color> colorMap;
   final bool isAdmin;
   final bool isLoading;
+
+  /// The stream failed before delivering anything — an empty day would lie.
+  final bool hasError;
+
+  /// Re-subscribes the stream; shown beside the error text.
+  final VoidCallback? onRetry;
   final void Function(AppointmentRecord appointment)? onAppointmentTap;
   final String? selectedAppointmentId;
 
@@ -64,7 +72,9 @@ class AgendaSliverList extends StatelessWidget {
     return SliverMainAxisGroup(
       slivers: [
         if (holidays.isNotEmpty) holidayRows(holidays),
-        if (isLoading)
+        if (hasError)
+          errorState(context, onRetry: onRetry)
+        else if (isLoading)
           const SliverToBoxAdapter(child: AgendaSkeleton())
         else if (events.isEmpty)
           _emptyState(context)
@@ -86,6 +96,19 @@ class AgendaSliverList extends StatelessWidget {
       children: [
         for (final holiday in holidays) HolidayAgendaRow(holiday: holiday),
       ],
+    ),
+  );
+
+  /// The cold-error state, shared with the week agenda; a data→error transition
+  /// keeps the cards and surfaces as a notice instead.
+  static Widget errorState(
+    BuildContext context, {
+    required VoidCallback? onRetry,
+  }) => SliverFillRemaining(
+    hasScrollBody: false,
+    child: CenteredErrorText(
+      message: context.l10n.error_introLoadAppointments,
+      onRetry: onRetry,
     ),
   );
 
@@ -148,10 +171,18 @@ class AgendaSliverList extends StatelessWidget {
       ),
       sliver: SliverList.builder(
         itemCount: events.length,
+        // Keeps a card's State when its index shifts, so it fades in once, not per emission.
+        findChildIndexCallback: (key) {
+          final id = (key as ValueKey<String?>).value;
+          final index = events.indexWhere(
+            (slice) => slice.appointment.id == id,
+          );
+          return index < 0 ? null : index;
+        },
         itemBuilder: (context, index) {
           final card = _card(context, events[index]);
           return FadeInItem(
-            key: ValueKey(events[index].appointment.id),
+            key: ValueKey<String?>(events[index].appointment.id),
             index: index,
             child: showClosedRule && index == firstClosedIndex
                 ? Column(

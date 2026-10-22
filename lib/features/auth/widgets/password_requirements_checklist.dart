@@ -4,13 +4,20 @@ import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/core/validators/password_requirements.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
-/// Live checklist under the create-account password field: one row per
+/// Live checklist under a new-password field: one row per
 /// [PasswordRequirement], an empty circle that becomes a checkmark as the
 /// typed [password] satisfies it.
 class PasswordRequirementsChecklist extends StatelessWidget {
-  const PasswordRequirementsChecklist({required this.password, super.key});
+  const PasswordRequirementsChecklist({
+    required this.password,
+    this.mustDifferFromStarting = false,
+    super.key,
+  });
 
   final String password;
+
+  /// Adds the "not the temporary password" note; only the server can check it.
+  final bool mustDifferFromStarting;
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +30,14 @@ class PasswordRequirementsChecklist extends StatelessWidget {
             child: _RequirementRow(
               label: _label(context, requirement),
               isMet: requirement.isMetBy(password),
+            ),
+          ),
+        if (mustDifferFromStarting)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.sp4),
+            child: _RequirementRow(
+              label: context.l10n.validation_passwordReqNotStarting,
+              isMet: null,
             ),
           ),
       ],
@@ -44,17 +59,24 @@ class _RequirementRow extends StatelessWidget {
   const _RequirementRow({required this.label, required this.isMet});
 
   final String label;
-  final bool isMet;
+
+  /// Null is an informational row the client cannot verify.
+  final bool? isMet;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final color = isMet
+    final color = isMet == true
         ? theme.statusColors.success
         : theme.colorScheme.onSurfaceVariant;
     final duration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
         : AppAnimationDurations.quick;
+    final icon = switch (isMet) {
+      true => Icons.check_circle,
+      false => Icons.circle_outlined,
+      null => Icons.info_outline,
+    };
 
     return Row(
       children: [
@@ -67,12 +89,7 @@ class _RequirementRow extends StatelessWidget {
               child: child,
             ),
           ),
-          child: Icon(
-            isMet ? Icons.check_circle : Icons.circle_outlined,
-            key: ValueKey(isMet),
-            size: 16,
-            color: color,
-          ),
+          child: Icon(icon, key: ValueKey(isMet), size: 16, color: color),
         ),
         const SizedBox(width: AppSpacing.sp8),
         Expanded(

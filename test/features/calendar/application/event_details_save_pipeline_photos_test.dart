@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -59,11 +60,11 @@ void main() {
       calls.add('deleteBytes');
     });
     when(
-      () => uploader.uploadInBackground(
+      () => uploader.enqueuePhotos(
         appointmentId: any(named: 'appointmentId'),
         newImages: any(named: 'newImages'),
       ),
-    ).thenAnswer((_) {
+    ).thenAnswer((_) async {
       calls.add('upload');
     });
   });
@@ -72,6 +73,39 @@ void main() {
     repo: repo,
     resolveStorage: () => storage,
     logger: AppLogger(),
+  );
+
+  test(
+    'waits for local photo handoff before the save pipeline completes',
+    () async {
+      final entered = Completer<void>();
+      final handoff = Completer<void>();
+      when(
+        () => uploader.enqueuePhotos(
+          appointmentId: any(named: 'appointmentId'),
+          newImages: any(named: 'newImages'),
+        ),
+      ).thenAnswer((_) {
+        entered.complete();
+        return handoff.future;
+      });
+      var completed = false;
+      final saving = pipeline()
+          .applyPhotoChanges(
+            id: 'a1',
+            uploader: uploader,
+            removedImages: const [],
+            newImages: [File('photo.jpg')],
+          )
+          .then((_) => completed = true);
+      await entered.future;
+      expect(completed, isFalse);
+
+      handoff.complete();
+      await saving;
+
+      expect(completed, isTrue);
+    },
   );
 
   test('drops the doc reference BEFORE deleting the bytes', () async {

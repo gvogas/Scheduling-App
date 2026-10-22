@@ -373,7 +373,13 @@ class _TeamRowFrame extends StatelessWidget {
         ),
       ),
     );
-    return onTap == null ? row : InkWell(onTap: onTap, child: row);
+    if (onTap == null) return row;
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        child: InkWell(onTap: onTap, child: row),
+      ),
+    );
   }
 
   Widget _buildNameBlock(BuildContext context, ThemeData theme) {

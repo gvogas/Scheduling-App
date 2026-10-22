@@ -203,20 +203,26 @@ class _SizeRow extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
 
-    return Material(
-      color: isSelected ? scheme.primaryContainer : Colors.transparent,
-      borderRadius: BorderRadius.circular(AppRadius.r8),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AppRadius.r8),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-            vertical: AppSpacing.sp12,
-            horizontal: AppSpacing.sp8,
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        child: Material(
+          color: isSelected ? scheme.primaryContainer : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppRadius.r8),
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(AppRadius.r8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                vertical: AppSpacing.sp12,
+                horizontal: AppSpacing.sp8,
+              ),
+              child: compact
+                  ? _buildStacked(theme, scheme)
+                  : _buildInline(theme, scheme),
+            ),
           ),
-          child: compact
-              ? _buildStacked(theme, scheme)
-              : _buildInline(theme, scheme),
         ),
       ),
     );

@@ -131,9 +131,7 @@ void main() {
         tester,
         scale: scale,
         home: const Scaffold(
-          body: AddClientSheet(
-            analyticsSource: AnalyticsSources.clientsTab,
-          ),
+          body: AddClientSheet(analyticsSource: AnalyticsSources.clientsTab),
         ),
       );
 

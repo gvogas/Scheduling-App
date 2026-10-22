@@ -3,6 +3,8 @@
 // no-hub early returns (the latter is the one that used to discard a tap with
 // nothing recording it), and the unavailable-appointment notice.
 
+import 'dart:async';
+
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -10,6 +12,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/core/app/appointment_link_opener.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/navigation/hub_shell_scope.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
@@ -69,6 +72,8 @@ void main() {
     List<bool>? shownWithActions,
     List<RouteSettings>? pushedRoutes,
     Duration hubPollInterval = const Duration(milliseconds: 200),
+    SessionFence? session,
+    AppointmentLinkHub? Function()? resolveHub,
   }) async {
     late AppointmentLinkOpener opener;
     await tester.pumpWidget(
@@ -76,6 +81,9 @@ void main() {
         overrides: [
           appointmentsRepositoryProvider.overrideWithValue(repository),
           noticeServiceProvider.overrideWithValue(notices),
+          sessionFenceProvider.overrideWithValue(
+            session ?? SessionFence(readUid: () => signedIn ? 'A' : null),
+          ),
         ],
         child: MaterialApp(
           navigatorKey: navigatorKey,
@@ -95,7 +103,7 @@ void main() {
                 navigatorKey: navigatorKey,
                 isMounted: () => true,
                 isSignedIn: () => signedIn,
-                resolveHub: () => hub,
+                resolveHub: resolveHub ?? () => hub,
                 hubPollInterval: hubPollInterval,
                 showDetails:
                     (
@@ -116,6 +124,87 @@ void main() {
     );
     return opener;
   }
+
+  testWidgets('an old appointment read cannot display in a new session', (
+    tester,
+  ) async {
+    String? uid = 'A';
+    final session = SessionFence(readUid: () => uid);
+    final read = Completer<AppointmentRecord?>();
+    when(
+      () => repository.getAppointmentById('a1'),
+    ).thenAnswer((_) => read.future);
+    final shown = <AppointmentRecord?>[];
+    final hub = _FakeHub(isAdmin: true);
+    final opener = await pumpOpener(
+      tester,
+      signedIn: true,
+      hub: hub,
+      session: session,
+      shown: shown,
+    );
+    final pending = opener.openAppointment('a1');
+    await tester.pump();
+    uid = 'B';
+    read.complete(job);
+    await pending;
+    expect(shown, isEmpty);
+    expect(hub.calls, ['showCalendar']);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('exit start suppresses a late unavailable-appointment notice', (
+    tester,
+  ) async {
+    final session = SessionFence(readUid: () => 'A');
+    final read = Completer<AppointmentRecord?>();
+    when(
+      () => repository.getAppointmentById('a1'),
+    ).thenAnswer((_) => read.future);
+    final opener = await pumpOpener(
+      tester,
+      signedIn: true,
+      hub: _FakeHub(),
+      session: session,
+    );
+    final pending = opener.openAppointment('a1');
+    await tester.pump();
+    session.beginExit();
+    read.complete(null);
+    await pending;
+    verifyNever(() => notices.info(any()));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'an overdue tap waiting for a hub cannot navigate after account switch',
+    (tester) async {
+      String? uid = 'A';
+      final session = SessionFence(readUid: () => uid);
+      AppointmentLinkHub? liveHub;
+      final routes = <RouteSettings>[];
+      final opener = await pumpOpener(
+        tester,
+        signedIn: true,
+        session: session,
+        resolveHub: () => liveHub,
+        pushedRoutes: routes,
+      );
+      final pending = opener.openOverdueReview();
+      await tester.pump();
+      uid = 'B';
+      final newHub = _FakeHub(isAdmin: true);
+      liveHub = newHub;
+      await tester.pump(const Duration(milliseconds: 200));
+      await pending;
+      expect(newHub.calls, isEmpty);
+      expect(
+        routes.where((route) => route.name == AppRoutes.overdueReview),
+        isEmpty,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('a push tap opens the appointment it names', (tester) async {
     when(

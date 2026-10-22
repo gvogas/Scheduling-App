@@ -5,6 +5,7 @@ import 'package:scheduling/core/errors/error_cause.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/core/utils/date_utils_helper.dart';
+import 'package:scheduling/features/auth/application/is_active_admin_provider.dart';
 import 'package:scheduling/features/calendar/domain/appointment_crew.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/calendar/utils/sheet_helpers.dart';
@@ -53,6 +54,8 @@ class ClientJobHistorySection extends ConsumerWidget {
               : _JobList(
                   jobs: jobs,
                   colorMap: ref.watch(employeeColorMapProvider),
+                  // Live gate, so an admin reaches a done job's Edit from here.
+                  showActions: ref.watch(isActiveAdminProvider),
                 ),
           loading: () => const Column(
             children: [
@@ -79,12 +82,17 @@ class ClientJobHistorySection extends ConsumerWidget {
 }
 
 class _JobList extends StatelessWidget {
-  const _JobList({required this.jobs, required this.colorMap});
+  const _JobList({
+    required this.jobs,
+    required this.colorMap,
+    required this.showActions,
+  });
 
   /// Already bounded by `kClientJobHistoryVisits`: this eager `Column` builds
   /// every row it is given.
   final List<AppointmentRecord> jobs;
   final Map<String, Color> colorMap;
+  final bool showActions;
 
   @override
   Widget build(BuildContext context) {
@@ -113,7 +121,7 @@ class _JobList extends StatelessWidget {
               context,
               job,
               analyticsSource: AnalyticsSources.clientDetail,
-              showActions: false,
+              showActions: showActions,
             ),
           ),
           const SizedBox(height: AppSpacing.sp8),

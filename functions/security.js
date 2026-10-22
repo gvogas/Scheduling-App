@@ -44,8 +44,9 @@ function hasControlChar(s) {
  * our mass-assignment defence.
  * @param {*} data raw callable request data.
  * @param {!Set<string>} allowedKeys the only keys this endpoint accepts.
+ * @param {number=} maxBytes Explicit server-owned batch endpoint byte budget.
  */
-function assertPayloadShape(data, allowedKeys) {
+function assertPayloadShape(data, allowedKeys, maxBytes = MAX_PAYLOAD_BYTES) {
   if (data === undefined || data === null) return;
   if (typeof data !== "object" || Array.isArray(data)) {
     throw new HttpsError("invalid-argument", "malformed-payload");
@@ -59,7 +60,7 @@ function assertPayloadShape(data, allowedKeys) {
   // BYTES, not `.length`: that counts UTF-16 code units, so 4096 emoji or CJK
   // characters serialize to ~12-16 KB and passed a cap whose constant and error
   // code both say bytes.
-  if (Buffer.byteLength(serialized, "utf8") > MAX_PAYLOAD_BYTES) {
+  if (Buffer.byteLength(serialized, "utf8") > maxBytes) {
     throw new HttpsError("invalid-argument", "payload-too-large");
   }
   for (const key of Object.keys(data)) {
@@ -163,6 +164,7 @@ function readSessionToken(data) {
  * @param {number} windowMs window length in milliseconds.
  * @param {string} [keyKind] label for `key` ("uid" | "email"), purely for log
  * discrimination; email keys are PII, so only a hash is logged.
+ * @param {number} [cost] Proportional units consumed by a bounded batch.
  * @return {!Promise<{refund: function(): !Promise<void>}>} A handle whose
  * `refund()` undoes the recorded attempt on a best-effort basis, so a
  * server-side failure (not the caller's fault) doesn't burn one of their
@@ -170,12 +172,16 @@ function readSessionToken(data) {
  * unaffected.
  */
 async function enforceDurableRateLimit(route, key, max, windowMs,
-    keyKind = "uid") {
+    keyKind = "uid", cost = 1) {
+  if (!Number.isInteger(cost) || cost < 1 || cost > max) {
+    throw new Error("invalid-rate-limit-cost");
+  }
   const db = getFirestore();
   const ref = db.collection("rateLimits").doc(`${route}__${key}`);
   const now = Date.now();
   let overLimit = false;
   await db.runTransaction(async (tx) => {
+    overLimit = false;
     const snap = await tx.get(ref);
     const data = snap.exists ? snap.data() : null;
     const prior = data && Array.isArray(data.attempts) ? data.attempts : [];
@@ -184,13 +190,13 @@ async function enforceDurableRateLimit(route, key, max, windowMs,
     const recent = prior.filter(
         (t) => typeof t === "number" && now - t < windowMs,
     );
-    if (recent.length >= max) {
+    if (recent.length + cost > max) {
       // Rejected attempts are not recorded — otherwise a hammering caller would
       // hold the window full forever.
       overLimit = true;
       return;
     }
-    recent.push(now);
+    for (let i = 0; i < cost; i++) recent.push(now);
     tx.set(ref, {
       route,
       attempts: recent,
@@ -216,9 +222,13 @@ async function enforceDurableRateLimit(route, key, max, windowMs,
         const data = snap.exists ? snap.data() : null;
         const prior = data && Array.isArray(data.attempts) ?
           data.attempts : [];
-        const idx = prior.indexOf(now);
-        if (idx === -1) return;
-        const next = prior.slice(0, idx).concat(prior.slice(idx + 1));
+        const next = [...prior];
+        for (let i = 0; i < cost; i++) {
+          const idx = next.indexOf(now);
+          if (idx === -1) break;
+          next.splice(idx, 1);
+        }
+        if (next.length === prior.length) return;
         tx.set(ref, {route, attempts: next}, {merge: true});
       });
     } catch (err) {
@@ -236,15 +246,16 @@ async function enforceDurableRateLimit(route, key, max, windowMs,
  * and a payload of exactly [allowedKeys].
  * @param {!Object} req The callable request.
  * @param {!Set<string>} allowedKeys The only keys this endpoint accepts.
+ * @param {number=} maxBytes Explicit server-owned batch endpoint byte budget.
  * @return {!Promise<string>} The caller's uid, which every site needs next for
  * its rate limiter.
  */
-async function assertAdminCall(req, allowedKeys) {
+async function assertAdminCall(req, allowedKeys, maxBytes = MAX_PAYLOAD_BYTES) {
   if (!req.auth || !req.auth.uid) {
     throw new HttpsError("unauthenticated", "auth-required");
   }
   await assertAdmin(req.auth.uid);
-  assertPayloadShape(req.data, allowedKeys);
+  assertPayloadShape(req.data, allowedKeys, maxBytes);
   return req.auth.uid;
 }
 

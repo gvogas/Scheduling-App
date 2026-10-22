@@ -55,6 +55,18 @@ enum SiriStrings {
             : "Open ES Pro to sync your schedule."
     }
 
+    static var partialSchedule: String {
+        french
+            ? "Horaire partiel. Ouvrez ES Pro pour voir tous les rendez-vous."
+            : "This schedule is partial. Open ES Pro to see all appointments."
+    }
+
+    static func partialCount(_ n: Int) -> String {
+        french
+            ? "Au moins \(n) rendez-vous aujourd'hui. \(partialSchedule)"
+            : "At least \(n) appointments today. \(partialSchedule)"
+    }
+
     // MARK: - Count
 
     static func count(_ n: Int, admin: Bool) -> String {

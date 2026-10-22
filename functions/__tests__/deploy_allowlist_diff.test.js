@@ -30,6 +30,14 @@ function deleteAccount(req) {
 `;
 
 describe("extractAllowlists", () => {
+  test("reads a bounded batch guard and rejects a dynamic budget", () => {
+    const guard = (budget) => "const save = onCall({}, async (req) => {" +
+      `assertAdminCall(req, new Set(["edits"]), ${budget});});`;
+    expect([...extractAllowlists(guard("4 * 1024 * 1024")).get("save")])
+        .toEqual(["edits"]);
+    expect(() => extractAllowlists(guard("MAX_BYTES")))
+        .toThrow(/cannot read/);
+  });
   test("keys each inline set by its owning function or onCall const", () => {
     const sets = extractAllowlists(BASE);
     expect([...sets.get("createHandler")]).toEqual(["email", "isAdmin"]);

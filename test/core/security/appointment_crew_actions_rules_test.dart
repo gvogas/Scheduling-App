@@ -131,7 +131,8 @@ void main() {
         appointments,
         contains(
           '!request.resource.data.diff(resource.data) .affectedKeys()'
-          " .hasAny(['pictureCount', 'startedAt', 'completedAt'])",
+          " .hasAny(['pictureCount', 'startedAt', 'completedAt', 'editProtocol', "
+          "'editRevision', 'clientSourceUpdatedAt'])",
         ),
       );
     });

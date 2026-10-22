@@ -1,5 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
+import 'package:scheduling/core/logging/app_logger.dart';
+import 'package:scheduling/core/utils/date_utils_helper.dart';
+import 'package:scheduling/core/utils/debouncer.dart';
+import 'package:scheduling/core/utils/presentation_time_provider.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/clients/application/clients_providers.dart';
@@ -14,43 +18,87 @@ import 'package:scheduling/features/employees/domain/policies/availability_confl
 /// Injectable clock for tests. The range below is midnight-aligned, which
 /// keeps it stable and avoids extra listener churn.
 final dashboardClockProvider = Provider<DateTime Function()>(
-  (ref) => DateTime.now,
+  (ref) => ref.watch(presentationClockProvider),
+);
+
+final dashboardNowProvider = Provider.autoDispose<DateTime>((ref) {
+  ref.watch(presentationTimeProvider);
+  return ref.watch(dashboardClockProvider)();
+});
+
+final _dashboardDayProvider = Provider.autoDispose<DateTime>(
+  (ref) => ref.watch(dashboardNowProvider).dateOnly,
 );
 
 /// The whole 8-week window. Only the new-clients read uses it now — the
 /// appointment side is split into a live half and a one-shot half below.
 final dashboardRangeProvider = Provider.autoDispose<AppointmentDateRange>(
-  (ref) => DashboardAggregator.rangeAround(ref.watch(dashboardClockProvider)()),
+  (ref) => DashboardAggregator.rangeAround(ref.watch(_dashboardDayProvider)),
 );
 
 /// The current week onwards — the only part of the window that can change
 /// while the dashboard is open, and therefore the only part worth a listener.
 final dashboardLiveRangeProvider = Provider.autoDispose<AppointmentDateRange>(
   (ref) =>
-      DashboardAggregator.liveRangeAround(ref.watch(dashboardClockProvider)()),
+      DashboardAggregator.liveRangeAround(ref.watch(_dashboardDayProvider)),
 );
 
 /// The seven settled weeks behind it, read ONCE.
 final dashboardHistoryRangeProvider =
     Provider.autoDispose<AppointmentDateRange>(
       (ref) => DashboardAggregator.historyRangeAround(
-        ref.watch(dashboardClockProvider)(),
+        ref.watch(_dashboardDayProvider),
       ),
     );
 
-/// One-shot read of the settled weeks, kept warm like the live half.
+/// Coalesces a write burst (an overdue review commits per 450-doc chunk).
+const Duration kDashboardHistoryRefreshDebounce = Duration(seconds: 2);
+
+/// How long the two one-shot reads outlive the dashboard: they self-invalidate
+/// on write and roll over at midnight, so re-reading ~2k docs after 3 min
+/// bought nothing.
+const Duration kDashboardReadKeepAlive = Duration(hours: 1);
+
+/// One-shot read of the settled weeks, kept warm for the session.
 final dashboardHistoryProvider =
-    FutureProvider.autoDispose<List<AppointmentRecord>>((ref) {
-      keepWarmWithGrace(ref);
+    FutureProvider.autoDispose<List<AppointmentRecord>>((ref) async {
+      keepWarmWithGrace(ref, grace: kDashboardReadKeepAlive);
       final range = ref.watch(dashboardHistoryRangeProvider);
-      return ref.watch(appointmentsRepositoryProvider).fetchInRange(range);
+      final repo = ref.watch(appointmentsRepositoryProvider);
+      final logger = ref.read(loggerProvider);
+      final refresh = Debouncer.tagged(
+        kDashboardHistoryRefreshDebounce,
+        logger: logger,
+        tag: 'DASH-LOAD history refresh failed',
+      );
+      ref.onDispose(refresh.dispose);
+      Set<String>? heldIds;
+      // The live listener already covers writes outside the history bounds.
+      final sub = repo.onRecordWrite.listen(
+        (written) {
+          if (DashboardAggregator.writeTouchesHistory(
+            written,
+            range,
+            heldIds,
+          )) {
+            refresh.run(ref.invalidateSelf);
+          }
+        },
+        onError: (Object e, StackTrace st) =>
+            logger.warn('DASH-LOAD history write listener failed', e, st),
+      );
+      ref.onDispose(sub.cancel);
+      final records = await repo.fetchInRange(range);
+      heldIds = {for (final record in records) ?record.id};
+      return records;
     });
 
 /// Clients created within the window, newest first, archived excluded.
 final newClientsProvider = FutureProvider.autoDispose<List<ClientRecord>>((
   ref,
 ) async {
-  keepWarmWithGrace(ref);
+  keepWarmWithGrace(ref, grace: kDashboardReadKeepAlive);
+  ref.watch(clientsRefreshProvider);
   final range = ref.watch(dashboardRangeProvider);
   final clients = await ref
       .watch(clientsRepositoryProvider)
@@ -127,7 +175,7 @@ final dashboardPeriodSummaryProvider =
           clientCreatedDates: clientDates.requireValue,
           window: ref
               .watch(dashboardPeriodProvider)
-              .windowFor(ref.read(dashboardClockProvider)()),
+              .windowFor(ref.watch(dashboardNowProvider)),
         ),
       );
     });
@@ -150,11 +198,29 @@ final dashboardStatsProvider = Provider.autoDispose<AsyncValue<DashboardStats>>(
         appointments: records.requireValue,
         employees: employees.requireValue,
         clientCreatedDates: clientDates.requireValue,
-        now: ref.read(dashboardClockProvider)(),
+        now: ref.watch(dashboardNowProvider),
       ),
     );
   },
 );
+
+/// Pull-to-refresh: re-reads the two one-shot halves (the live half is a
+/// listener and is already current).
+Future<void> refreshDashboardReads(WidgetRef ref) async {
+  final logger = ref.read(loggerProvider);
+  ref
+    ..invalidate(dashboardHistoryProvider)
+    ..invalidate(newClientsProvider);
+  try {
+    await Future.wait([
+      ref.read(dashboardHistoryProvider.future),
+      ref.read(newClientsProvider.future),
+    ]);
+  } catch (e, st) {
+    // The screen's error branch and listener surface it; this only ends the indicator.
+    logger.warn('DASH-LOAD refresh failed', e, st);
+  }
+}
 
 /// Re-fetches the errored sources; invalidating a combiner re-reads their cached error.
 void retryDashboardSources(WidgetRef ref) {

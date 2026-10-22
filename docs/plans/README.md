@@ -1,8 +1,15 @@
 # Active plans — index and outstanding work
 
 Swept 2026-08-11, re-swept 2026-08-15, 2026-09-06, 2026-09-09 and 2026-09-12,
-re-swept 2026-09-13, 2026-09-19 and **2026-10-01** against what the code, `git log` and the deploy log
-actually say. **The 2026-10-01 pass** found the index ten days stale: it still
+re-swept 2026-09-13, 2026-09-19, 2026-10-01, 2026-10-18 and **2026-10-20** against what the code, `git log` and the deploy log
+actually say. **The 2026-10-20 pass** moved the superseded `CODEBASE_AUDIT_2026-10-14.md` to
+`docs/archive/`, found the index one plan behind (the
+2026-10-18 audit remediation plan had no row) and every "rides 1.64.2+96" stale:
+that build was cut and never shipped, and 1.65.0+97 now carries it plus the
+remediation work, whose backend is NOT deployed (§1). **The 2026-10-18 pass** moved ten finished plans and four
+superseded audits to `docs/archive/` (listed below the index), carried their
+unverified owner steps into §6, and found one backend change undeployed (§1).
+**The 2026-10-01 pass** found the index ten days stale: it still
 called the admin password reset undeployed (live since 2026-09-29, `306ed848` +
 `cc38be5d`) and §1 still described 1.61.0+90 as the newest build, while
 1.62.0, 1.62.1 and 1.63.0 have all been cut since and none has shipped. It
@@ -46,20 +53,21 @@ at the top of each file, not its boxes.
 
 | Doc | State |
 |---|---|
-| `2026-09-28-admin-password-reset.md` | **BUILT 2026-09-29, backend DEPLOYED 2026-09-29, app SHIPPED in 1.63.0+93** (owner, 2026-10-09: every phone is on 1.63). Admin resets an ACTIVE employee's password (emails aren't real inboxes, so Forgot password can't work): server-owned `passwordResetRequired` flag, temp password, sign-out everywhere, forced Change password screen. Both callables (30 → 32) and the rules denylist field went live at `306ed848`, the review fixes at `cc38be5d`; the app half rides 1.63.0+93. **S4** of the 2026-09-28 audit (a demoted account's reset leaves it disabled) was approved, built and DEPLOYED 2026-10-07 (`8739e48c`). Plan: `2026-09-28-admin-password-reset-plan.md`. |
-| `2026-10-06-remote-config-kill-switches-design.md` | **BUILT 2026-10-06; functions DEPLOYED 2026-10-07 (`29fa4072`); app half NOT SHIPPED** (rides 1.64.2+96). (Design approved 2026-10-06.) Remote Config kill switches (address autocomplete, presence/live map, Live Activities, Wave sync) enforced in the app AND the functions, fail-open, plus a `min_supported_build` forced-update screen. Plan: `2026-10-06-remote-config-kill-switches-plan.md`. |
-| `2026-10-06-remote-config-kill-switches-plan.md` | **BUILT 2026-10-06; functions DEPLOYED 2026-10-07 (`29fa4072`); app half NOT SHIPPED** (rides 1.64.2+96). 17 TDD tasks: functions (policy, loader, Places / Live Activity / Wave gates), then the app (service, providers, five gates, `UpdateGate`), then docs. Apple ID recorded (6788556855). |
-| `2026-10-06-rules-docs-cut-down.md` | **COMPLETE 2026-10-07.** All 15 rules files cut to invariants plus one-clause reasons; history in ADR-0001..0183; `check_rules.dart` in CI; corpus ~608 KB → ~263 KB, always-loaded ~90 KB → ~43 KB. The `appointments.md` move was done 2026-10-08 (`2f8b3979`). |
-| `2026-10-07-followups.md` | **ALL DONE 2026-10-08** (`3000b7e4`..`8d296a04`). The `/users` create denylist goes live with the next `Deploy backend` run. |
-| `2026-10-06-shared-dart-js-fixtures.md` | **BUILT 2026-10-07 on `dev`** (`74fa736c..19713ea1`, tests only, no deploy). Nine hand-mirrored Dart↔JS pairs now read one shared JSON fixture each under `test/fixtures/shared/`; a registry test fails if a fixture loses its reader on either side. No divergence found. |
-| `2026-10-06-repeatable-deploys.md` | **BUILT; first workflow deploy 2026-10-07 (`61811650`).** `deploy.yml` (manual dispatch, `production` approval, Workload Identity, never `--force`), deploy checkers, deploy-log PR, and `functions/scripts/run.js` with a fresh-count confirm. Task 1 is owner-only GCP/GitHub setup. |
-| `2026-09-28-admin-password-reset-plan.md` | **EXECUTED 2026-09-29.** Task-by-task TDD plan for the design above; its "Deviations from the spec" section records where the real code forced a different shape. Archive both once 1.63.0+93 ships and S4 is decided. |
-| `2026-09-12-month-end-overdue-review.md` | **BUILT (`ed59a6a5`), functions DEPLOYED 2026-09-19 (`608b817a`), SHIPPED in 1.63.0+93** (owner, 2026-10-09). Owner steps after it ships: turn the month-end switch on for Paul, register the `count` GA dimension. The plan's banner lists the seven deviations from the design. |
-| `2026-09-12-live-map-improvements.md` | **BUILT (`ed59a6a5`, `e544fb01`), DEVICE PASS DONE 2026-09-19 (owner), SHIPPED in 1.63.0+93** (owner, 2026-10-09). App-only, no backend deploy. Owner steps once the build ships: republish `privacy-policy.html` and `accessibility.html` to `es-pro-legal`, flip the Apple tester's Test account switch. |
-| `2026-09-07-analytics-followups.md` | **Code COMPLETE, device-verified 2026-09-10; every open item is off-repo.** GA is enabled and linked, and all 27 custom dimensions are registered (owner, 2026-09-10) — this row called both outstanding until 2026-09-13 while the plan had them ticked. Left, all unticked and so *unknown* now that 1.61.0+90 has shipped with analytics in it: the App Store Connect privacy answers (Product Interaction, and Analytics added to Device ID) plus owner sign-off on `PrivacyInfo.xcprivacy`; whether the release build used `FIREBASE_ANALYTICS_WITHOUT_ADID=true`; four events never observed in DebugView (`search_used`, `note_added`, `photo_added`, `contact_action`); the optional `FIREBASE_ANALYTICS_COLLECTION_ENABLED=NO` Info.plist key; and the post-release `build_env` and ~48 h Events-page checks. |
-| `2026-09-12-open-followups.md` | **OPEN — two items still blocked** (items 4 and 5 CLOSED; item 2, the street/city address split, backend DEPLOYED 2026-10-11 at `0ab3f05c`, app half rides 1.64.2+96): the split container vocabulary on the appointment form (an owner decision — the declined Option B), and device verification of both rebuilt dropdowns (macOS Accessibility permission). The plan it came from is archived: `docs/archive/2026-09-12-add-appointment-sheet-structure.md`. |
-| `2026-09-10-wave-validated-contract-phases-2-4.md` | **Phases 2-4 DEPLOYED** (Phase 4 at `608b817a`, 2026-09-19); the design doc is archived. Left: republish privacy + terms to `es-pro-legal`; the cadence-free app SHIPPED in 1.63.0+93; `waveSetImportSchedule` DELETED 2026-10-11 (ADR-0184; 32 → 31, verified by name). |
+| `2026-10-06-remote-config-kill-switches-design.md` | **BUILT 2026-10-06; functions DEPLOYED 2026-10-07 (`29fa4072`); app half NOT SHIPPED** (rides 1.65.0+97). (Design approved 2026-10-06.) Remote Config kill switches (address autocomplete, presence/live map, Live Activities, Wave sync) enforced in the app AND the functions, fail-open, plus a `min_supported_build` forced-update screen. Plan: `2026-10-06-remote-config-kill-switches-plan.md`. |
+| `2026-10-06-remote-config-kill-switches-plan.md` | **BUILT 2026-10-06; functions DEPLOYED 2026-10-07 (`29fa4072`, hardened `364d4812`); app half NOT SHIPPED** (rides 1.65.0+97). Archive both kill-switch docs once it ships and the owner's device check (Task 17 Step 5) is done. 17 TDD tasks: functions (policy, loader, Places / Live Activity / Wave gates), then the app (service, providers, five gates, `UpdateGate`), then docs. Apple ID recorded (6788556855). |
+| `2026-09-12-open-followups.md` | **OPEN — two items still blocked** (items 4 and 5 CLOSED; item 2, the street/city address split, backend DEPLOYED 2026-10-11 at `0ab3f05c`, app half rides 1.65.0+97): the split container vocabulary on the appointment form (an owner decision — the declined Option B), and device verification of both rebuilt dropdowns (macOS Accessibility permission). The plan it came from is archived: `docs/archive/2026-09-12-add-appointment-sheet-structure.md`. |
+| `2026-10-18-audit-remediation-plan.md` | **BUILT IN CODE, NOT DEPLOYED, NOT SHIPPED** (`33cde361`, `a851d238`, release 1.65.0+97). Staged packages T00–T14 from `docs/audits/2026-10-18-performance-reliability-review.md`: session fencing, durable photo uploads, `saveAppointmentEdits`, complete conflict checks, mirror ownership. Left: the backend deploy before the app build, native/device checks, creation ambiguity, the edit-migration policy, T13/T14. |
+| `2026-10-21-flutterfire-5-upgrade-plan.md` | **BUILT, green on Windows (analyze clean, 4441 tests), uncommitted.** FlutterFire 5 / Firebase Apple SDK 13 + every package at its newest (geolocator held at 14.0.1 by a Linux-only `dbus` conflict); `Package.resolved` hand-pinned to `firebase-ios-sdk` 13.0.0. Left: iOS CI build, Mac build (Xcode 26.2+), device checks, then it rides 1.66.0+98. |
+| `2026-10-21-fcm-fid-migration-plan.md` | **Step 1 BUILT 2026-10-21, NOT DEPLOYED** (rides the next `Deploy backend`); steps 2 (app registers by FID, deletes its legacy token row) and 3 (retire the token path once the fleet allows) not started. Decision ADR-0190. |
 | `APP_STORE_SUBMISSION.md` | **The live release runbook**, now for updates rather than a launch — the app shipped. Its unticked boxes have never been reconciled against four shipped submissions, so read one as *unknown*, not *outstanding*. |
+
+**Moved to `docs/archive/` on 2026-10-18.** Ten plans, all shipped and
+deployed: the admin password reset pair (shipped in 1.63.0+93), the rules
+cut-down and its 2026-10-07 follow-ups, the shared Dart/JS fixtures, repeatable
+deploys, the analytics follow-ups, Wave Phases 2-4, the live map rework and the
+month-end overdue review. Plus four superseded audits:
+`CODEBASE_AUDIT_2026-09-23.md`, `-09-28.md`, `-10-07.md` and `-10-09.md`. Their
+unverified owner steps are in §5 and §6.
 
 **Moved to `docs/archive/` on 2026-10-09.** Cancelled by the owner (not
 needed): `2026-09-12-dashboard-redesign.md` and the three Siri docs
@@ -103,14 +111,29 @@ build record, the device runbook included), complete and owing nothing.
 Everything below is open. This file is a work list; it is not where the history
 goes.
 
-### 1. The app build — 1.63.0+93 SHIPPED, 1.64.2+96 next
+### 1. The app build — 1.63.0+93 SHIPPED, 1.65.0+97 next
+
+**Update (2026-10-20): the next build is 1.65.0+97** (`pubspec.yaml`, release
+pass `8516e314`). 1.64.2+96 was cut and never shipped, so this
+build carries everything 1.64.2+96 did plus the 2026-10-18 remediation work
+(`33cde361`) and the 2026-10-19 audit (`a851d238`). **Its backend is NOT live,
+and the deploy must come FIRST:** the app sends every admin appointment edit
+through the new `saveAppointmentEdits` callable (32 exports, 31 deployed), and
+the batched `findAppointmentConflicts`, `propagateClientEdits`, the overdue
+`(status ASC, endTime ASC)` index and `afd68870`'s `maintenance_policy.js`
+change are also undeployed. The last deploy is `0ab3f05c` (2026-10-11).
+
 
 **Update (2026-10-14): the next build is 1.64.2+96** (`34938249`; re-ships
 1.64.1+95, which never shipped; 1.64.0+94 didn't either). It carries the kill
 switches' app half, the 2026-10-07 and 10-09 audit fixes, the street/city
-address split and the pre-1.63 compat removals. **Its backend is fully live**
+address split and the pre-1.63 compat removals. **Its backend is live**
 (`0ab3f05c`, functions + rules 2026-10-11, 31/31 by name), so no deploy is owed
-ahead of it. **Update (2026-10-09): every phone runs 1.63.0+93 (owner).** The
+ahead of it. **One functions change is undeployed (2026-10-18):** `afd68870`
+(the 2026-10-14 audit's B1) changed `functions/maintenance_policy.js` so
+`purgeExpiredHistory` counts image failures by doc id. It only fixes a log
+count, has no ordering constraint against the app, and goes out with the next
+`Deploy backend` run. **Update (2026-10-09): every phone runs 1.63.0+93 (owner).** The
 text below predates both.
 
 **The newest SHIPPED build is still 1.61.0+90** (`dd8c4863`, 2026-09-13).
@@ -177,7 +200,7 @@ value here is prospective, not a backlog to clean. Phases 3–4 (backfill, then 
 
 **Phase 2 was written and built 2026-09-10** — `e0460805` on branch
 `wave-contract-enforce`, pushed, **nothing deployed and no app build shipped**.
-`docs/plans/2026-09-10-wave-validated-contract-phases-2-4.md` is the task list
+`docs/archive/2026-09-10-wave-validated-contract-phases-2-4.md` is the task list
 and its deploy-ordering section is binding: this phase **inverts** the repo's
 backend-first rule. Phase 4's `waveSetImportSchedule` removal is a callable
 deletion and needs its own deploy under `docs/DEPLOYMENT.md` §4a, not a
@@ -211,6 +234,16 @@ Interaction, and Analytics added to Device ID), whether the release build used
 and the post-release `build_env` and Events-page checks.
 
 ### 6. Off-repo and console items
+
+- **Carried from the plans archived 2026-10-18** (all unverified; read as
+  *unknown*): republish `privacy-policy.html`, `terms.html` and
+  `accessibility.html` to `es-pro-legal` (the files last changed 2026-09-19,
+  `bec23b85`); flip the Apple tester's Test account switch; switch the
+  month-end overdue review ON for Paul; register `count` as a GA custom
+  dimension.
+- **Carried from the archived 2026-10-09 audit:** B1, the optional prod
+  `node functions/scripts/run.js backfill-search-tokens` (dry run, then
+  `--live`), once 1.65.0+97 (which carries the 1.64 changes; 1.64.x never shipped) is on every phone. The archived 2026-10-14 audit carried it too.
 
 - **A hard budget cap for Google Maps Platform is still unset** —
   `docs/audits/AUDIT_FOLLOWUPS.md`, the one item there still open. Needs GCP

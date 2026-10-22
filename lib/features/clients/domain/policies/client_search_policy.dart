@@ -224,8 +224,10 @@ class ClientSearchPolicy {
     required String queryDigits,
   }) {
     final hasDigits = queryDigits.isNotEmpty;
+    final exactDigits = _withoutNanpPrefix(queryDigits);
     if (displayName == queryText ||
-        (hasDigits && phoneDigits.contains(queryDigits))) {
+        (hasDigits &&
+            phoneDigits.any((n) => _withoutNanpPrefix(n) == exactDigits))) {
       return 0;
     }
     if (displayName.startsWith(queryText) || personName.startsWith(queryText)) {
@@ -247,6 +249,12 @@ class ClientSearchPolicy {
     }
     return 5;
   }
+
+  // One spelling of a NANP number: an 11-digit "1…" equals its 10 digits.
+  static String _withoutNanpPrefix(String digits) =>
+      digits.length == 11 && digits.startsWith('1')
+      ? digits.substring(1)
+      : digits;
 
   /// The cheap half of [matchesClient] — just two substring checks against an
   /// already-normalized entry and query.

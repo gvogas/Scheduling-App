@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/app/device_deregistration.dart';
+import 'package:scheduling/core/app/pending_photo_exit.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
@@ -48,26 +50,21 @@ mixin DeleteAccountFlow<T extends ConsumerStatefulWidget> on ConsumerState<T> {
     final notices = ref.read(noticeServiceProvider);
     final analytics = ref.read(analyticsServiceProvider);
     setState(() => _isSigningOut = true);
-    // Holds the deps once the teardown has actually run, so the rollback in
-    // the catch below reuses THEM instead of reading `ref` again — see
-    // [restoreThisDevice]. Non-null is exactly "there is something to roll
-    // back", which is why it replaces a separate bool.
-    DeviceDeregistrationDeps? deregistered;
     try {
-      // Clean up this device's push token, presence, and Live Activity state
-      // — best effort, so a failure here doesn't block sign-out. The ORDER is
-      // owned by `deregisterThisDevice`; all three exits share it.
-      final devices = DeviceDeregistrationDeps.from(ref.read);
-      await deregisterThisDevice(devices);
-      deregistered = devices;
-      await authService.signOut();
-      // After the sign-out lands; never `resetAnalyticsData`, clear `user_role` instead (ADR-0165).
-      analytics
-        ..logSignOut()
-        ..setUserRole(null);
+      // The voluntary teardown shared with the app-lock overlay's Log out;
+      // it restores the device itself before rethrowing.
+      final signedOut = await signOutAfterPhotoCheck(
+        context,
+        DeviceDeregistrationDeps.from(ref.read),
+        authService,
+        analytics,
+      );
+      if (!signedOut) {
+        if (mounted) setState(() => _isSigningOut = false);
+        return;
+      }
     } catch (e, st) {
       logger.warn('ACCT-SIGNOUT signOut failed', e, st);
-      if (deregistered != null) await restoreThisDevice(deregistered);
       if (!mounted) return;
       setState(() => _isSigningOut = false);
       notices.error(
@@ -142,14 +139,33 @@ mixin DeleteAccountFlow<T extends ConsumerStatefulWidget> on ConsumerState<T> {
     // See [restoreThisDevice]: holding the deps is what lets both catch arms
     // roll back without touching `ref` after these round-trips.
     DeviceDeregistrationDeps? deregistered;
+    PendingPhotoExit? pendingExit;
+    final lease = ref.read(sessionFenceProvider).capture();
     try {
+      if (lease == null) {
+        if (mounted) setState(() => _isDeletingAccount = false);
+        return;
+      }
       await deletionService.reauthenticateWithPassword(password);
+      if (!lease.isCurrent || !mounted) {
+        if (mounted) setState(() => _isDeletingAccount = false);
+        return;
+      }
       // Drop this device's registrations while still authenticated, before
       // deleteAccount revokes access — same shared order as the other exits.
       final devices = DeviceDeregistrationDeps.from(ref.read);
-      await deregisterThisDevice(devices);
+      final exit = await exitDevicesAfterPhotoCheck(context, devices);
+      if (exit == null) {
+        if (mounted) setState(() => _isDeletingAccount = false);
+        return;
+      }
       deregistered = devices;
+      pendingExit = exit.pendingExit;
       await deletionService.deleteAccount();
+      if (devices.hasReplacementSession) {
+        if (mounted) setState(() => _isDeletingAccount = false);
+        return;
+      }
     } on AuthFailure catch (e, st) {
       // Logged before the mounted guard: this fires AFTER push, presence and
       // the Live Activity have already de-registered, so a half-torn-down
@@ -183,6 +199,8 @@ mixin DeleteAccountFlow<T extends ConsumerStatefulWidget> on ConsumerState<T> {
         ),
       );
       return;
+    } finally {
+      pendingExit?.resume();
     }
     if (!mounted) return;
     final message = context.l10n.settings_accountDeleted;

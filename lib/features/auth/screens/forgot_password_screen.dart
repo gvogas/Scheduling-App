@@ -88,12 +88,7 @@ class _ForgotPasswordState extends ConsumerState<ForgotPasswordScreen> {
       await _authService.sendPasswordResetEmail(email);
     } catch (error, st) {
       final failure = AuthErrorMapper.map(error);
-      _logger.authFailure(
-        'AUTH-RESET reset failed',
-        failure,
-        error,
-        st,
-      );
+      _logger.authFailure('AUTH-RESET reset failed', failure, error, st);
       if (!mounted) return false;
       resetError = failure.toForgotPasswordMessage(context);
     }
@@ -174,9 +169,7 @@ class _ForgotPasswordState extends ConsumerState<ForgotPasswordScreen> {
           onSubmitted: _submitResetEmail,
           onChanged: _clearFeedback,
         ),
-        AuthBanner(
-          message: _feedbackMessage,
-        ),
+        AuthBanner(message: _feedbackMessage),
         const SizedBox(height: AppSpacing.sp16),
         WarningNote(
           message: context.l10n.auth_noEmailOnAccountNote,
@@ -245,9 +238,12 @@ class _ForgotPasswordState extends ConsumerState<ForgotPasswordScreen> {
               ),
             ],
           ),
-          AuthBanner(
-            message: _feedbackMessage,
+          const SizedBox(height: AppSpacing.sp12),
+          WarningNote(
+            message: context.l10n.auth_noEmailOnAccountNote,
+            filled: false,
           ),
+          AuthBanner(message: _feedbackMessage),
           const SizedBox(height: AppSpacing.sp16),
           _SentPanel(
             resent: _resentOnce,
@@ -300,12 +296,7 @@ class _FactPanel extends StatelessWidget {
                     color: theme.palette.textTertiary,
                   ),
                   const SizedBox(width: AppSpacing.sp8),
-                  Expanded(
-                    child: Text(
-                      facts[i].text,
-                      style: textStyle,
-                    ),
-                  ),
+                  Expanded(child: Text(facts[i].text, style: textStyle)),
                 ],
               ),
             ),
@@ -355,11 +346,7 @@ class _SentPanel extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.check_rounded,
-                  size: 16,
-                  color: palette.textMuted,
-                ),
+                Icon(Icons.check_rounded, size: 16, color: palette.textMuted),
                 const SizedBox(width: AppSpacing.sp8),
                 Expanded(
                   child: Text(

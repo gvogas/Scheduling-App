@@ -27,13 +27,15 @@ class AppointmentStatusPicker extends StatelessWidget {
       children: AppointmentStatus.appointmentValues.map((s) {
         final isSelected = selected == s;
         final label = statusLabel(l, s);
+        void select() => onChanged(s.raw);
         return Semantics(
           button: true,
+          onTap: select,
           selected: isSelected,
           label: label,
           excludeSemantics: true,
           child: GestureDetector(
-            onTap: () => onChanged(s.raw),
+            onTap: select,
             child: ConstrainedBox(
               // Keep the tap target without overflowing at large text scales.
               constraints: BoxConstraints(

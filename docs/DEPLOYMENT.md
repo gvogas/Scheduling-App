@@ -99,6 +99,11 @@ the wild still sends it.
 New fields must read through `optionalString(...)` or `x === true`, never
 `requireString(...)`. A new *required* field breaks every older build.
 
+Pending example (not yet deployed): `saveAppointmentEdits` gained the optional
+`checkConflicts` key — an ADDITION to the allowlist, so the deployed build keeps
+working, while the next app build sends it on every admin Save and refuses to
+build before this deploys (ADR-0030).
+
 **(c) Rules: is any cap tighter than what a shipped write path can produce?**
 
 This is the most common way a rules deploy breaks the app, and it fails with an
@@ -121,6 +126,17 @@ Two real examples from this repo:
 Also check the converse: a **client** cap must not exceed the callable's, or the
 field accepts input the server rejects as `invalid-argument`, which surfaces to
 the user as an unexplained "Something went wrong".
+
+**(d) Does a new query add an equality filter on a field older docs lack?**
+
+Firestore excludes a document missing a filtered field, so a new `where(x, '==')`
+needs its composite `READY` AND a backfill run BEFORE the app build (ADR-0030
+order). Pending example: the `isPersonal` queries (ADR-0189) — deploy
+`firestore:indexes` alone, wait until all three `isPersonal` composites read
+`READY`, run `node functions/scripts/run.js backfill-appointment-is-personal`
+(dry run), then `--live`, read its wide-client-job report, and only then ship
+the build. Reversed, every pre-2026-07-31 overdue job vanishes from the review
+until the backfill finishes.
 
 ## 5. Deploy
 

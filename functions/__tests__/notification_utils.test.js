@@ -14,6 +14,7 @@ const {
   tomorrowWindowToronto,
   overduePromptLedgerId,
   isStaleTokenError,
+  messageTargetFor,
   deliverRecipientOnce,
   handleAppointmentWrite,
   OPEN_STATUSES,
@@ -556,6 +557,18 @@ describe("buildDigestMessage", () => {
   });
 });
 
+describe("messageTargetFor", () => {
+  test("a fid row targets the installation id", () => {
+    expect(messageTargetFor("f1", {kind: "fid"})).toEqual({fid: "f1"});
+  });
+
+  test("a row without kind, or with token, stays a legacy token", () => {
+    expect(messageTargetFor("t1", {})).toEqual({token: "t1"});
+    expect(messageTargetFor("t1", {kind: "token"})).toEqual({token: "t1"});
+    expect(messageTargetFor("t1", null)).toEqual({token: "t1"});
+  });
+});
+
 describe("overduePromptLedgerId / isStaleTokenError", () => {
   test("overdue ledger id joins appointment, endTime and recipient", () => {
     expect(overduePromptLedgerId("a", 456, "e1")).toBe("a_456_e1");
@@ -566,6 +579,8 @@ describe("overduePromptLedgerId / isStaleTokenError", () => {
         "messaging/registration-token-not-registered")).toBe(true);
     expect(isStaleTokenError(
         "messaging/invalid-registration-token")).toBe(true);
+    expect(isStaleTokenError(
+        "messaging/installation-id-not-registered")).toBe(true);
     expect(isStaleTokenError("messaging/internal-error")).toBe(false);
     // This code is generic — it could be a payload problem rather than a
     // dead token, so we don't treat it as stale.
@@ -597,6 +612,12 @@ function makeDb(config) {
   const existing = new Set(config.ledgerExisting || []);
   const db = {
     collection(name) {
+      if (name === "notificationSweepCursors") {
+        return {doc: () => ({
+          get: async () => ({exists: false}),
+          set: async () => {},
+        })};
+      }
       if (name === "users") {
         return {
           doc(id) {
@@ -615,7 +636,8 @@ function makeDb(config) {
                     return {
                       docs: (config.tokens[id] || []).map((t) => ({
                         id: t.id,
-                        data: () => ({locale: t.locale}),
+                        data: () => ({locale: t.locale, uid: "uid-test",
+                          sessionEpoch: "epoch-test", ...t}),
                         ref: {
                           delete: async () => {
                             deletedTokens.push(t.id);
@@ -718,7 +740,7 @@ function makeMessaging(resultFor) {
       sent.push(...messages);
       return {
         responses: messages.map((m) =>
-          resultFor ? resultFor(m.token) : {success: true}),
+          resultFor ? resultFor(m.token || m.fid) : {success: true}),
       };
     },
   };
@@ -1033,6 +1055,46 @@ describe("handleAppointmentWrite", () => {
     expect(deletedTokens).toEqual(["dead"]);
   });
 
+  test("a fid row is sent by fid and a legacy row by token", async () => {
+    const {db} = makeDb({
+      users: {e1: {role: "employee", status: "active"}},
+      tokens: {e1: [
+        {id: "legacy", locale: "en"},
+        {id: "fid-1", locale: "fr", kind: "fid"},
+      ]},
+    });
+    const messaging = makeMessaging();
+    const res = await handleAppointmentWrite(
+        "appt1",
+        null,
+        {employeeIds: ["e1"], startTime: future(3 * HOUR)},
+        {db, messaging, now: NOW, logger: silentLogger},
+    );
+    expect(res.sent).toBe(2);
+    expect(messaging.sent.map((m) => [m.token, m.fid])).toEqual([
+      ["legacy", undefined],
+      [undefined, "fid-1"],
+    ]);
+  });
+
+  test("deletes a fid row FCM reports as unregistered", async () => {
+    const {db, deletedTokens} = makeDb({
+      users: {e1: {role: "employee", status: "active"}},
+      tokens: {e1: [{id: "gone", locale: "en", kind: "fid"}]},
+    });
+    const messaging = makeMessaging(() => ({success: false, error: {
+      code: "messaging/installation-id-not-registered",
+    }}));
+    const res = await handleAppointmentWrite(
+        "appt1",
+        null,
+        {employeeIds: ["e1"], startTime: future(3 * HOUR)},
+        {db, messaging, now: NOW, logger: silentLogger},
+    );
+    expect(res.sent).toBe(0);
+    expect(deletedTokens).toEqual(["gone"]);
+  });
+
   test("no events -> no sends", async () => {
     const {db} = makeDb({users: {}, tokens: {}});
     const messaging = makeMessaging();
@@ -1212,6 +1274,7 @@ describe("runOverduePromptSweep", () => {
     expect(messaging.sent[0].data).toEqual({
       appointmentId: "over",
       kind: "doneCheck",
+      validUntil: String(future(-30 * MIN).getTime() + OVERDUE_LOOKBACK_MS),
     });
     expect(messaging.sent[0].notification.body).toContain("Alice");
   });

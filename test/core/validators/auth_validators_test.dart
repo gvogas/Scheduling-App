@@ -5,9 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:scheduling/core/validators/auth_validators.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
-/// S3: password validator requires 8+ characters. This test uses a real
-/// [Localizations] harness so `context.l10n.*` messages match what users
-/// actually see.
+/// Sign-in (`password`) is non-empty only; the 8+ / mixed-case / digit policy
+/// lives on `newPassword`. This test uses a real [Localizations] harness so
+/// `context.l10n.*` messages match what users actually see.
 
 void main() {
   Future<BuildContext> buildContext(WidgetTester tester) async {
@@ -35,31 +35,37 @@ void main() {
 
   testWidgets('AuthValidators.password rejects empty input', (tester) async {
     final context = await buildContext(tester);
-    expect(AuthValidators.password(context, ''), isNotNull);
+    expect(
+      AuthValidators.password(context, ''),
+      AppLocalizations.of(context).validation_pleaseEnterYourPassword,
+    );
     expect(AuthValidators.password(context, '   '), isNotNull);
   });
 
-  testWidgets('AuthValidators.password rejects passwords shorter than 8', (
-    tester,
-  ) async {
-    final context = await buildContext(tester);
-    expect(AuthValidators.password(context, '1234567'), isNotNull);
-    // The 7-char rejection uses the "must be at least 8" message, not the
-    // "please enter" empty-field message.
-    expect(
-      AuthValidators.password(context, '1234567'),
-      AppLocalizations.of(context).validation_passwordMustBeAtLeast8Characters,
-    );
-  });
+  testWidgets(
+    'AuthValidators.password accepts a short password: legacy accounts predate '
+    'the 8-character policy, and a format error at sign-in locks them out (C3)',
+    (tester) async {
+      final context = await buildContext(tester);
+      expect(AuthValidators.password(context, '1234567'), isNull);
+      expect(AuthValidators.password(context, 'a'), isNull);
+      expect(
+        AuthValidators.password(context, 'a-perfectly-fine-password'),
+        isNull,
+      );
+    },
+  );
 
-  testWidgets('AuthValidators.password accepts 8+ char passwords', (
+  testWidgets('AuthValidators.newPassword enforces the checklist', (
     tester,
   ) async {
     final context = await buildContext(tester);
-    expect(AuthValidators.password(context, '12345678'), isNull);
     expect(
-      AuthValidators.password(context, 'a-perfectly-fine-password'),
-      isNull,
+      AuthValidators.newPassword(context, '1234567'),
+      AppLocalizations.of(
+        context,
+      ).validation_passwordDoesNotMeetAllRequirements,
     );
+    expect(AuthValidators.newPassword(context, 'Abcdefg1'), isNull);
   });
 }

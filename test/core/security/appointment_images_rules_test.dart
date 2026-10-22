@@ -129,7 +129,8 @@ void main() {
         update.replaceAll(RegExp(r'\s+'), ' '),
         contains(
           'affectedKeys() '
-          ".hasAny(['pictureCount', 'startedAt', 'completedAt'])",
+          ".hasAny(['pictureCount', 'startedAt', 'completedAt', 'editProtocol', "
+          "'editRevision', 'clientSourceUpdatedAt'])",
         ),
       );
     });

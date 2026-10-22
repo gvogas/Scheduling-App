@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:scheduling/features/calendar/domain/models/photo_upload_expiry.dart';
 
 class PhotoUploadFailure {
   const PhotoUploadFailure({
@@ -17,6 +18,9 @@ class PhotoUploadNotifier {
   PhotoUploadNotifier();
 
   final ValueNotifier<PhotoUploadFailure?> latestFailure = ValueNotifier(null);
+  final ValueNotifier<List<PhotoUploadExpiry>> expired = ValueNotifier(
+    const [],
+  );
 
   /// Photos still sitting in the offline queue, per appointment id.
   final ValueNotifier<Map<String, int>> pending = ValueNotifier(const {});
@@ -62,6 +66,7 @@ class PhotoUploadNotifier {
 
   void dispose() {
     latestFailure.dispose();
+    expired.dispose();
     pending.dispose();
     failures.dispose();
   }

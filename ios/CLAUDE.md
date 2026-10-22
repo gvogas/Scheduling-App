@@ -6,7 +6,7 @@ Loaded when working under `ios/`. Root context: `../CLAUDE.md`. Native build, ru
 
 - Never re-run `flutterfire configure` — `lib/firebase_options.dart` builds the iOS options from `--dart-define` values (`IOS_API_KEY`, `IOS_APP_ID`, `MESSAGING_SENDER_ID`, `PROJECT_ID`, `STORAGE_BUCKET`, `iosBundleId: net.vogas.scheduling`), and a re-run rewrites it into literals.
 - Carry the gitignored `GoogleService-Info.plist` to the Mac out-of-band and put it at the `ios/` ROOT, not `ios/Runner/` — the Xcode fileRef and the extensions' `-gsp` both point there.
-- Keep the project SPM-only: no Podfile, ever, and ignore notes about `pod install` or `${PODS_ROOT}`. Xcode resolves `firebase-ios-sdk` from `Package.resolved`. Vet any new iOS plugin for SPM support before adding it. (ADR-0169)
+- Keep the project SPM-only: no Podfile, ever, and ignore notes about `pod install` or `${PODS_ROOT}`. Xcode resolves `firebase-ios-sdk` from `Package.resolved`. Firebase Apple SDK 13 (FlutterFire 5) needs Xcode 26.2+ to resolve; keep both `Package.resolved` files identical and change them only together with `pubspec.lock`. Vet any new iOS plugin for SPM support before adding it. (ADR-0169)
 - Keep `google_maps_flutter` on the `google_maps_flutter_ios_sdk9` endorsed SPM override (Maps SDK 9.x, iOS 15+) and `saver_gallery` (ships a `Package.swift`) for Save to Photos; never fall back to `google_maps_flutter_ios` or switch to the more popular `gal` — both are CocoaPods-only and would force a Podfile back. (ADR-0169)
 
 ## Build settings (`project.pbxproj`)

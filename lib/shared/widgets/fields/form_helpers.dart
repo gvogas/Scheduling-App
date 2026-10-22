@@ -66,7 +66,11 @@ Widget formRemoveButton(BuildContext context, {required VoidCallback onTap}) {
               ).colorScheme.scrim.withValues(alpha: 0.54),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.close, size: 16, color: Colors.white),
+            child: Icon(
+              Icons.close,
+              size: 16,
+              color: Theme.of(context).colorScheme.onInverseSurface,
+            ),
           ),
         ),
       ),

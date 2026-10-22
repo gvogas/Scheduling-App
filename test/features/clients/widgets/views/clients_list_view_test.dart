@@ -12,6 +12,7 @@ import 'package:scheduling/features/clients/application/clients_providers.dart';
 import 'package:scheduling/features/clients/domain/client_grouping.dart';
 import 'package:scheduling/features/clients/domain/clients_repository.dart';
 import 'package:scheduling/features/clients/domain/models/client_record.dart';
+import 'package:scheduling/features/clients/domain/models/client_search_results.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
@@ -40,15 +41,18 @@ Widget _wrap(
   List<Override> extraOverrides = const [],
   bool grouped = false,
   String? buildingLabel,
+  bool isAdmin = true,
+  VoidCallback? onClearFilter,
 }) {
   final view = ClientsListView(
     searchQuery: searchQuery,
-    isAdmin: true,
+    isAdmin: isAdmin,
     filter: filter,
     sort: sort,
     onCountChanged: onCountChanged,
     grouped: grouped,
     buildingLabel: buildingLabel,
+    onClearFilter: onClearFilter,
   );
   return ProviderScope(
     overrides: [
@@ -98,6 +102,44 @@ void main() {
         limit: any(named: 'limit'),
       ),
     ).thenAnswer((_) async => const []);
+  });
+
+  testWidgets('a limited search shows how many matches are omitted', (
+    tester,
+  ) async {
+    when(() => repo.searchClients(any())).thenAnswer(
+      (_) async => ClientSearchResults(
+        [_sophie],
+        examinedCount: 201,
+        matchedCount: 30,
+        truncated: true,
+      ),
+    );
+    await tester.pumpWidget(_wrap(repo, searchQuery: 'sophie'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Showing 1 of 30 matches.'), findsOneWidget);
+    expect(find.text('Sophie Tremblay'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a read-capped search shows a lower-bound N+ count', (
+    tester,
+  ) async {
+    when(() => repo.searchClients(any())).thenAnswer(
+      (_) async => ClientSearchResults(
+        [_sophie],
+        examinedCount: 200,
+        matchedCount: 1,
+        truncated: true,
+        matchedCountIsLowerBound: true,
+      ),
+    );
+    await tester.pumpWidget(_wrap(repo, searchQuery: 'sophie'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1+ matches.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('search error offers a Retry that re-runs the search', (
@@ -457,6 +499,345 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(identical(groupsNow(), grouped), isTrue);
+  });
+
+  group('writes patch the loaded pages in place', () {
+    const bob = ClientRecord(id: 'c2', name: 'Bob Carter');
+
+    void servePage(List<ClientRecord> page) => when(
+      () => repo.fetchClientsPage(
+        filter: any(named: 'filter'),
+        after: any(named: 'after'),
+        limit: any(named: 'limit'),
+        sort: any(named: 'sort'),
+      ),
+    ).thenAnswer((_) async => page);
+
+    int pageFetches() => verify(
+      () => repo.fetchClientsPage(
+        filter: any(named: 'filter'),
+        after: any(named: 'after'),
+        limit: any(named: 'limit'),
+        sort: any(named: 'sort'),
+      ),
+    ).callCount;
+
+    ClientsRefresh refresh(WidgetTester tester) => ProviderScope.containerOf(
+      tester.element(find.byType(ClientsListView)),
+    ).read(clientsRefreshProvider.notifier);
+
+    testWidgets('an edit replaces its row without refetching page one', (
+      tester,
+    ) async {
+      // Fixing a typo on client #180 used to drop the admin to the top of the
+      // roster behind a skeleton, at ~60-260 reads a save.
+      servePage(const [_sophie, bob]);
+      await tester.pumpWidget(_wrap(repo));
+      await tester.pumpAndSettle();
+
+      refresh(
+        tester,
+      ).bump(ClientsWriteUpdated(_sophie.copyWith(name: 'Sophia Tremblay')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sophia Tremblay'), findsOneWidget);
+      expect(find.text('Sophie Tremblay'), findsNothing);
+      expect(find.text('Bob Carter'), findsOneWidget);
+      expect(pageFetches(), 1);
+    });
+
+    testWidgets('an edit that leaves the type filter drops the row', (
+      tester,
+    ) async {
+      const filter = ClientsFilterType(ClientType.commercial);
+      servePage(const [
+        ClientRecord(id: 'c1', name: 'Acme', type: ClientType.commercial),
+      ]);
+      await tester.pumpWidget(_wrap(repo, filter: filter));
+      await tester.pumpAndSettle();
+
+      refresh(tester).bump(
+        ClientsWriteUpdated(
+          const ClientRecord(
+            id: 'c1',
+            name: 'Acme',
+            type: ClientType.residential,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Acme'), findsNothing);
+      expect(pageFetches(), 1);
+    });
+
+    testWidgets('an edit that moves the address off the building drops the '
+        'row', (tester) async {
+      const before = ClientRecord(
+        id: 'c1',
+        name: 'Acme',
+        address: '4450 Prom. Paton',
+        city: 'Laval',
+      );
+      final filter = ClientsFilterBuilding(buildingKeyFor(before)!);
+      servePage(const [before]);
+      await tester.pumpWidget(_wrap(repo, filter: filter));
+      await tester.pumpAndSettle();
+      expect(find.text('Acme'), findsOneWidget);
+
+      refresh(tester).bump(
+        ClientsWriteUpdated(before.copyWith(address: '12 Rue Principale')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Acme'), findsNothing);
+      expect(pageFetches(), 1);
+    });
+
+    testWidgets('an archive removes the row, and its undo puts it back where '
+        'it was', (tester) async {
+      servePage(const [_sophie, bob]);
+      await tester.pumpWidget(_wrap(repo));
+      await tester.pumpAndSettle();
+
+      refresh(tester).bump(ClientsWriteArchived('c1', archived: true));
+      await tester.pumpAndSettle();
+      expect(find.text('Sophie Tremblay'), findsNothing);
+      expect(find.text('Bob Carter'), findsOneWidget);
+
+      refresh(tester).bump(ClientsWriteArchived('c1', archived: false));
+      await tester.pumpAndSettle();
+      expect(find.text('Sophie Tremblay'), findsOneWidget);
+      expect(
+        tester.getTopLeft(find.text('Sophie Tremblay')).dy,
+        lessThan(tester.getTopLeft(find.text('Bob Carter')).dy),
+      );
+      expect(pageFetches(), 1);
+    });
+
+    testWidgets('an add still refreshes from page one', (tester) async {
+      servePage(const [_sophie]);
+      await tester.pumpWidget(_wrap(repo));
+      await tester.pumpAndSettle();
+
+      refresh(tester).bump(ClientsWriteAdded(bob));
+      await tester.pumpAndSettle();
+
+      expect(pageFetches(), 2);
+    });
+
+    testWidgets('a row removed from a full page does not end the list', (
+      tester,
+    ) async {
+      // getNextPageKey used to read the STORED page length, so 49 rows after an
+      // in-place removal looked like a short last page and paging stopped.
+      final full = [
+        for (var i = 0; i < 50; i++)
+          ClientRecord(
+            id: 'p$i',
+            name: 'Client ${i.toString().padLeft(2, '0')}',
+          ),
+      ];
+      when(
+        () => repo.fetchClientsPage(
+          filter: any(named: 'filter'),
+          after: any(named: 'after'),
+          limit: any(named: 'limit'),
+          sort: any(named: 'sort'),
+        ),
+      ).thenAnswer(
+        (invocation) async =>
+            invocation.namedArguments[#after] == null ? full : const [bob],
+      );
+      await tester.pumpWidget(_wrap(repo));
+      await tester.pumpAndSettle();
+
+      refresh(tester).bump(ClientsWriteArchived('p0', archived: true));
+      await tester.pumpAndSettle();
+      for (var i = 0; i < 12; i++) {
+        await tester.drag(find.byType(Scrollable).first, const Offset(0, -600));
+        await tester.pumpAndSettle();
+      }
+
+      expect(find.text('Bob Carter'), findsOneWidget);
+      expect(pageFetches(), 2);
+    });
+
+    // Only the fetched page-last doc has a cached stored sort value; resuming
+    // after the row above it would page from a composed fallback.
+    for (final (label, write) in [
+      ('archived', ClientsWriteArchived('p49', archived: true)),
+      (
+        'edited off the filter',
+        ClientsWriteUpdated(
+          const ClientRecord(id: 'p49', name: 'Client 49', archived: true),
+        ),
+      ),
+    ]) {
+      testWidgets('a page-last row $label still pages after that row', (
+        tester,
+      ) async {
+        final full = [
+          for (var i = 0; i < 50; i++)
+            ClientRecord(
+              id: 'p$i',
+              name: 'Client ${i.toString().padLeft(2, '0')}',
+            ),
+        ];
+        final afters = <String?>[];
+        when(
+          () => repo.fetchClientsPage(
+            filter: any(named: 'filter'),
+            after: any(named: 'after'),
+            limit: any(named: 'limit'),
+            sort: any(named: 'sort'),
+          ),
+        ).thenAnswer((invocation) async {
+          final after = invocation.namedArguments[#after] as ClientRecord?;
+          afters.add(after?.id);
+          return after == null ? full : const [bob];
+        });
+        await tester.pumpWidget(_wrap(repo));
+        await tester.pumpAndSettle();
+
+        refresh(tester).bump(write);
+        await tester.pumpAndSettle();
+        for (var i = 0; i < 12; i++) {
+          await tester.drag(
+            find.byType(Scrollable).first,
+            const Offset(0, -600),
+          );
+          await tester.pumpAndSettle();
+        }
+
+        expect(find.text('Bob Carter'), findsOneWidget);
+        expect(afters, [null, 'p49']);
+      });
+    }
+  });
+
+  group('local search fallback', () {
+    const prefixHit = ClientRecord(id: 'c2', name: 'Sophie Tremblay');
+    const containsHit = ClientRecord(id: 'c1', name: 'Tremblay Sophie');
+
+    setUp(() {
+      // Page order is the server's name order: the contains-hit first.
+      when(
+        () => repo.fetchClientsPage(
+          filter: any(named: 'filter'),
+          after: any(named: 'after'),
+          limit: any(named: 'limit'),
+          sort: any(named: 'sort'),
+        ),
+      ).thenAnswer((_) async => const [containsHit, prefixHit]);
+    });
+
+    testWidgets('is ranked like the server answer, so the commit does not '
+        'reorder', (tester) async {
+      when(
+        () => repo.searchClients(any()),
+      ).thenAnswer((_) => Completer<List<ClientRecord>>().future);
+      await tester.pumpWidget(_wrap(repo));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(_wrap(repo, searchQuery: 'sophie'));
+      await tester.pump();
+
+      expect(
+        tester.getTopLeft(find.text('Sophie Tremblay')).dy,
+        lessThan(tester.getTopLeft(find.text('Tremblay Sophie')).dy),
+      );
+      // Lets the search debounce fire so no timer outlives the test.
+      await tester.pump(const Duration(milliseconds: 300));
+    });
+
+    testWidgets('outlives an empty server answer', (tester) async {
+      // The index can lag a write the loaded page already shows.
+      when(() => repo.searchClients(any())).thenAnswer((_) async => const []);
+      await tester.pumpWidget(_wrap(repo));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(_wrap(repo, searchQuery: 'sophie'));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sophie Tremblay'), findsOneWidget);
+      expect(find.textContaining('No clients match'), findsNothing);
+    });
+  });
+
+  group('empty and error copy', () {
+    testWidgets('a first-page error titles the intro over the cause', (
+      tester,
+    ) async {
+      when(
+        () => repo.fetchClientsPage(
+          filter: any(named: 'filter'),
+          after: any(named: 'after'),
+          limit: any(named: 'limit'),
+          sort: any(named: 'sort'),
+        ),
+      ).thenThrow(Exception('boom'));
+      await tester.pumpWidget(_wrap(repo));
+      await tester.pumpAndSettle();
+
+      expect(find.text("Couldn't load clients"), findsOneWidget);
+      expect(find.text('Please try again in a moment.'), findsOneWidget);
+      expect(find.text('Something went wrong'), findsNothing);
+    });
+
+    testWidgets('a technician is not told to tap a + they do not have', (
+      tester,
+    ) async {
+      await tester.pumpWidget(_wrap(repo, isAdmin: false));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Tap +'), findsNothing);
+      expect(
+        find.text('Clients added by an administrator will appear here.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the shared-address empty state has its own hint', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrap(repo, filter: const ClientsFilterBuilding('k1')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('No clients at this address.'), findsOneWidget);
+      expect(find.textContaining('edit sheet'), findsNothing);
+      expect(find.textContaining('two or more clients'), findsOneWidget);
+    });
+
+    testWidgets('a search inside a filter names the filter and offers to '
+        'clear it', (tester) async {
+      const filter = ClientsFilterType(ClientType.commercial);
+      var cleared = false;
+      when(
+        () => repo.searchClients(any(), filter: filter),
+      ).thenAnswer((_) async => const []);
+      await tester.pumpWidget(
+        _wrap(repo, filter: filter, onClearFilter: () => cleared = true),
+      );
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(
+        _wrap(
+          repo,
+          filter: filter,
+          searchQuery: 'zzz',
+          onClearFilter: () => cleared = true,
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      // Typographic quotes come from the ARB, so French can use « » instead.
+      expect(find.text('No clients match \u201czzz\u201d'), findsOneWidget);
+      expect(find.textContaining('within Commercial'), findsOneWidget);
+      await tester.tap(find.text('Clear filter'));
+      expect(cleared, isTrue);
+    });
   });
 
   testWidgets('reports the loaded row count to its host', (tester) async {

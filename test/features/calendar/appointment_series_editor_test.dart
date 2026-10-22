@@ -29,10 +29,11 @@ AppointmentRecord _runDay(
   DateTime start, {
   required int dayIndex,
   int dayCount = 5,
-}) => _appt(id: id, start: start, seriesId: 'r1').copyWith(
-  dayIndex: dayIndex,
-  dayCount: dayCount,
-);
+}) => _appt(
+  id: id,
+  start: start,
+  seriesId: 'r1',
+).copyWith(dayIndex: dayIndex, dayCount: dayCount);
 
 void main() {
   setUpAll(() {
@@ -56,9 +57,18 @@ void main() {
         updated: any(named: 'updated'),
         deleteIds: any(named: 'deleteIds'),
         copies: any(named: 'copies'),
+        base: any(named: 'base'),
+        deleteBases: any(named: 'deleteBases'),
+        checkConflicts: any(named: 'checkConflicts'),
       ),
     ).thenAnswer((_) async {});
-    when(() => repo.updateAppointments(any())).thenAnswer((_) async {});
+    when(
+      () => repo.updateAppointments(
+        any(),
+        bases: any(named: 'bases'),
+        checkConflicts: any(named: 'checkConflicts'),
+      ),
+    ).thenAnswer((_) async {});
   });
 
   group('rewrite', () {
@@ -93,6 +103,9 @@ void main() {
             updated: captureAny(named: 'updated'),
             deleteIds: captureAny(named: 'deleteIds'),
             copies: captureAny(named: 'copies'),
+            base: any(named: 'base'),
+            deleteBases: any(named: 'deleteBases'),
+            checkConflicts: any(named: 'checkConflicts'),
           ),
         ).captured;
         final deleteIds = (captured[1] as List).cast<String>();
@@ -149,6 +162,9 @@ void main() {
             updated: captureAny(named: 'updated'),
             deleteIds: captureAny(named: 'deleteIds'),
             copies: captureAny(named: 'copies'),
+            base: any(named: 'base'),
+            deleteBases: any(named: 'deleteBases'),
+            checkConflicts: any(named: 'checkConflicts'),
           ),
         ).captured;
         expect((captured[1] as List).cast<String>(), ['a3']);
@@ -198,7 +214,13 @@ void main() {
 
         expect(count, 1);
         final written =
-            (verify(() => repo.updateAppointments(captureAny())).captured.single
+            (verify(
+                      () => repo.updateAppointments(
+                        captureAny(),
+                        bases: any(named: 'bases'),
+                        checkConflicts: any(named: 'checkConflicts'),
+                      ),
+                    ).captured.single
                     as List)
                 .cast<AppointmentRecord>();
         // The anchor is written first, then the propagated siblings.
@@ -211,6 +233,40 @@ void main() {
         expect(propagated.startTime, DateTime(2026, 3, 20, 11));
         // Status is per-visit and never propagated.
         expect(propagated.status, 'pending');
+      },
+    );
+
+    test(
+      'an end-only edit keeps a moved sibling after its own start',
+      () async {
+        final appointment = _appt(
+          id: 'p1',
+          start: DateTime(2026, 1, 15, 10),
+          seriesId: 'ps',
+        );
+        final moved = _appt(
+          id: 'p2',
+          start: DateTime(2026, 3, 20, 14),
+          seriesId: 'ps',
+        );
+        when(
+          () => repo.getSeries('ps'),
+        ).thenAnswer((_) async => [appointment, moved]);
+        final newEnd = DateTime(2026, 1, 15, 12);
+
+        final plan = await editor.planPropagate(
+          updated: appointment.copyWith(endTime: newEnd),
+          appointment: appointment,
+          id: 'p1',
+          start: appointment.startTime,
+          end: newEnd,
+        );
+
+        final sibling = plan.propagated.single;
+        expect(
+          (sibling.startTime, sibling.endTime),
+          (DateTime(2026, 3, 20, 14), DateTime(2026, 3, 20, 16)),
+        );
       },
     );
 
@@ -250,7 +306,13 @@ void main() {
         );
 
         final written =
-            (verify(() => repo.updateAppointments(captureAny())).captured.single
+            (verify(
+                      () => repo.updateAppointments(
+                        captureAny(),
+                        bases: any(named: 'bases'),
+                        checkConflicts: any(named: 'checkConflicts'),
+                      ),
+                    ).captured.single
                     as List)
                 .cast<AppointmentRecord>();
         final propagated = written[1];

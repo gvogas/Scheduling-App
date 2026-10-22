@@ -14,6 +14,7 @@ import 'package:scheduling/features/employees/domain/employees_repository.dart';
 import 'package:scheduling/features/employees/domain/models/new_account_credentials.dart';
 import 'package:scheduling/features/employees/widgets/sheets/invite_person_sheet.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/feedback/offline_form_notice.dart';
 import 'package:scheduling/shared/widgets/feedback/warning_note.dart';
 
 import '../../../../support/tour_test_support.dart';
@@ -51,32 +52,35 @@ void main() {
     addTearDown(tester.view.reset);
   }
 
-  Widget wrap({Set<int> usedColors = const {}, double textScale = 1}) =>
-      ProviderScope(
-        overrides: [
-          employeesRepositoryProvider.overrideWithValue(repo),
-          isOfflineProvider.overrideWithValue(false),
-        ],
-        child: ThemeNotifier(
-          themeMode: ThemeMode.light,
-          toggleTheme: () {},
-          textScale: textScale,
-          setTextScale: (_) {},
-          setLanguage: (_) {},
-          child: MaterialApp(
-            localizationsDelegates: AppLocalizations.localizationsDelegates,
-            supportedLocales: AppLocalizations.supportedLocales,
-            theme: lightTheme(),
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: TextScaler.linear(textScale)),
-              child: child ?? const SizedBox.shrink(),
-            ),
-            home: Scaffold(body: InvitePersonSheet(usedColors: usedColors)),
-          ),
+  Widget wrap({
+    Set<int> usedColors = const {},
+    double textScale = 1,
+    bool offline = false,
+  }) => ProviderScope(
+    overrides: [
+      employeesRepositoryProvider.overrideWithValue(repo),
+      isOfflineProvider.overrideWithValue(offline),
+    ],
+    child: ThemeNotifier(
+      themeMode: ThemeMode.light,
+      toggleTheme: () {},
+      textScale: textScale,
+      setTextScale: (_) {},
+      setLanguage: (_) {},
+      child: MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        theme: lightTheme(),
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child ?? const SizedBox.shrink(),
         ),
-      );
+        home: Scaffold(body: InvitePersonSheet(usedColors: usedColors)),
+      ),
+    ),
+  );
 
   Future<void> fillRequired(WidgetTester tester) async {
     await tester.enterText(find.byKey(const Key('firstName')), 'Theo');
@@ -84,6 +88,57 @@ void main() {
     await tester.enterText(find.byKey(const Key('email')), 'theo@x.com');
     await tester.pumpAndSettle();
   }
+
+  testWidgets('a failed validation focuses the first missing field', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(wrap());
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('firstName')), 'Theo');
+
+    await tester.tap(find.text('Send Invite'));
+    await tester.pumpAndSettle();
+
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.byKey(const Key('lastName')),
+              matching: find.byType(TextField),
+            ),
+          )
+          .focusNode
+          ?.hasFocus,
+      isTrue,
+    );
+  });
+
+  testWidgets('offline, the form says so up front', (tester) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(wrap(offline: true));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(OfflineFormNotice), findsOneWidget);
+  });
+
+  testWidgets('Cancel asks only once something has been entered', (
+    tester,
+  ) async {
+    useTallViewport(tester);
+    await tester.pumpWidget(wrap());
+    await tester.pumpAndSettle();
+
+    // The seeded colour is the baseline, not an edit.
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsNothing);
+
+    await tester.enterText(find.byKey(const Key('firstName')), 'Theo');
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(find.text('Discard changes?'), findsOneWidget);
+  });
 
   testWidgets('sends every field to the callable', (tester) async {
     useTallViewport(tester);

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
 import 'package:scheduling/core/analytics/analytics_events.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/navigation/hub_shell_scope.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
@@ -84,6 +85,9 @@ class AppointmentLinkOpener {
 
   StreamSubscription<Uri?>? _widgetTapSubscription;
   StreamSubscription<RemoteMessage>? _pushTapSubscription;
+  bool _disposed = false;
+
+  bool get _canOpen => !_disposed && isMounted() && isSignedIn();
 
   /// Number of [_hubPollInterval] ticks spent waiting for the hub — ~10s.
   static const int _hubPollAttempts = 50;
@@ -97,6 +101,7 @@ class AppointmentLinkOpener {
   }
 
   void dispose() {
+    _disposed = true;
     unawaited(_widgetTapSubscription?.cancel());
     _widgetTapSubscription = null;
     unawaited(_pushTapSubscription?.cancel());
@@ -107,16 +112,18 @@ class AppointmentLinkOpener {
   void _startWidgetTaps() {
     if (!Platform.isIOS) return;
     final logger = ref.read(loggerProvider);
+    final lease = ref.read(sessionFenceProvider).capture();
     unawaited(() async {
       try {
         await HomeWidget.setAppGroupId(widgetAppGroupId);
-        if (!isMounted()) return;
+        if (_disposed || !isMounted()) return;
         _widgetTapSubscription = HomeWidget.widgetClicked.listen(
           handleWidgetTap,
           onError: (Object e, StackTrace st) =>
               logger.warn('WIDGET-TAP stream error', e, st),
         );
         final launchUri = await HomeWidget.initiallyLaunchedFromHomeWidget();
+        if (_disposed || lease?.isCurrent != true) return;
         await handleWidgetTap(launchUri);
       } catch (e, st) {
         logger.warn('WIDGET-TAP setup failed', e, st);
@@ -126,7 +133,7 @@ class AppointmentLinkOpener {
 
   @visibleForTesting
   Future<void> handleWidgetTap(Uri? uri) async {
-    if (uri == null) return;
+    if (uri == null || !_canOpen) return;
     final appointmentId = uri.queryParameters['id']?.trim() ?? '';
     final logger = ref.read(loggerProvider);
     // Swallow errors to prevent leaking into zone handlers as FATAL crashes.
@@ -140,6 +147,7 @@ class AppointmentLinkOpener {
   /// Notification taps open appointment detail on calendar hub.
   void _startPushTaps() {
     final service = ref.read(pushNotificationServiceProvider);
+    final lease = ref.read(sessionFenceProvider).capture();
     // Hoisted like the widget-tap sibling above: neither the `initialMessage`
     // chain nor the stream's `onError` is cancelled by dispose, so a failure
     // after teardown would `ref.read` on an unmounted consumer and throw out
@@ -148,7 +156,10 @@ class AppointmentLinkOpener {
     unawaited(
       service
           .initialMessage()
-          .then(handlePushTap)
+          .then<void>((message) async {
+            if (_disposed || lease?.isCurrent != true) return;
+            await handlePushTap(message);
+          })
           .catchError(
             (Object e, StackTrace st) =>
                 logger.warn('PUSH-TAP initial message failed', e, st),
@@ -163,7 +174,7 @@ class AppointmentLinkOpener {
 
   @visibleForTesting
   Future<void> handlePushTap(RemoteMessage? message) async {
-    if (message == null) return;
+    if (message == null || !_canOpen) return;
     final logger = ref.read(loggerProvider);
     // Swallow errors to prevent leaking into zone handlers as FATAL crashes.
     try {
@@ -183,8 +194,12 @@ class AppointmentLinkOpener {
   /// The month-end push: lands on the calendar, then opens the overdue review
   /// over it for an admin.
   Future<void> openOverdueReview() async {
-    if (!isSignedIn()) return;
-    final shell = await _landOnCalendar(ref.read(loggerProvider));
+    if (!_canOpen) return;
+    final lease = ref.read(sessionFenceProvider).capture();
+    if (lease == null) return;
+    bool current() => _canOpen && lease.isCurrent;
+    final shell = await _landOnCalendar(ref.read(loggerProvider), current);
+    if (!current()) return;
     if (shell == null) return;
     final navContext = navigatorKey.currentContext;
     if (navContext == null || !navContext.mounted) return;
@@ -199,7 +214,10 @@ class AppointmentLinkOpener {
   /// Shared deep-link handler — shows the calendar, then opens the
   /// appointment if it's valid. Also the `app_links` dispatcher's callback.
   Future<void> openAppointment(String appointmentId) async {
-    if (!isSignedIn()) return;
+    if (!_canOpen) return;
+    final lease = ref.read(sessionFenceProvider).capture();
+    if (lease == null) return;
+    bool current() => _canOpen && lease.isCurrent;
 
     final logger = ref.read(loggerProvider);
     // Read every provider up front: `ref.read` on an unmounted consumer throws
@@ -211,17 +229,19 @@ class AppointmentLinkOpener {
     final recordFuture = appointmentId.isEmpty || !_isDocId(appointmentId)
         ? Future<AppointmentRecord?>.value()
         : retryAsync<AppointmentRecord?>(
-            () => repository.getAppointmentById(appointmentId),
+            () => current()
+                ? repository.getAppointmentById(appointmentId)
+                : Future<AppointmentRecord?>.value(),
           ).catchError((Object e, StackTrace st) {
             logger.warn('PUSH-TAP load appointment failed', e, st);
             return null;
           });
 
-    final shell = await _landOnCalendar(logger);
+    final shell = await _landOnCalendar(logger, current);
     if (shell == null) return;
 
     final record = await recordFuture;
-    if (!isMounted()) return;
+    if (!current()) return;
 
     final navContext = navigatorKey.currentContext;
     if (navContext == null || !navContext.mounted) return;
@@ -248,9 +268,12 @@ class AppointmentLinkOpener {
   }
 
   /// Shows the calendar once the hub is live; null (logged) if it never is.
-  Future<AppointmentLinkHub?> _landOnCalendar(AppLogger logger) async {
-    final shell = await _awaitLiveHub();
-    if (!isMounted()) return null;
+  Future<AppointmentLinkHub?> _landOnCalendar(
+    AppLogger logger,
+    bool Function() current,
+  ) async {
+    final shell = await _awaitLiveHub(current);
+    if (!current()) return null;
     if (shell == null) {
       logger.warn('PUSH-TAP hub never appeared');
       return null;
@@ -261,8 +284,9 @@ class AppointmentLinkOpener {
 
   /// Polls for up to ~10s waiting for the live hub to appear. Returns null
   /// if it never shows up.
-  Future<AppointmentLinkHub?> _awaitLiveHub() async {
+  Future<AppointmentLinkHub?> _awaitLiveHub(bool Function() current) async {
     for (var i = 0; i < _hubPollAttempts; i++) {
+      if (!current()) return null;
       final shell = resolveHub();
       if (shell != null) return shell;
       if (!isMounted()) return null;

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/animations/app_animation_constants.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/app_notice.dart';
+import 'package:scheduling/core/notices/notice_hold.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/l10n/l10n.dart';
@@ -24,6 +25,10 @@ class NoticeListener extends ConsumerStatefulWidget {
 class _NoticeListenerState extends ConsumerState<NoticeListener> {
   StreamSubscription<AppNotice>? _sub;
   OverlayEntry? _currentEntry;
+  AppNotice? _currentNotice;
+
+  /// A non-error notice that arrived while an action notice was showing.
+  AppNotice? _pending;
 
   @override
   void initState() {
@@ -59,23 +64,38 @@ class _NoticeListenerState extends ConsumerState<NoticeListener> {
 
   void _show(AppNotice notice) {
     if (!mounted) return;
+    if (_currentEntry != null &&
+        _currentNotice?.action != null &&
+        notice is! NoticeError) {
+      _pending = notice;
+      return;
+    }
     final overlay =
         widget.navigatorKey?.currentState?.overlay ?? Overlay.maybeOf(context);
     if (overlay == null) return;
 
     final accessible =
         MediaQuery.maybeOf(context)?.accessibleNavigation ?? false;
-    // Accessible navigation keeps the longer hold — and is the only mode that
-    // renders a close button, since the design has none.
-    final duration = accessible
-        ? const Duration(seconds: 6)
-        : AppMotion.noticeCycle;
+    final duration = noticeHoldFor(notice, accessible: accessible);
     final theme = Theme.of(context);
+    final l10n = context.l10n;
 
-    final dot = switch (notice) {
-      NoticeSuccess() => theme.palette.noticeMint,
-      NoticeInfo() => theme.palette.noticeInfo,
-      NoticeError() => theme.palette.noticeRed,
+    final (tint, icon, semanticsLabel) = switch (notice) {
+      NoticeSuccess() => (
+        theme.palette.noticeMint,
+        Icons.check_circle_outline_rounded,
+        l10n.common_noticeSuccessAnnouncement(notice.message),
+      ),
+      NoticeInfo() => (
+        theme.palette.noticeInfo,
+        Icons.info_outline_rounded,
+        l10n.common_noticeInfoAnnouncement(notice.message),
+      ),
+      NoticeError() => (
+        theme.palette.noticeRed,
+        Icons.error_outline_rounded,
+        l10n.common_noticeErrorAnnouncement(notice.message),
+      ),
     };
 
     unawaited(switch (notice) {
@@ -97,13 +117,20 @@ class _NoticeListenerState extends ConsumerState<NoticeListener> {
       entry
         ..remove()
         ..dispose();
-      if (_currentEntry == entry) _currentEntry = null;
+      if (_currentEntry != entry) return;
+      _currentEntry = null;
+      _currentNotice = null;
+      final next = _pending;
+      _pending = null;
+      if (next != null) _show(next);
     }
 
     entry = OverlayEntry(
       builder: (_) => _TopNotice(
-        dot: dot,
+        tint: tint,
+        icon: icon,
         message: notice.message,
+        semanticsLabel: semanticsLabel,
         action: notice.action,
         duration: duration,
         showClose: accessible,
@@ -112,6 +139,7 @@ class _NoticeListenerState extends ConsumerState<NoticeListener> {
     );
 
     _currentEntry = entry;
+    _currentNotice = notice;
     overlay.insert(entry);
   }
 
@@ -121,16 +149,22 @@ class _NoticeListenerState extends ConsumerState<NoticeListener> {
 
 class _TopNotice extends StatefulWidget {
   const _TopNotice({
-    required this.dot,
+    required this.tint,
+    required this.icon,
     required this.message,
+    required this.semanticsLabel,
     required this.action,
     required this.duration,
     required this.showClose,
     required this.onDismiss,
   });
 
-  final Color dot;
+  final Color tint;
+  final IconData icon;
   final String message;
+
+  /// The kind-prefixed message VoiceOver reads for the live region.
+  final String semanticsLabel;
   final NoticeAction? action;
   final Duration duration;
 
@@ -149,6 +183,13 @@ class _TopNoticeState extends State<_TopNotice>
   late final Animation<Offset> _slide;
   late final CurvedAnimation _slideCurve;
   late final CurvedAnimation _fade;
+
+  // A pausable hold, not a debounce; cancelled with the banner.
+  Timer? _hold;
+  late Duration _remaining = widget.duration;
+  final Stopwatch _elapsed = Stopwatch();
+  int _pointersDown = 0;
+  bool _dismissing = false;
 
   @override
   void initState() {
@@ -171,21 +212,45 @@ class _TopNoticeState extends State<_TopNotice>
     ).animate(_slideCurve);
 
     _controller.forward();
-    Future.delayed(widget.duration, () {
-      if (mounted) _dismiss();
-    });
+    _startHold();
   }
 
   @override
   void dispose() {
+    _hold?.cancel();
     _slideCurve.dispose();
     _fade.dispose();
     _controller.dispose();
     super.dispose();
   }
 
+  void _startHold() {
+    _elapsed
+      ..reset()
+      ..start();
+    _hold = Timer(_remaining, _dismiss);
+  }
+
+  void _pauseHold(PointerDownEvent _) {
+    _pointersDown++;
+    if (_pointersDown > 1 || _dismissing) return;
+    _hold?.cancel();
+    _hold = null;
+    _elapsed.stop();
+    _remaining -= _elapsed.elapsed;
+    if (_remaining < Duration.zero) _remaining = Duration.zero;
+  }
+
+  void _resumeHold(PointerEvent _) {
+    if (_pointersDown > 0) _pointersDown--;
+    if (_pointersDown == 0 && !_dismissing && mounted) _startHold();
+  }
+
   void _dismiss() {
-    if (!mounted) return;
+    if (!mounted || _dismissing) return;
+    _dismissing = true;
+    _hold?.cancel();
+    _hold = null;
     _controller.reverse().then((_) {
       if (mounted) widget.onDismiss();
     });
@@ -217,21 +282,23 @@ class _TopNoticeState extends State<_TopNotice>
   Widget _buildRow(BuildContext context, ColorScheme scheme) {
     return Row(
       children: [
-        Container(
-          key: const ValueKey('notice-dot'),
-          width: 9,
-          height: 9,
-          decoration: BoxDecoration(color: widget.dot, shape: BoxShape.circle),
+        Icon(
+          widget.icon,
+          key: const ValueKey('notice-icon'),
+          color: widget.tint,
+          size: 18,
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Text(
-            widget.message,
-            style: TextStyle(
-              fontFamily: kFontSans,
-              color: scheme.onInverseSurface,
-              fontSize: 13.5,
-              fontWeight: FontWeight.w500,
+          child: ExcludeSemantics(
+            child: Text(
+              widget.message,
+              style: TextStyle(
+                fontFamily: kFontSans,
+                color: scheme.onInverseSurface,
+                fontSize: 13.5,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ),
@@ -296,13 +363,19 @@ class _TopNoticeState extends State<_TopNotice>
               constraints: const BoxConstraints(maxWidth: 520),
               child: Semantics(
                 liveRegion: true,
+                label: widget.semanticsLabel,
                 // Swipe up to dismiss. Dismissible already handles the
                 // animation, so we just remove the entry directly.
                 child: Dismissible(
                   key: const ValueKey('app-notice-banner'),
                   direction: DismissDirection.up,
                   onDismissed: (_) => widget.onDismiss(),
-                  child: _buildCard(context, theme),
+                  child: Listener(
+                    onPointerDown: _pauseHold,
+                    onPointerUp: _resumeHold,
+                    onPointerCancel: _resumeHold,
+                    child: _buildCard(context, theme),
+                  ),
                 ),
               ),
             ),

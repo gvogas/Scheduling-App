@@ -57,11 +57,14 @@ class SheetFieldRow extends StatelessWidget {
     if (onTap == null) return content;
     return Semantics(
       button: true,
+      onTap: onTap,
+      liveRegion: errorText != null,
       // The trailing label is excluded with the rest of the subtree, so it has
       // to be spoken here or it is invisible to a screen reader.
       label:
           '$label, ${isEmpty ? (placeholder ?? '') : value}'
-          '${trailingLabel == null ? '' : ', $trailingLabel'}',
+          '${trailingLabel == null ? '' : ', $trailingLabel'}'
+          '${errorText == null ? '' : ', $errorText'}',
       excludeSemantics: true,
       child: InkWell(
         onTap: onTap,

@@ -2,7 +2,7 @@ name: scheduling
 description: "ES Pro — appointment, client, and employee scheduling."
 publish_to: 'none'
 
-version: 1.64.2+96
+version: 1.66.0+98
 
 environment:
   sdk: ^3.10.7
@@ -15,15 +15,15 @@ dependencies:
     sdk: flutter
 
   # Firebase
-  firebase_core: ^4.14.0
-  firebase_auth: ^6.6.1
-  cloud_firestore: ^6.9.0
-  firebase_storage: ^13.5.0
-  firebase_app_check: ^0.4.7
-  firebase_crashlytics: ^5.3.0
-  cloud_functions: ^6.4.0
-  firebase_messaging: ^16.6.0
-  firebase_analytics: ^12.5.0
+  firebase_core: ^5.0.0
+  firebase_auth: ^7.0.0
+  cloud_firestore: ^7.0.0
+  firebase_storage: ^14.0.0
+  firebase_app_check: ^0.5.0
+  firebase_crashlytics: ^6.0.0
+  cloud_functions: ^7.0.0
+  firebase_messaging: ^17.0.0
+  firebase_analytics: ^13.0.0
 
   # Calendar / dates / i18n
   intl: ^0.20.2
@@ -36,6 +36,9 @@ dependencies:
 
   # Logging
   logger: ^2.5.0
+
+  # DeepCollectionEquality for the widget and Siri payload dedup.
+  collection: ^1.19.1
 
   # Local storage
   shared_preferences: ^2.5.5
@@ -94,7 +97,7 @@ dependencies:
   google_maps_flutter_ios_sdk9: ^2.18.6
 
   # Network reachability (app-wide offline banner)
-  connectivity_plus: ^7.2.0
+  connectivity_plus: ^7.3.2
   home_widget: ^0.10.0
   share_plus: ^13.2.0
   saver_gallery: ^5.1.0
@@ -104,7 +107,7 @@ dependencies:
   # FlutterDeepLinkingEnabled stays false: Flutter's own handler would consume
   # the URL before this plugin sees it.
   app_links: ^7.2.1
-  firebase_remote_config: ^6.7.0
+  firebase_remote_config: ^7.0.0
 
 dev_dependencies:
   integration_test:
@@ -116,7 +119,7 @@ dev_dependencies:
   very_good_analysis: ^11.0.0
 
   # Codegen (freezed value classes only)
-  build_runner: ^2.16.1
+  build_runner: ^2.16.2
   freezed: ^4.0.1
 
   # Testing

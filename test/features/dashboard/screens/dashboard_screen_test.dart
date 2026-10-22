@@ -20,6 +20,7 @@ import 'package:scheduling/features/employees/domain/models/employee_record.dart
 import 'package:scheduling/features/feature_tour/domain/tour_definitions.dart';
 import 'package:scheduling/features/feature_tour/domain/tour_scope.dart';
 import 'package:scheduling/l10n/l10n.dart';
+import 'package:scheduling/shared/widgets/feedback/skeleton_loader.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:showcaseview/showcaseview.dart';
 
@@ -56,6 +57,7 @@ Widget _wrap({
   required ClientsRepository clientsRepo,
   Object? appointmentsError,
   Stream<List<AppointmentRecord>> Function()? appointmentsStream,
+  Future<List<AppointmentRecord>> Function()? history,
   List<EmployeeRecord> users = const [_jane],
   double textScale = 1,
   Locale locale = const Locale('en'),
@@ -76,7 +78,7 @@ Widget _wrap({
       // The settled weeks are a one-shot read, not part of the live stream —
       // these tests supply everything through the live half.
       dashboardHistoryProvider.overrideWith(
-        (_) async => const <AppointmentRecord>[],
+        (_) => history?.call() ?? Future.value(const <AppointmentRecord>[]),
       ),
       // Fresh stream per provider: Stream.value is single-subscription.
       employeesStreamProvider.overrideWith((_) => Stream.value(const [_jane])),
@@ -154,9 +156,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Hero label lives in a Text.rich span; singular because only one visit is today.
+    // Hero label lives in a Text.rich span; singular because only one job is today.
     expect(
-      find.textContaining('visit today', findRichText: true),
+      find.textContaining('job today', findRichText: true),
       findsOneWidget,
     );
     expect(find.text('NEXT UP TODAY'), findsOneWidget);
@@ -164,8 +166,8 @@ void main() {
     expect(find.text('BUSINESS TRENDS'), findsOneWidget);
     expect(find.text('NEEDS ATTENTION'), findsOneWidget);
     expect(find.text('Jane Doe'), findsWidgets);
-    expect(find.text('1 pending visit starts within 48 hours'), findsOneWidget);
-    expect(find.text('1 past visit was never closed'), findsOneWidget);
+    expect(find.text('1 pending job starts within 48 hours'), findsOneWidget);
+    expect(find.text('1 past job was never closed'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -203,7 +205,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('No upcoming visits today'), findsOneWidget);
+    expect(find.text('No upcoming jobs today'), findsOneWidget);
     expect(find.text('All clear — nothing needs attention'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -323,6 +325,52 @@ void main() {
     await tester.pumpAndSettle();
     expect(booked(), '3');
 
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('loading paints the hero silhouette, not a flat list of rows', (
+    tester,
+  ) async {
+    await withPhoneViewport(tester);
+    // A stream that never answers; fixed pumps because the shimmer repeats.
+    await tester.pumpWidget(
+      _wrap(
+        appointments: const [],
+        clientsRepo: clientsRepo,
+        appointmentsStream: () => const Stream.empty(),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.byKey(const ValueKey('dashboard-skeleton-hero')), findsOne);
+    expect(find.byType(SkeletonAppointmentRow), findsNWidgets(6));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('pull to refresh re-reads the settled history', (tester) async {
+    await withPhoneViewport(tester);
+    var historyReads = 0;
+    await tester.pumpWidget(
+      _wrap(
+        appointments: const [],
+        clientsRepo: clientsRepo,
+        history: () async {
+          historyReads++;
+          return const [];
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(historyReads, 1);
+
+    await tester.fling(find.byType(ListView).first, const Offset(0, 300), 1000);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(RefreshIndicator), findsOneWidget);
+    expect(historyReads, 2);
     expect(tester.takeException(), isNull);
   });
 

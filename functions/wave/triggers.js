@@ -98,6 +98,7 @@ const waveUpsertCustomer = onDocumentWritten(
       secrets: [WAVE_FULL_ACCESS_TOKEN],
       timeoutSeconds: TRIGGER_TIMEOUT_SECONDS,
       maxInstances: TRIGGER_MAX_INSTANCES,
+      concurrency: 1,
     },
     async (event) => {
       const beforeSnap = event.data?.before;

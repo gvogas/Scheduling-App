@@ -1,9 +1,14 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
+import 'package:scheduling/core/platform/app_group_mirror_store.dart';
 import 'package:scheduling/features/home_widget/application/widget_sync_service.dart';
+
+import '../../support/fake_app_group.dart';
 
 class _RecordingLogger extends AppLogger {
   final warnings = <String>[];
@@ -11,17 +16,6 @@ class _RecordingLogger extends AppLogger {
   @override
   void warn(String message, [Object? error, StackTrace? stack]) {
     warnings.add(message);
-  }
-}
-
-/// Records every App Group write, and can be made to fail on demand.
-class _Writer {
-  final calls = <String?>[];
-  bool failNext = false;
-
-  Future<void> call(String? payloadJson) async {
-    calls.add(payloadJson);
-    if (failNext) throw StateError('App Group write failed');
   }
 }
 
@@ -77,87 +71,228 @@ void main() {
   });
 
   group('sync / clear', () {
-    late _Writer writer;
+    late FakeAppGroup group;
     late _RecordingLogger logger;
+    late int reloads;
+    late bool failNextReload;
+    String? uid;
 
-    const payload = {
-      'generatedAt': '2026-07-08T12:00:00Z',
+    Map<String, dynamic> payload([
+      String generatedAt = '2026-07-08T12:00:00Z',
+    ]) => {
+      'generatedAt': generatedAt,
       'todayJobs': [
         {'id': 'j1'},
       ],
     };
 
     WidgetSyncService service({bool isIos = true}) => WidgetSyncService(
+      session: SessionFence(readUid: () => uid),
       logger: logger,
       isIosPlatform: () => isIos,
-      write: writer.call,
+      store: group.store,
+      reloadWidget: () async {
+        if (failNextReload) {
+          failNextReload = false;
+          throw StateError('reload failed');
+        }
+        reloads++;
+      },
     );
 
     setUp(() {
-      writer = _Writer();
+      group = FakeAppGroup();
       logger = _RecordingLogger();
+      reloads = 0;
+      failNextReload = false;
+      uid = 'A';
     });
 
-    test('writes the encoded payload into the App Group', () async {
-      await service().sync(payload);
+    test('writes an owner-bound payload, then reloads the widget', () async {
+      await service().sync(payload());
 
-      expect(writer.calls, [jsonEncode(payload)]);
+      final written = group.decoded(mirrorWidgetKey)!;
+      expect(written['ownerUid'], 'A');
+      expect(written['sessionEpoch'], group.decoded(mirrorOwnerKey)!['epoch']);
+      expect(
+        jsonEncode(written['todayJobs']),
+        jsonEncode(payload()['todayJobs']),
+      );
+      expect(reloads, 1);
       expect(logger.warnings, isEmpty);
     });
 
-    test('an unchanged schedule is not rewritten', () async {
+    test('an unchanged schedule is neither rewritten nor reloaded', () async {
       final s = service();
-      await s.sync(payload);
-      await s.sync({...payload, 'generatedAt': '2026-07-08T12:05:00Z'});
+      await s.sync(payload());
+      await s.sync(payload('2026-07-08T12:05:00Z'));
 
-      // `generatedAt` moves on every rebuild, so the dedup has to ignore it or
-      // it never fires at all.
-      expect(writer.calls, hasLength(1));
+      expect(group.savesOf(mirrorWidgetKey), 1);
+      expect(reloads, 1);
     });
 
-    test('a FAILED write is not remembered, so the next sync retries', () async {
-      // The ordering that matters: `_lastState` is stamped only AFTER the
-      // write lands. Stamp it first and a failed write is remembered as the
-      // current state, so the next identical payload dedupes away and the
-      // home screen is frozen on stale jobs until the schedule itself changes.
+    test('a change deep inside one job is rewritten', () async {
       final s = service();
-      writer.failNext = true;
-      await s.sync(payload);
-      writer.failNext = false;
-      await s.sync(payload);
+      await s.sync(payload());
+      await s.sync({
+        ...payload(),
+        'todayJobs': [
+          {'id': 'j1', 'status': 'done'},
+        ],
+      });
 
-      expect(writer.calls, hasLength(2));
+      expect(group.savesOf(mirrorWidgetKey), 2);
+      expect(reloads, 2);
+    });
+
+    test('a changed schedule is rewritten', () async {
+      final s = service();
+      await s.sync(payload());
+      await s.sync({...payload(), 'todayJobs': const <Object>[]});
+
+      expect(group.savesOf(mirrorWidgetKey), 2);
+      expect(reloads, 2);
+    });
+
+    test(
+      'an unchanged schedule is republished after an external write',
+      () async {
+        final s = service();
+        await s.sync(payload());
+        group.values[mirrorWidgetKey] = '{"ownerUid":"A"}';
+        await s.sync(payload());
+
+        expect(group.decoded(mirrorWidgetKey)!['todayJobs'], isNotEmpty);
+        expect(reloads, 2);
+      },
+    );
+
+    test('a new owner is written even with the same schedule', () async {
+      final s = service();
+      await s.sync(payload());
+      uid = 'B';
+      await s.sync(payload());
+
+      expect(group.decoded(mirrorWidgetKey)!['ownerUid'], 'B');
+      expect(reloads, 2);
+    });
+
+    test(
+      'a FAILED write is not remembered, so the next sync retries',
+      () async {
+        final s = service();
+        group.failNextSaveOf = mirrorWidgetKey;
+        await s.sync(payload());
+        await s.sync(payload());
+
+        expect(group.savesOf(mirrorWidgetKey), 2);
+        expect(reloads, 1);
+        expect(logger.warnings.single, startsWith('WIDGET sync failed'));
+      },
+    );
+
+    test('a FAILED reload is not remembered either', () async {
+      final s = service();
+      failNextReload = true;
+      await s.sync(payload());
+      await s.sync(payload());
+
+      expect(group.savesOf(mirrorWidgetKey), 2);
+      expect(reloads, 1);
       expect(logger.warnings.single, startsWith('WIDGET sync failed'));
     });
 
-    test('clear wipes the key and then dedupes', () async {
+    test('a lease gone stale mid-write neither saves nor reloads', () async {
       final s = service();
-      await s.sync(payload);
-      await s.clear();
-      await s.clear();
+      final hold = group.holdNextRead = Completer<void>();
+      final pending = s.sync(payload());
+      await Future<void>.delayed(Duration.zero);
+      uid = 'B';
+      hold.complete();
+      await pending;
 
-      expect(writer.calls, [jsonEncode(payload), null]);
+      expect(group.values[mirrorWidgetKey], isNull);
+      expect(reloads, 0);
     });
 
-    test('a FAILED clear is not remembered either', () async {
-      // Same rule the other way: a signed-out user's jobs would otherwise sit
-      // in the shared App Group until something else happened to write.
+    test('the next owner writes after a stale attempt', () async {
       final s = service();
-      writer.failNext = true;
-      await s.clear();
-      writer.failNext = false;
+      final hold = group.holdNextRead = Completer<void>();
+      final pending = s.sync(payload());
+      await Future<void>.delayed(Duration.zero);
+      uid = 'B';
+      hold.complete();
+      await pending;
+      await s.sync(payload());
+
+      expect(group.decoded(mirrorWidgetKey)!['ownerUid'], 'B');
+      expect(reloads, 1);
+    });
+
+    test('nothing is written while signed out', () async {
+      uid = null;
+      await service().sync(payload());
+
+      expect(group.saves, isEmpty);
+    });
+
+    test('clear wipes the mirror and drops ownership', () async {
+      final s = service();
+      await s.sync(payload());
       await s.clear();
 
-      expect(writer.calls, [null, null]);
+      expect(group.values[mirrorWidgetKey], isNull);
+      expect(group.decoded(mirrorOwnerKey)!['ownerUid'], isNull);
+      expect(reloads, 2);
+    });
+
+    test(
+      'clear forgets the dedup, so the same schedule is rewritten',
+      () async {
+        final s = service();
+        await s.sync(payload());
+        await s.clear();
+        await s.sync(payload());
+
+        expect(group.decoded(mirrorWidgetKey)!['ownerUid'], 'A');
+        expect(reloads, 3);
+      },
+    );
+
+    test('a FAILED clear is logged and the next clear retries', () async {
+      final s = service();
+      group.failNextSaveOf = mirrorOwnerKey;
+      await s.clear();
+      await s.clear();
+
+      expect(group.savesOf(mirrorOwnerKey), 2);
       expect(logger.warnings.single, startsWith('WIDGET clear failed'));
     });
 
+    test(
+      'a clear superseded by a new session neither wipes nor reloads',
+      () async {
+        final s = service();
+        final hold = group.holdNextRead = Completer<void>();
+        final write = s.sync(payload());
+        await Future<void>.delayed(Duration.zero);
+        final clear = s.clear();
+        uid = 'B';
+        hold.complete();
+        await Future.wait([write, clear]);
+
+        expect(group.saves, isEmpty);
+        expect(reloads, 0);
+      },
+    );
+
     test('nothing is written off iOS', () async {
       final s = service(isIos: false);
-      await s.sync(payload);
+      await s.sync(payload());
       await s.clear();
 
-      expect(writer.calls, isEmpty);
+      expect(group.saves, isEmpty);
+      expect(reloads, 0);
     });
   });
 }

@@ -41,9 +41,9 @@ class ClientSearchWindow {
     truncated: false,
     results: [
       for (final client in results)
-        if (ClientSearchPolicy.index(client).phoneDigits.any(
-          (number) => number.contains(nextDigits),
-        ))
+        if (ClientSearchPolicy.index(
+          client,
+        ).phoneDigits.any((number) => number.contains(nextDigits)))
           client,
     ],
   );

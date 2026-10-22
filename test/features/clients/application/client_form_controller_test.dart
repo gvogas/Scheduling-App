@@ -31,10 +31,12 @@ void main() {
   late _MockClientsRepo repo;
   late _MockContactLinkStore linkStore;
   late ProviderContainer container;
+  late List<ClientsWrite?> writes;
 
   setUp(() {
     repo = _MockClientsRepo();
     linkStore = _MockContactLinkStore();
+    writes = [];
 
     // No linked phone contact by default: the best-effort sync exits before
     // touching any platform channel.
@@ -50,6 +52,7 @@ void main() {
       ],
     );
     addTearDown(container.dispose);
+    container.listen(clientsRefreshProvider, (_, write) => writes.add(write));
   });
 
   ClientFormController offlineNotifier() {
@@ -67,7 +70,7 @@ void main() {
   ClientFormController notifier() =>
       container.read(clientFormControllerProvider.notifier);
 
-  int refreshCount() => container.read(clientsRefreshProvider);
+  int refreshCount() => writes.length;
 
   group('addClient', () {
     test('persists, bumps the list refresh and reports saved with the '
@@ -82,7 +85,8 @@ void main() {
       // input (whose id may be empty), so the caller can link to it.
       expect((outcome as ClientSaved).client, persisted);
       verify(() => repo.addClient(_client)).called(1);
-      expect(refreshCount(), 1);
+      // Typed, so the list can tell "refresh" from "patch this row".
+      expect(writes.single, isA<ClientsWriteAdded>());
       // Resets on success — the detail pane keeps this shared provider alive
       // after the sheet pops, so a lingering isSaving would disable add/edit forms all session.
       expect(container.read(clientFormControllerProvider), isFalse);
@@ -137,7 +141,11 @@ void main() {
       expect(outcome, isA<ClientSaved>());
       verify(() => repo.updateClient(_client)).called(1);
       verify(() => linkStore.contactIdFor('c1')).called(1);
-      expect(refreshCount(), 1);
+      // The list patches the saved record into its page in place.
+      expect(
+        writes.single,
+        isA<ClientsWriteUpdated>().having((w) => w.client, 'client', _client),
+      );
       expect(container.read(clientFormControllerProvider), isFalse);
     });
 
@@ -186,7 +194,12 @@ void main() {
       expect(outcome, isA<ClientArchived>());
       expect((outcome as ClientArchived).archived, isTrue);
       verify(() => repo.setClientArchived('c1', archived: true)).called(1);
-      expect(refreshCount(), 1);
+      expect(
+        writes.single,
+        isA<ClientsWriteArchived>()
+            .having((w) => w.clientId, 'clientId', 'c1')
+            .having((w) => w.archived, 'archived', isTrue),
+      );
       expect(container.read(clientFormControllerProvider), isFalse);
     });
 

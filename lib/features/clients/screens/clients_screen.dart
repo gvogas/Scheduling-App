@@ -123,6 +123,14 @@ class _ListInformationState extends ConsumerState<ListInformation> {
     await showClientDetailSheet(context, client);
   }
 
+  // Two-pane: the record just added (or the existing one the duplicate row
+  // opened) lands in the detail pane rather than leaving the placeholder up.
+  Future<void> _addClient() async {
+    final client = await runAddClientFlow(context);
+    if (client == null || !mounted || !context.isTwoPane) return;
+    setState(() => _selectedClient = client);
+  }
+
   void _backToCalendar() => navigateToDestination(
     context,
     HubTab.calendar,
@@ -187,6 +195,7 @@ class _ListInformationState extends ConsumerState<ListInformation> {
                     ? _selectedClient?.id
                     : null,
                 onClientTap: _onClientTap,
+                onClearFilter: () => _applyFilter(const ClientsFilterAll()),
                 firstRowTourWrap: (child) =>
                     _tour.stepIf(TourStepId.clientsRow, child),
                 onFirstPageSettled: _onListSettled,
@@ -218,7 +227,7 @@ class _ListInformationState extends ConsumerState<ListInformation> {
             child: FloatingActionButton(
               // Needs to be unique across tabs, since IndexedStack keeps every tab's FAB mounted at the same time.
               heroTag: 'clientsAddFab',
-              onPressed: () => runAddClientFlow(context),
+              onPressed: _addClient,
               tooltip: context.l10n.clients_addClient,
               child: const Icon(Icons.add),
             ),

@@ -1,12 +1,13 @@
 import 'dart:io';
 
+import 'package:crypto/crypto.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 
 import 'package:scheduling/core/images/image_magic.dart';
 import 'package:scheduling/core/images/image_upload_failure.dart';
+import 'package:scheduling/core/images/image_upload_intent.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/performance/performance_trace.dart';
-import 'package:scheduling/core/validators/text_limits.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
 
 class ImageStorageService {
@@ -19,14 +20,6 @@ class ImageStorageService {
   final FirebaseStorage _storage;
   final AppLogger _logger;
 
-  /// Builds a bounded `<millis>_<originalName>` storage file name.
-  static String composeFileName(String originalName, DateTime now) {
-    final name = '${now.millisecondsSinceEpoch}_$originalName';
-    return name.length <= TextLimits.imageFileName
-        ? name
-        : name.substring(0, TextLimits.imageFileName);
-  }
-
   Future<bool> _isValidImageFile(File file) async {
     final raf = await file.open();
     try {
@@ -36,38 +29,69 @@ class ImageStorageService {
     }
   }
 
-  Future<AppointmentImage> uploadImage(String appointmentId, File file) async {
+  Future<AppointmentImage> uploadQueuedImage(
+    String appointmentId,
+    File file,
+    ImageUploadIntent intent, {
+    bool Function()? isCurrent,
+  }) async {
+    void checkCurrent() {
+      if (isCurrent != null && !isCurrent()) {
+        throw StateError('photo upload session ended');
+      }
+    }
+
+    checkCurrent();
+    final image = intent.image;
+    final fileName = image.fileName ?? '';
+    final expectedPrefix = 'appointments/$appointmentId/images/';
+    if (image.storagePath != '$expectedPrefix${image.fileName}' ||
+        !RegExp(
+          '^${RegExp.escape(intent.uploadId)}\\.(jpg|png)\$',
+        ).hasMatch(fileName)) {
+      throw StateError('invalid queued photo destination');
+    }
     if (!await _isValidImageFile(file)) {
       throw const ImageUploadFailureInvalidFormat();
     }
-
     final size = await file.length();
-    if (size > maxUploadBytes) {
-      throw const ImageUploadFailureTooLarge();
+    if (size > maxUploadBytes) throw const ImageUploadFailureTooLarge();
+    final digest = await sha256.bind(file.openRead()).first;
+    checkCurrent();
+    if (size != intent.byteLength || digest.toString() != intent.digest) {
+      throw StateError('queued photo bytes changed');
     }
-
-    final uploadedAt = DateTime.now();
-    final originalName = file.uri.pathSegments.last;
-    final fileName = composeFileName(originalName, uploadedAt);
-    final path = 'appointments/$appointmentId/images/$fileName';
-
-    final ref = _storage.ref(path);
-    final metadata = SettableMetadata(
-      contentType: _contentTypeFor(originalName),
-      // Keep authenticated photo responses out of shared caches.
-      cacheControl: 'private, max-age=31536000',
-    );
-
+    final ref = _storage.ref(image.storagePath);
+    FullMetadata? existing;
+    try {
+      existing = await ref.getMetadata();
+    } on FirebaseException catch (error) {
+      if (error.code != 'object-not-found') rethrow;
+    }
+    checkCurrent();
+    if (existing != null) {
+      final metadata = existing.customMetadata ?? const <String, String>{};
+      if (existing.size != size ||
+          intent.metadata.entries.any(
+            (item) => metadata[item.key] != item.value,
+          )) {
+        throw StateError('queued photo object does not match its upload');
+      }
+      return image;
+    }
     await PerformanceTrace.measure(
       PerformanceOperation.photoUpload,
-      () => ref.putFile(file, metadata),
+      () => ref.putFile(
+        file,
+        SettableMetadata(
+          contentType: _contentTypeFor(fileName),
+          cacheControl: 'private, max-age=31536000',
+          customMetadata: intent.metadata,
+        ),
+      ),
     );
-
-    return AppointmentImage(
-      storagePath: path,
-      fileName: fileName,
-      uploadedAt: uploadedAt,
-    );
+    checkCurrent();
+    return image;
   }
 
   Future<void> _deleteImage(AppointmentImage image) async {

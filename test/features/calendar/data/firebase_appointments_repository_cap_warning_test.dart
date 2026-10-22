@@ -45,6 +45,7 @@ void main() {
   late _MockFirestore firestore;
   late _MockCollection collection;
   late _MockQuery query;
+  late _MockQuery tailQuery;
   late _MockQuerySnapshot snapshot;
   late _RecordingLogger logger;
 
@@ -58,10 +59,34 @@ void main() {
     firestore = _MockFirestore();
     collection = _MockCollection();
     query = _MockQuery();
+    tailQuery = _MockQuery();
     snapshot = _MockQuerySnapshot();
     logger = _RecordingLogger();
 
     when(() => firestore.collection('appointments')).thenReturn(collection);
+    // The range tail: a separate chain, served empty here.
+    when(
+      () => collection.where('isPersonal', isEqualTo: true),
+    ).thenReturn(tailQuery);
+    when(
+      () => tailQuery.where(
+        'startTime',
+        isGreaterThanOrEqualTo: any(named: 'isGreaterThanOrEqualTo'),
+      ),
+    ).thenReturn(tailQuery);
+    when(
+      () => tailQuery.where('startTime', isLessThan: any(named: 'isLessThan')),
+    ).thenReturn(tailQuery);
+    when(() => tailQuery.orderBy(any())).thenReturn(tailQuery);
+    when(() => tailQuery.limit(any())).thenReturn(tailQuery);
+    when(() => tailQuery.get()).thenAnswer((_) async {
+      final empty = _MockQuerySnapshot();
+      when(() => empty.docs).thenReturn(const []);
+      return empty;
+    });
+    when(
+      () => query.where('isPersonal', isEqualTo: any(named: 'isEqualTo')),
+    ).thenReturn(query);
     when(
       () => collection.where(
         'employeeIds',
@@ -391,6 +416,14 @@ void main() {
       await repo().watchOverdueOpen(now).first;
 
       expect(logger.warnings, isEmpty);
+    });
+
+    test('the query itself excludes personal blocks', () async {
+      withWindow([_FakeDoc('job', past(24))]);
+
+      await repo().watchOverdueOpen(now).first;
+
+      verify(() => query.where('isPersonal', isEqualTo: false)).called(1);
     });
   });
 }

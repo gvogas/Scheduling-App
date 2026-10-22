@@ -235,6 +235,28 @@ function nowMillis(now) {
   return toMillis(now) ?? NaN;
 }
 
+/**
+ * Converts Firestore values to JSON values the Flutter callable SDK can parse.
+ * @param {*} value Raw Firestore/Admin SDK value.
+ * @return {*}
+ */
+function serializeValue(value) {
+  if (value == null) return value;
+  if (typeof value.toMillis === "function") {
+    return {millisecondsSinceEpoch: value.toMillis()};
+  }
+  if (value instanceof Date) {
+    return {millisecondsSinceEpoch: value.getTime()};
+  }
+  if (Array.isArray(value)) return value.map(serializeValue);
+  if (typeof value === "object") {
+    return Object.fromEntries(
+        Object.entries(value).map(([k, v]) => [k, serializeValue(v)]),
+    );
+  }
+  return value;
+}
+
 module.exports = {
   BUSINESS_TIME_ZONE,
   MAX_APPOINTMENT_SPAN_DAYS,
@@ -254,4 +276,5 @@ module.exports = {
   businessOffsetMs,
   businessMidnight,
   businessDayStartMs,
+  serializeValue,
 };

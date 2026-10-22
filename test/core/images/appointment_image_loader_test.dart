@@ -20,6 +20,7 @@ import 'package:mocktail/mocktail.dart';
 
 import 'package:scheduling/core/images/appointment_image_disk_cache.dart';
 import 'package:scheduling/core/images/appointment_image_loader.dart';
+import 'package:scheduling/core/images/appointment_storage_image.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_image.dart';
 
@@ -69,10 +70,65 @@ void main() {
   const stored = 'https://storage/stale?token=old';
   final photo = _bytes('photo-bytes');
 
+  test('remote image handles expire with their image session', () async {
+    final first = AppointmentStorageImage(
+      const AppointmentImage(storagePath: path),
+      loader,
+    );
+    final same = AppointmentStorageImage(
+      const AppointmentImage(storagePath: path),
+      loader,
+    );
+    expect(first, same);
+    await loader.clear();
+    expect(
+      AppointmentStorageImage(
+        const AppointmentImage(storagePath: path),
+        loader,
+      ),
+      isNot(first),
+    );
+    expect(await first.loadBytes(), isEmpty);
+    verifyNever(() => storage.ref(any()));
+  });
+
   /// Stubs [r] to answer [answer] for whatever `maxSize` the loader passes.
   void whenGetData(_MockRef r, Future<Uint8List?> Function() answer) {
     when(() => r.getData(any())).thenAnswer((_) => answer());
   }
+
+  test(
+    'four stalled old fetches cannot block replacement-session photos',
+    () async {
+      final oldGate = Completer<Uint8List>();
+      final started = Completer<void>();
+      var count = 0;
+      for (var i = 0; i < 4; i++) {
+        final oldRef = _MockRef();
+        when(() => storage.ref('old/$i')).thenReturn(oldRef);
+        whenGetData(oldRef, () {
+          if (++count == 4) started.complete();
+          return oldGate.future;
+        });
+      }
+      final old = [
+        for (var i = 0; i < 4; i++)
+          loader.load(AppointmentImage(storagePath: 'old/$i')),
+      ];
+      await started.future;
+      await loader.clear();
+      when(() => storage.ref('new')).thenReturn(ref);
+      whenGetData(ref, () async => photo);
+      expect(
+        await loader
+            .load(const AppointmentImage(storagePath: 'new'))
+            .timeout(const Duration(seconds: 5)),
+        photo,
+      );
+      oldGate.complete(photo);
+      expect(await Future.wait(old), everyElement(isEmpty));
+    },
+  );
 
   test(
     'fetches the bytes from storagePath, never from the stored url',
@@ -141,9 +197,7 @@ void main() {
       );
 
       return expectLater(
-        loader.load(
-          const AppointmentImage(url: stored, storagePath: path),
-        ),
+        loader.load(const AppointmentImage(url: stored, storagePath: path)),
         completion(isEmpty),
       );
     });
@@ -175,6 +229,8 @@ void main() {
     var inFlight = 0;
     var peak = 0;
     final gates = <String, Completer<Uint8List>>{};
+    final started = StreamController<void>.broadcast(sync: true);
+    addTearDown(started.close);
     final paths = [for (var i = 0; i < 9; i++) 'p/$i'];
     for (final p in paths) {
       final r = _MockRef();
@@ -184,6 +240,7 @@ void main() {
         if (inFlight > peak) peak = inFlight;
         final gate = Completer<Uint8List>();
         gates[p] = gate;
+        started.add(null);
         return gate.future;
       });
     }
@@ -203,16 +260,9 @@ void main() {
       // so a batch opens its gates over several microtask turns, and draining
       // a half-open batch understates the peak — which is what made this test
       // report 3 on some runs and 4 on others.
-      var seen = -1;
-      var stable = 0;
-      for (var turn = 0; turn < 400 && (gates.isEmpty || stable < 8); turn++) {
-        await Future<void>.delayed(Duration.zero);
-        if (gates.length == seen) {
-          stable += 1;
-        } else {
-          seen = gates.length;
-          stable = 0;
-        }
+      final expected = (paths.length - drained).clamp(1, 4);
+      while (gates.length < expected) {
+        await started.stream.first.timeout(const Duration(seconds: 10));
       }
       final open = gates.keys.toList();
       expect(open, isNotEmpty);
@@ -311,10 +361,14 @@ void main() {
           whenGetData(r, () async => _bytes(url));
         }
 
-        expect(await loader.load(const AppointmentImage(url: 'legacy-a')),
-            isEmpty);
-        expect(await loader.load(const AppointmentImage(url: 'legacy-b')),
-            isEmpty);
+        expect(
+          await loader.load(const AppointmentImage(url: 'legacy-a')),
+          isEmpty,
+        );
+        expect(
+          await loader.load(const AppointmentImage(url: 'legacy-b')),
+          isEmpty,
+        );
         verifyNever(() => storage.refFromURL(any()));
       },
     );

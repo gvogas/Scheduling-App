@@ -9,27 +9,46 @@ import 'package:scheduling/core/navigation/hub_shell_scope.dart';
 import 'package:scheduling/features/auth/application/active_user_identity_provider.dart';
 import 'package:scheduling/features/employees/application/employees_providers.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
+import 'package:scheduling/features/notifications/widgets/notification_ask_gate.dart';
 import 'package:scheduling/features/presence/data/location_share_ask_store.dart';
 import 'package:scheduling/features/presence/domain/location_share_ask_policy.dart';
 import 'package:scheduling/features/settings/application/app_info_provider.dart';
 import 'package:scheduling/features/settings/application/my_details_providers.dart';
 import 'package:scheduling/routes/app_routes.dart';
 
-/// Pushes the "Be on the team map" page once per app build, ahead of the
-/// calendar tour.
-class LocationShareAskGate extends ConsumerStatefulWidget {
+/// Hosts both ask pages over the calendar, ahead of its tour: the one-time
+/// notifications page first, then "Be on the team map" once per app build.
+class LocationShareAskGate extends StatelessWidget {
   const LocationShareAskGate({required this.builder, super.key});
 
-  /// Builds the calendar; `holdsTour` stays true until this build is decided.
+  /// Builds the calendar; `holdsTour` stays true until both pages are decided.
   final Widget Function(BuildContext context, {required bool holdsTour})
   builder;
 
   @override
-  ConsumerState<LocationShareAskGate> createState() =>
-      _LocationShareAskGateState();
+  Widget build(BuildContext context) => NotificationAskGate(
+    builder: (context, {required holdsTour}) => _LocationShareAskHost(
+      ready: !holdsTour,
+      builder: (context, {required holdsLocation}) =>
+          builder(context, holdsTour: holdsTour || holdsLocation),
+    ),
+  );
 }
 
-class _LocationShareAskGateState extends ConsumerState<LocationShareAskGate> {
+class _LocationShareAskHost extends ConsumerStatefulWidget {
+  const _LocationShareAskHost({required this.ready, required this.builder});
+
+  /// False while the notifications page is still pending or on top.
+  final bool ready;
+  final Widget Function(BuildContext context, {required bool holdsLocation})
+  builder;
+
+  @override
+  ConsumerState<_LocationShareAskHost> createState() =>
+      _LocationShareAskHostState();
+}
+
+class _LocationShareAskHostState extends ConsumerState<_LocationShareAskHost> {
   bool _checking = false;
 
   /// The uid whose page is already decided this session.
@@ -51,13 +70,13 @@ class _LocationShareAskGateState extends ConsumerState<LocationShareAskGate> {
     final onTop =
         HubShellScope.currentOf(context) == HubTab.calendar &&
         (_route?.isCurrent ?? true);
-    if (due && onTop && !_checking) {
+    if (due && onTop && widget.ready && !_checking) {
       _checking = true;
       WidgetsBinding.instance.addPostFrameCallback(
         (_) => unawaited(_maybeAsk(me)),
       );
     }
-    return widget.builder(context, holdsTour: loadingMe || due);
+    return widget.builder(context, holdsLocation: loadingMe || due);
   }
 
   Future<void> _maybeAsk(EmployeeRecord me) async {

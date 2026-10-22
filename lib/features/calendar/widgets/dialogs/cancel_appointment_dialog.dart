@@ -29,6 +29,7 @@ Future<SeriesScopeChoice?> showCancelAppointmentDialog(
       title: l.calendar_cancelAppointment,
       message: l.calendar_cancelledJobsAreSavedToHistory,
       confirmLabel: l.calendar_cancelAppointment,
+      cancelLabel: l.calendar_keepAppointment,
     );
     return confirmed ? SeriesScopeChoice.thisOnly : null;
   }

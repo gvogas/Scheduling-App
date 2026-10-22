@@ -36,6 +36,39 @@ void main() {
     });
   });
 
+  group('isLocationConsentFresh', () {
+    final now = DateTime(2026, 10, 20, 9);
+
+    test('counts a stamp within the window, before or just after now', () {
+      expect(
+        isLocationConsentFresh(
+          consentAt: now.subtract(const Duration(minutes: 5)),
+          now: now,
+        ),
+        isTrue,
+      );
+      // A server stamp can run a little ahead of the device clock.
+      expect(
+        isLocationConsentFresh(
+          consentAt: now.add(const Duration(minutes: 2)),
+          now: now,
+        ),
+        isTrue,
+      );
+    });
+
+    test('an old or missing stamp is not fresh', () {
+      expect(
+        isLocationConsentFresh(
+          consentAt: now.subtract(kLocationConsentFreshFor * 2),
+          now: now,
+        ),
+        isFalse,
+      );
+      expect(isLocationConsentFresh(consentAt: null, now: now), isFalse);
+    });
+  });
+
   group('locationShareAskVariant', () {
     LocationShareAskVariant variant(
       LocationPermissionResult permission, {
@@ -69,6 +102,41 @@ void main() {
         );
       },
     );
+
+    test('a consent just given in setup turns the question into its iOS step', () {
+      for (final permission in [
+        LocationPermissionResult.granted,
+        LocationPermissionResult.denied,
+      ]) {
+        expect(
+          locationShareAskVariant(
+            sharing: false,
+            permission: permission,
+            consentFresh: true,
+          ),
+          LocationShareAskVariant.consented,
+        );
+      }
+    });
+
+    test('a fresh consent changes nothing once sharing is on or iOS refused', () {
+      expect(
+        locationShareAskVariant(
+          sharing: true,
+          permission: LocationPermissionResult.granted,
+          consentFresh: true,
+        ),
+        LocationShareAskVariant.alreadyOn,
+      );
+      expect(
+        locationShareAskVariant(
+          sharing: false,
+          permission: LocationPermissionResult.permanentlyDenied,
+          consentFresh: true,
+        ),
+        LocationShareAskVariant.openSettings,
+      );
+    });
 
     test('a refusal iOS will not re-ask sends them to Settings', () {
       for (final sharing in [true, false]) {

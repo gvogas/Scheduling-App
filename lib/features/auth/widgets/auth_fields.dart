@@ -29,26 +29,29 @@ class AuthFieldError extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 6,
-          height: 6,
-          margin: const EdgeInsets.only(top: 5),
-          decoration: BoxDecoration(
-            color: scheme.error,
-            shape: BoxShape.circle,
+    return Semantics(
+      liveRegion: true,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.only(top: 5),
+            decoration: BoxDecoration(
+              color: scheme.error,
+              shape: BoxShape.circle,
+            ),
           ),
-        ),
-        const SizedBox(width: AppSpacing.sp8),
-        Flexible(
-          child: Text(
-            message,
-            style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+          const SizedBox(width: AppSpacing.sp8),
+          Flexible(
+            child: Text(
+              message,
+              style: theme.textTheme.bodySmall?.copyWith(color: scheme.error),
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -213,10 +216,8 @@ class AuthPasswordField extends StatelessWidget {
                 ),
                 suffixIcon: AnimatedSwitcher(
                   duration: AppAnimationDurations.quick,
-                  transitionBuilder: (child, animation) => FadeTransition(
-                    opacity: animation,
-                    child: child,
-                  ),
+                  transitionBuilder: (child, animation) =>
+                      FadeTransition(opacity: animation, child: child),
                   child: _ObscureToggleLink(
                     key: ValueKey(isObscured),
                     isObscured: isObscured,

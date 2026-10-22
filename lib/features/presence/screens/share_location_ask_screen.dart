@@ -5,6 +5,7 @@ import 'package:scheduling/core/adaptive/adaptive_progress_indicator.dart';
 import 'package:scheduling/core/permissions/location_permission_service.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/employees/domain/models/employee_record.dart';
+import 'package:scheduling/features/presence/application/location_consent_provider.dart';
 import 'package:scheduling/features/presence/application/presence_sync_controller.dart';
 import 'package:scheduling/features/presence/domain/location_share_ask_policy.dart';
 import 'package:scheduling/features/settings/application/my_details_providers.dart';
@@ -20,9 +21,29 @@ class ShareLocationAskScreen extends ConsumerStatefulWidget {
       _ShareLocationAskScreenState();
 }
 
-class _ShareLocationAskScreenState
-    extends ConsumerState<ShareLocationAskScreen> {
+class _ShareLocationAskScreenState extends ConsumerState<ShareLocationAskScreen>
+    with WidgetsBindingObserver {
   bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Back from iOS Settings: the variant follows the permission as it now is.
+    if (state == AppLifecycleState.resumed && mounted) {
+      ref.invalidate(locationPermissionStatusProvider);
+    }
+  }
 
   Future<bool> _enable(EmployeeRecord record) async {
     setState(() => _busy = true);
@@ -36,18 +57,22 @@ class _ShareLocationAskScreenState
     return saved;
   }
 
+  /// A refused prompt keeps the page open and re-reads the permission, so the
+  /// Open Settings variant takes over instead of a silent close.
   Future<void> _turnOn(EmployeeRecord record) async {
-    if (await _enable(record) && mounted) Navigator.of(context).pop();
+    final saved = await _enable(record);
+    if (!mounted) return;
+    if (saved) {
+      Navigator.of(context).pop();
+    } else {
+      ref.invalidate(locationPermissionStatusProvider);
+    }
   }
 
-  /// iOS will not ask again, so the switch is saved and Settings does the rest.
-  Future<void> _openSettings(EmployeeRecord record) async {
-    final permissions = ref.read(locationPermissionServiceProvider);
-    if (!record.locationSharingEnabled && !await _enable(record)) return;
-    if (!mounted) return;
-    Navigator.of(context).pop();
-    await permissions.openSettings();
-  }
+  /// iOS will not ask again, so Settings is the only way through. Nothing is
+  /// saved here: the page stays open and offers Turn on once access is back.
+  Future<void> _openSettings() =>
+      ref.read(locationPermissionServiceProvider).openSettings();
 
   @override
   Widget build(BuildContext context) {
@@ -56,6 +81,10 @@ class _ShareLocationAskScreenState
     final variant = locationShareAskVariant(
       sharing: record?.locationSharingEnabled ?? false,
       permission: permission ?? LocationPermissionResult.denied,
+      consentFresh: isLocationConsentFresh(
+        consentAt: ref.watch(myLocationConsentAtProvider),
+        now: DateTime.now(),
+      ),
     );
 
     return Scaffold(
@@ -92,10 +121,24 @@ class _ShareLocationAskScreenState
   ) {
     final theme = Theme.of(context);
     final l10n = context.l10n;
-    final isOn = variant == LocationShareAskVariant.alreadyOn;
     final bodyStyle = theme.textTheme.bodyLarge?.copyWith(
       color: theme.palette.textBody,
     );
+    final (String title, String body) = switch (variant) {
+      LocationShareAskVariant.alreadyOn => (
+        l10n.onboarding_shareLocationOnTitle,
+        l10n.onboarding_shareLocationOnBody,
+      ),
+      LocationShareAskVariant.consented => (
+        l10n.onboarding_shareLocationConsentedTitle,
+        l10n.onboarding_shareLocationConsentedBody,
+      ),
+      LocationShareAskVariant.turnOn ||
+      LocationShareAskVariant.openSettings => (
+        l10n.onboarding_shareLocationTitle,
+        l10n.onboarding_shareLocationBody,
+      ),
+    };
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -103,20 +146,13 @@ class _ShareLocationAskScreenState
           _MapThumbnail(record: record),
           const SizedBox(height: AppSpacing.sp24),
           Text(
-            isOn
-                ? l10n.onboarding_shareLocationOnTitle
-                : l10n.onboarding_shareLocationTitle,
+            title,
             style: theme.textTheme.headlineMedium?.copyWith(
               fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: AppSpacing.sp8),
-          Text(
-            isOn
-                ? l10n.onboarding_shareLocationOnBody
-                : l10n.onboarding_shareLocationBody,
-            style: bodyStyle,
-          ),
+          Text(body, style: bodyStyle),
           if (variant == LocationShareAskVariant.openSettings) ...[
             const SizedBox(height: AppSpacing.sp8),
             Text(l10n.onboarding_shareLocationBlocked, style: bodyStyle),
@@ -138,13 +174,13 @@ class _ShareLocationAskScreenState
   }) {
     final l10n = context.l10n;
     final (String label, VoidCallback onPressed) = switch (variant) {
-      LocationShareAskVariant.turnOn => (
+      LocationShareAskVariant.turnOn || LocationShareAskVariant.consented => (
         l10n.onboarding_shareLocationTurnOn,
         () => _turnOn(record!),
       ),
       LocationShareAskVariant.openSettings => (
         l10n.onboarding_shareLocationOpenSettings,
-        () => _openSettings(record!),
+        _openSettings,
       ),
       LocationShareAskVariant.alreadyOn => (
         l10n.common_done,

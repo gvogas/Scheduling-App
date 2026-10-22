@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
@@ -25,9 +26,11 @@ import 'package:scheduling/features/employees/widgets/fields/availability_panel.
 import 'package:scheduling/features/employees/widgets/fields/employee_color_grid.dart';
 import 'package:scheduling/features/employees/widgets/fields/job_title_chips.dart';
 import 'package:scheduling/features/employees/widgets/fields/work_schedule_pickers.dart';
+import 'package:scheduling/features/employees/widgets/sheets/invite_person_sheet.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/shared/widgets/dialogs/confirm_dialog.dart';
 import 'package:scheduling/shared/widgets/dialogs/password_reauth_dialog.dart';
+import 'package:scheduling/shared/widgets/feedback/offline_form_notice.dart';
 import 'package:scheduling/shared/widgets/feedback/user_status_chip.dart';
 import 'package:scheduling/shared/widgets/feedback/warning_note.dart';
 import 'package:scheduling/shared/widgets/fields/labeled_text_field.dart';
@@ -88,6 +91,11 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
   late bool _monthEndReviewPush;
   late bool _isDisabled;
   final Map<String, String?> errors = {};
+  final _errorFocus = employeeFormErrorFocus();
+
+  /// The form as seeded; the emergency pair is tracked by `_emergencyDirty`
+  /// instead, since it lands asynchronously.
+  late final List<Object?> _baseline;
 
   @override
   void initState() {
@@ -125,7 +133,27 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     _isTestAccount = e.isTestAccount;
     _monthEndReviewPush = e.monthEndReviewPush;
     _isDisabled = e.isDisabled;
+    _baseline = _fingerprint();
   }
+
+  List<Object?> _fingerprint() => [
+    _firstNameController.text,
+    _lastNameController.text,
+    _emailController.text,
+    _phoneController.text,
+    _jobTitle,
+    _workingDays.join(','),
+    _workStartMinutes,
+    _workEndMinutes,
+    _maxJobsPerDay,
+    _selectedColor,
+    _onCall,
+    _isAdmin,
+    _isTestAccount,
+    _monthEndReviewPush,
+  ];
+
+  bool _isDirty() => _emergencyDirty || !listEquals(_baseline, _fingerprint());
 
   /// Folds one emergency snapshot into the fields; [initial] skips setState inside initState.
   void _applyEmergency(
@@ -174,6 +202,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     ]) {
       controller.dispose();
     }
+    _errorFocus.dispose();
     super.dispose();
   }
 
@@ -196,7 +225,30 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
         ..clear()
         ..addAll(next);
     });
-    return next.values.every((e) => e == null);
+    final errored = [
+      for (final e in next.entries)
+        if (e.value != null) e.key,
+    ];
+    if (errored.isNotEmpty) _errorFocus.focusFirstError(errored);
+    return errored.isEmpty;
+  }
+
+  /// The address is a sign-in identity, so moving it is confirmed first.
+  Future<bool> _confirmEmailChange() async {
+    final stored = normalizeEmail(widget.employee.email);
+    final next = normalizeEmail(_emailController.text);
+    if (stored.isEmpty || next == stored) return true;
+    final l10n = context.l10n;
+    return await showConfirmDialog(
+      context,
+      title: l10n.employees_changeEmailConfirmTitle,
+      message: l10n.employees_changeEmailConfirmBody(
+        widget.employee.displayName,
+        next,
+      ),
+      confirmLabel: l10n.employees_changeEmailConfirm,
+      destructive: false,
+    );
   }
 
   Future<void> _pickMaxJobs() async {
@@ -212,6 +264,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
       fallback: widget.employee.name,
     );
     if (!_validate()) return;
+    if (!await _confirmEmailChange() || !mounted) return;
 
     // Fail fast offline, or Save spins until we reconnect.
     if (guardedOffline(
@@ -414,7 +467,9 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
       primaryLabel: l10n.common_save,
       isBusy: sheetBusy,
       onPrimary: _save,
+      isDirty: _isDirty,
       children: [
+        const OfflineFormNotice(),
         ..._detailsSection(theme, l10n),
         ..._roleSection(theme, l10n),
         ..._colourSection(theme, l10n),
@@ -433,6 +488,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
         key: const Key('firstName'),
         label: l10n.employees_firstName,
         controller: _firstNameController,
+        focusNode: _errorFocus.nodeFor('name'),
         textCapitalization: TextCapitalization.words,
         textInputAction: TextInputAction.next,
         maxLength: TextLimits.employeeNameHalf,
@@ -459,12 +515,20 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
         key: const Key('email'),
         label: l10n.employees_workEmail,
         controller: _emailController,
+        focusNode: _errorFocus.nodeFor('email'),
         required: true,
         keyboard: TextInputType.emailAddress,
         textInputAction: TextInputAction.next,
         maxLength: TextLimits.authEmail,
         errorText: errors['email'],
         onChanged: (_) => _clearError('email'),
+      ),
+    ),
+    const SizedBox(height: AppSpacing.sp4),
+    Text(
+      l10n.employees_workEmailHelper,
+      style: theme.textTheme.labelSmall?.copyWith(
+        color: theme.palette.textTertiary,
       ),
     ),
     const SizedBox(height: AppSpacing.sp16),
@@ -517,26 +581,30 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
     MonoSectionLabel(l10n.employees_sectionAvailability),
     const SizedBox(height: AppSpacing.sp8),
     // Shared with Settings › My details.
-    AvailabilityPanel(
-      workingDays: _workingDays,
-      workStartMinutes: _workStartMinutes,
-      workEndMinutes: _workEndMinutes,
-      onCall: _onCall,
-      hoursErrorText: errors['hours'],
-      // Admin-only (not on the self-service allowlist), so a slot rather than part of the panel.
-      maxJobsRow: SheetFieldRow(
-        label: l10n.employees_maxJobsPerDay,
-        value: maxJobsLabel(l10n, _maxJobsPerDay),
-        useMonoValue: true,
-        onTap: _pickMaxJobs,
+    SheetFocusScroll(
+      focusNode: _errorFocus.nodeFor('hours'),
+      child: AvailabilityPanel(
+        workingDays: _workingDays,
+        workStartMinutes: _workStartMinutes,
+        workEndMinutes: _workEndMinutes,
+        onCall: _onCall,
+        hoursErrorText: errors['hours'],
+        // Admin-only (not on the self-service allowlist), so a slot rather
+        // than part of the panel.
+        maxJobsRow: SheetFieldRow(
+          label: l10n.employees_maxJobsPerDay,
+          value: maxJobsLabel(l10n, _maxJobsPerDay),
+          useMonoValue: true,
+          onTap: _pickMaxJobs,
+        ),
+        onChanged: (days, start, end, {required onCall}) => setState(() {
+          _workingDays = days;
+          _workStartMinutes = start;
+          _workEndMinutes = end;
+          _onCall = onCall;
+          errors['hours'] = null;
+        }),
       ),
-      onChanged: (days, start, end, {required onCall}) => setState(() {
-        _workingDays = days;
-        _workStartMinutes = start;
-        _workEndMinutes = end;
-        _onCall = onCall;
-        errors['hours'] = null;
-      }),
     ),
     const SizedBox(height: AppSpacing.sp24),
   ];
@@ -553,6 +621,8 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
           controller: _emergencyController,
           optional: true,
           readOnly: !_emergencyLoaded,
+          // A read-only field with no cue swallows typing; say why.
+          hint: _emergencyLoaded ? null : l10n.employees_emergencyLoading,
           textInputAction: TextInputAction.next,
           maxLength: TextLimits.employeeEmergencyContact,
           onChanged: (_) => _markEmergencyDirty(),
@@ -566,6 +636,7 @@ class _EditPersonSheetState extends ConsumerState<EditPersonSheet> {
           controller: _emergencyPhoneController,
           optional: true,
           readOnly: !_emergencyLoaded,
+          hint: _emergencyLoaded ? null : l10n.employees_emergencyLoading,
           keyboard: TextInputType.phone,
           inputFormatters: const [PhoneInputFormatter()],
           maxLength: TextLimits.phone,

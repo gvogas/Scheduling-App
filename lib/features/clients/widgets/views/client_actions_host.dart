@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:scheduling/core/analytics/analytics_events.dart';
 import 'package:scheduling/core/analytics/analytics_providers.dart';
 import 'package:scheduling/core/errors/error_cause.dart';
+import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/notices/notice_service.dart';
 import 'package:scheduling/features/clients/application/client_form_controller.dart';
 import 'package:scheduling/features/clients/domain/clients_failure.dart';
@@ -39,18 +40,14 @@ mixin ClientActionsHost<T extends ConsumerStatefulWidget> on ConsumerState<T> {
       case ClientArchiveBusy():
         return false;
       case ClientArchived(:final archived):
-        // One toggle, one event — the direction is a parameter.
-        ref
-            .read(analyticsServiceProvider)
-            .logClientArchived(
-              action: archived
-                  ? AnalyticsArchiveActions.archive
-                  : AnalyticsArchiveActions.unarchive,
-            );
-        notices.success(
+        _logArchived(archived: archived);
+        // The one notice action the rules allow: an undo of a symmetric toggle.
+        notices.successWithAction(
           archived
               ? context.l10n.clients_archivedNotice(client.displayName)
               : context.l10n.clients_unarchivedNotice(client.displayName),
+          actionLabel: context.l10n.common_undo,
+          onAction: () => _undoArchive(client, archived: !archived),
         );
         onClientArchived(client, archived: archived);
         return true;
@@ -63,6 +60,55 @@ mixin ClientActionsHost<T extends ConsumerStatefulWidget> on ConsumerState<T> {
           ),
         );
         return false;
+    }
+  }
+
+  void _logArchived({required bool archived}) {
+    // One toggle, one event — the direction is a parameter.
+    ref
+        .read(analyticsServiceProvider)
+        .logClientArchived(
+          action: archived
+              ? AnalyticsArchiveActions.archive
+              : AnalyticsArchiveActions.unarchive,
+        );
+  }
+
+  /// The notice's Undo: runs after the surface that raised it may be gone, so
+  /// everything is read up front and nothing touches `ref` past the await.
+  Future<void> _undoArchive(
+    ClientRecord client, {
+    required bool archived,
+  }) async {
+    if (!mounted) return;
+    final l10n = context.l10n;
+    final notices = ref.read(noticeServiceProvider);
+    final logger = ref.read(loggerProvider);
+    final controller = ref.read(clientFormControllerProvider.notifier);
+    try {
+      final outcome = await controller.setArchived(
+        client.id,
+        archived: archived,
+      );
+      switch (outcome) {
+        case ClientArchiveBusy():
+          return;
+        case ClientArchived():
+          if (!mounted) return;
+          _logArchived(archived: archived);
+          onClientArchived(client, archived: archived);
+        case ClientArchiveFailed(:final error):
+          notices.error(
+            composeErrorNoticeFor(
+              l10n,
+              intro: l10n.error_introArchiveClient,
+              error: error,
+            ),
+          );
+      }
+    } catch (e, st) {
+      // The controller was disposed under the await; the write itself logged.
+      logger.warn('CLI-ARCH undo failed', e, st);
     }
   }
 

@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/features/auth/data/auth_cache.dart';
 import 'package:scheduling/features/auth/domain/auth_failure.dart';
 import 'package:scheduling/features/auth/services/account_deletion_service.dart';
@@ -61,6 +64,30 @@ void main() {
       ),
     ).thenReturn(callable);
   });
+
+  test(
+    'an old deletion acknowledgement cannot sign out or clear the new account',
+    () async {
+      final release = Completer<HttpsCallableResult<dynamic>>();
+      when(() => user.uid).thenReturn('A');
+      final session = SessionFence(readUid: () => auth.currentUser?.uid);
+      when(() => callable.call<dynamic>()).thenAnswer((_) => release.future);
+      final guarded = AccountDeletionService(
+        firebaseAuth: auth,
+        functions: functions,
+        authCache: authCache,
+        sessionForExit: () => session,
+      );
+      final pending = guarded.deleteAccount();
+      final next = _MockUser();
+      when(() => next.uid).thenReturn('B');
+      when(() => auth.currentUser).thenReturn(next);
+      release.complete(_MockHttpsCallableResult());
+      await pending;
+      verifyNever(auth.signOut);
+      verifyNever(authCache.clear);
+    },
+  );
 
   group('reauthenticateWithPassword', () {
     test('normalizes email before reauth', () async {

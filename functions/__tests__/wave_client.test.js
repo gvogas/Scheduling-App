@@ -57,6 +57,41 @@ function sequencedFetch(...responses) {
 // graphql() — success path
 // ---------------------------------------------------------------------------
 
+describe("graphql() request deadlines", () => {
+  afterEach(() => jest.useRealTimers());
+
+  test.each(["fetch", "json", "discard"])("bounds a stalled %s",
+      async (phase) => {
+        jest.useFakeTimers();
+        const stalled = new Promise(() => {});
+        const response = phase === "discard" ?
+      {status: 503, text: () => stalled} :
+      {status: 200, json: () => stalled};
+        const fetch = jest.fn().mockReturnValue(
+        phase === "fetch" ? stalled : Promise.resolve(response));
+        const pending = graphql("query { ok }", {}, opts(fetch, {
+          requestTimeoutMs: 100,
+        }));
+        const rejected = expect(pending).rejects
+            .toMatchObject({kind: "network"});
+        await jest.advanceTimersByTimeAsync(100);
+        await rejected;
+        expect(fetch.mock.calls[0][1].signal.aborted).toBe(true);
+      });
+
+  test("a retry exceeding the drain budget stays retryable without sleeping",
+      async () => {
+        const fetch = jest.fn().mockResolvedValue(
+            mockResponse(429, null, {"retry-after": "60"}));
+        const sleepFn = jest.fn();
+        await expect(graphql("query { ok }", {}, opts(fetch, {
+          sleepFn, deadlineMs: Date.now() + 5000,
+        }))).rejects.toMatchObject({kind: "rateLimited"});
+        expect(sleepFn).not.toHaveBeenCalled();
+        expect(fetch).toHaveBeenCalledTimes(1);
+      });
+});
+
 describe("graphql() success", () => {
   test("returns data on HTTP 200 with no errors", async () => {
     const body = {data: {user: {id: "u1", defaultEmail: "a@b.com"}}};
@@ -186,6 +221,7 @@ describe("graphql() 429 retry", () => {
           fetchImpl: jest.fn(fetch),
           sleepFn: sleepSpy,
           maxRetries: 1,
+          requestTimeoutMs: 120_000,
         },
     );
     expect(delays.length).toBe(1);

@@ -1,7 +1,7 @@
 # Open follow-ups from the 2026-09-12 session
 
 **Date:** 2026-09-12
-**Status: OPEN — item 4 CLOSED 2026-09-12, item 5 CLOSED 2026-09-19, item 2 backend DEPLOYED 2026-10-11 (`0ab3f05c`), app half rides 1.64.2+96, items 1 and 3 still blocked (re-verified 2026-10-01:** `appointment_form_fields.dart` and `job_address_section.dart` still mix `SheetPanel` with loose fields). Five items, each blocked on a
+**Status: OPEN — item 4 CLOSED 2026-09-12, item 5 CLOSED 2026-09-19, item 2 backend DEPLOYED 2026-10-11 (`0ab3f05c`), app half rides 1.65.0+97 (swept 2026-10-20; 1.64.2+96 was cut and never shipped), items 1 and 3 still blocked (re-verified 2026-10-01:** `appointment_form_fields.dart` and `job_address_section.dart` still mix `SheetPanel` with loose fields). Five items, each blocked on a
 different thing — a design decision, a deploy, a machine permission, a commit
 boundary, and a device. None is blocked on not knowing what to do.
 
@@ -41,7 +41,7 @@ re-open the mockup and design the text-row variant before writing any of it.
 
 ## 2. Street/city split on address suggestions
 
-**BUILT 2026-10-09; functions DEPLOYED 2026-10-11 (`0ab3f05c`); app half rides 1.64.2+96.**
+**BUILT 2026-10-09; functions DEPLOYED 2026-10-11 (`0ab3f05c`); app half rides 1.65.0+97.**
 `placesAutocomplete` now masks `suggestions.placePrediction.structuredFormat`
 and adds plain `mainText`/`secondaryText` strings (`""` when Places omits them)
 beside each passed-through `placePrediction`, which is unchanged, so 1.63 keeps

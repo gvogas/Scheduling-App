@@ -32,6 +32,27 @@
   "common_done": "Terminé",
   "common_close": "Fermer",
   "common_remove": "Retirer",
+  "common_noticeSuccessAnnouncement": "Succès : {message}",
+  "@common_noticeSuccessAnnouncement": {
+    "description": "Screen-reader label of a success notice banner; the kind prefix tells VoiceOver what colour alone shows.",
+    "placeholders": {
+      "message": {"type": "String"}
+    }
+  },
+  "common_noticeInfoAnnouncement": "Info : {message}",
+  "@common_noticeInfoAnnouncement": {
+    "description": "Screen-reader label of an info notice banner; the kind prefix tells VoiceOver what colour alone shows.",
+    "placeholders": {
+      "message": {"type": "String"}
+    }
+  },
+  "common_noticeErrorAnnouncement": "Erreur : {message}",
+  "@common_noticeErrorAnnouncement": {
+    "description": "Screen-reader label of an error notice banner; the kind prefix tells VoiceOver what colour alone shows.",
+    "placeholders": {
+      "message": {"type": "String"}
+    }
+  },
   "common_clearText": "Effacer le texte",
   "clients_clearAddress": "Effacer l’adresse",
   "settings_apply": "Appliquer",
@@ -68,6 +89,24 @@
   "calendar_fieldNotesHint": "Ce que vous avez trouvé, ce que vous avez fait, ce qui reste à estimer",
   "calendar_photosLimitReached": "{count, plural, =1{Une seule photo supplémentaire peut être ajoutée à ce travail.} other{Seulement {count} photos supplémentaires peuvent être ajoutées à ce travail.}}",
   "calendar_photosLimitFull": "Ce travail contient déjà toutes les photos possibles.",
+  "calendar_nPhotosQueuedOffline": "{count, plural, =1{1 photo sera téléversée dès que vous serez de retour en ligne.} other{{count} photos seront téléversées dès que vous serez de retour en ligne.}}",
+  "@calendar_nPhotosQueuedOffline": {
+    "description": "Avis lorsque l'équipe ajoute des photos hors ligne : elles sont en file d'attente et seront envoyées à la reconnexion.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "calendar_nPhotosUploading": "{count, plural, =1{Téléversement de 1 photo…} other{Téléversement de {count} photos…}}",
+  "@calendar_nPhotosUploading": {
+    "description": "Avis au retour en ligne quand les photos en attente commencent à s'envoyer.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "calendar_crewNotesLabel": "NOTES DE L’ÉQUIPE",
   "calendar_crewNotesTruncated": "Affichage des {count} notes les plus récentes. Les notes plus anciennes de ce travail ne sont pas affichées ici.",
   "calendar_crewNotesUnread": "Impossible de charger les notes de l’équipe. Fermez et rouvrez la tâche pour réessayer — ce qui a déjà été ajouté est toujours là.",
@@ -255,9 +294,16 @@
   "clients_deleteBlockedHasHistory": "Ce client a un historique de travaux; il ne peut pas être supprimé. Archivez-le plutôt.",
   "clients_deleteFailedNotFound": "Ce client n'existe plus.",
   "clients_noClientsYet": "Aucun client pour le moment",
-  "clients_noClientsMatch": "Aucun client ne correspond à",
+  "clients_noClientsMatchQuery": "Aucun client ne correspond à « {query} »",
+  "clients_noMatchWithinFilter": "Rien ne correspond dans {filter} — essayez un autre terme ou retirez le filtre.",
+  "clients_buildingFilterHint": "Une adresse apparaît ici dès que deux clients ou plus partagent la même rue et la même ville.",
+  "clients_noClientsYetHint": "Les clients ajoutés par un administrateur apparaîtront ici.",
+  "clients_alreadyOnFile": "Déjà au dossier : {name}",
+  "clients_openExistingClient": "Ouvrir",
+  "clients_useAnyway": "Utiliser quand même",
+  "clients_duplicatePhoneBlocked": "Ce numéro est déjà au dossier — ouvrez ce client ou choisissez Utiliser quand même.",
   "common_noAppointmentsFound": "Aucun rendez-vous trouvé.",
-  "clients_noAppointmentsMatch": "Aucun rendez-vous ne correspond à",
+  "clients_noAppointmentsMatchQuery": "Aucun rendez-vous ne correspond à « {query} »",
   "error_errorLoadingEmployees": "Erreur lors du chargement des employés",
   "clients_searchByClientOrEmployee": "Rechercher par client, téléphone ou employé...",
   "clients_historyFilterYear": "Année",
@@ -282,7 +328,7 @@
   "error_tooManyAttemptsPleaseTryAgainLater": "Trop de tentatives. Veuillez réessayer plus tard.",
   "error_networkErrorCheckYourConnectionAndTryAgain": "Erreur réseau. Vérifiez votre connexion et réessayez.",
   "common_offlineFormNotice": "Vous êtes hors ligne, donc ceci ne peut pas encore être enregistré. Remplissez-le — l’enregistrement fonctionnera dès le retour de la connexion.",
-  "common_offlineBanner": "Hors ligne — les modifications seront synchronisées à la reconnexion",
+  "common_offlineBanner": "Hors ligne — vous pouvez consulter votre horaire; l'enregistrement nécessite une connexion",
   "common_featurePaused": "Cette fonction est temporairement indisponible.",
   "common_updateRequiredTitle": "Mise à jour requise",
   "common_updateRequiredBody": "Cette version de l'app n'est plus prise en charge. Mettez-la à jour depuis l'App Store pour continuer.",
@@ -306,13 +352,12 @@
   "error_yourAdminAccessWasRevoked": "Votre accès administrateur a été révoqué. Veuillez vous reconnecter.",
   "error_anAccountWithThisEmailAlreadyExists": "Un compte avec ce courriel existe déjà",
   "error_anAccountWithThisEmailAlreadyExistsSignInOrContactAdmin": "Un compte existe déjà pour ce courriel. Connectez-vous, ou demandez à votre administrateur de réinitialiser votre invitation si vous n'y avez pas accès.",
-  "validation_passwordIsTooWeakUseAtLeast6Characters": "Mot de passe trop faible. Utilisez au moins 6 caractères",
-  "validation_passwordMustBeAtLeast8Characters": "Le mot de passe doit comporter au moins 8 caractères",
   "validation_passwordDoesNotMeetAllRequirements": "Le mot de passe ne respecte pas toutes les exigences ci-dessous",
   "validation_passwordReqMinLength": "Au moins 8 caractères",
   "validation_passwordReqUppercase": "Une lettre majuscule (A–Z)",
   "validation_passwordReqLowercase": "Une lettre minuscule (a–z)",
   "validation_passwordReqNumber": "Un chiffre (0–9)",
+  "validation_passwordReqNotStarting": "Pas le mot de passe temporaire qui vous a été remis",
   "common_clientAdded": "Client ajouté",
   "common_changesSaved": "Modifications enregistrées",
   "common_appointmentCreated": "Rendez-vous créé",
@@ -322,7 +367,6 @@
   "common_appointmentCancelled": "Rendez-vous annulé",
   "error_signInIsTemporarilyUnavailable": "La connexion est temporairement indisponible",
   "error_thisEmailIsNotAuthorizedToSignUp": "Ce courriel n’est pas autorisé à créer un compte",
-  "error_noUserProfileFoundForThisAccount": "Aucun profil utilisateur trouvé pour ce compte",
   "auth_pleaseLogInAgainAndRetry": "Veuillez vous reconnecter et réessayer",
   "auth_showPassword": "Afficher le mot de passe",
   "auth_hidePassword": "Masquer le mot de passe",
@@ -332,7 +376,7 @@
   "validation_enterAValidEmail": "Entrez une adresse courriel valide",
   "validation_pleaseSelectAtLeastOneEmployee": "Veuillez sélectionner au moins un employé",
   "common_optional": "facultatif",
-  "error_addressLookupFailed": "Échec de la recherche d’adresse",
+  "error_addressLookupFailed": "Échec de la recherche d’adresse — continuez à taper ou saisissez l’adresse manuellement.",
   "error_couldNotLoadAddressDetails": "Impossible de charger les détails de l’adresse",
   "common_search": "Rechercher...",
   "clients_noClientsFound": "Aucun client trouvé",
@@ -358,16 +402,12 @@
   "applock_title": "Verrouillé",
   "applock_unlock": "Déverrouiller",
   "applock_reason": "Authentifiez-vous pour déverrouiller l’application",
-  "onboarding_slide1Title": "Gérez les rendez-vous",
-  "onboarding_slide1Body": "Planifiez les travaux et suivez-les jusqu’à leur achèvement.",
-  "onboarding_slide2Title": "Vos clients au même endroit",
-  "onboarding_slide2Body": "Regroupez coordonnées, contacts et historique des clients.",
-  "onboarding_slide3Title": "Coordonnez votre équipe",
-  "onboarding_slide3Body": "Assignez les employés et voyez leurs disponibilités d’un coup d’œil.",
-  "onboarding_skip": "Passer",
-  "onboarding_next": "Suivant",
+  "applock_logOut": "Se déconnecter",
+  "applock_continue": "Continuer",
+  "applock_signedOut": "Vous avez été déconnecté.",
+  "onboarding_welcomeTitle": "Bienvenue",
+  "onboarding_welcomeBody": "Vos travaux, vos clients et votre équipe, au même endroit. Connectez-vous pour commencer.",
   "onboarding_getStarted": "Commencer",
-  "onboarding_back": "Retour",
   "settings_version": "Version {version} ({buildNumber})",
   "settings_wavePaused": "La synchronisation Wave est temporairement suspendue. Les modifications des clients sont en attente et seront synchronisées à la reprise.",
   "employees_disableEmployee": "Désactiver l'employé",
@@ -391,6 +431,7 @@
   "calendar_deleteAppointment": "Supprimer le rendez-vous",
   "calendar_cancelAppointment": "Annuler le rendez-vous",
   "calendar_cancelledJobsAreSavedToHistory": "Les travaux annulés sont sauvegardés dans l'historique.",
+  "calendar_keepAppointment": "Garder le rendez-vous",
   "calendar_appointmentStatus": "Statut du rendez-vous",
   "calendar_assignedEmployee": "Employé assigné",
   "employees_inviteEmployee": "Inviter un employé",
@@ -402,11 +443,27 @@
   "common_retry": "Réessayer",
   "calendar_open": "Ouvrir",
   "calendar_photoUploadFailedSnackbar": "Téléchargement de photo échoué. Ouvrez le rendez-vous pour réessayer.",
+  "calendar_photoPosition": "Photo {index} sur {count}",
+  "@calendar_photoPosition": {
+    "description": "Accessible position of a photo in an appointment gallery, including loading and unavailable entries. Index is one-based.",
+    "placeholders": {
+      "index": {"type": "int"},
+      "count": {"type": "int"}
+    }
+  },
+  "calendar_openPhoto": "Ouvrir en plein écran",
+  "@calendar_openPhoto": {
+    "description": "Screen reader action hint for opening an appointment photo."
+  },
+  "calendar_photoLoading": "Chargement de la photo",
+  "@calendar_photoLoading": {
+    "description": "Accessible state of an appointment photo while its bytes are loading."
+  },
   "calendar_photoUnavailable": "Photo indisponible",
   "calendar_photoFailedBadge": "Échec",
   "calendar_nPhotosWaitingToUpload": "{count, plural, =1{1 photo en attente de téléversement.} other{{count} photos en attente de téléversement.}}",
-  "calendar_nPhotosFailedToUpload": "{count, plural, =1{1 photo n'a pas pu être téléchargée.} other{{count} photos n'ont pas pu être téléchargées.}}",
-  "calendar_fileTooLargeWarning": "{fileName} est trop volumineux pour être téléchargé. La taille maximale est de 8 Mo même après compression. Veuillez utiliser une image plus petite.",
+  "calendar_nPhotosFailedToUpload": "{count, plural, =1{1 photo n'a pas pu être téléversée.} other{{count} photos n'ont pas pu être téléversées.}}",
+  "calendar_fileTooLargeWarning": "{fileName} est trop volumineux pour être téléversé. La taille maximale est de 8 Mo même après compression. Veuillez utiliser une image plus petite.",
   "calendar_scheduleConflict": "Double réservation",
   "calendar_alreadyBookedThisSlot": "Déjà réservé pendant ce créneau :",
   "calendar_doubleBookingWarning": "Vous les réservez en double. Voulez-vous quand même réserver ?",
@@ -449,6 +506,7 @@
   "settings_locationCleared": "Le partage de position est suspendu et votre dernière position a été effacée.",
   "settings_locationNone": "Aucune position envoyée",
   "settings_locationLoading": "Vérification de la position...",
+  "settings_locationPermissionRefused": "L'accès à la localisation a été refusé — autorisez-le pour cette app dans Réglages iOS pour partager votre position.",
   "settings_locationUnavailable": "Non disponible",
   "error_introSaveLocationSharing": "Impossible de modifier le partage de votre position",
   "settings_changeEmail": "Modifier le courriel de connexion",
@@ -458,6 +516,9 @@
   "error_introChangeEmail": "Impossible de modifier votre courriel de connexion",
   "settings_unsavedChanges": "Modifications non enregistrées",
   "common_discard": "Annuler les modifications",
+  "common_discardChangesTitle": "Abandonner les modifications?",
+  "common_discardChangesBody": "Ce que vous avez saisi ici n’est pas enregistré et sera perdu.",
+  "common_keepEditing": "Continuer la saisie",
   "error_introSaveAvailability": "Impossible d'enregistrer vos disponibilités",
   "error_introSaveAppLock": "Impossible de modifier le verrouillage de l'application",
   "error_introSaveMyDetails": "Impossible d'enregistrer vos informations",
@@ -519,7 +580,7 @@
   "dashboard_kpiBooked": "Réservés",
   "dashboard_kpiCompleted": "Terminés",
   "dashboard_kpiCancelled": "Annulés",
-  "dashboard_visitsToday": "{count, plural, =1{visite aujourd'hui} other{visites aujourd'hui}}",
+  "dashboard_visitsToday": "{count, plural, =1{tâche aujourd'hui} other{tâches aujourd'hui}}",
   "dashboard_employeeWorkload": "Charge de travail des employés",
   "dashboard_workloadCounts": "{today} auj. · {week} cette sem.",
   "dashboard_jobsPerDay": "Travaux réservés par jour — cette semaine",
@@ -529,7 +590,7 @@
   "dashboard_attentionFlags": "À surveiller",
   "dashboard_unassignedCount": "{count, plural, =1{1 visite non assignée aujourd'hui} other{{count} visites non assignées aujourd'hui}}",
   "dashboard_upcomingToday": "À venir aujourd'hui",
-  "dashboard_noVisitsToday": "Aucune visite à venir aujourd'hui",
+  "dashboard_noVisitsToday": "Aucune tâche à venir aujourd'hui",
   "dashboard_noActiveEmployees": "Aucun employé actif",
   "dashboard_completedVsCancelled": "Terminées vs annulées — 8 dernières semaines",
   "dashboard_newClientsEmpty": "Aucun nouveau client depuis 8 semaines",
@@ -545,8 +606,8 @@
   "dashboard_availabilityConflictHeader": "{count, plural, =1{1 personne est assignée en dehors de ses disponibilités} other{{count} personnes sont assignées en dehors de leurs disponibilités}}",
   "dashboard_availabilityConflictDays": "Assignée le {days}",
   "dashboard_allClear": "Tout est en ordre — rien à signaler",
-  "dashboard_pendingSoonHeader": "{count, plural, =1{1 visite en attente commence d'ici 48 heures} other{{count} visites en attente commencent d'ici 48 heures}}",
-  "dashboard_overdueOpenHeader": "{count, plural, =1{1 visite passée n'a jamais été clôturée} other{{count} visites passées n'ont jamais été clôturées}}",
+  "dashboard_pendingSoonHeader": "{count, plural, =1{1 tâche en attente commence d'ici 48 heures} other{{count} tâches en attente commencent d'ici 48 heures}}",
+  "dashboard_overdueOpenHeader": "{count, plural, =1{1 tâche passée n'a jamais été clôturée} other{{count} tâches passées n'ont jamais été clôturées}}",
   "dashboard_andMoreVisits": "{count, plural, =1{1 autre non affichée} other{{count} autres non affichées}}",
   "error_introLoadDashboard": "Impossible de charger le tableau de bord",
   "common_share": "Partager",
@@ -580,6 +641,15 @@
   "employees_testAccount": "Compte de test",
   "employees_testAccountCaption": "Masque cette personne de la carte du personnel, des choix d'employés et des totaux de l'équipe.",
   "employees_testAccountsSection": "{count, plural, =1{1 compte de test} other{{count} comptes de test}}",
+  "onboarding_notificationsTitle": "Sachez quand un travail est à vous",
+  "onboarding_notificationsBody": "Soyez averti quand un travail vous est assigné, quand c'est l'heure de partir, et recevez le résumé de votre journée.",
+  "onboarding_notificationsOnlyJobs": "Seulement vos travaux — rien d'autre",
+  "onboarding_notificationsLeaveOnTime": "Des alertes de départ qui tiennent compte du trafic",
+  "onboarding_notificationsOffAnytime": "Désactivez-les en tout temps dans Paramètres",
+  "onboarding_notificationsTurnOn": "Activer les notifications",
+  "onboarding_notificationsNotNow": "Plus tard",
+  "onboarding_shareLocationConsentedTitle": "Terminez la configuration de la carte d'équipe",
+  "onboarding_shareLocationConsentedBody": "Vous avez accepté de partager votre position lors de la configuration. Autorisez l'accès à la localisation pour que votre position atteigne la carte.",
   "onboarding_shareLocationTitle": "Soyez sur la carte d'équipe",
   "onboarding_shareLocationBody": "Partagez votre position pour que le bureau envoie la personne la plus proche au prochain travail.",
   "onboarding_shareLocationOnlyOpen": "Seulement quand l'app est ouverte",
@@ -753,6 +823,11 @@
   "employees_sectionAccess": "ACCÈS",
   "employees_firstName": "Prénom",
   "employees_lastName": "Nom",
+  "employees_workEmailHelper": "C'est l'adresse avec laquelle la personne se connecte.",
+  "employees_changeEmailConfirmTitle": "Changer le courriel de connexion?",
+  "employees_changeEmailConfirmBody": "{name} se connectera désormais avec {email}, et l'ancienne adresse cessera de fonctionner. Prévenez la personne.",
+  "employees_changeEmailConfirm": "Changer le courriel",
+  "employees_emergencyLoading": "Chargement du contact d'urgence…",
   "employees_workEmail": "Courriel professionnel",
   "employees_workingDays": "Jours de travail",
   "employees_startsAt": "Début",
@@ -767,7 +842,9 @@
   "employees_noWorkingDays": "Aucun jour de travail défini",
   "auth_show": "Voir",
   "auth_hide": "Cacher",
-  "auth_noEmailOnAccountNote": "Aucun courriel sur votre compte ? Demandez à votre responsable de l'ajouter avant la réinitialisation.",
+  "auth_noEmailOnAccountNote": "Si votre courriel professionnel n'est pas une vraie boîte de réception, demandez à votre responsable de réinitialiser votre mot de passe depuis l'écran Équipe.",
+  "auth_accountReadySignInAgain": "Votre compte est prêt. Connectez-vous avec votre nouveau mot de passe.",
+  "auth_splashOfflineRetrying": "Vous êtes hors ligne — nouvelle tentative…",
   "auth_resetSentPanelTitle": "ENVOYÉ",
   "auth_resetExpiryFact": "Le lien de réinitialisation expire dans 1 heure.",
   "auth_resetSignsOutFact": "Son utilisation vous déconnecte de tous vos appareils.",
@@ -781,6 +858,9 @@
   "auth_passwordStrengthGood": "Bon",
   "auth_passwordStrengthStrong": "Fort",
   "employees_accountCreatedTitle": "Compte créé",
+  "employees_closeWithoutCopyTitle": "Fermer sans copier?",
+  "employees_closeWithoutCopyBody": "Vous n'avez pas copié ces informations. Le mot de passe temporaire ne pourra plus être affiché.",
+  "employees_closeAnyway": "Fermer quand même",
   "employees_shareTheseWith": "Donnez ceci à {name} pour se connecter.",
   "employees_temporaryPassword": "MOT DE PASSE TEMPORAIRE",
   "employees_theyWillChooseTheirOwnPassword": "Cette personne choisira son propre mot de passe à la première connexion.",
@@ -925,5 +1005,61 @@
   "calendar_overdueReviewSelectJob": "Sélectionner {title}",
   "employees_monthEndReviewPush": "Rappel des travaux en retard en fin de mois",
   "employees_monthEndReviewPushDescription": "Une notification le dernier jour du mois pour les travaux terminés sans être fermés",
+  "clients_searchTruncated": "Affichage de {shown} résultats sur {total}. Précisez le nom, l'adresse ou le numéro de téléphone pour affiner la recherche.",
+  "@clients_searchTruncated": {
+    "description": "Précise que la recherche de clients a trouvé plus de résultats que la limite affichée.",
+    "placeholders": {
+      "shown": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "clients_searchTruncatedAtLeast": "Plus de {shown} résultats. Précisez le nom, l'adresse ou le numéro de téléphone pour affiner la recherche.",
+  "@clients_searchTruncatedAtLeast": {
+    "description": "Précise que la recherche de clients s'est arrêtée à sa limite de lecture : on sait seulement que plus de résultats que ceux affichés correspondent.",
+    "placeholders": {
+      "shown": {
+        "type": "int"
+      }
+    }
+  },
+  "error_causeEditConflict": "Ce rendez-vous a été modifié ailleurs — consultez la dernière version avant de réessayer; votre brouillon est conservé.",
+  "@error_causeEditConflict": {
+    "description": "Explique un conflit de modification de rendez-vous sans effacer le brouillon."
+  },
+  "auth_pendingPhotosTitle": "Photos en attente d'enregistrement",
+  "@auth_pendingPhotosTitle": {
+    "description": "Titre avant une déconnexion volontaire ou une suppression de compte avec des photos en attente."
+  },
+  "auth_pendingPhotosBody": "{count, plural, =1{1 photo attend d'être enregistrée dans un rendez-vous.} other{{count} photos attendent d'être enregistrées dans des rendez-vous.}} Restez connecté pour réessayer, ou abandonnez les photos en attente pour continuer. Les photos déjà enregistrées seront conservées.",
+  "@auth_pendingPhotosBody": {
+    "description": "Explique le choix des photos en attente avant de quitter le compte.",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "auth_stayAndRetryPhotos": "Rester et réessayer",
+  "@auth_stayAndRetryPhotos": {
+    "description": "Annule la sortie du compte et relance les photos en attente."
+  },
+  "auth_discardPhotosAndContinue": "Abandonner les photos et continuer",
+  "@auth_discardPhotosAndContinue": {
+    "description": "Abandon explicite des photos en attente avant de quitter le compte."
+  },
+  "calendar_photoUploadsExpired": "{count, plural, =1{1 photo n'a pas été enregistrée et a été supprimée après sept jours.} other{{count} photos n'ont pas été enregistrées et ont été supprimées après sept jours.}} Ouvrez les rendez-vous pour les ajouter de nouveau.",
+  "@calendar_photoUploadsExpired": {
+    "description": "Signale les photos non enregistrées arrivées à expiration pour ce compte.",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "auth_forcedExitPhotos": "Certaines photos n'étaient pas encore enregistrées. Vérifiez vos rendez-vous avant de les ajouter de nouveau; les photos non envoyées sont effacées de cet appareil à la sortie du compte.",
+  "@auth_forcedExitPhotos": {
+    "description": "Explique la perte possible de photos lors d'une sortie forcée du compte."
+  },
+  "error_causeIncompleteCheck": "La vérification n'a pas pu examiner tous les résultats — réduisez la recherche ou la période avant de confirmer.",
+  "@error_causeIncompleteCheck": {
+    "description": "Explique une recherche ou vérification de conflits incomplète."
+  },
+  "error_causeFailedPrecondition": "Cette action est impossible dans l'état actuel de la fiche — actualisez et vérifiez les dernières données avant de réessayer.",
   "error_introReviewOverdue": "Impossible de mettre à jour les travaux"
 }

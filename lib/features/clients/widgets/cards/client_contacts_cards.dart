@@ -71,9 +71,7 @@ class _CollapsibleContactsState extends State<_CollapsibleContacts> {
                 children: [
                   Expanded(
                     child: SectionLabel(
-                      context.l10n.common_contactsCount(
-                        widget.contacts.length,
-                      ),
+                      context.l10n.common_contactsCount(widget.contacts.length),
                     ),
                   ),
                   AnimatedRotation(

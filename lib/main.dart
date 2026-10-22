@@ -25,6 +25,7 @@ import 'package:scheduling/core/app/analytics_identity_listener.dart';
 import 'package:scheduling/core/app/app_sync_listeners.dart';
 import 'package:scheduling/core/app/appointment_link_opener.dart';
 import 'package:scheduling/core/app/carplay_bridge.dart';
+import 'package:scheduling/core/app/session_fence.dart';
 import 'package:scheduling/core/connectivity/offline_banner.dart';
 import 'package:scheduling/core/deep_links/deep_link_dispatcher.dart';
 import 'package:scheduling/core/layout/breakpoints.dart';
@@ -40,7 +41,9 @@ import 'package:scheduling/core/security/app_lock.dart';
 import 'package:scheduling/core/theme/theme_notifier.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/core/utils/app_language.dart';
+import 'package:scheduling/core/utils/date_utils_helper.dart';
 import 'package:scheduling/core/utils/debouncer.dart';
+import 'package:scheduling/core/utils/presentation_time_provider.dart';
 import 'package:scheduling/features/home_widget/application/widget_sync_service.dart';
 import 'package:scheduling/features/live_activity/application/live_activity_registration_controller.dart';
 import 'package:scheduling/features/notifications/application/push_registration_controller.dart';
@@ -49,6 +52,7 @@ import 'package:scheduling/features/presence/application/presence_sync_controlle
 import 'package:scheduling/features/settings/application/settings_providers.dart';
 import 'package:scheduling/features/settings/data/shared_prefs_settings_repository.dart';
 import 'package:scheduling/features/settings/domain/models/app_settings.dart';
+import 'package:scheduling/features/siri/application/schedule_snapshot_provider.dart';
 import 'package:scheduling/firebase_options.dart';
 import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
@@ -217,6 +221,7 @@ class _PaulAppState extends ConsumerState<PaulApp> {
   late double _textScale;
   late AppLanguageController _languageController;
   bool _controllerSyncsPrimed = false;
+  late final AppLifecycleListener _pushResumeListener;
 
   @override
   void initState() {
@@ -234,6 +239,19 @@ class _PaulAppState extends ConsumerState<PaulApp> {
     _setupCarPlay();
     _setupDeepLinkHandling();
     _setupAnalytics();
+    _pushResumeListener = AppLifecycleListener(
+      onResume: () {
+        if (mounted) {
+          ref
+            ..invalidate(presentationTimeProvider)
+            ..invalidate(widgetPayloadProvider)
+            ..invalidate(scheduleSnapshotProvider);
+          unawaited(
+            ref.read(pushRegistrationControllerProvider).retryRegistration(),
+          );
+        }
+      },
+    );
   }
 
   /// Collection state and the two properties that never change mid-session.
@@ -268,11 +286,13 @@ class _PaulAppState extends ConsumerState<PaulApp> {
     _deepLinkDispatcher = DeepLinkDispatcher(
       logger: ref.read(loggerProvider),
       openAppointment: _linkOpener.openAppointment,
+      session: ref.read(sessionFenceProvider),
     )..start();
   }
 
   @override
   void dispose() {
+    _pushResumeListener.dispose();
     _linkOpener.dispose();
     _carPlayBridge.dispose();
     _deepLinkDispatcher?.dispose();
@@ -364,6 +384,7 @@ class _PaulAppState extends ConsumerState<PaulApp> {
 
   Widget _buildAppShell(BuildContext context, Widget? child) {
     final media = MediaQuery.of(context);
+    DateUtilsHelper.use24Hour = media.alwaysUse24HourFormat;
     // Compose in-app text scale with the OS scale, capped app-wide.
     final systemFactor = media.textScaler.scale(14) / 14;
     final effectiveScale = math.min(
@@ -383,6 +404,7 @@ class _PaulAppState extends ConsumerState<PaulApp> {
         data: theme,
         child: UpdateGate(
           child: AppLock(
+            navigatorKey: _navigatorKey,
             child: NoticeListener(
               navigatorKey: _navigatorKey,
               child: Column(

@@ -7,6 +7,9 @@ import 'package:flutter_riverpod/misc.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/notices/notice_listener.dart';
+import 'package:scheduling/core/theme/design_tokens.dart';
+import 'package:scheduling/core/utils/presentation_time_provider.dart';
 import 'package:scheduling/features/auth/application/active_user_identity_provider.dart';
 import 'package:scheduling/features/auth/application/is_active_admin_provider.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
@@ -52,16 +55,28 @@ final _open = AppointmentRecord(
   employeeNames: const ['Alex'],
 );
 
-Widget _wrap(Widget child, {required List<Override> overrides}) {
+Widget _wrap(
+  Widget child, {
+  required List<Override> overrides,
+  GlobalKey<NavigatorState>? noticeHost,
+}) {
   return ProviderScope(
     overrides: overrides,
     child: MaterialApp(
+      navigatorKey: noticeHost,
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
       ],
       supportedLocales: AppLocalizations.supportedLocales,
+      // Mounted only where a test taps a notice action (the Undo).
+      builder: noticeHost == null
+          ? null
+          : (context, child) => NoticeListener(
+              navigatorKey: noticeHost,
+              child: child ?? const SizedBox.shrink(),
+            ),
       home: Scaffold(body: SingleChildScrollView(child: child)),
     ),
   );
@@ -95,7 +110,9 @@ void main() {
   List<Override> overrides({
     bool? isAdmin,
     Future<ActiveUserIdentity?>? identity,
+    DateTime? now,
   }) => [
+    if (now != null) presentationTimeProvider.overrideWithValue(now),
     appointmentsRepositoryProvider.overrideWithValue(appointments),
     clientsRepositoryProvider.overrideWithValue(clients),
     employeesRepositoryProvider.overrideWithValue(employees),
@@ -112,6 +129,8 @@ void main() {
     VoidCallback? onClose,
     bool? isAdmin,
     Future<ActiveUserIdentity?>? identity,
+    GlobalKey<NavigatorState>? noticeHost,
+    DateTime? now,
   }) async {
     await tester.pumpWidget(
       _wrap(
@@ -120,11 +139,27 @@ void main() {
           showActions: showActions,
           onClose: onClose ?? () {},
         ),
-        overrides: overrides(isAdmin: isAdmin, identity: identity),
+        overrides: overrides(isAdmin: isAdmin, identity: identity, now: now),
+        noticeHost: noticeHost,
       ),
     );
     await tester.pumpAndSettle();
   }
+
+  /// Runs the notice banner out so its auto-dismiss timer cannot outlive the
+  /// widget tree.
+  Future<void> settleNotices(WidgetTester tester) async {
+    await tester.pump(AppMotion.noticeCycle);
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump();
+  }
+
+  void stubStatusWrite() => when(
+    () => appointments.updateAppointmentStatus(
+      id: any(named: 'id'),
+      status: any(named: 'status'),
+    ),
+  ).thenAnswer((_) async {});
 
   group('time record', () {
     testWidgets('a finished job shows started, finished and elapsed', (
@@ -185,12 +220,7 @@ void main() {
 
     testWidgets('starting a job does NOT dismiss the sheet', (tester) async {
       // Mark-done and cancel close because the job is finished.
-      when(
-        () => appointments.updateAppointmentStatus(
-          id: any(named: 'id'),
-          status: any(named: 'status'),
-        ),
-      ).thenAnswer((_) async {});
+      stubStatusWrite();
       var closed = false;
       await pump(tester, _open, onClose: () => closed = true);
 
@@ -198,6 +228,58 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(closed, isFalse, reason: 'the crew still needs this sheet');
+    });
+
+    testWidgets('a successful start updates the open sheet in place', (
+      tester,
+    ) async {
+      // The sheet stays open on the snapshot it was opened with, so without a
+      // live source Start stayed visible (a second tap is refused by the
+      // rules) and the chip still said Scheduled.
+      // Viewed BEFORE the booked start: the chip is clock-derived, so past the
+      // start it would read In Progress either way.
+      stubStatusWrite();
+      await pump(tester, _open, now: DateTime(2026, 5, 10, 8));
+      expect(find.text('Scheduled'), findsOneWidget);
+
+      await tester.tap(find.text('Start job'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Start job'), findsNothing);
+      expect(find.text('In Progress'), findsOneWidget);
+      expect(find.textContaining('Started'), findsOneWidget);
+      expect(find.text('Mark as complete'), findsOneWidget);
+    });
+
+    testWidgets('Start, Complete, Undo restores in_progress, not pending', (
+      tester,
+    ) async {
+      stubStatusWrite();
+      when(
+        () => appointments.restoreAppointmentStatus(
+          id: any(named: 'id'),
+          previousStatus: any(named: 'previousStatus'),
+        ),
+      ).thenAnswer((_) async {});
+      final host = GlobalKey<NavigatorState>();
+      await pump(tester, _open, noticeHost: host);
+
+      await tester.tap(find.text('Start job'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Mark as complete'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+
+      // `previousStatus` is taken from the LIVE record, so the undo lands the
+      // job back where the crew left it rather than on the opening snapshot.
+      verify(
+        () => appointments.restoreAppointmentStatus(
+          id: 'appt-1',
+          previousStatus: 'in_progress',
+        ),
+      ).called(1);
+      await settleNotices(tester);
     });
   });
 

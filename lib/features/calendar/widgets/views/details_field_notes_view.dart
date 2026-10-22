@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:intl/intl.dart';
 
 import 'package:scheduling/core/errors/error_cause.dart';
 import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
+import 'package:scheduling/core/utils/date_utils_helper.dart';
 import 'package:scheduling/features/calendar/application/field_notes_provider.dart';
 import 'package:scheduling/features/calendar/data/appointment_field_notes_store.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
@@ -55,11 +55,6 @@ class DetailsFieldNotesView extends ConsumerWidget {
     // who may not list users).
     final nameMap = ref.watch(employeeNameMapProvider);
 
-    // Hoisted out of the notes: constructing one parses the locale's symbols.
-    final when = DateFormat.MMMd(
-      Localizations.localeOf(context).toString(),
-    ).add_jm();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -69,7 +64,6 @@ class DetailsFieldNotesView extends ConsumerWidget {
         for (final note in notes) ...[
           _Note(
             note: note,
-            when: when,
             authorName: nameMap[note.authorId] ?? note.authorName,
           ),
           const SizedBox(height: AppSpacing.sp12),
@@ -87,14 +81,9 @@ class DetailsFieldNotesView extends ConsumerWidget {
 }
 
 class _Note extends StatelessWidget {
-  const _Note({
-    required this.note,
-    required this.when,
-    required this.authorName,
-  });
+  const _Note({required this.note, required this.authorName});
 
   final FieldNote note;
-  final DateFormat when;
 
   /// Resolved from `note.authorId` where possible — never rendered from the
   /// unvalidated stored name when the roster can answer.
@@ -105,7 +94,10 @@ class _Note extends StatelessWidget {
     final theme = Theme.of(context);
     final l10n = context.l10n;
     final createdAt = note.createdAt;
-    final stamp = createdAt == null ? '' : when.format(createdAt);
+    final stamp = createdAt == null
+        ? ''
+        : '${DateUtilsHelper.formatMonthDay(createdAt)} '
+              '${DateUtilsHelper.formatTime(createdAt)}';
     final hasAuthor = authorName.trim().isNotEmpty;
 
     return Row(

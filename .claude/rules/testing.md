@@ -34,6 +34,9 @@ before each file; nothing else is reset. The leaks found when sharding landed
 - **Override `isOfflineProvider` in a bare `ProviderContainer`** whose code
   reads it. Once another file has initialised the test binding, the real
   connectivity channel is called and throws `MissingPluginException`.
+- Give every `overrideWith` that builds a push / presence / live-activity
+  controller `ref.onDispose(controller.dispose)` — its `AppLifecycleListener`
+  outlives the container and a later file's resume drives it.
 - Set a global mock in `setUp`/`setUpAll`, never directly in `main()`: every
   file's `main()` runs at load, so the last file loaded wins.
 
@@ -60,12 +63,12 @@ before each file; nothing else is reset. The leaks found when sharding landed
   `FlutterSecureStorage.setMockInitialValues({})` in `setUp`. `SettingsScreen`
   additionally needs `PackageInfo.setMockInitialValues(...)` and a `ProviderScope`
   (it watches `appInfoProvider` + `appLockEnabledProvider` during build).
-- **Any widget test reaching an account exit must override FOUR providers:
+- **Any widget test reaching an account exit must override FIVE providers:
   `appointmentImageLoaderProvider`, `appointmentImageUploadProvider`,
-  `clientsRepositoryProvider` and `appointmentsRepositoryProvider`** — count
-  them off `accountExitStubOverrides` rather than off this sentence, which said
-  THREE until 2026-09-05 while the helper returned four, so following it as
-  written still hung. `deregisterThisDevice` forgets everything
+  `clientsRepositoryProvider`, `appointmentsRepositoryProvider` and
+  `sessionFenceProvider`** — spread `accountExitStubOverrides()` to keep this
+  list current. The session fence needs an injected UID rather than a live
+  Firebase Auth stream. `deregisterThisDevice` forgets everything
   the session cached locally, and each of them fails a different way
   without an override. The image loader resolves the platform cache directory
   through `path_provider`, and a method channel never completes under
@@ -126,7 +129,7 @@ before each file; nothing else is reset. The leaks found when sharding landed
   told you not to write any). Only the plugin round-trip itself needs a device;
   verify picker fixes there via `flutter run`. **`ImageStorageService` is NOT in that category**
   (corrected 2026-08-15): it takes an injected `FirebaseStorage` and `AppLogger`,
-  and its magic-byte rejection, 8 MB cap, `composeFileName` bound, legacy
+  and its magic-byte rejection and 8 MB cap (through `uploadQueuedImage`), legacy
   `_pathFromUrl` fallback and `object-not-found` swallow are all covered by
   `test/core/images/image_storage_service_test.dart`. Only the actual byte
   transfer (`putFile`) is device-only.

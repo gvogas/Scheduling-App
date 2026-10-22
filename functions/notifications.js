@@ -48,6 +48,7 @@ function liveDeps() {
     db: getFirestore(),
     messaging: getMessaging(),
     now: new Date(),
+    deliveryNow: Date.now,
     logger,
   };
 }

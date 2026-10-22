@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -112,48 +111,34 @@ void main() {
     expect(find.byType(ImageViewer), findsNothing);
   });
 
-  group('buildImageProviders', () {
-    test('substitutes a refused photo in place rather than dropping it', () {
-      // Empty bytes are a REFUSAL from AppointmentImageLoader — a rules
-      // rejection or a failed fetch, with no url to fall back to by design.
-      // The viewer opens at an INDEX, so dropping the entry would shift every
-      // photo beside it — the tapped thumbnail would open its neighbour.
-      final a = Uint8List.fromList([1, 2, 3]);
-      final c = Uint8List.fromList([4, 5, 6]);
-
-      final providers = buildImageProviders(
-        bytes: [a, Uint8List(0), c],
-        files: const [],
+  testWidgets('a photo that failed to load disables Save and Share', (
+    tester,
+  ) async {
+    final broken = MemoryImage(Uint8List.fromList(const [0, 1, 2, 3]));
+    await tester.runAsync(() async {
+      await _open(
+        tester,
+        images: [MemoryImage(_kTransparentPng), broken],
+        initialIndex: 1,
       );
-
-      expect(providers, hasLength(3));
-      expect((providers[0] as MemoryImage).bytes, a);
-      expect((providers[2] as MemoryImage).bytes, c);
-      // The stand-in is a real 1×1 transparent PNG, never the empty bytes it
-      // replaced — an empty MemoryImage throws out of the decoder, which is a
-      // crash where a blank slot is wanted.
-      final substitute = providers[1] as MemoryImage;
-      expect(substitute.bytes, isNotEmpty);
-      expect(substitute.bytes, isNot(a));
-      expect(substitute.bytes, isNot(c));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
     });
+    await tester.pumpAndSettle();
+    VoidCallback? action(IconData icon) => tester
+        .widget<IconButton>(find.widgetWithIcon(IconButton, icon))
+        .onPressed;
 
-    test('appends the files after every photo, in order', () {
-      // This ordering is the whole reason `existingBytes.length + i` is a
-      // correct viewer offset for a newly picked photo.
-      final first = File('first.jpg');
-      final second = File('second.jpg');
+    expect([action(Icons.save_alt), action(Icons.ios_share)], [null, null]);
 
-      final providers = buildImageProviders(
-        bytes: [Uint8List.fromList([1, 2, 3])],
-        files: [first, second],
-      );
+    await tester.drag(find.byType(PageView), const Offset(500, 0));
+    await tester.pumpAndSettle();
+    expect(action(Icons.save_alt), isNotNull);
+  });
 
-      expect(providers, hasLength(3));
-      expect(providers[0], isA<MemoryImage>());
-      expect((providers[1] as FileImage).file.path, first.path);
-      expect((providers[2] as FileImage).file.path, second.path);
-    });
+  test('the refused-photo stand-in is a real image, never empty bytes', () {
+    // An empty MemoryImage throws out of the decoder; a blank slot is wanted.
+    expect(refusedImage.bytes, isNotEmpty);
+    expect(isRefusedImage(refusedImage), isTrue);
   });
 
   group('ImageViewer.open clamps its initial index', () {

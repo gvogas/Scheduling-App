@@ -11,6 +11,18 @@ import XCTest
 @testable import Runner
 
 final class CarPlayTemplateBuilderTests: XCTestCase {
+    func testSnapshotDayMakesCappedAndLegacyCoverageExplicit() throws {
+        let raw = """
+        {"date":"2026-10-18","appointments":[],"totalCount":31,
+         "truncated":true,"coverageComplete":true}
+        """
+        let bucket = try JSONDecoder().decode(SnapshotDay.self, from: Data(raw.utf8))
+        XCTAssertEqual(bucket.totalCount, 31)
+        XCTAssertTrue(bucket.isPartial)
+        let legacy = try JSONDecoder().decode(SnapshotDay.self,
+            from: Data("{\"date\":\"2026-10-18\",\"appointments\":[]}".utf8))
+        XCTAssertTrue(legacy.isPartial)
+    }
 
     // MARK: - Fixtures
 

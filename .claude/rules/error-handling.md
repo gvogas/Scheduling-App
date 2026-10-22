@@ -7,12 +7,12 @@ alwaysApply: true
 - Never swallow an error: log or rethrow, naming the operation. Catch `FirebaseAuthException`/`FirebaseException` specifically; no raw codes or stack traces in UI.
 - Give every async call in `initState` and every stream subscription a `.catchError` or `try/catch` — unhandled, they crash silently.
 - Retry transient errors with backoff; fail fast on auth/permission errors — except a read right after sign-in (`permission-denied` until the token propagates): wrap it in `retryAsync`/`retryStream` (`lib/core/utils/retry.dart`), as the appointments stream (`retryStream`) and `sign_in_controller.dart`'s `findUserByUid` (`retryAsync`) do. (ADR-0035)
-- Keep the defaults `isAuthPropagationDenied` (`retryWhen`) and `kAuthPropagationDelays` (`delays:`) sole owners — no local predicate, inline `catch (FirebaseException)`-then-delay or per-site budget. (ADR-0035)
+- Keep the defaults `isAuthPropagationDenied` (`retryWhen`) and `kAuthPropagationDelays` (`delays:`) sole owners — no local predicate, inline `catch (FirebaseException)`-then-delay or per-site budget. (ADR-0035) One carve-out: `SignInController.resumeAfterSignUp` composes `isAuthPropagationDenied` with its private `_ProfileStillStale` ("doc still invited" is no Firebase error), still on the default delays; a new site needing more than the default gets a rules entry, not a quiet copy.
 - Log `permission-denied` clearly — usually a `firestore.rules` issue, not a bug.
 
 ## Cause notices (generic catch sites)
 
-- Typed-`Failure` branches first, else `composeErrorNotice(context, intro:, error:)` (`lib/core/errors/error_cause.dart`): `"{intro}. {cause}"` from 7 sanitized causes. Never `error_somethingWentWrong` at a new site.
+- Typed-`Failure` branches first, else `composeErrorNotice(context, intro:, error:)` (`lib/core/errors/error_cause.dart`): `"{intro}. {cause}"` from 10 sanitized causes. Never `error_somethingWentWrong` at a new site.
 - Never put a support tag in user-facing text; it lives only as the `logger.warn` label prefix, so the label MUST start with it (`'CLI-DEL deleteClient failed'`). (ADR-0031)
 - Call `warn` BEFORE any `if (!mounted) return;` — the log must survive unmount.
 - Read the logger (`loggerProvider`) and any provider a post-await path needs (`noticeServiceProvider`, a repository) BEFORE the first `await` — Riverpod 3 `ref.read` on an unmounted consumer throws a `StateError`, exactly when the mounted guard matters. A `ref.read` in a braced `catch` or `.catchError` body is CI-checked (`tool/check_rules.dart`, `ref-read-in-catch`); the before-await half is not. (ADR-0033)
@@ -93,6 +93,8 @@ A discarded future has no caller, so its `try` is all that stands between a rout
 
 - At most ONE action, on a success notice: `noticeServiceProvider.successWithAction(message, actionLabel:, onAction:)` (`core/notices/notice_service.dart`), which DISMISSES first so the action can push a notice of its own. `AppNotice.info`/`.error` take none — an error already says what to do in its cause sentence, and an action on an auto-dismissing notice is a race the user loses.
 - Only an undo belongs there (mark-complete → `restoreAppointmentStatus`); anything deliberate goes on the screen.
+- Hold comes only from `noticeHoldFor` (`core/notices/notice_hold.dart`, dials on `AppMotion`): success/info `noticeCycle`, error 5 s + 40 ms/char capped at 10 s, an action notice ≥ 6 s, `accessibleNavigation` ≥ 6 s (max of the two); a finger on the banner pauses the timer. Never a per-site duration.
+- A later non-error notice never pre-empts a shown action notice: `NoticeListener` parks it (latest pending wins) and shows it when the action notice ends; only an error pre-empts.
 
 ## Action outcomes vs. errors
 
