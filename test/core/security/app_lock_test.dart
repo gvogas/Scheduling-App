@@ -403,6 +403,31 @@ void main() {
       verifyNever(auth.signOut);
     });
 
+    testWidgets('the forced exit that won the guard drops the lock once its '
+        'login has covered the app', (tester) async {
+      final exit = _MockAccountExit();
+      final loginShown = StreamController<void>.broadcast();
+      addTearDown(loginShown.close);
+      when(
+        () => exit.runVoluntaryTeardown(any()),
+      ).thenAnswer((_) async => false);
+      await pumpWithExit(
+        tester,
+        overrides: [
+          accountExitControllerProvider.overrideWithValue(exit),
+          forcedExitLoginShownProvider.overrideWithValue(loginShown),
+        ],
+      );
+      await tester.tap(find.text('Log out'));
+      await tester.pumpAndSettle();
+
+      loginShown.add(null);
+      await tester.pumpAndSettle();
+
+      expect(isLocked(tester), isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('a failed sign-out restores the device and keeps the session '
         'locked, saying why inline', (tester) async {
       when(auth.signOut).thenAnswer((_) async => throw Exception('boom'));

@@ -22,6 +22,8 @@ Fixes around signing out and crew notes.
   out from the lock screen failed at that moment, the app could stay signed
   in until it was next opened.
 - **A broken link to the home screen opens it normally** instead of failing.
+- **The lock screen no longer covers the login screen** after your account
+  is signed out by an administrator; it clears once login has opened.
 
 ## [1.66.0+98] - 2026-10-21
 

@@ -55,16 +55,28 @@ class _AppLockState extends ConsumerState<AppLock> with WidgetsBindingObserver {
   /// A failed Log out's composed notice, inline for the same reason.
   String? _logOutError;
 
+  StreamSubscription<void>? _loginShownSub;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    final logger = ref.read(loggerProvider);
+    // A forced exit's login holds nothing to guard; drop the lock once it covers the app.
+    _loginShownSub = ref.read(forcedExitLoginShownProvider).stream.listen(
+      (_) {
+        if (mounted && _locked) _release();
+      },
+      onError: (Object e, StackTrace st) =>
+          logger.warn('APPLOCK loginShown stream failed', e, st),
+    );
     _lockOnStartIfEnabled();
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(_loginShownSub?.cancel());
     _answerPhotoChoice(discard: false);
     super.dispose();
   }

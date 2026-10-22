@@ -13,6 +13,14 @@ import 'package:scheduling/l10n/l10n.dart';
 import 'package:scheduling/routes/app_routes.dart';
 import 'package:scheduling/shared/widgets/feedback/error_snack_bar.dart';
 
+/// Fires once a forced exit's login route has finished covering the app, so
+/// `AppLock` can drop an overlay that would otherwise sit over login.
+final forcedExitLoginShownProvider = Provider<StreamController<void>>((ref) {
+  final signal = StreamController<void>.broadcast();
+  ref.onDispose(() => unawaited(signal.close()));
+  return signal;
+});
+
 final accountExitControllerProvider = Provider<AccountExitController>(
   (ref) => AccountExitController(
     logger: ref.read(loggerProvider),
@@ -27,6 +35,7 @@ final accountExitControllerProvider = Provider<AccountExitController>(
         .value
         .values
         .fold<int>(0, (sum, count) => sum + count),
+    onLoginShown: () => ref.read(forcedExitLoginShownProvider).add(null),
   ),
 );
 
@@ -42,12 +51,14 @@ class AccountExitController {
     required bool Function() isSignedIn,
     SessionFence Function()? sessionForExit,
     int Function()? pendingPhotoCount,
+    void Function()? onLoginShown,
   }) : _logger = logger,
        _authService = authService,
        _deregisterDevice = deregisterDevice,
        _isSignedIn = isSignedIn,
        _sessionForExit = sessionForExit,
-       _pendingPhotoCount = pendingPhotoCount;
+       _pendingPhotoCount = pendingPhotoCount,
+       _onLoginShown = onLoginShown;
 
   final AppLogger _logger;
   final AuthService _authService;
@@ -55,6 +66,7 @@ class AccountExitController {
   final bool Function() _isSignedIn;
   final SessionFence Function()? _sessionForExit;
   final int Function()? _pendingPhotoCount;
+  final void Function()? _onLoginShown;
   bool _isHandlingAccountExit = false;
   bool _isVoluntaryTeardown = false;
   Future<void> Function()? _blockedForcedExit;
@@ -129,10 +141,9 @@ class AccountExitController {
           return;
         }
         final messengerContext = scaffoldMessengerKey.currentContext;
-        navigatorKey.currentState?.pushNamedAndRemoveUntil(
-          AppRoutes.login,
-          (_) => false,
-        );
+        final navigator = navigatorKey.currentState;
+        navigator?.pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
+        if (navigator != null) _announceLoginWhenCovered(navigator);
         scaffoldMessengerKey.currentState?.showSnackBar(
           errorSnackBar(messengerContext ?? navContext, message),
         );
@@ -146,5 +157,36 @@ class AccountExitController {
     } finally {
       if (!exitScheduled) _isHandlingAccountExit = false;
     }
+  }
+
+  /// Waits out the login route's transition: until it completes, the hub
+  /// is still painted beneath it.
+  void _announceLoginWhenCovered(NavigatorState navigator) {
+    Route<dynamic>? top;
+    // NOTE: a predicate that is immediately true pops nothing; it reads the top route.
+    navigator.popUntil((route) {
+      top = route;
+      return true;
+    });
+    final route = top;
+    final animation = route is ModalRoute ? route.animation : null;
+    void announce() {
+      if (_authService.currentUser == null) _onLoginShown?.call();
+    }
+
+    // The transition starts on the next frame; until then it reads completed.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (animation == null || animation.isCompleted) {
+        announce();
+        return;
+      }
+      void onStatus(AnimationStatus status) {
+        if (status.isAnimating) return;
+        animation.removeStatusListener(onStatus);
+        if (status == AnimationStatus.completed) announce();
+      }
+
+      animation.addStatusListener(onStatus);
+    });
   }
 }

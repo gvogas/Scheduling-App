@@ -75,6 +75,7 @@ void main() {
     bool Function()? isSignedIn,
     SessionFence? session,
     int pendingPhotos = 0,
+    void Function()? onLoginShown,
   }) async {
     late AccountExitController controller;
     await tester.pumpWidget(
@@ -112,6 +113,7 @@ void main() {
                 isSignedIn: isSignedIn ?? () => signedIn,
                 sessionForExit: session == null ? null : () => session,
                 pendingPhotoCount: () => pendingPhotos,
+                onLoginShown: onLoginShown,
               );
               return const Scaffold(body: SizedBox.shrink());
             },
@@ -350,6 +352,30 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(pushedRoutes, [AppRoutes.login]);
+  });
+
+  testWidgets('announces login only once its transition has covered the app', (
+    tester,
+  ) async {
+    var shown = 0;
+    final controller = await pumpController(
+      tester,
+      onLoginShown: () => shown++,
+    );
+
+    await controller.exitAccount(
+      selectMessage: (l10n) => 'disabled',
+      navigatorKey: navigatorKey,
+      scaffoldMessengerKey: messengerKey,
+      isMounted: () => true,
+    );
+    tester.binding.scheduleFrame();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final midTransition = shown;
+    await tester.pumpAndSettle();
+
+    expect((midTransition, shown), (0, 1));
   });
 
   testWidgets('shows the reason on the way out', (tester) async {

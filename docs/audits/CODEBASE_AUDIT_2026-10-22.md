@@ -10,7 +10,7 @@ targets (`21ee9644`, `6b995636`), functions dep bumps, the deploy preflight fix
 
 ## Implementation status (2026-10-22)
 
-`/audit-do` the same day: 11 DONE (2 deviated: B1, B3), B2 reverted, Q2/Q3 kept, I6 watch-only, Q5 open for an owner call. Nothing needs a deploy or backfill. Verified 2026-10-22 on Windows: `flutter analyze` **No issues found!** · `dart run tool/test.dart` **4472 passed, 0 failed** (after the release review's B2 revert) · `tool/check_rules.dart` 0 violations · functions lint clean · jest **116 suites, 2394/2394** · no BOMs.
+`/audit-do` the same day: 12 DONE (2 deviated: B1, B3; B2 reopened and redone), Q2/Q3 kept, I6 watch-only, Q5 open for an owner call. Nothing needs a deploy or backfill. Verified 2026-10-22 on Windows: `flutter analyze` **No issues found!** · `dart run tool/test.dart` **4472 passed, 0 failed** (after the release review's B2 revert) · `tool/check_rules.dart` 0 violations · functions lint clean · jest **116 suites, 2394/2394** · no BOMs.
 
 ## Summary
 
@@ -69,7 +69,7 @@ None at or above the confidence bar. See "Checked and sound".
 
 ### B2 — after a forced exit wins the guard, the lock overlay sits on top of the login screen · low · confidence medium
 
-**NOT FIXED — reverted during the 1.66.1 release review.** The fix (release on any uid → null) let a bare Firebase Auth sign-out, which navigates nowhere, drop the overlay and show the hub without biometrics, and even a forced exit leaves a frame plus the route animation unlocked. The overlay over login (Unlock still works) is the lesser problem; `app_lock_test.dart` pins that losing the guard keeps the lock. A real fix would release only once the login route has finished pushing — reopen if wanted.
+**DONE 2026-10-22 (reopened by the owner).** `exitAccount` fires `forcedExitLoginShownProvider` one frame after its push, once the login route's transition completes; `AppLock` releases on it. A bare uid → null still releases nothing. Tests: `announces login only once its transition has covered the app` (`account_exit_listeners_test.dart`), `the forced exit that won the guard drops the lock once its login has covered the app` (`app_lock_test.dart`). History: the first fix (release on any uid → null) let a bare Firebase Auth sign-out, which navigates nowhere, drop the overlay and show the hub without biometrics, and even a forced exit leaves a frame plus the route animation unlocked. The overlay over login (Unlock still works) is the lesser problem; `app_lock_test.dart` pins that losing the guard keeps the lock. A real fix would release only once the login route has finished pushing — reopen if wanted.
 
 - **Where:** `lib/core/security/app_lock.dart:229-233` (`if (!signedOut && auth.currentUser != null) return;`).
 - **Problem:** if a forced exit already holds the guard, `signOutAfterPhotoCheck` returns false while `currentUser` is still non-null (the forced exit is mid-teardown), so `_logOut` returns without `_release()`. The forced exit then pushes login UNDER the opaque overlay; the person must pass biometrics to reach a login screen. Not a trap (Unlock works) but wrong.
