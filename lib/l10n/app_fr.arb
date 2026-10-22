@@ -404,7 +404,6 @@
   "applock_reason": "Authentifiez-vous pour déverrouiller l’application",
   "applock_logOut": "Se déconnecter",
   "applock_continue": "Continuer",
-  "applock_signedOut": "Vous avez été déconnecté.",
   "onboarding_welcomeTitle": "Bienvenue",
   "onboarding_welcomeBody": "Vos travaux, vos clients et votre équipe, au même endroit. Connectez-vous pour commencer.",
   "onboarding_getStarted": "Commencer",

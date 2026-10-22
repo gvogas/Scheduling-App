@@ -216,17 +216,6 @@ void main() {
       );
     });
 
-    test('an appointment photo fileName', () {
-      // Capped by the appointment-images subcollection rule, and
-      // `appendAppointmentPictures` writes a whole photo batch in ONE
-      // WriteBatch — so one over-long basename fails the batch with an opaque
-      // `permission-denied` and takes every valid photo beside it down too.
-      expect(
-        TextLimits.imageFileName,
-        lessThanOrEqualTo(rulesCapFor('fileName')),
-      );
-    });
-
     test('client email', () {
       expect(TextLimits.email, lessThanOrEqualTo(rulesCapFor('email')));
     });

@@ -72,8 +72,10 @@ void main() {
   Future<AccountExitController> pumpController(
     WidgetTester tester, {
     bool signedIn = true,
+    bool Function()? isSignedIn,
     SessionFence? session,
     int pendingPhotos = 0,
+    void Function()? onLoginShown,
   }) async {
     late AccountExitController controller;
     await tester.pumpWidget(
@@ -108,9 +110,10 @@ void main() {
                 deregisterDevice: () => deregisterThisDevice(
                   DeviceDeregistrationDeps.from(ref.read),
                 ),
-                isSignedIn: () => signedIn,
+                isSignedIn: isSignedIn ?? () => signedIn,
                 sessionForExit: session == null ? null : () => session,
                 pendingPhotoCount: () => pendingPhotos,
+                onLoginShown: onLoginShown,
               );
               return const Scaffold(body: SizedBox.shrink());
             },
@@ -212,13 +215,17 @@ void main() {
     expect(calls.where((c) => c == 'signOut').length, 1);
   });
 
-  testWidgets('a forced exit during a voluntary teardown is ignored', (
+  testWidgets('a forced exit blocked by a voluntary sign-out is not replayed', (
     tester,
   ) async {
-    final controller = await pumpController(tester);
+    var signedIn = true;
+    final controller = await pumpController(tester, isSignedIn: () => signedIn);
     final release = Completer<void>();
 
-    final voluntary = controller.runVoluntaryTeardown(() => release.future);
+    final voluntary = controller.runVoluntaryTeardown(() async {
+      await release.future;
+      signedIn = false;
+    });
     await controller.exitAccount(
       selectMessage: (l10n) => 'disabled',
       navigatorKey: navigatorKey,
@@ -228,7 +235,33 @@ void main() {
     release.complete();
 
     expect(await voluntary, isTrue);
+    await tester.pumpAndSettle();
     expect(calls, isEmpty);
+  });
+
+  testWidgets('a forced exit blocked by a FAILED voluntary teardown runs '
+      'afterwards', (tester) async {
+    // Every exit signal is a transition that never re-fires.
+    final controller = await pumpController(tester);
+    final release = Completer<void>();
+
+    final voluntary = controller.runVoluntaryTeardown(() async {
+      await release.future;
+      throw Exception('signOut failed');
+    });
+    await controller.exitAccount(
+      selectMessage: (l10n) => 'disabled',
+      navigatorKey: navigatorKey,
+      scaffoldMessengerKey: messengerKey,
+      isMounted: () => true,
+    );
+    expect(calls, isEmpty);
+    release.complete();
+
+    await expectLater(voluntary, throwsException);
+    await tester.pumpAndSettle();
+    expect(pushedRoutes.last, AppRoutes.login);
+    verify(() => auth.signOut()).called(1);
   });
 
   testWidgets('a voluntary teardown during a forced exit does not run', (
@@ -319,6 +352,30 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(pushedRoutes, [AppRoutes.login]);
+  });
+
+  testWidgets('announces login only once its transition has covered the app', (
+    tester,
+  ) async {
+    var shown = 0;
+    final controller = await pumpController(
+      tester,
+      onLoginShown: () => shown++,
+    );
+
+    await controller.exitAccount(
+      selectMessage: (l10n) => 'disabled',
+      navigatorKey: navigatorKey,
+      scaffoldMessengerKey: messengerKey,
+      isMounted: () => true,
+    );
+    tester.binding.scheduleFrame();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    final midTransition = shown;
+    await tester.pumpAndSettle();
+
+    expect((midTransition, shown), (0, 1));
   });
 
   testWidgets('shows the reason on the way out', (tester) async {

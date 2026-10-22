@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:scheduling/core/app/account_exit_controller.dart';
 import 'package:scheduling/core/app/pending_photo_exit.dart';
 import 'package:scheduling/core/security/app_lock.dart';
 import 'package:scheduling/core/security/biometric_auth_service.dart';
@@ -34,6 +35,8 @@ class _MockPresence extends Mock implements PresenceSyncController {}
 
 class _MockLiveActivity extends Mock
     implements LiveActivityRegistrationController {}
+
+class _MockAccountExit extends Mock implements AccountExitController {}
 
 /// Drives the lifecycle the way the OS does, so the widget's observer fires.
 void _lifecycle(AppLifecycleState state) =>
@@ -282,26 +285,30 @@ void main() {
       when(liveActivity.sync).thenAnswer((_) async {});
     });
 
-    Future<void> pumpWithExit(WidgetTester tester, {int pendingPhotos = 0}) =>
-        pumpLock(
-          tester,
-          navigatorKey: GlobalKey<NavigatorState>(),
-          pushedRoutes: pushedRoutes,
-          overrides: [
-            authServiceProvider.overrideWithValue(auth),
-            pushRegistrationControllerProvider.overrideWithValue(push),
-            presenceSyncControllerProvider.overrideWithValue(presence),
-            liveActivityRegistrationControllerProvider.overrideWithValue(
-              liveActivity,
-            ),
-            ...accountExitStubOverrides(
-              pendingPhotos: PendingPhotoExit(
-                pendingCount: pendingPhotos,
-                onResume: () => resumes++,
-              ),
-            ),
-          ],
-        );
+    Future<void> pumpWithExit(
+      WidgetTester tester, {
+      int pendingPhotos = 0,
+      List<Override> overrides = const [],
+    }) => pumpLock(
+      tester,
+      navigatorKey: GlobalKey<NavigatorState>(),
+      pushedRoutes: pushedRoutes,
+      overrides: [
+        ...overrides,
+        authServiceProvider.overrideWithValue(auth),
+        pushRegistrationControllerProvider.overrideWithValue(push),
+        presenceSyncControllerProvider.overrideWithValue(presence),
+        liveActivityRegistrationControllerProvider.overrideWithValue(
+          liveActivity,
+        ),
+        ...accountExitStubOverrides(
+          pendingPhotos: PendingPhotoExit(
+            pendingCount: pendingPhotos,
+            onResume: () => resumes++,
+          ),
+        ),
+      ],
+    );
 
     testWidgets('with no pending photos signs out and lands on login', (
       tester,
@@ -375,6 +382,50 @@ void main() {
       expect(isLocked(tester), isTrue);
       expect(find.text('Photos waiting to save'), findsNothing);
       expect(resumes, 1, reason: 'the upload hold is released');
+    });
+
+    testWidgets('losing the guard to a forced exit keeps the lock', (
+      tester,
+    ) async {
+      final exit = _MockAccountExit();
+      when(
+        () => exit.runVoluntaryTeardown(any()),
+      ).thenAnswer((_) async => false);
+      await pumpWithExit(
+        tester,
+        overrides: [accountExitControllerProvider.overrideWithValue(exit)],
+      );
+
+      await tester.tap(find.text('Log out'));
+      await tester.pumpAndSettle();
+
+      expect(isLocked(tester), isTrue);
+      verifyNever(auth.signOut);
+    });
+
+    testWidgets('the forced exit that won the guard drops the lock once its '
+        'login has covered the app', (tester) async {
+      final exit = _MockAccountExit();
+      final loginShown = StreamController<void>.broadcast();
+      addTearDown(loginShown.close);
+      when(
+        () => exit.runVoluntaryTeardown(any()),
+      ).thenAnswer((_) async => false);
+      await pumpWithExit(
+        tester,
+        overrides: [
+          accountExitControllerProvider.overrideWithValue(exit),
+          forcedExitLoginShownProvider.overrideWithValue(loginShown),
+        ],
+      );
+      await tester.tap(find.text('Log out'));
+      await tester.pumpAndSettle();
+
+      loginShown.add(null);
+      await tester.pumpAndSettle();
+
+      expect(isLocked(tester), isFalse);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('a failed sign-out restores the device and keeps the session '
