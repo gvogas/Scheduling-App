@@ -1,7 +1,6 @@
 # FlutterFire 5 / Firebase Apple SDK 13 package upgrade
 
-**Status (2026-10-21): BUILT AND GREEN ON WINDOWS, uncommitted; iOS build and device checks not done.**
-Rides PR #80 (release 1.66.0+98) unless split out. Push-token follow-up: `2026-10-21-fcm-fid-migration-plan.md`.
+**Status (2026-10-22): MERGED to `main` in PR #80 (`6b995636`). Step 1 DONE: CI's iOS job passed on `f2813efb` (run 39712206909), Xcode resolved the hand-written `Package.resolved` pins without rewriting them. Left: Mac build, device checks.** Push-token follow-up: `2026-10-21-fcm-fid-migration-plan.md`.
 
 ## What changed
 
@@ -46,7 +45,7 @@ once broke test COMPILATION while analyze stayed clean, so the suite was the rea
 
 ## Next steps
 
-### 1. Commit and let CI build iOS (blocks the merge)
+### 1. Commit and let CI build iOS — DONE 2026-10-22 (run 39712206909)
 
 - `/ship` the upgrade to `dev`. CI's macOS job builds with `-onlyUsePackageVersionsFromResolvedFile`
   and fails if Xcode rewrites either `Package.resolved` — the real proof the hand-written pins are
@@ -92,3 +91,10 @@ fail, roll back by reverting `pubspec.yaml`, `pubspec.lock` and both `Package.re
   deprecated messaging calls are removed in some later FlutterFire major — do step 2 before taking it.
 - `geolocator` 14.1.x once the `dbus` conflict clears.
 - `docs/plans/APP_STORE_SUBMISSION.md`: note Xcode 26.2+ as the archive floor.
+- **eslint 10 in `functions/` (Dependabot #83, closed 2026-10-22):** not a version bump. ESLint 9 dropped
+  `.eslintrc.js` (needs a flat `eslint.config.js`) and removed `require-jsdoc`/`valid-jsdoc`, which
+  `code-quality.md` mandates through `eslint-config-google`; the replacement is `eslint-plugin-jsdoc`
+  configured to the same bar. Do it as its own change and confirm lint still fails a function with no
+  JSDoc before merging.
+- `functions/` took `firebase-admin` 14.5.0, `firebase-functions` 7.4.0 and `jest` 30.5.2 on `dev`
+  (Dependabot #81, #82, #84) AFTER #80 merged, so they reach prod only with the deploy after next.
