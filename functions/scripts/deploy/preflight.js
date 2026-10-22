@@ -40,7 +40,7 @@ function plan(project, target) {
     INDEXES.forEach((permission) => permissions.add(permission));
     requests.push({name: "indexes-list", permission: "datastore.indexes.list",
       url: "https://firestore.googleapis.com/v1/projects/" +
-      `${project}/databases/(default)/collectionGroups/-/indexes?pageSize=1`});
+      `${project}/databases/(default)/collectionGroups/-/indexes`});
   }
   if (all || target === "storage" || target === "firestore:rules") {
     RULES.forEach((permission) => permissions.add(permission));
