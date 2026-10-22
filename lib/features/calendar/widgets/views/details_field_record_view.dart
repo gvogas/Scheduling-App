@@ -114,9 +114,14 @@ class _DetailsFieldRecordViewState
         authorId: identity.docId,
         authorName: authorName,
       );
-      drafts.clear(id);
+      // Only text typed during the write stays, as the next note's draft.
+      final draft = drafts.draftFor(id).trimLeft();
+      final rest = draft.startsWith(text)
+          ? draft.substring(text.length).trimLeft()
+          : draft;
+      rest.trim().isEmpty ? drafts.clear(id) : drafts.set(id, rest);
       if (!mounted) return;
-      _notes.clear();
+      _notes.text = rest.trim().isEmpty ? '' : rest;
       setState(() => _isSaving = false);
       ref.invalidate(appointmentFieldNotesProvider(id));
       // The note's TEXT is never sent — only that the crew wrote one.

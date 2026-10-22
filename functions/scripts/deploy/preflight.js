@@ -100,9 +100,13 @@ async function preflight(project, target, token, request = fetch) {
 /**
  * Runs using the current deployment identity, optionally impersonated locally.
  * @param {!Array<string>} argv Target, project, report path, optional identity.
+ * @param {!Object=} io Optional exec, write and request adapters for tests.
  * @return {!Promise<number>} Exit status.
  */
-async function main(argv) {
+async function main(argv, io = {}) {
+  const exec = io.exec || execFileSync;
+  const write = io.write || writeFileSync;
+  const request = io.request || fetch;
   const [target, project, output, identity] = argv;
   plan(project, target);
   let report;
@@ -119,10 +123,10 @@ async function main(argv) {
     const parameters = windows ? ["-NoProfile", "-NonInteractive", "-Command",
       "& gcloud " + args.map((arg) => `'${arg}'`).join(" ") +
         "; exit $LASTEXITCODE"] : args;
-    const token = execFileSync(command, parameters, {encoding: "utf8",
+    const token = exec(command, parameters, {encoding: "utf8",
       windowsHide: true, timeout: 20000,
       stdio: ["ignore", "pipe", "pipe"]}).trim();
-    report = await preflight(project, target, token);
+    report = await preflight(project, target, token, request);
   } catch (error) {
     const denied = /iam.serviceAccounts.getAccessToken|Failed to impersonate/
         .test(String(error.stderr || ""));
@@ -130,7 +134,7 @@ async function main(argv) {
       error: denied ? "impersonation-unavailable" :
         "deployment-token-unavailable"}]};
   }
-  writeFileSync(output, JSON.stringify(report, null, 2) + "\n");
+  write(output, JSON.stringify(report, null, 2) + "\n");
   const passed = report.checks.every((check) => check.ok);
   if (!passed) {
     console.error("::error::Target-specific deployment preflight " +

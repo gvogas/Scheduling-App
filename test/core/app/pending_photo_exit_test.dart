@@ -3,13 +3,40 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:scheduling/core/analytics/analytics_service.dart';
+import 'package:scheduling/core/app/device_deregistration.dart';
 import 'package:scheduling/core/app/pending_photo_exit.dart';
 import 'package:scheduling/core/app/session_fence.dart';
+import 'package:scheduling/core/images/appointment_image_loader.dart';
+import 'package:scheduling/core/logging/app_logger.dart';
 import 'package:scheduling/core/theme/themes.dart';
+import 'package:scheduling/features/auth/services/auth_service.dart';
 import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';
+import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
+import 'package:scheduling/features/clients/domain/clients_repository.dart';
+import 'package:scheduling/features/live_activity/application/live_activity_registration_controller.dart';
+import 'package:scheduling/features/notifications/application/push_registration_controller.dart';
+import 'package:scheduling/features/presence/application/presence_sync_controller.dart';
 import 'package:scheduling/l10n/l10n.dart';
 
 class _Uploads extends Mock implements AppointmentImageUploadService {}
+
+class _Auth extends Mock implements AuthService {}
+
+class _Analytics extends Mock implements AnalyticsService {}
+
+class _Push extends Mock implements PushRegistrationController {}
+
+class _Presence extends Mock implements PresenceSyncController {}
+
+class _LiveActivity extends Mock
+    implements LiveActivityRegistrationController {}
+
+class _ImageLoader extends Mock implements AppointmentImageLoader {}
+
+class _Clients extends Mock implements ClientsRepository {}
+
+class _Appointments extends Mock implements AppointmentsRepository {}
 
 void main() {
   late _Uploads uploads;
@@ -178,5 +205,96 @@ void main() {
     expect(result, isNull);
     expect(resumes, 1);
     expect(tester.takeException(), isNull);
+  });
+
+  group('signOutAfterPhotoCheck', () {
+    late _Auth auth;
+    late _Push push;
+    late DeviceDeregistrationDeps devices;
+    bool? signedOut;
+
+    setUp(() {
+      auth = _Auth();
+      push = _Push();
+      final presence = _Presence();
+      final liveActivity = _LiveActivity();
+      final loader = _ImageLoader();
+      final clients = _Clients();
+      final appointments = _Appointments();
+      signedOut = null;
+      when(uploads.prepareForExit).thenAnswer(
+        (_) async =>
+            PendingPhotoExit(pendingCount: 0, onResume: () => resumes++),
+      );
+      when(uploads.clearPending).thenAnswer((_) async {});
+      when(push.unregisterCurrentDevice).thenAnswer((_) async {});
+      when(presence.unregister).thenAnswer((_) async => true);
+      when(liveActivity.unregister).thenAnswer((_) async {});
+      when(loader.clear).thenAnswer((_) async {});
+      when(auth.signOut).thenAnswer((_) async {});
+      devices = DeviceDeregistrationDeps(
+        logger: AppLogger(),
+        push: push,
+        presence: presence,
+        liveActivity: liveActivity,
+        imageLoader: loader,
+        imageUploads: uploads,
+        clients: clients,
+        appointments: appointments,
+        session: session,
+      );
+    });
+
+    Future<void> signOut(
+      WidgetTester tester, {
+      ExitTeardownGuard? guard,
+    }) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Builder(
+            builder: (context) => TextButton(
+              onPressed: () async {
+                signedOut = await signOutAfterPhotoCheck(
+                  context,
+                  devices,
+                  auth,
+                  _Analytics(),
+                  guard:
+                      guard ??
+                      (teardown) async {
+                        await teardown();
+                        return true;
+                      },
+                );
+              },
+              child: const Text('sign out'),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('sign out'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a session change during deregistration never signs out', (
+      tester,
+    ) async {
+      when(push.unregisterCurrentDevice).thenAnswer((_) async => uid = 'uid-2');
+
+      await signOut(tester);
+
+      expect((signedOut, resumes), (false, 1));
+      verifyNever(auth.signOut);
+    });
+
+    testWidgets('a guard held by another exit returns false and releases the '
+        'photo hold', (tester) async {
+      await signOut(tester, guard: (_) async => false);
+
+      expect((signedOut, resumes), (false, 1));
+      verifyNever(push.unregisterCurrentDevice);
+    });
   });
 }

@@ -44,12 +44,4 @@ abstract final class TextLimits {
   static const int clientBillingTerms = 200;
 
   static const int employeeEmergencyContact = 200;
-
-  /// Matches the appointment-images subcollection `fileName` rule cap.
-  ///
-  /// `ImageStorageService` composes `<millis>_<originalName>` with whatever the
-  /// picker hands it, and `appendAppointmentPictures` writes the whole batch in
-  /// ONE `WriteBatch` — so a single over-long basename fails the batch with an
-  /// opaque `permission-denied` and takes every valid photo beside it down too.
-  static const int imageFileName = 300;
 }

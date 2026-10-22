@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -54,17 +56,25 @@ class AccountExitController {
   final SessionFence Function()? _sessionForExit;
   final int Function()? _pendingPhotoCount;
   bool _isHandlingAccountExit = false;
+  bool _isVoluntaryTeardown = false;
+  Future<void> Function()? _blockedForcedExit;
 
   /// Holds the forced-exit guard across a voluntary exit's [teardown], so the
   /// two never interleave; false (nothing run) when an exit already holds it.
+  /// A forced exit it blocked replays afterwards: its signal never re-fires.
   Future<bool> runVoluntaryTeardown(Future<void> Function() teardown) async {
     if (_isHandlingAccountExit) return false;
     _isHandlingAccountExit = true;
+    _isVoluntaryTeardown = true;
     try {
       await teardown();
       return true;
     } finally {
       _isHandlingAccountExit = false;
+      _isVoluntaryTeardown = false;
+      final blocked = _blockedForcedExit;
+      _blockedForcedExit = null;
+      if (blocked != null && _isSignedIn()) unawaited(blocked());
     }
   }
 
@@ -80,7 +90,17 @@ class AccountExitController {
     required GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey,
     required bool Function() isMounted,
   }) async {
-    if (_isHandlingAccountExit) return;
+    if (_isHandlingAccountExit) {
+      if (_isVoluntaryTeardown) {
+        _blockedForcedExit = () => exitAccount(
+          selectMessage: selectMessage,
+          navigatorKey: navigatorKey,
+          scaffoldMessengerKey: scaffoldMessengerKey,
+          isMounted: isMounted,
+        );
+      }
+      return;
+    }
     if (!_isSignedIn()) return;
 
     final navContext = navigatorKey.currentContext;

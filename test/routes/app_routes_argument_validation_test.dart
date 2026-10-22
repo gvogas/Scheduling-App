@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:scheduling/features/auth/screens/account_setup_screen.dart';
 import 'package:scheduling/features/auth/screens/forgot_password_screen.dart';
 import 'package:scheduling/features/auth/screens/login_screen.dart';
+import 'package:scheduling/features/dashboard/screens/dashboard_screen.dart';
 import 'package:scheduling/features/notifications/screens/notification_ask_screen.dart';
 import 'package:scheduling/routes/app_routes.dart';
 
@@ -78,6 +80,16 @@ void main() {
       );
     },
   );
+
+  test('account setup degrades a wrong argument type to blank names', () {
+    final screen = build(AppRoutes.accountSetup, 42) as AccountSetupScreen;
+    expect(screen.firstName, isEmpty);
+  });
+
+  test('dashboard degrades a wrong argument type to least privilege', () {
+    final screen = build(AppRoutes.dashboard, 'admin') as DashboardScreen;
+    expect(screen.isAdmin, isFalse);
+  });
 
   test('notification ask builds without arguments', () {
     expect(build(AppRoutes.notificationAsk), isA<NotificationAskScreen>());

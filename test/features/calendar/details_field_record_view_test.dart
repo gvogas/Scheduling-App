@@ -244,6 +244,37 @@ void main() {
     await settleNotices(tester);
   });
 
+  testWidgets('text typed while a note posts survives the post', (
+    tester,
+  ) async {
+    final held = Completer<void>();
+    when(
+      () => repository.appendFieldNote(
+        appointmentId: any(named: 'appointmentId'),
+        text: any(named: 'text'),
+        authorId: any(named: 'authorId'),
+        authorName: any(named: 'authorName'),
+      ),
+    ).thenAnswer((_) => held.future);
+
+    await pump(tester);
+    await typeNote(tester);
+    await tester.pump();
+    await tester.tap(postButton());
+    await tester.pump();
+    await typeNote(tester, 'Valve swapped and the filter');
+
+    held.complete();
+    await tester.pumpAndSettle();
+
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller!.text,
+      'and the filter',
+      reason: 'the posted text must not stay behind to post twice',
+    );
+    await settleNotices(tester);
+  });
+
   testWidgets('an unresolved identity writes nothing and says so', (
     tester,
   ) async {

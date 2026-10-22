@@ -1741,10 +1741,6 @@
   "@applock_continue": {
     "description": "Button on the lock overlay when biometrics are unavailable; opens the app for this session only"
   },
-  "applock_signedOut": "You've been signed out.",
-  "@applock_signedOut": {
-    "description": "Notice on the sign-in screen after Log out from the lock overlay"
-  },
   "onboarding_welcomeTitle": "Welcome",
   "@onboarding_welcomeTitle": {
     "description": "Title of the single first-launch welcome screen shown before sign-in"

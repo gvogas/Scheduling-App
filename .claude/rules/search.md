@@ -82,7 +82,7 @@ Loaded when working on search, the token index or the scan windows. Root context
 
 ## Bounded scans
 
-- Page every scan window to its cap and WARN at it (as `_mapRangeSnapshot` does); never a bounded read without the warn or an unbounded `while (true)` loop — `fetchClientHistory` (`_clientHistoryScanLimit` 1000) and `fetchClientsCreatedSince` included. (ADR-0023)
+- Page every scan window to its cap and WARN at it (as `_warnAtRangeCap` does); never a bounded read without the warn or an unbounded `while (true)` loop — `fetchClientHistory` (`_clientHistoryScanLimit` 1000) and `fetchClientsCreatedSince` included. (ADR-0023)
 - Page only through `pageToCap` (`core/data/paged_scan.dart`); the caller supplies cap, page size and warn text.
 - Keep page size apart from the display bound and the cap (windows page at 500): `pageToCap` asks for `cap + 1 - fetched`, so a page equal to the cap costs a second trip. For the newest N pass `limit: N + 1, cap: N` (`clientBookingHistoryProvider`). (ADR-0023)
 - Breadcrumb, not warn, when a deliberate window hits its cap, or every form open files a non-fatal; `fetchClientHistory` keys this on an explicit `cap`. (ADR-0023)

@@ -68,7 +68,7 @@ class AppRoutes {
       case accountSetup:
         // Args are optional: sign-in and splash both route here for an
         // `invited` account, seeding whatever name halves the admin typed.
-        final args = settings.arguments as AccountSetupArgs?;
+        final args = _args<AccountSetupArgs>(settings);
         return AppPageRoute(
           settings: settings,
           builder: (_) => AccountSetupScreen(
@@ -84,7 +84,7 @@ class AppRoutes {
         );
 
       case dashboard:
-        final args = settings.arguments as DashboardArgs?;
+        final args = _args<DashboardArgs>(settings);
         return AppPageRoute(
           settings: settings,
           // Defaults CLOSED; this is HOME, so least privilege rather than an invalid-link screen (ADR-0017).

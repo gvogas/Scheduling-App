@@ -10,6 +10,19 @@ All notable changes to this project are documented here.
 The `+N` build number after the version (e.g. `1.1.0+5`) is the store version
 code; it increments by one on every store upload regardless of the semver part.
 
+## [1.66.1+99] - 2026-10-22
+
+Fixes around signing out and crew notes.
+
+### Fixed
+- **A crew note keeps what you type while it posts.** Words added after
+  tapping Post were cleared along with the posted note; they now stay in the
+  box as your next note.
+- **An account disabled while you log out is always signed out.** If the log
+  out from the lock screen failed at that moment, the app could stay signed
+  in until it was next opened.
+- **A broken link to the home screen opens it normally** instead of failing.
+
 ## [1.66.0+98] - 2026-10-21
 
 Clearer messages, safer forms and a smoother first day for new staff.

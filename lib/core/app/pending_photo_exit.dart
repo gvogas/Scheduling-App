@@ -58,20 +58,16 @@ typedef CheckedDeviceExit = ({PendingPhotoExit? pendingExit});
 /// Photo check, then [deregisterThisDevice]; null (hold released) on any bail-out.
 Future<CheckedDeviceExit?> exitDevicesAfterPhotoCheck(
   BuildContext context,
-  DeviceDeregistrationDeps devices, {
-  bool checkPendingPhotos = true,
-}) async {
-  PendingPhotoExit? pendingExit;
-  if (checkPendingPhotos) {
-    pendingExit = await confirmPendingPhotoExit(
-      context,
-      devices.imageUploads,
-      devices.session!,
-    );
-    if (pendingExit == null || !pendingExit.isCurrent) {
-      pendingExit?.resume();
-      return null;
-    }
+  DeviceDeregistrationDeps devices,
+) async {
+  final pendingExit = await confirmPendingPhotoExit(
+    context,
+    devices.imageUploads,
+    devices.session!,
+  );
+  if (pendingExit == null || !pendingExit.isCurrent) {
+    pendingExit?.resume();
+    return null;
   }
   var handedOver = false;
   try {
@@ -80,7 +76,7 @@ Future<CheckedDeviceExit?> exitDevicesAfterPhotoCheck(
     handedOver = true;
     return (pendingExit: pendingExit);
   } finally {
-    if (!handedOver) pendingExit?.resume();
+    if (!handedOver) pendingExit.resume();
   }
 }
 
@@ -93,12 +89,10 @@ Future<bool> _unguarded(Future<void> Function() teardown) async {
   return true;
 }
 
-/// The voluntary sign-out: photo check, then [deregisterThisDevice] and
-/// `signOut` under [guard]; true only once nobody is signed in.
-///
 /// The photo choice stays OUTSIDE [guard], so a forced exit arriving while the
-/// person decides still runs. A throw restores the device and is rethrown for
-/// the caller's `ACCT-SIGNOUT` log and notice.
+/// person decides still runs. A failed `signOut` restores the device INSIDE
+/// [guard], before any forced exit it blocked replays, and is rethrown for the
+/// caller's `ACCT-SIGNOUT` log and notice.
 Future<bool> signOutAfterPhotoCheck(
   BuildContext context,
   DeviceDeregistrationDeps devices,
@@ -121,14 +115,17 @@ Future<bool> signOutAfterPhotoCheck(
       return false;
     }
   }
-  var deregistered = false;
   var signedOut = false;
   try {
     final ran = await guard(() async {
       await deregisterThisDevice(devices);
       if (!devices.isCurrentExit) return;
-      deregistered = true;
-      await auth.signOut();
+      try {
+        await auth.signOut();
+      } catch (_) {
+        await restoreThisDevice(devices);
+        rethrow;
+      }
       signedOut = auth.currentUser == null;
     });
     if (!ran || !signedOut) return false;
@@ -137,9 +134,6 @@ Future<bool> signOutAfterPhotoCheck(
       ..logSignOut()
       ..setUserRole(null);
     return true;
-  } catch (_) {
-    if (deregistered) await restoreThisDevice(devices);
-    rethrow;
   } finally {
     pendingExit?.resume();
   }
