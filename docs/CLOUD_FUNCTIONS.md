@@ -853,7 +853,10 @@ mocked `{db, messaging, now, logger}`). Recipients are always filtered
 server-side to `role == 'employee' && status == 'active'`; tokens live in
 `users/{docId}/fcmTokens/{token}` (doc id = token, keyed by users **doc id**
 so the send path needs no uid translation), and stale tokens are deleted on
-send failure. Text is localized per token doc (`locale: 'en'|'fr'`) from an
+send failure. A row with `kind: 'fid'` is keyed by a Firebase Installation ID
+and sent as `{fid}` (`messageTargetFor`, `notification_policy.js`); any other
+row is a legacy FCM token sent as `{token}`, and
+`messaging/installation-id-not-registered` prunes a dead FID (ADR-0190). Text is localized per token doc (`locale: 'en'|'fr'`) from an
 inline EN/FR table; every message sets an APNs `sound` so delivery isn't
 silent. **Deployed 2026-07-11**
 — see Deployment status. Design: `docs/archive/2026-07-08-push-notifications.md`.

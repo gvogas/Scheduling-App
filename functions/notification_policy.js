@@ -342,7 +342,19 @@ function overduePromptLedgerId(appointmentId, endTimeMillis, employeeDocId) {
  */
 function isStaleTokenError(code) {
   return code === "messaging/registration-token-not-registered" ||
-      code === "messaging/invalid-registration-token";
+      code === "messaging/invalid-registration-token" ||
+      code === "messaging/installation-id-not-registered";
+}
+
+/**
+ * The FCM send target for one `fcmTokens` row: a `kind: "fid"` row is keyed by
+ * a Firebase Installation ID, anything else by a legacy FCM token (ADR-0190).
+ * @param {string} docId The row's document id.
+ * @param {!Object} data The row's fields.
+ * @return {!Object} `{fid}` or `{token}`.
+ */
+function messageTargetFor(docId, data) {
+  return (data && data.kind) === "fid" ? {fid: docId} : {token: docId};
 }
 
 /**
@@ -406,6 +418,7 @@ module.exports = {
   tomorrowWindowToronto,
   overduePromptLedgerId,
   isStaleTokenError,
+  messageTargetFor,
   isAlreadyExists,
   isCrewCompletion,
   lifecycleStamps,

@@ -100,7 +100,7 @@ async function verifyDirectStatusRules(db, prefix, write) {
 }
 
 /**
- * Pins the `sessionEpoch` bound on a device token row.
+ * Pins the `sessionEpoch` and `kind` bounds on a device token row.
  * @param {string} prefix Unique test prefix.
  * @param {!Function} write Authenticated REST writer from the parent harness.
  * @param {!Object} admin The writer's account (`uid`, `docId`).
@@ -118,6 +118,14 @@ async function verifySessionEpochRules(prefix, write, admin) {
       "a sessionEpoch over 64 characters must be refused");
   assert.equal(await token({stringValue: "e".repeat(64)}), 200,
       "a 64-character sessionEpoch is allowed");
+  const kinded = (kind) => write(
+      `users/${admin.docId}/fcmTokens/${prefix}-fid`, {
+        platform: {stringValue: "ios"}, locale: {stringValue: "en"},
+        uid: {stringValue: admin.uid}, kind: {stringValue: kind},
+      });
+  assert.equal(await kinded("fid"), 200, "a fid row is allowed");
+  assert.equal(await kinded("token"), 200, "an explicit token row is allowed");
+  assert.equal(await kinded("apns"), 403, "an unknown kind must be refused");
 }
 
 /**

@@ -56,6 +56,7 @@ const {
   tomorrowWindowToronto,
   overduePromptLedgerId,
   isStaleTokenError,
+  messageTargetFor,
   isAlreadyExists,
   isCrewCompletion,
   lifecycleStamps,
@@ -188,7 +189,7 @@ async function sendToEmployee(deps, employeeDocId, data, buildMsg, roles,
       aps["interruption-level"] = "time-sensitive";
     }
     return {
-      token: doc.id,
+      ...messageTargetFor(doc.id, doc.data() || {}),
       notification: {title, body},
       data: {...msgData, validUntil: String(validUntil)},
       apns: {payload: {aps}, headers: {
@@ -726,6 +727,7 @@ module.exports = {
   tomorrowWindowToronto,
   overduePromptLedgerId,
   isStaleTokenError,
+  messageTargetFor,
   // The one owner of "push to an employee's live tokens" — token fetch, role +
   // active gate, and stale-token pruning.
   sendToEmployee,

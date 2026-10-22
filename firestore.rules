@@ -269,7 +269,9 @@ service cloud.firestore {
         allow create, update: if isActiveUser()
           && myDocId() == userId
           && request.resource.data.keys().hasOnly(
-              ['platform', 'locale', 'uid', 'sessionEpoch', 'createdAt', 'updatedAt'])
+              ['platform', 'locale', 'uid', 'sessionEpoch', 'kind', 'createdAt', 'updatedAt'])
+          && (!('kind' in request.resource.data) ||
+              request.resource.data.kind in ['token', 'fid'])
           && (!('sessionEpoch' in request.resource.data) ||
               (request.resource.data.sessionEpoch is string &&
                request.resource.data.sessionEpoch.size() <= 64))
