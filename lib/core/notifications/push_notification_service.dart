@@ -89,6 +89,7 @@ class PushNotificationService {
           return null;
         }
       }
+      // ignore: deprecated_member_use — the backend sends to FCM tokens; register() yields a FID.
       return await _messaging.getToken();
     } catch (e, st) {
       _logger.warn('PUSH getToken failed', e, st);
@@ -97,6 +98,7 @@ class PushNotificationService {
   }
 
   /// Emits a fresh token whenever FCM rotates it.
+  // ignore: deprecated_member_use — see getToken; onRegistered emits a FID.
   Stream<String> get onTokenRefresh => _messaging.onTokenRefresh;
 
   /// The message that launched the app from a terminated state (tap), if any.
@@ -116,6 +118,7 @@ class PushNotificationService {
   /// Invalidates the device token (used on sign-out).
   Future<void> deleteToken() async {
     try {
+      // ignore: deprecated_member_use — see getToken; unregister() drops a FID.
       await _messaging.deleteToken();
     } catch (e, st) {
       _logger.warn('PUSH deleteToken failed', e, st);
