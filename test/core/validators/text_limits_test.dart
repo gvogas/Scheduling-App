@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:scheduling/core/images/image_storage_service.dart';
 import 'package:scheduling/core/validators/text_limits.dart';
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/policies/client_name_policy.dart';
@@ -226,18 +225,6 @@ void main() {
         TextLimits.imageFileName,
         lessThanOrEqualTo(rulesCapFor('fileName')),
       );
-    });
-
-    test('the widest name composeFileName can emit fits that cap', () {
-      // Pin the ACTUAL output, not the constant: `ImageStorageService` builds
-      // `<millis>_<originalName>` from whatever the picker hands it, so the
-      // millisecond prefix has to be inside the bound too.
-      final widest = ImageStorageService.composeFileName(
-        '${'x' * 5000}.jpg',
-        DateTime.fromMillisecondsSinceEpoch(1700000000000),
-      );
-
-      expect(widest.length, lessThanOrEqualTo(rulesCapFor('fileName')));
     });
 
     test('client email', () {

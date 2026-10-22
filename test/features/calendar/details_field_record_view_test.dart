@@ -12,6 +12,7 @@ import 'package:scheduling/core/connectivity/connectivity_providers.dart';
 import 'package:scheduling/core/images/image_picker_service.dart';
 import 'package:scheduling/core/images/images_providers.dart';
 import 'package:scheduling/core/notices/notice_listener.dart';
+import 'package:scheduling/core/providers/firebase_providers.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/features/auth/application/account_status_provider.dart';
 import 'package:scheduling/features/auth/application/active_user_identity_provider.dart';
@@ -85,7 +86,11 @@ void main() {
   List<Override> overrides({
     ActiveUserIdentity? identity = _identity,
     bool offline = false,
+    Stream<String?>? uids,
   }) => [
+    authUidProvider.overrideWith(
+      (ref) => uids ?? Stream<String?>.value('uid-1'),
+    ),
     appointmentsRepositoryProvider.overrideWithValue(repository),
     employeesRepositoryProvider.overrideWithValue(employees),
     imagePickerProvider.overrideWithValue(picker),
@@ -302,11 +307,36 @@ void main() {
   });
 
   group('the draft survives a dismissed sheet', () {
-    ProviderContainer makeContainer() {
-      final container = ProviderContainer(overrides: overrides());
+    ProviderContainer makeContainer({Stream<String?>? uids}) {
+      final container = ProviderContainer(overrides: overrides(uids: uids));
       addTearDown(container.dispose);
       return container;
     }
+
+    testWidgets('a different person signing in never sees the draft', (
+      tester,
+    ) async {
+      // Shared phone: tech A's unposted note must not pre-fill tech B's box.
+      final uids = StreamController<String?>();
+      addTearDown(uids.close);
+      // The app keeps the uid stream listened for the whole session.
+      final container = makeContainer(uids: uids.stream)
+        ..listen(authUidProvider, (_, _) {});
+      uids.add('uid-a');
+      await pump(tester, container: container);
+      await typeNote(tester, 'Half typed');
+      await tester.pump();
+      await pump(tester, container: container, body: const SizedBox());
+
+      uids.add('uid-b');
+      await tester.pumpAndSettle();
+      await pump(tester, container: container);
+
+      expect(
+        tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        isEmpty,
+      );
+    });
 
     testWidgets('a typed note is restored when the view is rebuilt', (
       tester,

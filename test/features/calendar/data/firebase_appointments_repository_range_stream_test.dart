@@ -195,6 +195,7 @@ void main() {
       final b = doc('b', hour: 9);
 
       final lists = await collect(repo().watchInRange(range), () {
+        emitTail(const [], const []);
         emit([a, b], [added(a), added(b)]);
       });
 
@@ -211,6 +212,7 @@ void main() {
         final b2 = doc('b', hour: 9, title: 'Renamed');
 
         final lists = await collect(repo().watchInRange(range), () {
+          emitTail(const [], const []);
           emit([a, b], [added(a), added(b)]);
           emit([a, b2], [modified(b2)]);
         });
@@ -229,6 +231,7 @@ void main() {
       final b = doc('b', hour: 9);
 
       final lists = await collect(repo().watchInRange(range), () {
+        emitTail(const [], const []);
         emit([a, b], [added(a), added(b)]);
         emit([b], [removed(a)]);
       });
@@ -242,6 +245,7 @@ void main() {
       final c = doc('c', hour: 7);
 
       final lists = await collect(repo().watchInRange(range), () {
+        emitTail(const [], const []);
         emit([a, b], [added(a), added(b)]);
         // A new earlier job sorts first under `orderBy('startTime')`.
         emit([c, a, b], [added(c)]);
@@ -255,6 +259,7 @@ void main() {
       final b = doc('b', hour: 9);
 
       final lists = await collect(repo().watchInRange(range), () {
+        emitTail(const [], const []);
         emit([a], [added(a)]);
         emit([a, b], const []);
       });
@@ -266,6 +271,7 @@ void main() {
       final docs = [for (var i = 0; i < 3000; i++) doc('a$i', hour: 9)];
 
       await collect(repo().watchInRange(range), () {
+        emitTail(const [], const []);
         emit(docs, [for (final d in docs) added(d)]);
       });
 
@@ -278,11 +284,13 @@ void main() {
       final a = doc('a', hour: 8);
       final r = repo();
       final first = await collect(r.watchInRange(range), () {
+        emitTail(const [], const []);
         emit([a], [added(a)]);
       });
       resetEmissions();
 
       final second = await collect(r.watchInRange(range), () {
+        emitTail(const [], const []);
         emit([a], [added(a)]);
       });
 
@@ -290,6 +298,73 @@ void main() {
       expect(second.single.map((x) => x.id), ['a']);
       // Both subscriptions parsed it: nothing leaks across listeners.
       expect(a.reads, 2);
+    });
+  });
+
+  group('the first emission waits for both initial snapshots', () {
+    test('main alone emits nothing', () async {
+      final a = doc('a', hour: 8);
+
+      final lists = await collect(repo().watchInRange(range), () {
+        emit([a], [added(a)]);
+      });
+
+      expect(lists, isEmpty);
+    });
+
+    test('tail first, then main: exactly one complete emission', () async {
+      final a = doc('a', hour: 8);
+      final wide = block('wide', daysAgo: 3);
+
+      final lists = await collect(repo().watchInRange(range), () {
+        emitTail([wide], [added(wide)]);
+        emit([a], [added(a)]);
+      });
+
+      expect(lists.map((l) => l.map((r) => r.id).toList()), [
+        ['wide', 'a'],
+      ]);
+    });
+
+    test('an empty tail first still yields one emission with main', () async {
+      final a = doc('a', hour: 8);
+      final b = doc('b', hour: 9);
+
+      final lists = await collect(repo().watchInRange(range), () {
+        emitTail(const [], const []);
+        emit([a, b], [added(a), added(b)]);
+      });
+
+      expect(lists.map((l) => l.map((r) => r.id).toList()), [
+        ['a', 'b'],
+      ]);
+    });
+
+    test('after both land, either query emits on its own', () async {
+      final a = doc('a', hour: 8);
+      final b = doc('b', hour: 9);
+      final wide = block('wide', daysAgo: 3);
+
+      // Two sources interleave their deliveries, so let each one settle.
+      final done = repo().watchInRange(range).toList();
+      for (final step in <void Function()>[
+        () => emit([a], [added(a)]),
+        () => emitTail(const [], const []),
+        () => emit([a, b], [added(b)]),
+        () => emitTail([wide], [added(wide)]),
+      ]) {
+        step();
+        await Future<void>.delayed(Duration.zero);
+      }
+      await emissions.close();
+      await tailEmissions.close();
+      final lists = await done;
+
+      expect(lists.map((l) => l.map((r) => r.id).toList()), [
+        ['a'],
+        ['a', 'b'],
+        ['wide', 'a', 'b'],
+      ]);
     });
   });
 
@@ -305,9 +380,9 @@ void main() {
           emitTail([wide], [added(wide)]);
         });
 
-        // One emission per query, the second one merged.
-        expect(lists, hasLength(2));
-        expect(lists.last.map((r) => r.id), ['wide', 'a']);
+        // Nothing until both land, then one merged list.
+        expect(lists, hasLength(1));
+        expect(lists.single.map((r) => r.id), ['wide', 'a']);
         expect(a.reads, 1);
         expect(wide.reads, 1);
       },
@@ -419,6 +494,7 @@ void main() {
     final lists = await collect(
       repo().watchForEmployeeInRange('e1', range),
       () {
+        emitTail(const [], const []);
         emit([a], [added(a)]);
         emit([a2], [modified(a2)]);
       },

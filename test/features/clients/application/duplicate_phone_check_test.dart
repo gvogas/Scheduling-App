@@ -94,6 +94,50 @@ void main() {
     });
   });
 
+  test('returning to a looked-up number before the debounce restores its '
+      'match, and Add stays blocked', () {
+    fakeAsync((async) {
+      final repo = _FakeRepo(const [_jane]);
+      final sut = check(repo);
+      phone.text = '5145550000';
+      settle(async);
+
+      phone.text = '51455500001';
+      async.elapse(kSearchDebounce ~/ 2);
+      phone.text = '5145550000';
+      settle(async);
+      var settled = false;
+      sut.ensureChecked().then((_) => settled = true);
+      async.flushMicrotasks();
+
+      expect(settled, isTrue);
+      expect(sut.match?.id, 'x1');
+      expect(sut.blocksSave, isTrue);
+      expect(repo.queries, [
+        '5145550000',
+      ], reason: 'the longer lookup is cancelled');
+      sut.dispose();
+    });
+  });
+
+  test('a "Use anyway" for the same number survives a round trip', () {
+    fakeAsync((async) {
+      final sut = check(_FakeRepo(const [_jane]));
+      phone.text = '5145550000';
+      settle(async);
+      sut.useAnyway();
+
+      phone.text = '51455500001';
+      expect(sut.blocksSave, isFalse);
+      expect(sut.match, isNull);
+      phone.text = '5145550000';
+
+      expect(sut.match?.id, 'x1');
+      expect(sut.acknowledged, isTrue);
+      sut.dispose();
+    });
+  });
+
   test('a longer number that merely contains the digits is no duplicate', () {
     fakeAsync((async) {
       final sut = check(_FakeRepo(const [_jane]));

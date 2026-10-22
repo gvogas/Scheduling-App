@@ -17,7 +17,7 @@ Loaded when working on the image pipeline. Root context: `../../CLAUDE.md`.
 - Reject an upload whose first bytes aren't JPEG (`FF D8 FF`) or PNG (`89 50 4E`) in `ImageStorageService`; the extension alone is not sufficient.
 - Set an uploaded photo's `cacheControl` to `private`, never `public` — `public` re-authorizes a shared cache to reuse an authenticated photo. Don't "restore" it for a perceived cache miss. (ADR-0005)
 - Keep image processing single-stage: `ImagePickerService` resizes and compresses at pick time (`image_picker` `maxWidth/maxHeight: 1600`, `imageQuality: 70`), then `ImageStorageService` validates magic bytes and uploads. Never reintroduce a second compression pass. Background upload staging journals its source/destination map before copying; the queue must own completed copies and source cleanup before picker originals may be deleted.
-- Queued uploads use a persisted `ImageUploadIntent` (UUID path, owner UID, exact timestamp, SHA-256 and byte length) before transfer. `uploadQueuedImage` reuses only matching authenticated object metadata; a missing object may be created, while a mismatched object or denied metadata read must never fall through to overwrite. The legacy `uploadImage` helper (tests only) still composes a new timestamped path. Cached paths remain immutable.
+- Queued uploads use a persisted `ImageUploadIntent` (UUID path, owner UID, exact timestamp, SHA-256 and byte length) before transfer. `uploadQueuedImage` reuses only matching authenticated object metadata; a missing object may be created, while a mismatched object or denied metadata read must never fall through to overwrite. Cached paths remain immutable.
 
 ## Rendering from bytes
 

@@ -36,7 +36,7 @@ Pure-Flutter rendering rules for the calendar surfaces, with no `functions/` han
 
 ## Agenda: loading, error and held data
 
-- Keep the last delivered list and its range (`_heldAppointments`/`_heldRange`, `_prepareBuild`) on screen while a new range's provider instance is still loading — a month swipe, Today or day↔week forks a fresh `appointmentsInRangeProvider(range)` that starts empty, which blanked the dots and read "0 JOBS"; the skeleton shows only for a selected day the held range doesn't cover. `_refreshDayIndex` keys on source AND range.
+- Keep the last delivered list and its range (`_held`, `_prepareBuild`) on screen while a new range's provider instance is still loading — a month swipe, Today or day↔week forks a fresh `appointmentsInRangeProvider(range)` that starts empty, which blanked the dots and read "0 JOBS"; the skeleton shows only for a selected day the held range doesn't cover. `_refreshDayIndex` keys on source AND range.
 - Render a COLD stream error (`hasError && !hasValue`) as `AgendaSliverList.errorState` (`CenteredErrorText` + Retry → `ref.invalidate` of the range provider), in both the day and week agendas; a data→error transition keeps the cards and surfaces only as the `APPT-LOAD` notice. Never fall back to the empty state there.
 - Keep `findChildIndexCallback` on the agenda's `SliverList.builder`: a stream emission that inserts or re-sinks a card shifts indexes, and without the key lookup every shifted `FadeInItem` is re-inflated and re-staggers. A new day's cards are new keys and still fade in.
 - Open the day route on the calendar's day: `DayRouteArgs.initialDay` carries `_selectedDay ?? _focusedDay`; null (the drawer) means today.

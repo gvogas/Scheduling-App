@@ -261,16 +261,10 @@ async function upsertCustomer(clientId, deps = {}) {
   }
 
   const data = snap.data() || {};
-  // The contract is the ONLY payload producer. Nothing here may build one that
-  // skipped validation — that is enforced by which module owns
-  // `toWaveCustomerInput`, not by discipline.
+  // The contract module is the only payload producer (ADR-0150).
   const built = buildCustomerPayload(data);
   if (!built.ok) {
-    // The enqueue gate refuses first, but a job queued by an earlier edit — or
-    // one already `inflight` when the edit landed — still arrives holding a
-    // client Wave would refuse. Dead-lettering it here would be permanent and
-    // unrecoverable; blocking it keeps the client editable and the reason
-    // readable.
+    // A pre-edit job still arrives; block, never dead-letter (ADR-0150).
     await writeSyncBlocked(db, ref, built);
     return {status: "blocked", problems: built.problems};
   }
@@ -282,18 +276,7 @@ async function upsertCustomer(clientId, deps = {}) {
 
   // Step 3 — already synced with identical mapped fields → no-op.
   if (waveCustomerId && hash === wave.lastSyncedHash) {
-    // The doc can still be flagged `pending` here, and nothing else would ever
-    // clear it. The trigger marks pending + enqueues on every mapped-field
-    // change, but a later write that puts those fields BACK is skipped by
-    // shouldEnqueueClientWrite's rule 2 — so the job the first edit left behind
-    // arrives to find nothing to push. The admin-facing badge reads this field,
-    // so without the heal that client shows "Sync pending" forever while every
-    // later sync correctly reports nothing to do.
-    //
-    // Gated on the state we already read: a no-op is the steady-state outcome
-    // for most clients, and healSyncState opens a transaction (a second read)
-    // that would return immediately on an already-synced doc. A doc that turned
-    // pending since this read has its own queued job and needs no heal.
+    // Heal a stale `pending`/`error` flag; gated on the read state (ADR-0090).
     if (wave.syncState !== "synced") {
       await healSyncState(db, ref);
     }

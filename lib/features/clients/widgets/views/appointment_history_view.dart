@@ -149,7 +149,7 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
           : items.last;
       return await ref
           .read(historyPagerProvider)
-          .fetchPage(after: after, limit: _pageSize);
+          .fetchPage(after: after, limit: _pageSize, status: _status);
     } catch (e, st) {
       logger.warn('HIST-LOAD history page fetch error', e, st);
       rethrow;
@@ -164,11 +164,24 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
     super.dispose();
   }
 
-  void _clearFilters() => setState(() {
-    _year = null;
-    _employeeId = null;
-    _status = null;
-  });
+  void _clearFilters() {
+    _setStatus(null);
+    setState(() {
+      _year = null;
+      _employeeId = null;
+    });
+  }
+
+  /// The status chip is a server filter, so a change re-pages from the top.
+  void _setStatus(HistoryStatusFilter? status) {
+    if (status == _status) return;
+    setState(() => _status = status);
+    _pagingController.refresh();
+    // Refresh only resets; a search in progress would never ask for page one.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _pagingController.fetchNextPage();
+    });
+  }
 
   // Every year from the oldest loaded one up to today's, newest first — a gap
   // year is pickable too; the pager then runs until it is reached or passed.
@@ -290,7 +303,7 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
         selectedStatus: _status,
         onStatusChanged: (v) {
           _logFilter(AnalyticsFilters.status, value: v?.name);
-          setState(() => _status = v);
+          _setStatus(v);
         },
       ),
     );
@@ -328,7 +341,9 @@ class _AppointmentHistoryViewState extends ConsumerState<AppointmentHistoryView>
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (loaded.isNotEmpty) _filterBar(_cachedYears, _cachedEmployees),
+              // Kept while a chip is set: a server-filtered page can be empty.
+              if (loaded.isNotEmpty || _hasChipFilter)
+                _filterBar(_cachedYears, _cachedEmployees),
               Expanded(
                 child: _hasActiveFilter
                     ? _buildFiltered(

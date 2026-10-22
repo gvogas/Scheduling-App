@@ -122,10 +122,11 @@ abstract class AppointmentsRepository {
   /// The same query as [watchInRange], read ONCE.
   Future<List<AppointmentRecord>> fetchInRange(AppointmentDateRange range);
 
-  /// One newest-first page of terminal appointments.
+  /// One newest-first page of terminal appointments, [statuses] narrowing it server-side.
   Future<List<AppointmentRecord>> fetchHistoryPage({
     required int limit,
     AppointmentRecord? after,
+    List<String>? statuses,
   });
 
   /// Search terminal appointments by client/employee name or phone,

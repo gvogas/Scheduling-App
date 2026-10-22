@@ -610,21 +610,13 @@ class EventDetailsController extends Notifier<EventDetailsState>
     );
 
     // Snapshot form state before async writes.
-    final removedImages = state.removedExistingImages;
-    final newImages = state.newImages;
-    final selectedEmployees = state.selectedEmployees;
-    final selectedClient = state.selectedClient;
-    final editingStatus = state.editingStatus;
-    final repeat = state.repeat;
-    final savedRepeat = state.savedRepeat;
-    final isPersonal = state.isPersonal;
-    final isDayOff = state.isDayOff;
+    final form = state;
 
     try {
       final assignees = await _resolveAssignees(
         appointment,
         pipeline,
-        selectedEmployees,
+        form.selectedEmployees,
       );
       if (isCurrent != null && !isCurrent()) {
         if (ref.mounted) state = state.copyWith(isSaving: false);
@@ -640,11 +632,11 @@ class EventDetailsController extends Notifier<EventDetailsState>
         start: start,
         end: end,
         assignees: assignees,
-        selectedClient: selectedClient,
-        status: editingStatus,
-        repeat: repeat,
-        isPersonal: isPersonal,
-        isDayOff: isDayOff,
+        selectedClient: form.selectedClient,
+        status: form.editingStatus,
+        repeat: form.repeat,
+        isPersonal: form.isPersonal,
+        isDayOff: form.isDayOff,
         isAllDay: isAllDay,
       );
 
@@ -656,10 +648,10 @@ class EventDetailsController extends Notifier<EventDetailsState>
         start: start,
         end: end,
         applyToSeries: applyToSeries,
-        repeat: repeat,
-        savedRepeat: savedRepeat,
-        selectedEmployees: selectedEmployees,
-        checkConflicts: !forceBusy && !isPersonal,
+        repeat: form.repeat,
+        savedRepeat: form.savedRepeat,
+        selectedEmployees: form.selectedEmployees,
+        checkConflicts: !forceBusy && !form.isPersonal,
         isCurrent: isCurrent,
       );
       if (saved is! EventDetailsSaved) {
@@ -674,11 +666,11 @@ class EventDetailsController extends Notifier<EventDetailsState>
       await pipeline.applyPhotoChanges(
         id: id,
         uploader: uploader,
-        removedImages: removedImages,
-        newImages: newImages,
+        removedImages: form.removedExistingImages,
+        newImages: form.newImages,
         // Move the repeat baseline after the record write.
         onRecordWritten: () {
-          if (ref.mounted) state = state.copyWith(savedRepeat: repeat);
+          if (ref.mounted) state = state.copyWith(savedRepeat: form.repeat);
         },
       );
 
@@ -889,27 +881,3 @@ final eventDetailsControllerProvider = NotifierProvider.autoDispose
     .family<EventDetailsController, EventDetailsState, EventDetailsKey>(
       EventDetailsController.new,
     );
-
-/// Unposted crew-note drafts by appointment id.
-///
-/// Outside [EventDetailsState] on purpose: that controller autoDisposes with
-/// the sheet, and the draft exists to survive a scrim tap or drag dismiss.
-class FieldNoteDrafts extends Notifier<Map<String, String>> {
-  @override
-  Map<String, String> build() => const {};
-
-  String draftFor(String appointmentId) => state[appointmentId] ?? '';
-
-  void set(String appointmentId, String text) {
-    if (text.isEmpty) return clear(appointmentId);
-    state = {...state, appointmentId: text};
-  }
-
-  void clear(String appointmentId) {
-    if (!state.containsKey(appointmentId)) return;
-    state = {...state}..remove(appointmentId);
-  }
-}
-
-final fieldNoteDraftsProvider =
-    NotifierProvider<FieldNoteDrafts, Map<String, String>>(FieldNoteDrafts.new);

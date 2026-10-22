@@ -7,7 +7,7 @@ alwaysApply: true
 - Never swallow an error: log or rethrow, naming the operation. Catch `FirebaseAuthException`/`FirebaseException` specifically; no raw codes or stack traces in UI.
 - Give every async call in `initState` and every stream subscription a `.catchError` or `try/catch` — unhandled, they crash silently.
 - Retry transient errors with backoff; fail fast on auth/permission errors — except a read right after sign-in (`permission-denied` until the token propagates): wrap it in `retryAsync`/`retryStream` (`lib/core/utils/retry.dart`), as the appointments stream (`retryStream`) and `sign_in_controller.dart`'s `findUserByUid` (`retryAsync`) do. (ADR-0035)
-- Keep the defaults `isAuthPropagationDenied` (`retryWhen`) and `kAuthPropagationDelays` (`delays:`) sole owners — no local predicate, inline `catch (FirebaseException)`-then-delay or per-site budget. (ADR-0035)
+- Keep the defaults `isAuthPropagationDenied` (`retryWhen`) and `kAuthPropagationDelays` (`delays:`) sole owners — no local predicate, inline `catch (FirebaseException)`-then-delay or per-site budget. (ADR-0035) One carve-out: `SignInController.resumeAfterSignUp` composes `isAuthPropagationDenied` with its private `_ProfileStillStale` ("doc still invited" is no Firebase error), still on the default delays; a new site needing more than the default gets a rules entry, not a quiet copy.
 - Log `permission-denied` clearly — usually a `firestore.rules` issue, not a bug.
 
 ## Cause notices (generic catch sites)

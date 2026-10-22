@@ -41,7 +41,7 @@ void main() {
   late NoticeService notices;
   late List<AppNotice> seen;
 
-  /// What iOS reports; `presence.sync` (the one prompt) moves it to [afterPrompt].
+  /// What iOS reports; `ensureLocation` (the one prompt) moves it to [afterPrompt].
   late LocationPermissionResult permissionNow;
 
   setUpAll(() => registerFallbackValue(const EmployeeRecord(id: 'fallback')));
@@ -68,7 +68,10 @@ void main() {
     DateTime? consentAt,
   }) {
     permissionNow = permission;
-    when(presence.sync).thenAnswer((_) async => permissionNow = afterPrompt);
+    when(
+      permissions.ensureLocation,
+    ).thenAnswer((_) async => permissionNow = afterPrompt);
+    when(presence.sync).thenAnswer((_) async {});
     return ProviderScope(
       overrides: [
         myEmployeeRecordProvider.overrideWith((_) => me),
@@ -165,8 +168,8 @@ void main() {
     expect(find.byType(ShareLocationAskScreen), findsNothing);
   });
 
-  testWidgets('a declined prompt puts the flag back, says so, and keeps the '
-      'page open in its Open Settings form', (tester) async {
+  testWidgets('a declined prompt never turns the flag on, says so, and keeps '
+      'the page open in its Open Settings form', (tester) async {
     await openPage(
       tester,
       afterPrompt: LocationPermissionResult.permanentlyDenied,
@@ -175,7 +178,7 @@ void main() {
     await tester.tap(find.text('Turn on'));
     await tester.pumpAndSettle();
 
-    expect(writtenFlags(), [true, false]);
+    verifyNever(() => repo.updateSelfDetails(any()));
     verify(presence.unregister).called(1);
     expect(seen.single, isA<NoticeError>());
     expect(find.byType(ShareLocationAskScreen), findsOneWidget);

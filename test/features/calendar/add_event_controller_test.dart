@@ -317,6 +317,28 @@ void main() {
       verify(() => clients.searchClients('5145628332')).called(1);
     });
 
+    test(
+      'a stale in-flight answer is dropped once a newer search lands',
+      () async {
+        final slow = Completer<List<ClientRecord>>();
+        when(
+          () => clients.searchClients('5145628'),
+        ).thenAnswer((_) => slow.future);
+        when(
+          () => clients.searchClients('4385551'),
+        ).thenAnswer((_) async => [jp]);
+
+        final first = readNotifier().searchClients('5145628');
+        await readNotifier().searchClients('4385551');
+        expect(readState().clientResults, [jp]);
+
+        slow.complete([marie]);
+        await first;
+        expect(readState().clientResults, [jp]);
+        expect(readState().isSearchingClient, isFalse);
+      },
+    );
+
     test('a miss at ten digits falls back to the first seven', () async {
       when(
         () => clients.searchClients('5145628233'),

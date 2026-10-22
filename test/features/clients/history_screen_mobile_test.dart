@@ -95,6 +95,7 @@ void main() {
       () => repo.fetchHistoryPage(
         limit: any(named: 'limit'),
         after: any(named: 'after'),
+        statuses: any(named: 'statuses'),
       ),
     ).thenAnswer((_) async => _history);
 

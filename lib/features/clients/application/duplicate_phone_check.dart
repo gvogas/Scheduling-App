@@ -42,7 +42,10 @@ class DuplicatePhoneCheck extends ChangeNotifier {
   /// The admin chose "Use anyway" for the current number.
   bool acknowledged = false;
 
+  // The last settled answer, kept whole so returning to that number restores it.
   String _checkedDigits = '';
+  ClientRecord? _checkedMatch;
+  bool _checkedAcknowledged = false;
   Future<void>? _inFlight;
 
   /// True while a found duplicate is still unanswered.
@@ -50,6 +53,7 @@ class DuplicatePhoneCheck extends ChangeNotifier {
 
   void useAnyway() {
     acknowledged = true;
+    _checkedAcknowledged = true;
     notifyListeners();
   }
 
@@ -66,13 +70,20 @@ class DuplicatePhoneCheck extends ChangeNotifier {
 
   void _onPhoneChanged() {
     final digits = phoneDigits(phone.text);
-    if (digits == _checkedDigits) return;
-    if (match != null || acknowledged) {
-      match = null;
-      acknowledged = false;
-      notifyListeners();
+    if (digits == _checkedDigits) {
+      _debounce.cancel();
+      _show(_checkedMatch, acknowledged: _checkedAcknowledged);
+      return;
     }
+    _show(null, acknowledged: false);
     _debounce.run(() => _lookup(digits));
+  }
+
+  void _show(ClientRecord? found, {required bool acknowledged}) {
+    if (identical(match, found) && this.acknowledged == acknowledged) return;
+    match = found;
+    this.acknowledged = acknowledged;
+    notifyListeners();
   }
 
   Future<void> _lookup(String digits) {
@@ -83,21 +94,27 @@ class DuplicatePhoneCheck extends ChangeNotifier {
 
   Future<void> _runLookup(String digits) async {
     if (digits.length < minDigits) {
-      _checkedDigits = digits;
+      _remember(digits, null);
       return;
     }
     try {
       final results = await _repository.searchClients(digits);
       // Superseded while the callable ran.
       if (phoneDigits(phone.text) != digits) return;
-      _checkedDigits = digits;
-      match = results.where((c) => _isExact(c, digits)).firstOrNull;
+      _remember(digits, results.where((c) => _isExact(c, digits)).firstOrNull);
+      match = _checkedMatch;
       acknowledged = false;
       notifyListeners();
     } catch (e, st) {
       _logger.warn('CLI-SEARCH duplicate phone check failed', e, st);
-      _checkedDigits = digits;
+      _remember(digits, null);
     }
+  }
+
+  void _remember(String digits, ClientRecord? found) {
+    _checkedDigits = digits;
+    _checkedMatch = found;
+    _checkedAcknowledged = false;
   }
 
   // Tier 0 of the shared ranking: the client's OWN number, NANP-folded, so

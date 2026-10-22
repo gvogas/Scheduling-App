@@ -77,11 +77,9 @@ void main() {
         maxJobsPerDay: 3,
       );
 
-      final load = DashboardAggregator.computeDailyLoad(
-        const [],
-        const [employee],
-        _now,
-      );
+      final load = DashboardAggregator.computeDailyLoad(const [], const [
+        employee,
+      ], _now);
 
       // Monday-Friday carry the capacity; the weekend carries none.
       expect([for (final d in load) d.capacity], [3, 3, 3, 3, 3, 0, 0]);
@@ -90,11 +88,7 @@ void main() {
     test('an unset maxJobsPerDay is never read as a ceiling', () {
       // The field defaults to 0, so treating it as capacity would paint every
       // day over-capacity on a roster that never configured it.
-      const employee = EmployeeRecord(
-        id: 'e1',
-        name: 'Jane',
-        status: 'active',
-      );
+      const employee = EmployeeRecord(id: 'e1', name: 'Jane', status: 'active');
       final job = _appt(id: 'x', start: DateTime(2026, 7, 8, 9));
 
       final load = DashboardAggregator.computeDailyLoad(
@@ -200,10 +194,7 @@ void main() {
     });
 
     test('future visit keeps its raw status (not promoted to in_progress)', () {
-      final a = _appt(
-        id: 'a',
-        start: DateTime(2026, 7, 8, 14),
-      );
+      final a = _appt(id: 'a', start: DateTime(2026, 7, 8, 14));
       expect(DashboardAggregator.displayStatusAt(a, _now), 'pending');
     });
   });
@@ -213,10 +204,7 @@ void main() {
       final ops = DashboardAggregator.computeTodayOps([
         // Started 11:30, ends 12:30 -> in_progress (not yet ended).
         _appt(id: 'running', start: DateTime(2026, 7, 8, 11, 30)),
-        _appt(
-          id: 'later',
-          start: DateTime(2026, 7, 8, 14),
-        ),
+        _appt(id: 'later', start: DateTime(2026, 7, 8, 14)),
         // Legacy raw 'completed' normalizes to done.
         _appt(
           id: 'legacy',
@@ -225,11 +213,7 @@ void main() {
         ),
         _appt(id: 'notToday', start: DateTime(2026, 7, 7, 9)),
       ], _now);
-      expect(ops.statusCounts, {
-        'in_progress': 1,
-        'pending': 1,
-        'done': 1,
-      });
+      expect(ops.statusCounts, {'in_progress': 1, 'pending': 1, 'done': 1});
     });
 
     test('ended-but-open today visits land in the overdue bucket', () {
@@ -453,16 +437,9 @@ void main() {
           status: 'in_progress',
         ),
         _appt(id: 'closed', start: DateTime(2026, 7, 7, 10), status: 'done'),
-        _appt(
-          id: 'cxl',
-          start: DateTime(2026, 7, 7, 11),
-          status: 'cancelled',
-        ),
+        _appt(id: 'cxl', start: DateTime(2026, 7, 7, 11), status: 'cancelled'),
         // Started but not ended yet — not overdue.
-        _appt(
-          id: 'running',
-          start: _now.subtract(const Duration(minutes: 30)),
-        ),
+        _appt(id: 'running', start: _now.subtract(const Duration(minutes: 30))),
       ], _now);
       expect(flags.overdueOpen.map((a) => a.id), ['overdue']);
       expect(flags.isAllClear, isFalse);
@@ -473,11 +450,7 @@ void main() {
       // an admin could not clear it from Attention. The card, the server sweep
       // and this reducer must agree.
       final flags = DashboardAggregator.computeAttentionFlags([
-        _appt(
-          id: 'personal',
-          start: DateTime(2026, 7, 7, 9),
-          isPersonal: true,
-        ),
+        _appt(id: 'personal', start: DateTime(2026, 7, 7, 9), isPersonal: true),
       ], _now);
       expect(flags.overdueOpen, isEmpty);
       expect(flags.isAllClear, isTrue);
@@ -579,6 +552,52 @@ void main() {
       // Dropping real work out of the Attention list is worse than a possible
       // double-count.
       expect(DashboardAggregator.mergeById([a, b], const []).length, 2);
+    });
+  });
+
+  group('writeTouchesHistory', () {
+    final history = AppointmentDateRange(
+      start: DateTime(2026, 6, 2),
+      end: DateTime(2026, 7, 6),
+    );
+
+    test('a held doc id touches history wherever its new start falls', () {
+      expect(
+        DashboardAggregator.writeTouchesHistory(
+          {'held': DateTime(2027, 1, 2)},
+          history,
+          {'held'},
+        ),
+        isTrue,
+      );
+    });
+
+    test(
+      'a start inside [fetchStart, end) touches; at end or before does not',
+      () {
+        bool touches(DateTime? start) =>
+            DashboardAggregator.writeTouchesHistory(
+              {'new': start},
+              history,
+              const {},
+            );
+
+        expect(touches(history.fetchStart), isTrue);
+        expect(touches(DateTime(2026, 7, 5, 23)), isTrue);
+        expect(touches(history.end), isFalse);
+        expect(
+          touches(history.fetchStart.subtract(const Duration(minutes: 1))),
+          isFalse,
+        );
+        expect(touches(null), isFalse);
+      },
+    );
+
+    test('heldIds still in flight always counts as touching', () {
+      expect(
+        DashboardAggregator.writeTouchesHistory(const {}, history, null),
+        isTrue,
+      );
     });
   });
 }

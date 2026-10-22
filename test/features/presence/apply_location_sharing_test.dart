@@ -50,7 +50,7 @@ void main() {
     when(presence.sync).thenAnswer((_) async {});
     when(presence.unregister).thenAnswer((_) async => true);
     when(
-      permissions.currentStatus,
+      permissions.ensureLocation,
     ).thenAnswer((_) async => LocationPermissionResult.granted);
   });
 
@@ -148,10 +148,10 @@ void main() {
     LocationPermissionResult.permanentlyDenied,
     LocationPermissionResult.servicesDisabled,
   ]) {
-    testWidgets('turning on against a ${refused.name} permission puts the flag '
-        'back and reports it', (tester) async {
+    testWidgets('turning on against a ${refused.name} permission never writes '
+        'the flag on and reports it', (tester) async {
       // Settings would otherwise read "On" with nothing able to upload.
-      when(permissions.currentStatus).thenAnswer((_) async => refused);
+      when(permissions.ensureLocation).thenAnswer((_) async => refused);
       final ref = await pumpRef(tester);
 
       final outcome = await applyLocationSharing(
@@ -168,15 +168,55 @@ void main() {
           refused,
         ),
       );
-      expect(writtenFlags(), [true, false]);
-      verifyInOrder([presence.sync, presence.unregister]);
+      verifyNever(() => repo.updateSelfDetails(any()));
+      verifyNever(presence.sync);
+      verify(presence.unregister).called(1);
     });
   }
 
+  testWidgets('a refusal puts a stale on flag back to off', (tester) async {
+    when(
+      permissions.ensureLocation,
+    ).thenAnswer((_) async => LocationPermissionResult.denied);
+    final ref = await pumpRef(tester);
+
+    final outcome = await applyLocationSharing(ref, _me, enabled: true);
+
+    expect(outcome, isA<LocationSharingBlocked>());
+    expect(writtenFlags(), [false]);
+  });
+
+  testWidgets('the prompt settles before the flag is written, so a sync '
+      'already in flight cannot revert it', (tester) async {
+    // A coalesced sync() returns at once, so it can't be what awaits the prompt.
+    final inFlight = Completer<void>();
+    final prompt = Completer<LocationPermissionResult>();
+    when(presence.sync).thenAnswer((_) => inFlight.future);
+    when(permissions.ensureLocation).thenAnswer((_) => prompt.future);
+    final ref = await pumpRef(tester);
+    unawaited(presence.sync());
+
+    final pending = applyLocationSharing(
+      ref,
+      _me.copyWith(locationSharingEnabled: false),
+      enabled: true,
+    );
+    await tester.pump();
+    verify(permissions.ensureLocation).called(1);
+    verifyNever(() => repo.updateSelfDetails(any()));
+
+    prompt.complete(LocationPermissionResult.granted);
+    await tester.pump();
+    inFlight.complete();
+
+    expect(await pending, isA<LocationSharingApplied>());
+    expect(writtenFlags(), [true]);
+    verifyNever(presence.unregister);
+  });
+
   testWidgets('a paused presence feature applies the flag without reading '
       'the permission', (tester) async {
-    // sync() returns before the prompt when paused, so an unprompted status
-    // would read as a refusal and wrongly revert a real opt-in.
+    // sync() never prompts while paused, so neither may the flip.
     final ref = await pumpRef(tester, presenceOn: false);
 
     final outcome = await applyLocationSharing(
@@ -187,6 +227,6 @@ void main() {
 
     expect(outcome, isA<LocationSharingApplied>());
     expect(writtenFlags(), [true]);
-    verifyNever(permissions.currentStatus);
+    verifyNever(permissions.ensureLocation);
   });
 }

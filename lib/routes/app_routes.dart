@@ -53,7 +53,12 @@ class AppRoutes {
         );
 
       case forgotPassword:
-        final args = settings.arguments as ForgotPasswordArgs?;
+        // Null is a legal open (no prefill); a wrong type is not.
+        final raw = settings.arguments;
+        if (raw != null && raw is! ForgotPasswordArgs) {
+          return _invalidRoute(settings);
+        }
+        final args = raw as ForgotPasswordArgs?;
         return AppPageRoute(
           settings: settings,
           builder: (_) =>

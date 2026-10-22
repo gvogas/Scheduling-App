@@ -14,6 +14,7 @@ import 'package:scheduling/features/clients/domain/models/client_search_results.
 import 'package:scheduling/features/clients/domain/models/client_type.dart';
 import 'package:scheduling/features/clients/domain/models/clients_filter.dart';
 import 'package:scheduling/features/clients/domain/models/clients_sort.dart';
+import 'package:scheduling/features/clients/domain/policies/client_building.dart';
 import 'package:scheduling/features/clients/domain/policies/client_delete_policy.dart';
 import 'package:scheduling/features/clients/domain/policies/client_search_policy.dart';
 import 'package:scheduling/features/clients/widgets/cards/client_tile.dart';
@@ -116,6 +117,13 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   /// shortens the stored page, which must not read as the end of the list.
   bool _lastPageFull = false;
 
+  /// The last row as FETCHED: the repository caches the stored sort value only
+  /// for that doc, so an in-place removal or edit must not move the cursor.
+  ClientRecord? _cursor;
+
+  /// Bumped by [_refresh], so a fetch the refresh superseded can't set [_cursor].
+  int _fetchGeneration = 0;
+
   /// Rows this list dropped on archive, by id, with where they sat, so an Undo
   /// puts each back in place instead of refreshing to page one.
   final Map<String, (int page, int row, ClientRecord client)> _removedRows = {};
@@ -138,18 +146,18 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
     // of the real failure, losing the CLI-LIST breadcrumb entirely.
     final repository = ref.read(clientsRepositoryProvider);
     final logger = ref.read(loggerProvider);
+    final generation = _fetchGeneration;
     try {
-      final items = _pagingController.value.items;
-      final after = (pageKey == 1 || items == null || items.isEmpty)
-          ? null
-          : items.last;
       final page = await repository.fetchClientsPage(
-        after: after,
+        after: pageKey == 1 ? null : _cursor,
         limit: _pageSize,
         sort: widget.sort,
         filter: widget.filter,
       );
-      _lastPageFull = page.length >= _pageSize;
+      if (generation == _fetchGeneration) {
+        _lastPageFull = page.length >= _pageSize;
+        if (page.isNotEmpty) _cursor = page.last;
+      }
       return page;
     } catch (e, st) {
       logger.warn('CLI-LIST clients page fetch error', e, st);
@@ -168,6 +176,8 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
   }
 
   void _refresh() {
+    _fetchGeneration++;
+    _cursor = null;
     _removedRows.clear();
     _pagingController.refresh();
   }
@@ -193,8 +203,9 @@ class _ClientsListViewState extends ConsumerState<ClientsListView>
     ClientsFilterAll() => !client.archived,
     ClientsFilterArchived() => client.archived,
     ClientsFilterType(:final type) => !client.archived && client.type == type,
-    // The building key is stamped server-side after the write (ADR-0089).
-    ClientsFilterBuilding() => !client.archived,
+    // Derived from the edited address, as the server's `buildingFor` will be.
+    ClientsFilterBuilding(:final key) =>
+      !client.archived && buildingKeyFor(client) == key,
   };
 
   void _setPages(List<List<ClientRecord>> pages) {

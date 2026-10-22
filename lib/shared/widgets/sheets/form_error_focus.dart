@@ -22,17 +22,16 @@ class FormErrorFocus {
     return _nodes.putIfAbsent(owner, () => FocusNode(debugLabel: owner));
   }
 
-  /// Focuses the first errored field in [order] and buzzes; false when none of
+  /// Focuses the first errored field in [order] and buzzes; no-op when none of
   /// [errored] is a known key.
-  bool focusFirstError(Iterable<String> errored) {
+  void focusFirstError(Iterable<String> errored) {
     final set = errored.toSet();
     for (final key in order) {
       if (!set.contains(key)) continue;
       nodeFor(key).requestFocus();
       unawaited(HapticFeedback.mediumImpact());
-      return true;
+      return;
     }
-    return false;
   }
 
   void dispose() {

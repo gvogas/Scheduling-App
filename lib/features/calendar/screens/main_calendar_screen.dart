@@ -99,7 +99,6 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
 
   /// Read once in initState; the prefs writes outlive any one build.
   late final CalendarViewPrefs _viewPrefs;
-  late final AppLogger _logger;
   late DateFormat _monthLabelFormat;
   late DateFormat _monthShortLabelFormat;
   late DateFormat _yearLabelFormat;
@@ -124,7 +123,6 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
       _openRange = ref.read(openCalendarRangeProvider.notifier);
     }
     _viewPrefs = ref.read(calendarViewPrefsProvider);
-    _logger = ref.read(loggerProvider);
     unawaited(_restoreViewPrefs());
     // Publish after build so Riverpod accepts the provider write.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -132,35 +130,19 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
     });
   }
 
-  /// Re-applies the last collapse and agenda mode; a failed read keeps the defaults.
+  /// Re-applies the last collapse and agenda mode; `load` keeps the defaults on failure.
   Future<void> _restoreViewPrefs() async {
-    try {
-      final stored = await _viewPrefs.load();
-      if (!mounted) return;
-      final mode = _AgendaMode.values.asNameMap()[stored.agendaMode];
-      setState(() {
-        _collapse.restore(collapsed: stored.isCollapsed);
-        if (mode != null && mode != _agendaMode) {
-          _agendaMode = mode;
-          _appointmentRange = _rangeFor(
-            _focusedDay,
-            _selectedDay ?? _focusedDay,
-          );
-        }
-      });
-      _publishRange();
-    } catch (e, st) {
-      _logger.warn('SETTINGS calendar view prefs read failed', e, st);
-    }
-  }
-
-  /// Fire-and-forget; the view already changed, so a failed write is log-only.
-  Future<void> _persist(Future<void> Function() write) async {
-    try {
-      await write();
-    } catch (e, st) {
-      _logger.warn('SETTINGS calendar view prefs write failed', e, st);
-    }
+    final stored = await _viewPrefs.load();
+    if (!mounted) return;
+    final mode = _AgendaMode.values.asNameMap()[stored.agendaMode];
+    setState(() {
+      _collapse.restore(collapsed: stored.isCollapsed);
+      if (mode != null && mode != _agendaMode) {
+        _agendaMode = mode;
+        _appointmentRange = _rangeFor(_focusedDay, _selectedDay ?? _focusedDay);
+      }
+    });
+    _publishRange();
   }
 
   @override
@@ -185,11 +167,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
 
   void _onCollapseChanged() {
     setState(() {});
-    unawaited(
-      _persist(
-        () => _viewPrefs.saveCollapsed(isCollapsed: _collapse.isCollapsed),
-      ),
-    );
+    unawaited(_viewPrefs.saveCollapsed(isCollapsed: _collapse.isCollapsed));
   }
 
   // Show Today when either the selected day or focused month differs.
@@ -253,7 +231,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
       if (newRange != _appointmentRange) _appointmentRange = newRange;
     });
     _publishRange();
-    unawaited(_persist(() => _viewPrefs.saveAgendaMode(mode.name)));
+    unawaited(_viewPrefs.saveAgendaMode(mode.name));
   }
 
   /// A tap on a week bar: that day, in day mode.
@@ -301,8 +279,7 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
 
   /// The last list the stream delivered and the range it answered, kept on
   /// screen while a new range's provider instance is still loading.
-  List<AppointmentRecord>? _heldAppointments;
-  AppointmentDateRange? _heldRange;
+  ({List<AppointmentRecord> appointments, AppointmentDateRange range})? _held;
 
   // Memo for the crew filter, keyed on source identity and the filtered id.
   List<AppointmentRecord>? _filterSource;
@@ -427,20 +404,17 @@ class _MainCalendarState extends ConsumerState<MainCalendar> {
     final selectedDay = _selectedDay ?? _focusedDay;
     final delivered = appointmentsAsync.value;
     if (delivered != null) {
-      _heldAppointments = delivered;
-      _heldRange = _appointmentRange;
+      _held = (appointments: delivered, range: _appointmentRange);
     }
     // A range change forks a new provider instance that starts empty; the held
     // list covers the overlap, so the dots and the agenda never blank meanwhile.
-    final held = _heldAppointments;
-    final heldRange = _heldRange;
-    final holding = delivered == null && held != null && heldRange != null;
+    final held = delivered == null ? _held : null;
     final heldCoversDay =
-        holding &&
-        !selectedDay.isBefore(heldRange.start) &&
-        selectedDay.isBefore(heldRange.end);
+        held != null &&
+        !selectedDay.isBefore(held.range.start) &&
+        selectedDay.isBefore(held.range.end);
     final visibleAppointments = _applyCrewFilter(
-      delivered ?? (holding ? held : const <AppointmentRecord>[]),
+      delivered ?? held?.appointments ?? const <AppointmentRecord>[],
       crewFilter,
     );
 

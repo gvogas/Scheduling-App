@@ -89,6 +89,22 @@ describe("dirty appointment edits", () => {
         expect(() => validateEditedAppointment(legacy, legacy)).not.toThrow();
       });
 
+  test.each(["completed", "confirmed"])(
+      "an untouched legacy %s status stays editable", (status) => {
+        const legacy = {...stored(), status};
+        expect(() => validateEditedAppointment(
+            {...legacy, title: "New title"}, legacy)).not.toThrow();
+      });
+
+  test("a patched or created invalid status is still refused", () => {
+    const legacy = {...stored(), status: "completed"};
+    expect(() => validateEditedAppointment(
+        {...legacy, status: "bogus"}, legacy))
+        .toThrow("invalid-appointment-status");
+    expect(() => validateEditedAppointment(legacy, null))
+        .toThrow("invalid-appointment-status");
+  });
+
   test("a legacy doc with no stored status stays editable", () => {
     const legacy = stored({});
     delete legacy.status;

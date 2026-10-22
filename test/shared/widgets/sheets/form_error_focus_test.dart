@@ -54,7 +54,7 @@ void main() {
     await tester.pumpWidget(harness(focus, controller));
 
     // Validator order is irrelevant; the field higher on screen wins.
-    expect(focus.focusFirstError(['endDate', 'name']), isTrue);
+    focus.focusFirstError(['endDate', 'name']);
     await tester.pump();
 
     expect(focus.nodeFor('name').hasFocus, isTrue);
@@ -71,7 +71,7 @@ void main() {
     addTearDown(controller.dispose);
     await tester.pumpWidget(harness(focus, controller));
 
-    expect(focus.focusFirstError(['endDate']), isTrue);
+    focus.focusFirstError(['endDate']);
     // The wrapper scrolls into view after a 280 ms delay that schedules no frame.
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pumpAndSettle();
@@ -84,8 +84,9 @@ void main() {
     final focus = FormErrorFocus(const ['name']);
     addTearDown(focus.dispose);
 
-    expect(focus.focusFirstError(['mobile']), isFalse);
-    expect(focus.focusFirstError(const []), isFalse);
+    focus
+      ..focusFirstError(['mobile'])
+      ..focusFirstError(const []);
     expect(haptics, isEmpty);
   });
 }

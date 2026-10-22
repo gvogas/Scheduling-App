@@ -87,6 +87,21 @@ Future<LocationSharingOutcome> applyLocationSharing(
   final permissions = ref.read(locationPermissionServiceProvider);
   final featureOn = ref.read(featureFlagsProvider).presence;
   bool stale() => !ref.context.mounted || (lease != null && !lease.isCurrent);
+  // Settle the iOS prompt BEFORE the write; a coalesced sync() can't await it.
+  if (enabled && featureOn) {
+    final permission = await permissions.ensureLocation();
+    if (stale()) return const LocationSharingAbandoned();
+    if (permission != LocationPermissionResult.granted) {
+      if (record.locationSharingEnabled) {
+        await repository.updateSelfDetails(
+          record.copyWith(locationSharingEnabled: false),
+        );
+        if (stale()) return const LocationSharingAbandoned();
+      }
+      await presence.unregister();
+      return LocationSharingBlocked(permission);
+    }
+  }
   await repository.updateSelfDetails(
     record.copyWith(locationSharingEnabled: enabled),
   );
@@ -95,21 +110,9 @@ Future<LocationSharingOutcome> applyLocationSharing(
     await presence.unregister();
     return const LocationSharingApplied();
   }
-  // sync() spends the one iOS prompt; a paused feature never reaches it.
   await presence.sync();
   if (stale()) return const LocationSharingAbandoned();
-  if (!featureOn) return const LocationSharingApplied();
-  final permission = await permissions.currentStatus();
-  if (stale()) return const LocationSharingAbandoned();
-  if (permission == LocationPermissionResult.granted) {
-    return const LocationSharingApplied();
-  }
-  await repository.updateSelfDetails(
-    record.copyWith(locationSharingEnabled: false),
-  );
-  if (stale()) return const LocationSharingAbandoned();
-  await presence.unregister();
-  return LocationSharingBlocked(permission);
+  return const LocationSharingApplied();
 }
 
 /// [applyLocationSharing] behind the shared offline guard, tag and notice.

@@ -9,7 +9,11 @@ alwaysApply: true
 - No premature abstractions. Three similar lines beats a helper used once.
 - Don't add features beyond what was asked.
 - No dead code or commented-out blocks. Git has history.
-- Comments: one line max, only where intent isn't obvious from the code.
+- Comments: one line, only where intent isn't obvious from the code. One
+  allowance (owner call, 2026-10-21): a WHY block of at most 4 lines where the
+  obvious "fix" is wrong — never a restated rule, history or incident (those go
+  in the rules or an ADR), and never in `firestore.rules`/`storage.rules`. A
+  4-line WHY block is not a finding; anything longer is.
   **This is enforced, not aspirational** (owner call, 2026-09-03). The rationale
   comments in `firestore.rules` were deleted deliberately and the same trim was
   applied across the codebase; a comment block explaining WHY a guard has its

@@ -571,6 +571,29 @@ void main() {
       expect(pageFetches(), 1);
     });
 
+    testWidgets('an edit that moves the address off the building drops the '
+        'row', (tester) async {
+      const before = ClientRecord(
+        id: 'c1',
+        name: 'Acme',
+        address: '4450 Prom. Paton',
+        city: 'Laval',
+      );
+      final filter = ClientsFilterBuilding(buildingKeyFor(before)!);
+      servePage(const [before]);
+      await tester.pumpWidget(_wrap(repo, filter: filter));
+      await tester.pumpAndSettle();
+      expect(find.text('Acme'), findsOneWidget);
+
+      refresh(tester).bump(
+        ClientsWriteUpdated(before.copyWith(address: '12 Rue Principale')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Acme'), findsNothing);
+      expect(pageFetches(), 1);
+    });
+
     testWidgets('an archive removes the row, and its undo puts it back where '
         'it was', (tester) async {
       servePage(const [_sophie, bob]);
@@ -639,6 +662,58 @@ void main() {
       expect(find.text('Bob Carter'), findsOneWidget);
       expect(pageFetches(), 2);
     });
+
+    // Only the fetched page-last doc has a cached stored sort value; resuming
+    // after the row above it would page from a composed fallback.
+    for (final (label, write) in [
+      ('archived', ClientsWriteArchived('p49', archived: true)),
+      (
+        'edited off the filter',
+        ClientsWriteUpdated(
+          const ClientRecord(id: 'p49', name: 'Client 49', archived: true),
+        ),
+      ),
+    ]) {
+      testWidgets('a page-last row $label still pages after that row', (
+        tester,
+      ) async {
+        final full = [
+          for (var i = 0; i < 50; i++)
+            ClientRecord(
+              id: 'p$i',
+              name: 'Client ${i.toString().padLeft(2, '0')}',
+            ),
+        ];
+        final afters = <String?>[];
+        when(
+          () => repo.fetchClientsPage(
+            filter: any(named: 'filter'),
+            after: any(named: 'after'),
+            limit: any(named: 'limit'),
+            sort: any(named: 'sort'),
+          ),
+        ).thenAnswer((invocation) async {
+          final after = invocation.namedArguments[#after] as ClientRecord?;
+          afters.add(after?.id);
+          return after == null ? full : const [bob];
+        });
+        await tester.pumpWidget(_wrap(repo));
+        await tester.pumpAndSettle();
+
+        refresh(tester).bump(write);
+        await tester.pumpAndSettle();
+        for (var i = 0; i < 12; i++) {
+          await tester.drag(
+            find.byType(Scrollable).first,
+            const Offset(0, -600),
+          );
+          await tester.pumpAndSettle();
+        }
+
+        expect(find.text('Bob Carter'), findsOneWidget);
+        expect(afters, [null, 'p49']);
+      });
+    }
   });
 
   group('local search fallback', () {

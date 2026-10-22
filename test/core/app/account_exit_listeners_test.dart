@@ -212,6 +212,49 @@ void main() {
     expect(calls.where((c) => c == 'signOut').length, 1);
   });
 
+  testWidgets('a forced exit during a voluntary teardown is ignored', (
+    tester,
+  ) async {
+    final controller = await pumpController(tester);
+    final release = Completer<void>();
+
+    final voluntary = controller.runVoluntaryTeardown(() => release.future);
+    await controller.exitAccount(
+      selectMessage: (l10n) => 'disabled',
+      navigatorKey: navigatorKey,
+      scaffoldMessengerKey: messengerKey,
+      isMounted: () => true,
+    );
+    release.complete();
+
+    expect(await voluntary, isTrue);
+    expect(calls, isEmpty);
+  });
+
+  testWidgets('a voluntary teardown during a forced exit does not run', (
+    tester,
+  ) async {
+    final controller = await pumpController(tester);
+    final release = Completer<void>();
+    when(push.unregisterCurrentDevice).thenAnswer((_) => release.future);
+
+    final forced = controller.exitAccount(
+      selectMessage: (l10n) => 'disabled',
+      navigatorKey: navigatorKey,
+      scaffoldMessengerKey: messengerKey,
+      isMounted: () => true,
+    );
+    var ran = false;
+    final voluntary = await controller.runVoluntaryTeardown(
+      () async => ran = true,
+    );
+    release.complete();
+    await forced;
+    await tester.pumpAndSettle();
+
+    expect((voluntary, ran), (false, false));
+  });
+
   testWidgets('does nothing when nobody is signed in', (tester) async {
     final controller = await pumpController(tester, signedIn: false);
 

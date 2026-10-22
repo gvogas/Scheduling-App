@@ -117,7 +117,10 @@ function appointmentEditPatch(base, desired, current) {
  */
 function validateEditedAppointment(record, previous) {
   const statuses = ["pending", "in_progress", "done", "cancelled"];
-  if (!statuses.includes(record.status ?? "pending")) {
+  const status = record.status ?? "pending";
+  const untouched = Boolean(previous) &&
+    status === (previous.status ?? "pending");
+  if (!untouched && !statuses.includes(status)) {
     throw new HttpsError("invalid-argument", "invalid-appointment-status");
   }
   const span = toMillis(record.endTime) - toMillis(record.startTime);

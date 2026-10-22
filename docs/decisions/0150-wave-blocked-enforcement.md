@@ -25,7 +25,7 @@ absent `wave.problems` and a derived empty list as EQUAL (else every clean clien
 and leaves ENTIRELY alone a `blocked` doc that now passes (the push owns the non-blocked state), cancels no queued
 job (the dispatcher refuses it), and stays uncapped (`scanByName`); a live run patching 0 against a non-zero
 advisory count means the comparison is wrong, not the data. Surfaces: `WaveSyncBadge` shows `blocked` and its
-reasons as visible text; `WaveBlockedList` reads `watchBlockedClients()`, admin-only by the read rule.
+reasons as visible text; `WaveBlockedList` reads `watchBlockedClients()`, admin-only by the read rule. A job queued by an earlier edit, or `inflight` when the edit landed, still reaches dispatch holding a client Wave would refuse; dispatch blocks it because dead-lettering is permanent and unrecoverable, and the contract module (not discipline) is the only payload producer.
 
 ## Consequences
 Deploying enforcement before the app leaves shipped builds with no badge for `blocked` clients. A backfill that

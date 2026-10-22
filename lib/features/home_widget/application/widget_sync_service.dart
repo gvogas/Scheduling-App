@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 
+import 'package:collection/collection.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:home_widget/home_widget.dart';
@@ -228,7 +229,9 @@ class WidgetSyncService {
   String _signatureFor(Map<String, dynamic> meaningful) {
     final last = _lastMeaningful;
     final signature = _lastSignature;
-    return last != null && signature != null && _deepEquals(meaningful, last)
+    return last != null &&
+            signature != null &&
+            const DeepCollectionEquality().equals(meaningful, last)
         ? signature
         : jsonEncode(meaningful);
   }
@@ -237,26 +240,6 @@ class WidgetSyncService {
   @visibleForTesting
   static String signatureForTesting(Map<String, dynamic> payload) =>
       _signatureOf(payload);
-}
-
-/// JSON-shaped structural equality (maps, lists, scalars).
-bool _deepEquals(Object? a, Object? b) {
-  if (a is Map && b is Map) {
-    if (a.length != b.length) return false;
-    for (final entry in a.entries) {
-      if (!b.containsKey(entry.key)) return false;
-      if (!_deepEquals(entry.value, b[entry.key])) return false;
-    }
-    return true;
-  }
-  if (a is List && b is List) {
-    if (a.length != b.length) return false;
-    for (var i = 0; i < a.length; i++) {
-      if (!_deepEquals(a[i], b[i])) return false;
-    }
-    return true;
-  }
-  return a == b;
 }
 
 final widgetSyncServiceProvider = Provider<WidgetSyncService>(

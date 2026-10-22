@@ -50,44 +50,21 @@ mixin DeleteAccountFlow<T extends ConsumerStatefulWidget> on ConsumerState<T> {
     final notices = ref.read(noticeServiceProvider);
     final analytics = ref.read(analyticsServiceProvider);
     setState(() => _isSigningOut = true);
-    // Holds the deps once the teardown has actually run, so the rollback in
-    // the catch below reuses THEM instead of reading `ref` again — see
-    // [restoreThisDevice]. Non-null is exactly "there is something to roll
-    // back", which is why it replaces a separate bool.
-    DeviceDeregistrationDeps? deregistered;
-    PendingPhotoExit? pendingExit;
     try {
-      // Clean up this device's push token, presence, and Live Activity state
-      // — best effort, so a failure here doesn't block sign-out. The ORDER is
-      // owned by `deregisterThisDevice`; all three exits share it.
-      final devices = DeviceDeregistrationDeps.from(ref.read);
-      pendingExit = await confirmPendingPhotoExit(
+      // The voluntary teardown shared with the app-lock overlay's Log out;
+      // it restores the device itself before rethrowing.
+      final signedOut = await signOutAfterPhotoCheck(
         context,
-        devices.imageUploads,
-        devices.session!,
+        DeviceDeregistrationDeps.from(ref.read),
+        authService,
+        analytics,
       );
-      if (pendingExit == null || !pendingExit.isCurrent) {
+      if (!signedOut) {
         if (mounted) setState(() => _isSigningOut = false);
         return;
       }
-      await deregisterThisDevice(devices);
-      deregistered = devices;
-      if (!devices.isCurrentExit) {
-        if (mounted) setState(() => _isSigningOut = false);
-        return;
-      }
-      await authService.signOut();
-      if (authService.currentUser != null) {
-        if (mounted) setState(() => _isSigningOut = false);
-        return;
-      }
-      // After the sign-out lands; never `resetAnalyticsData`, clear `user_role` instead (ADR-0165).
-      analytics
-        ..logSignOut()
-        ..setUserRole(null);
     } catch (e, st) {
       logger.warn('ACCT-SIGNOUT signOut failed', e, st);
-      if (deregistered != null) await restoreThisDevice(deregistered);
       if (!mounted) return;
       setState(() => _isSigningOut = false);
       notices.error(
@@ -98,8 +75,6 @@ mixin DeleteAccountFlow<T extends ConsumerStatefulWidget> on ConsumerState<T> {
         ),
       );
       return;
-    } finally {
-      pendingExit?.resume();
     }
     if (!mounted) return;
     try {
@@ -179,21 +154,13 @@ mixin DeleteAccountFlow<T extends ConsumerStatefulWidget> on ConsumerState<T> {
       // Drop this device's registrations while still authenticated, before
       // deleteAccount revokes access — same shared order as the other exits.
       final devices = DeviceDeregistrationDeps.from(ref.read);
-      pendingExit = await confirmPendingPhotoExit(
-        context,
-        devices.imageUploads,
-        devices.session!,
-      );
-      if (pendingExit == null || !pendingExit.isCurrent) {
+      final exit = await exitDevicesAfterPhotoCheck(context, devices);
+      if (exit == null) {
         if (mounted) setState(() => _isDeletingAccount = false);
         return;
       }
-      await deregisterThisDevice(devices);
       deregistered = devices;
-      if (!devices.isCurrentExit) {
-        if (mounted) setState(() => _isDeletingAccount = false);
-        return;
-      }
+      pendingExit = exit.pendingExit;
       await deletionService.deleteAccount();
       if (devices.hasReplacementSession) {
         if (mounted) setState(() => _isDeletingAccount = false);

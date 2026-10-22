@@ -73,6 +73,7 @@ Widget _wrap(
       () => repo.fetchHistoryPage(
         limit: any(named: 'limit'),
         after: any(named: 'after'),
+        statuses: any(named: 'statuses'),
       ),
     ).thenAnswer((_) async => history);
   }
@@ -389,6 +390,7 @@ void main() {
       () => repo.fetchHistoryPage(
         limit: any(named: 'limit'),
         after: any(named: 'after'),
+        statuses: any(named: 'statuses'),
       ),
     ).thenAnswer((_) async {
       if (calls++ == 0) throw Exception('boom');
@@ -419,6 +421,7 @@ void main() {
       () => repo.fetchHistoryPage(
         limit: any(named: 'limit'),
         after: any(named: 'after'),
+        statuses: any(named: 'statuses'),
       ),
     ).thenAnswer((_) async => [_aliceJob]);
     when(() => repo.searchHistory(any())).thenThrow(Exception('boom'));

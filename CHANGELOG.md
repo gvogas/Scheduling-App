@@ -10,6 +10,72 @@ All notable changes to this project are documented here.
 The `+N` build number after the version (e.g. `1.1.0+5`) is the store version
 code; it increments by one on every store upload regardless of the semver part.
 
+## [1.66.0+98] - 2026-10-21
+
+Clearer messages, safer forms and a smoother first day for new staff.
+
+### Added
+- **Closing a form with unsaved changes asks first.** Cancel, a tap outside
+  the sheet or a swipe down now offers "Discard changes?" instead of throwing
+  your edits away. A form you haven't touched still closes straight away.
+- **New employees are asked once about notifications** when they first sign
+  in, so job assignments and "time to leave" alerts aren't silent until they
+  find the setting.
+- **Adding a client warns when the phone number is already on file.** Open the
+  existing client, or choose Use anyway.
+- **Swiping a client to archive offers Undo.**
+- **Log out from the lock screen** when Face ID isn't working for you. If
+  photos are still waiting to upload, it asks first, like Settings does.
+- **Admins can edit a finished job straight from a client's Job history.**
+- **The calendar remembers whether it was collapsed** and which agenda view you
+  were using.
+
+### Changed
+- **Messages stay up long enough to read.** Errors stay longer the more they
+  say, a notice with Undo stays at least six seconds, and resting a finger on
+  a notice keeps it there.
+- **Save with a mistake further down the form jumps to it** instead of looking
+  like nothing happened.
+- **The offline banner says what works offline**: you can view your schedule,
+  but saving needs a connection. Photos waiting to upload are announced, and
+  you're told when they finish.
+- **Every edit sheet warns when you're offline**, not only the new-item ones.
+- **Times follow your phone's 24-hour setting** everywhere, including cards
+  and crew notes.
+- **History filters keep loading older jobs**, and the Complete and Cancelled
+  filters fetch only matching jobs.
+- **Editing a client keeps your place in the list** instead of jumping back to
+  the top.
+- **The day route opens on the day you picked**, not always today.
+- **Changing a password ends at Login with an "account ready" message**
+  instead of an unexplained sign-out.
+- **Wording is consistent**: "jobs" on the dashboard, "Complete" everywhere,
+  clearer password rules and a single welcome screen.
+- **Saving an appointment is faster**, with the clash check done in the same
+  step as the save.
+
+### Fixed
+- **Start job updates the details sheet straight away**: the status, the
+  Start button and the start time no longer stay as they were.
+- **Turning on location sharing no longer switches itself back off** while the
+  iPhone permission prompt is open, and it no longer reads "On" after you
+  tap Don't Allow.
+- **Swiping between months no longer flashes an empty calendar** or "0 JOBS"
+  while the new month loads.
+- **A calendar that can't load says so**, instead of "No appointments found".
+- **An offline cold start offers Retry** instead of dropping you at Login.
+- **Fixing a digit in the middle of a phone number keeps the cursor there.**
+- **Editing an older appointment with a legacy status now saves.**
+- **A client edited off an address leaves that address's filtered list.**
+- **The duplicate-phone warning fits on small screens with large text**, and
+  it comes back if you change the number and then change it back.
+- **An unsent crew note stays with the person who typed it** instead of
+  appearing for the next person to sign in on the same phone.
+- **The client list no longer skips or repeats clients** after you archive
+  the last one loaded.
+- **Error messages no longer tell you to refresh** when the real cause is a
+  temporary server problem.
+
 ## [1.65.0+97] - 2026-10-20
 
 Safer appointment edits and photo uploads, plus a more accurate home-screen widget.

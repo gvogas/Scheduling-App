@@ -44,6 +44,10 @@ class _RecordingExit implements AccountExitController {
   }) async {
     requests.add(selectMessage);
   }
+
+  @override
+  Future<bool> runVoluntaryTeardown(Future<void> Function() teardown) =>
+      throw UnimplementedError();
 }
 
 /// The warm-cache probe that separates a cold-start DELETION from an invited

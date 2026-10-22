@@ -13,6 +13,7 @@ import 'package:scheduling/features/auth/application/active_user_identity_provid
 import 'package:scheduling/features/calendar/application/appointment_form_concerns.dart';
 import 'package:scheduling/features/calendar/application/appointments_providers.dart';
 import 'package:scheduling/features/calendar/application/event_details_controller.dart';
+import 'package:scheduling/features/calendar/application/field_note_drafts.dart';
 import 'package:scheduling/features/calendar/application/field_notes_provider.dart';
 import 'package:scheduling/features/calendar/application/photo_upload_notifier.dart';
 import 'package:scheduling/features/calendar/data/appointment_image_upload_service.dart';

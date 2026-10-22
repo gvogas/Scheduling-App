@@ -129,7 +129,7 @@ before each file; nothing else is reset. The leaks found when sharding landed
   told you not to write any). Only the plugin round-trip itself needs a device;
   verify picker fixes there via `flutter run`. **`ImageStorageService` is NOT in that category**
   (corrected 2026-08-15): it takes an injected `FirebaseStorage` and `AppLogger`,
-  and its magic-byte rejection, 8 MB cap, `composeFileName` bound, legacy
+  and its magic-byte rejection and 8 MB cap (through `uploadQueuedImage`), legacy
   `_pathFromUrl` fallback and `object-not-found` swallow are all covered by
   `test/core/images/image_storage_service_test.dart`. Only the actual byte
   transfer (`putFile`) is device-only.

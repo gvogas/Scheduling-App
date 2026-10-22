@@ -426,6 +426,7 @@ service cloud.firestore {
         // Interpolated into an `appointmentSeriesNotices` doc id, like the ids.
         && (!('seriesOpId' in d.keys()) || isValidDocIdField(d.seriesOpId))
 
+        && (!('isPersonal' in d.keys()) || d.isPersonal is bool)
         && (!('pictures' in d.keys())
             || (d.pictures is list && d.pictures.size() <= 100))
 

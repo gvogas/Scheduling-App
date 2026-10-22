@@ -8,6 +8,10 @@ including tests (the 10-19 implementation, release 1.65.0+97, the 10-20 UX and
 performance review and its implementation, the range tail query + `isPersonal`
 equality).
 
+## Implementation status (2026-10-21)
+
+All 20 findings plus S-obs-2 worked (`/audit-do`): 21 DONE, 9 of them deviated as annotated; B3 and I2 wait on the backend deploy. Also fixed on the way: a 209 px overflow in `DuplicatePhoneNotice` (found by I10) and a Windows-only teardown failure in `appointment_image_disk_cache_test.dart` (an un-awaited write held a file open). Verified 2026-10-21 on Windows: `flutter analyze` **No issues found!** · `dart run tool/test.dart` **4427 passed, 0 failed** · `tool/check_rules.dart` 0 violations · functions lint clean · jest **116 suites, 2381/2381** · emulator smoke (I2/I3) passed locally.
+
 ## Summary
 
 - Scanned: 499 Dart files in `lib/` (75,490 lines), 425 test files,
@@ -27,6 +31,12 @@ equality).
   `tool/check_rules.dart` 0 violations.
 
 ## Decide first
+
+> **Owner decisions (2026-10-21):** B1 → settle the permission before writing
+> the flag; B2/I1 → gate the first emission on both snapshots and amend
+> `appointments.md`; I2 → add the `isPersonal is bool` bound in this backend
+> deploy; Q1 → relax `code-quality.md` to allow a short WHY block (≤4 lines),
+> and still trim the `wave/customers.js` blocks already in ADR-0148/0150.
 
 1. **B1 (high):** turning location sharing ON reverts itself while the iOS
    prompt is open. Two fixes are possible: decide the permission before
@@ -90,7 +100,7 @@ below-the-bar observations:
   legacy `completed`/`confirmed` WITHOUT touching status gets
   `invalid-appointment-status` and cannot save. Fail-closed and admin-only, so
   not a security finding; it is a functional gap, filed as **B3**.
-- **S-obs-2** `.github/workflows/ci.yml:116` · informational — the CI
+- **S-obs-2** **DONE — `npm ci --ignore-scripts` in `ci.yml`; the three packages with install scripts are not needed by jest.** `.github/workflows/ci.yml:116` · informational — the CI
   `functions` job runs `npm ci` with lifecycle scripts; the deploy job uses
   `--ignore-scripts`. The CI job holds only a read-only `GITHUB_TOKEN` and no
   GCP credential. Optional hardening: add `--ignore-scripts` there too.
@@ -102,6 +112,8 @@ below-the-bar observations:
 ## 🟠 Bug findings (review required)
 
 ### B1 — turning location sharing ON reverts itself while the iOS prompt is open · high · confidence high
+
+> **DONE — `applyLocationSharing` awaits `ensureLocation()` before any write; flag written on only when granted; `runCoalesced` untouched. Refusal writes off only if the record still read on. Regression test with an in-flight `sync` (Completer); `share_location_ask_screen_test` moved the prompt to `ensureLocation`; `notifications.md` Presence bullet updated.**
 - **Where:** `lib/features/presence/application/presence_sync_controller.dart:90-112`
   (`applyLocationSharing`), with `lib/core/app/app_sync_listeners.dart:96-105`
   (`_presenceSync`) and `lib/core/utils/reentrant_sync.dart:32-50`
@@ -131,6 +143,8 @@ below-the-bar observations:
   by three controllers, so prefer the first.
 
 ### B2 — range streams emit a partial window on every cold subscription · medium · confidence high
+
+> **DONE — `_watchRange` returns before `controller.add` while `latest.contains(null)`; `appointments.md` clause amended ("after both have landed, then on either").**
 - **Where:** `lib/features/calendar/data/firebase_appointments_repository.dart:659-690`
   (`_watchRange`). New in `a8072b6`.
 - **Problem:** each of the two `snapshots().listen` callbacks does
@@ -156,6 +170,8 @@ below-the-bar observations:
   then on either").
 
 ### B3 — `saveAppointmentEdits` refuses an untouched legacy status · low · confidence medium
+
+> **DONE (deviated — `validateEditedAppointment(record, previous)` never sees the patch, so an unchanged status is detected as `record.status === previous.status`; same effect). Jest: stored `completed`/`confirmed` + title-only edit accepted; patched bogus status and a create with `completed` refused. OPEN — needs the backend deploy.**
 - **Where:** `functions/appointment_edit_policy.js:118-122`
   (`validateEditedAppointment`).
 - **Problem:** the merged `next` record is validated against the four-value
@@ -174,6 +190,8 @@ below-the-bar observations:
 ## 🔵 Areas to improve (review required)
 
 ### I1 — the two-listener range stream has no "both landed" test · medium · confidence high
+
+> **DONE — group "the first emission waits for both initial snapshots" (main alone emits nothing; tail-then-main one emission; empty tail; later snapshots emit singly).**
 - **Where:** `test/features/calendar/data/firebase_appointments_repository_range_stream_test.dart`.
 - **Opportunity:** the suite pins the query shapes (main starts at the window,
   tail 14 days back, employee scoping, cap-warn) but not the merge timing —
@@ -181,6 +199,8 @@ below-the-bar observations:
 - **Suggested improvement:** lands with B2 (above).
 
 ### I2 — `isPersonal` is a query key with no rules type bound · medium · confidence high
+
+> **DONE — `(!('isPersonal' in d.keys()) || d.isPersonal is bool)` in `isValidAppointmentData`; emulator assert in `safety_checks.js` ("yes" → 403, `true` → 200). OPEN — needs the rules deploy.**
 - **Where:** `firestore.rules` `isValidAppointmentData` (0 hits for
   `isPersonal`); `firebase_appointments_repository.dart:720,740`.
 - **Opportunity:** `a8072b6` made `isPersonal` an equality in both the overdue
@@ -194,6 +214,8 @@ below-the-bar observations:
   an emulator assert in `safety_checks.js`. Rules deploy.
 
 ### I3 — the three assignee `allow update` disjuncts and `fieldNotes` create have no emulator coverage · medium · confidence high
+
+> **DONE — `verifyAssigneeRules` in `appointment_edits_checks.js` (pending→done/in_progress 200, cancelled→done 403, non-assignee 403, parent touch updatedAt-only 200 / extra key 403, fieldNotes own author 200 / foreign 403); executed locally via `firebase emulators:exec` (emulator only), all passed.**
 - **Where:** `functions/__tests__/emulator/{appointment_edits_checks,safety_checks}.js`
   (0 hits for `done`/`in_progress`/`fieldNotes`).
 - **Opportunity:** `appointment_edits_checks.js` covers the admin branch well
@@ -209,6 +231,8 @@ below-the-bar observations:
   `fieldNotes` with a foreign `authorId` refused.
 
 ### I4 — `DashboardAggregator.writeTouchesHistory` is untested · high · confidence high
+
+> **DONE — `writeTouchesHistory` group in `dashboard_aggregator_test.dart` (held id, start inside [fetchStart, end) at both boundaries, `heldIds == null`).**
 - **Where:** `lib/features/dashboard/domain/dashboard_aggregator.dart`
   (+26/−9 this week); `dashboard_aggregator_test.dart` unchanged; 0 references
   in `test/`.
@@ -218,6 +242,8 @@ below-the-bar observations:
 - **Suggested improvement:** three `test(...)` cases in the existing file.
 
 ### I5 — `AppointmentFormConcerns.searchClients` has no direct test · high · confidence high
+
+> **DONE (deviated — narrowing and truncated-refetch were already pinned in `add_event_controller_test.dart` ("extra digits narrow…", "a truncated answer is re-queried…"); only the stale-request drop was missing and was added there, since the mixin needs a host notifier).**
 - **Where:** `lib/features/calendar/application/appointment_form_concerns.dart`
   (279 lines; `searchClients` 96 lines: phone-rung narrowing via
   `_clientWindow.canNarrowTo`, request-id drop).
@@ -229,6 +255,8 @@ below-the-bar observations:
   request id is dropped.
 
 ### I6 — `EventDetailsController.save` (144 lines) and `AddEventController.submit` (159 lines) · medium · confidence high
+
+> **DONE (deviated — form snapshots extracted as private records `_EditFormSnapshot`/`_AddFormSnapshot`; no `_saveNew`, because `EventDetailsController.save` has no create branch — the cited lines are the id guard and span call). Flag placement, offline guard and every reset unchanged.**
 - **Where:** `event_details_controller.dart:551-694` (+ `_applySeriesChange`
   `:696-790`, 95), `add_event_controller.dart:301-459`.
 - **Opportunity:** each does gate → seed-settle → 7–10-field snapshot →
@@ -242,6 +270,8 @@ below-the-bar observations:
   the first await exactly where it is.
 
 ### I7 — `firebase_appointments_repository.dart` is 1205 lines, 44 methods · medium · confidence high
+
+> **DONE (deviated — `AppointmentHistoryScan` takes a query FACTORY, since a built query constructed `where(status whereIn)` on first write and broke 21 tests with unstubbed collections; `rawOf` public static for the save-ack path). Repository 1205 → 1040 lines; `_patchWindow` stays, its source-reading test unchanged.**
 - **Where:** `lib/features/calendar/data/firebase_appointments_repository.dart`
   (+252/−130 this week).
 - **Opportunity:** range streams + tail merge, history scan/search patching
@@ -256,6 +286,8 @@ below-the-bar observations:
   must keep passing.
 
 ### I8 — History status chip auto-pages up to 500 reads for an empty answer · low · confidence high
+
+> **DONE (deviated — `fetchHistoryPage(statuses:)`, not a single `status`: Complete must match `done` + legacy `completed` (ADR-0044), so one value → `isEqualTo`, several → `whereIn`; non-terminal values never widen the archive). Same `(status, startTime DESC)` shape, no new index. `clients.md` History bullet updated.**
 - **Where:** `lib/features/clients/widgets/views/appointment_history_view.dart`
   (`_emptyFilterFetchCap = 20` × 25 rows; `_mayAutoFetch` ~`:213-225`; the
   `requestFirstPage` loop in `_buildFiltered` ~`:457-466`).
@@ -270,6 +302,8 @@ below-the-bar observations:
   scopes).
 
 ### I9 — `calendar_view_prefs.dart` promises best-effort but has no `catch`, and no test · medium · confidence high
+
+> **DONE — `CalendarViewPrefs` takes an `AppLogger`, `load`/`saveCollapsed`/`saveAgendaMode` catch and log `SETTINGS`; the redundant catch left `main_calendar_screen.dart`; new `calendar_view_prefs_test.dart` (4 tests; unknown-mode → day stays pinned in `main_calendar_screen_test`).**
 - **Where:** `lib/features/calendar/data/calendar_view_prefs.dart` (new, 34
   lines; only `main_calendar_screen.dart:126` reads it).
 - **Opportunity:** the doc comment says a failure leaves the defaults, but the
@@ -281,6 +315,8 @@ below-the-bar observations:
   unknown stored mode → day.
 
 ### I10 — new code since 33cde361 with no test · medium · confidence high
+
+> **DONE — `duplicate_phone_notice_test.dart`, `add_client_flow_test.dart` (four AddClientNext paths incl. two-pane), route cases for `textSize`/`locationSharing`/`notificationAsk`/`LoginArgs`. The new 260 px / 2× case found a 209 px OVERFLOW in `DuplicatePhoneNotice` — fixed (`Wrap`, buttons drop under the text) and pinned. Leaf widgets skipped (low priority).**
 - **Where:** `clients/widgets/sections/duplicate_phone_notice.dart` (+76, new,
   `DuplicatePhoneNotice` 0 refs in `test/`); `clients/widgets/sheets/add_client_flow.dart`
   (`runAddClientFlow`, three-way `AddClientNext` switch incl. `isTwoPane`, 0
@@ -295,6 +331,8 @@ below-the-bar observations:
   leaf widgets are low priority.
 
 ### I11 — exit prologue repeated at exactly three sites · low · confidence high
+
+> **DONE (deviated — the three sites were not identical: `change_password_screen` gates the photo check on `checkPendingPhotos`, and callers' `finally { pendingExit?.resume(); }` must keep the hold, so `exitDevicesAfterPhotoCheck(context, devices, {checkPendingPhotos})` returns `({devices, pendingExit})?` and releases the hold itself on any bail-out).**
 - **Where:** `auth/screens/change_password_screen.dart:199-216`,
   `settings/widgets/views/delete_account_flow.dart:63-78` (`signOut`) and
   `:182-197` (`_runDeletion`).
@@ -310,6 +348,8 @@ below-the-bar observations:
   caller keeps its own busy-flag reset.
 
 ### I12 — `travel_policy.js` and `wave/outbox_core.js` have no direct suite · medium · confidence high
+
+> **DONE (deviated — `travel_utils.test.js` already covers the decision functions via re-exports; new `travel_policy.test.js` covers only the uncovered `readEstimate`/`pruneEstimates`/`canDeferRoutes`. New `outbox_core.test.js` pins the commitOutcome inflight + same-`claimedAt` guard and `claimJob`).**
 - **Where:** `functions/travel_policy.js` (283 lines, pure; reached only
   through `resolveReminderForAssignee`, 123 lines); `functions/wave/outbox_core.js`
   (305; `claimJob`/`commitOutcome` — the "outcome write only while still
@@ -322,6 +362,8 @@ below-the-bar observations:
   by suites that do not mock them — fine.)
 
 ### I13 — `AppLock` keeps offering "Continue" after biometrics return · low · confidence medium
+
+> **DONE — `_authenticate` clears `_unavailable` when biometrics are available before prompting; test "biometrics returning withdraw Continue before the prompt".**
 - **Where:** `lib/core/security/app_lock.dart:150-171` (`_authenticate`),
   `:40-42` (`_unavailable`).
 - **Opportunity:** `_unavailable` is set when `isAvailable()` is false and
@@ -336,7 +378,7 @@ below-the-bar observations:
 
 ## 🟡 Code-quality suggestions (optional)
 
-- **Q1** `lib/` (225 sites, 0 longer than 4 lines) — multi-line `//` blocks
+- **Q1** **DONE (owner: relax) — `code-quality.md` allows a ≤4-line WHY block; the three `upsertCustomer` blocks in `wave/customers.js` trimmed to one line, reasons added to ADR-0150 and ADR-0090 (not 0148, which doesn't own them).** `lib/` (225 sites, 0 longer than 4 lines) — multi-line `//` blocks
   vs `code-quality.md`'s one-line rule ("enforced, not aspirational"). Sampled
   sites (`status_chip.dart:7`, `main.dart:82/394/460`, `hub_shell.dart:125`,
   `app_routes.dart:315`, `delete_account_flow.dart:53/203/211/248`,
@@ -347,7 +389,7 @@ below-the-bar observations:
   the JS side `wave/customers.js:264-297` (`upsertCustomer`) carries two 9–13
   line rationale blocks already recorded in ADR-0148/0150 — that trim is
   unambiguous.
-- **Q2** `lib/core/images/image_storage_service.dart:41,25` —
+- **Q2** **DONE — magic-byte and 8 MB cases ported to `uploadQueuedImage`; `uploadImage`/`composeFileName` deleted with their tests; `images.md`/`testing.md` mentions removed.** `lib/core/images/image_storage_service.dart:41,25` —
   `uploadImage(appointmentId, file)` and its only dependant `composeFileName`
   have no production caller (`uploadQueuedImage` and `deleteImages` are the
   live paths); 7 tests in `image_storage_service_test.dart:268-343,356-371`
@@ -355,14 +397,14 @@ below-the-bar observations:
   the magic-byte/size-cap cases to `uploadQueuedImage` (which duplicates the
   checks at `:97-101`), so the `images.md` invariant stays pinned. Not
   auto-applied because the tests guard a security invariant.
-- **Q3** `lib/features/settings/widgets/views/location_sharing_view.dart:160-168`
+- **Q3** **DONE (deviated — kept the theme's default r8 shape like the helper's six other callers rather than threading r12 through; `_ClearLocationButton` extracted, `build()` 56 lines).** `lib/features/settings/widgets/views/location_sharing_view.dart:160-168`
   — hand-rolled destructive outlined style; `frontend.md` names
   `destructiveOutlinedButtonStyle` (`core/theme/button_styles.dart`, 6
   callers). The local one adds an `r12` shape the shared one lacks: either
   pass the shape through the helper or accept the default shape. `build()`
   there is 71 lines; extracting the button as `_ClearLocationButton` brings it
   under the ~60 guide.
-- **Q4** `lib/routes/app_routes.dart:56` — `forgotPassword` reads
+- **Q4** **DONE (deviated — null args is a legal open, so null → screen, wrong type → `InvalidRouteScreen`; plain `_args<T>` would have sent null to the invalid screen).** `lib/routes/app_routes.dart:56` — `forgotPassword` reads
   `settings.arguments as ForgotPasswordArgs?`; every other typed arm uses
   `_args<T>` (ADR-0017). Switch it so a wrong type degrades to
   `InvalidRouteScreen`.

@@ -25,6 +25,7 @@ class _FakeHistoryRepo implements AppointmentsRepository {
   int? failOnCall;
 
   final List<AppointmentRecord?> cursors = [];
+  final List<List<String>?> statusFilters = [];
   int calls = 0;
 
   @override
@@ -34,17 +35,22 @@ class _FakeHistoryRepo implements AppointmentsRepository {
   Future<List<AppointmentRecord>> fetchHistoryPage({
     required int limit,
     AppointmentRecord? after,
+    List<String>? statuses,
   }) async {
     calls += 1;
     cursors.add(after);
+    statusFilters.add(statuses);
     if (failOnCall == calls) {
       failOnCall = null;
       throw Exception('history page load failed');
     }
+    final rows = statuses == null
+        ? all
+        : all.where((a) => statuses.contains(a.status)).toList();
     final start = after == null
         ? 0
-        : all.indexWhere((a) => a.id == after.id) + 1;
-    return all.skip(start).take(limit).toList();
+        : rows.indexWhere((a) => a.id == after.id) + 1;
+    return rows.skip(start).take(limit).toList();
   }
 
   @override
@@ -212,9 +218,57 @@ void main() {
       await tester.tap(find.widgetWithText(FilterChip, 'Cancelled'));
       await tester.pumpAndSettle();
 
-      expect(repo.calls, greaterThanOrEqualTo(2));
+      expect(repo.statusFilters.last, ['cancelled']);
       expect(find.text('Job 30'), findsOneWidget);
       expect(find.text('Job 00'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the Complete chip asks the server for both done spellings', (
+      tester,
+    ) async {
+      final repo = _FakeHistoryRepo(_history(_pageSize));
+      await pumpView(tester, repo);
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Complete'));
+      await tester.pumpAndSettle();
+
+      expect(repo.statusFilters.last, ['done', 'completed']);
+      expect(repo.cursors.last, isNull);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a status chip with no match costs one read, not 20 pages', (
+      tester,
+    ) async {
+      final repo = _FakeHistoryRepo(_history(_pageSize * 3));
+      await pumpView(tester, repo);
+      final before = repo.calls;
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Cancelled'));
+      await tester.pumpAndSettle();
+
+      expect(repo.calls - before, 1);
+      // The chips stay up, so the filter can be undone in place.
+      expect(find.widgetWithText(FilterChip, 'Cancelled'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('clearing the status chip re-pages the whole archive', (
+      tester,
+    ) async {
+      final repo = _FakeHistoryRepo(
+        _history(_pageSize, statusAt: (i) => i == 3 ? 'cancelled' : 'done'),
+      );
+      await pumpView(tester, repo);
+
+      await tester.tap(find.widgetWithText(FilterChip, 'Cancelled'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilterChip, 'Cancelled'));
+      await tester.pumpAndSettle();
+
+      expect(repo.statusFilters.last, isNull);
+      expect(find.text('Job 00'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 

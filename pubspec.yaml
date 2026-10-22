@@ -2,7 +2,7 @@ name: scheduling
 description: "ES Pro — appointment, client, and employee scheduling."
 publish_to: 'none'
 
-version: 1.65.0+97
+version: 1.66.0+98
 
 environment:
   sdk: ^3.10.7
@@ -36,6 +36,9 @@ dependencies:
 
   # Logging
   logger: ^2.5.0
+
+  # DeepCollectionEquality for the widget and Siri payload dedup.
+  collection: ^1.19.1
 
   # Local storage
   shared_preferences: ^2.5.5

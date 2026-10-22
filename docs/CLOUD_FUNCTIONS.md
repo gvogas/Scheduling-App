@@ -2,7 +2,7 @@
 
 Map of every Cloud Function in `functions/` — what it does, how it's
 triggered, who calls it, and its security posture. Generated 2026-07-05,
-refreshed 2026-10-20 (release 1.65.0+97 — **32 exports, 31 deployed**: `saveAppointmentEdits` is NEW and NOT yet deployed, and must deploy BEFORE the app build, which calls it for every admin appointment edit; `findAppointmentConflicts` gains a batched `windows` mode, `excludeAppointmentIds` and a per-window rate cost at 250/min; `propagateClientEdits` re-reads each page inside a transaction; none of these are deployed). Previously refreshed 2026-10-18 (release 1.64.2+96 — **31 exports, all deployed** at `0ab3f05c` on 2026-10-11, the 2026-10-07 and 10-09 entries below included, `waveSetImportSchedule` deleted 32 → 31; one source change since is NOT deployed: `afd68870` makes `purgeExpiredHistory` count image failures by doc id, in `maintenance_policy.js`). Previously refreshed 2026-10-09 (release 1.64.1+95 — **31 exports**; `placesAutocomplete` adds `structuredFormat` to its field mask and passes suggestions through untouched; `waveSetImportSchedule` removed from `index.js` but still live until the owner deletes it — ADR-0184; `completeEmployeeSetup` now requires `newPassword` — ADR-0185; neither deployed yet). Previously refreshed 2026-10-07 (release 1.64.0+94 — still **32 exports**; source changes NOT yet deployed: `resetEmployeePassword` gained a fresh-reauth gate and refuses admin targets, the kill-switch parsers became strict, `endLiveActivity` keeps tokens while paused, and the FCM message dropped its Android block).
+refreshed 2026-10-21 (release 1.66.0+98 — no export added; `saveAppointmentEdits` accepts an unchanged legacy status). Before that, refreshed 2026-10-20 (release 1.65.0+97 — **32 exports, 31 deployed**: `saveAppointmentEdits` is NEW and NOT yet deployed, and must deploy BEFORE the app build, which calls it for every admin appointment edit; `findAppointmentConflicts` gains a batched `windows` mode, `excludeAppointmentIds` and a per-window rate cost at 250/min; `propagateClientEdits` re-reads each page inside a transaction; none of these are deployed). Previously refreshed 2026-10-18 (release 1.64.2+96 — **31 exports, all deployed** at `0ab3f05c` on 2026-10-11, the 2026-10-07 and 10-09 entries below included, `waveSetImportSchedule` deleted 32 → 31; one source change since is NOT deployed: `afd68870` makes `purgeExpiredHistory` count image failures by doc id, in `maintenance_policy.js`). Previously refreshed 2026-10-09 (release 1.64.1+95 — **31 exports**; `placesAutocomplete` adds `structuredFormat` to its field mask and passes suggestions through untouched; `waveSetImportSchedule` removed from `index.js` but still live until the owner deletes it — ADR-0184; `completeEmployeeSetup` now requires `newPassword` — ADR-0185; neither deployed yet). Previously refreshed 2026-10-07 (release 1.64.0+94 — still **32 exports**; source changes NOT yet deployed: `resetEmployeePassword` gained a fresh-reauth gate and refuses admin targets, the kill-switch parsers became strict, `endLiveActivity` keeps tokens while paused, and the FCM message dropped its Android block).
 Refresh entries older than 2026-10-07 were moved to
 `docs/archive/CLOUD_FUNCTIONS_refresh_history.md` (2026-09-06, 2026-09-13,
 2026-10-01 and 2026-10-18).
@@ -149,6 +149,8 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
   *count* never moved (25 throughout, `index.js` untouched), so a count check
   looked clean for three days while prod ran older bodies — check the deploy
   log, not the count.
+- **32 functions defined, 31 DEPLOYED** (2026-10-21, release 1.66.0+98):
+  unchanged since 1.65.0+97; the backend is still owed before the app build.
 - **32 functions defined, 31 DEPLOYED** (2026-10-20, release 1.65.0+97):
   `saveAppointmentEdits` was added in source and is not deployed yet; deploy the
   backend (functions + indexes) before the app build.
@@ -710,7 +712,10 @@ record; `appointmentEditPatch` (`appointment_edit_policy.js`) writes only the
 fields the form changed, measured against the CURRENT doc, and refuses
 `aborted`/`appointment-edit-conflict` when the same field moved elsewhere, so a
 stale form cannot overwrite a newer edit. A delete is refused if the doc changed
-since the form loaded. Reopening a closed job deletes `completedAt`. Commands are
+since the form loaded. Reopening a closed job deletes `completedAt`. The status
+allowlist checks a status the edit sets; an unchanged stored legacy
+`completed`/`confirmed` passes, as `appointmentClosedStatusPreserved` does in the
+rules. Commands are
 validated before the rate limit is consumed. It is the one callable with a
 non-default byte budget (4 MiB, `.claude/rules/security.md`).
 

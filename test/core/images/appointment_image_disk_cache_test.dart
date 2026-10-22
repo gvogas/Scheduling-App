@@ -213,11 +213,17 @@ void main() {
     await seeded.write(key, _bytes('photo'), generation: seeded.generation);
 
     // Held in the directory resolve, so the chain never settles until released.
-    unawaited(cache.write('other', _bytes('x'), generation: cache.generation));
+    final pending = cache.write(
+      'other',
+      _bytes('x'),
+      generation: cache.generation,
+    );
     final read = cache.read(key);
     gate.complete(root);
 
     expect(await read, _bytes('photo'));
+    // Settle before teardown: Windows refuses to delete a dir with an open file.
+    await pending;
   });
 
   test('a read still waits for a clear already under way', () async {

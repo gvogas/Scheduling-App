@@ -192,36 +192,20 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
   }) async {
     final logger = ref.read(loggerProvider);
     final analytics = ref.read(analyticsServiceProvider);
-    DeviceDeregistrationDeps? deregistered;
-    PendingPhotoExit? pendingExit;
     try {
-      // An active account holds push, presence and Live Activity registrations.
-      final devices = DeviceDeregistrationDeps.from(ref.read);
-      if (checkPendingPhotos) {
-        pendingExit = await confirmPendingPhotoExit(
-          context,
-          devices.imageUploads,
-          devices.session!,
-        );
-        if (pendingExit == null || !pendingExit.isCurrent) {
-          if (mounted) setState(() => _isSigningOut = false);
-          return;
-        }
-      }
-      await deregisterThisDevice(devices);
-      deregistered = devices;
-      if (!devices.isCurrentExit) {
+      // An active account holds push, presence and Live Activity registrations;
+      // the shared path restores them itself before rethrowing.
+      final signedOut = await signOutAfterPhotoCheck(
+        context,
+        DeviceDeregistrationDeps.from(ref.read),
+        _authService,
+        analytics,
+        checkPendingPhotos: checkPendingPhotos,
+      );
+      if (!signedOut) {
         if (mounted) setState(() => _isSigningOut = false);
         return;
       }
-      await _authService.signOut();
-      if (_authService.currentUser != null) {
-        if (mounted) setState(() => _isSigningOut = false);
-        return;
-      }
-      analytics
-        ..logSignOut()
-        ..setUserRole(null);
       if (!mounted) return;
       await Navigator.of(context).pushNamedAndRemoveUntil(
         AppRoutes.login,
@@ -230,15 +214,12 @@ class _ChangePasswordScreenState extends ConsumerState<ChangePasswordScreen> {
       );
     } catch (error, stackTrace) {
       logger.warn('AUTH-CHANGEPW signOut failed', error, stackTrace);
-      if (deregistered != null) await restoreThisDevice(deregistered);
       if (!mounted) return;
       setState(() {
         _isSigningOut = false;
         _isLoading = false;
         _bannerError = context.l10n.error_somethingWentWrongPleaseTryAgain;
       });
-    } finally {
-      pendingExit?.resume();
     }
   }
 

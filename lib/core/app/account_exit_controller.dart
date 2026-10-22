@@ -55,6 +55,19 @@ class AccountExitController {
   final int Function()? _pendingPhotoCount;
   bool _isHandlingAccountExit = false;
 
+  /// Holds the forced-exit guard across a voluntary exit's [teardown], so the
+  /// two never interleave; false (nothing run) when an exit already holds it.
+  Future<bool> runVoluntaryTeardown(Future<void> Function() teardown) async {
+    if (_isHandlingAccountExit) return false;
+    _isHandlingAccountExit = true;
+    try {
+      await teardown();
+      return true;
+    } finally {
+      _isHandlingAccountExit = false;
+    }
+  }
+
   /// De-registers this device, signs out, and lands on login with a notice.
   ///
   /// The order matters: push, presence and Live Activity registration are all
@@ -81,8 +94,7 @@ class AccountExitController {
       final l10n = AppLocalizations.of(navContext);
       final message = [
         selectMessage(l10n),
-        if ((_pendingPhotoCount?.call() ?? 0) > 0)
-          l10n.auth_forcedExitPhotos,
+        if ((_pendingPhotoCount?.call() ?? 0) > 0) l10n.auth_forcedExitPhotos,
       ].join(' ');
       session = _sessionForExit?.call();
       lease = session?.beginExit();

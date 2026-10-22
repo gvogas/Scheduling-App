@@ -112,7 +112,7 @@ goes.
 ### 1. The app build — 1.63.0+93 SHIPPED, 1.65.0+97 next
 
 **Update (2026-10-20): the next build is 1.65.0+97** (`pubspec.yaml`, release
-pass uncommitted at this sweep). 1.64.2+96 was cut and never shipped, so this
+pass `8516e314`). 1.64.2+96 was cut and never shipped, so this
 build carries everything 1.64.2+96 did plus the 2026-10-18 remediation work
 (`33cde361`) and the 2026-10-19 audit (`a851d238`). **Its backend is NOT live,
 and the deploy must come FIRST:** the app sends every admin appointment edit

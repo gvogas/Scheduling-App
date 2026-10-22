@@ -405,7 +405,6 @@ class _PaulAppState extends ConsumerState<PaulApp> {
         child: UpdateGate(
           child: AppLock(
             navigatorKey: _navigatorKey,
-            scaffoldMessengerKey: _scaffoldMessengerKey,
             child: NoticeListener(
               navigatorKey: _navigatorKey,
               child: Column(

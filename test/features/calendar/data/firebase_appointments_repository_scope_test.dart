@@ -63,6 +63,9 @@ void main() {
       () => collection.where('status', whereIn: any(named: 'whereIn')),
     ).thenReturn(archiveQuery);
     when(
+      () => collection.where('status', isEqualTo: any(named: 'isEqualTo')),
+    ).thenReturn(archiveQuery);
+    when(
       () => archiveQuery.orderBy(any(), descending: any(named: 'descending')),
     ).thenReturn(archiveQuery);
     when(() => archiveQuery.limit(any())).thenReturn(archiveQuery);
@@ -113,6 +116,34 @@ void main() {
         arrayContains: any(named: 'arrayContains'),
       ),
     );
+  });
+
+  test('one status narrows the page query to an equality', () async {
+    await repo().fetchHistoryPage(limit: 25, statuses: ['cancelled']);
+
+    verify(() => collection.where('status', isEqualTo: 'cancelled')).called(1);
+  });
+
+  test('two statuses stay a whereIn over just those values', () async {
+    await repo().fetchHistoryPage(limit: 25, statuses: ['done', 'completed']);
+
+    verify(
+      () => collection.where('status', whereIn: ['done', 'completed']),
+    ).called(1);
+  });
+
+  test('a non-terminal status never widens the archive', () async {
+    await repo().fetchHistoryPage(limit: 25, statuses: ['pending']);
+
+    verifyNever(
+      () => collection.where('status', isEqualTo: any(named: 'isEqualTo')),
+    );
+    verify(
+      () => collection.where(
+        'status',
+        whereIn: ['done', 'completed', 'cancelled'],
+      ),
+    ).called(1);
   });
 
   test('a reassigned job stays in the patched search window', () async {

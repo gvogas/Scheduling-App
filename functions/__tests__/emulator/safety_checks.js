@@ -16,7 +16,8 @@ const {
 } = require("../../employee_accounts_self");
 const {reconcileClientBuilding} = require("../../client_buildings");
 const {backfillBuildings} = require("../../scripts/backfill-client-buildings");
-const {verifyAppointmentEdits} = require("./appointment_edits_checks");
+const {verifyAppointmentEdits, verifyAssigneeRules} =
+  require("./appointment_edits_checks");
 
 /**
  * Invoked only after the parent smoke runner has validated demo/local hosts.
@@ -24,9 +25,12 @@ const {verifyAppointmentEdits} = require("./appointment_edits_checks");
  * @param {string} firestore REST origin.
  * @param {string} auth REST origin.
  * @param {!Object} admin Emulator credential.
+ * @param {!Object} employee Active employee account.
+ * @param {!Object} outsider Active employee on no job.
  * @return {!Promise<void>}
  */
-async function verifySafety(project, firestore, auth, admin) {
+async function verifySafety(project, firestore, auth, admin, employee,
+    outsider) {
   const app = initializeApp({projectId: project});
   try {
     const db = getFirestore(app);
@@ -101,6 +105,17 @@ async function verifySafety(project, firestore, auth, admin) {
     }
     console.log("Client deletion: both booking commit orders checked.");
     await verifyAppointmentEdits(db, prefix, write, admin);
+    await verifyAssigneeRules(db, prefix, project, firestore, employee,
+        outsider);
+    const personal = (value) => write(`appointments/${prefix}-personal-flag`, {
+      status: {stringValue: "pending"}, clientId: {stringValue: ""},
+      isPersonal: value,
+    });
+    assert.equal(await personal({stringValue: "yes"}), 403,
+        "a non-bool isPersonal must be refused");
+    assert.equal(await personal({booleanValue: true}), 200,
+        "a bool isPersonal is allowed");
+    console.log("Assignee, field-note and isPersonal rules checked.");
 
     const email = `${prefix}@example.test`;
     const fields = {name: "Test Employee", email, colorValue: "1"};

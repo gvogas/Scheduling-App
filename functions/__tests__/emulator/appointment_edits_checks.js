@@ -120,4 +120,73 @@ async function verifySessionEpochRules(prefix, write, admin) {
       "a 64-character sessionEpoch is allowed");
 }
 
-module.exports = {verifyAppointmentEdits};
+/**
+ * Pins the assignee `allow update` disjuncts and the `fieldNotes` create.
+ * @param {!Object} db Demo emulator Firestore.
+ * @param {string} prefix Unique test prefix.
+ * @param {string} project Demo project.
+ * @param {string} firestore REST origin.
+ * @param {!Object} assignee Active employee account (`token`, `docId`).
+ * @param {!Object} outsider Active employee not on the job.
+ * @return {!Promise<void>}
+ */
+async function verifyAssigneeRules(db, prefix, project, firestore, assignee,
+    outsider) {
+  const root = `projects/${project}/databases/(default)/documents`;
+  const seed = (id, status) => db.collection("appointments").doc(id).set({
+    title: "Visit", status, employeeIds: [assignee.docId],
+    startTime: Timestamp.fromMillis(Date.UTC(2026, 9, 19, 9)),
+    endTime: Timestamp.fromMillis(Date.UTC(2026, 9, 19, 10))});
+  const commit = async (user, path, fields, create = false) => {
+    const response = await fetch(`${firestore}/v1/${root}:commit`, {
+      method: "POST",
+      headers: {"Authorization": `Bearer ${user.token}`,
+        "Content-Type": "application/json"},
+      body: JSON.stringify({writes: [{
+        update: {name: `${root}/${path}`, fields},
+        updateMask: create ? undefined : {fieldPaths: Object.keys(fields)},
+        updateTransforms: [{fieldPath: create ? "createdAt" : "updatedAt",
+          setToServerValue: "REQUEST_TIME"}],
+        currentDocument: {exists: !create},
+      }]}),
+    });
+    await response.arrayBuffer();
+    return response.status;
+  };
+  const move = async (user, from, to, extra = {}) => {
+    const id = `${prefix}-assignee-${from}-${to}-${Object.keys(extra).length}`;
+    await seed(id, from);
+    return commit(user, `appointments/${id}`,
+        {status: {stringValue: to}, ...extra});
+  };
+
+  assert.equal(await move(assignee, "pending", "done"), 200,
+      "assignee pending -> done is allowed");
+  assert.equal(await move(assignee, "pending", "in_progress"), 200,
+      "assignee pending -> in_progress is allowed");
+  assert.equal(await move(assignee, "cancelled", "done"), 403,
+      "assignee cannot complete a cancelled job");
+  assert.equal(await move(outsider, "pending", "done"), 403,
+      "a non-assignee cannot complete the job");
+
+  const touch = `${prefix}-assignee-touch`;
+  await seed(touch, "pending");
+  assert.equal(await commit(assignee, `appointments/${touch}`, {}), 200,
+      "assignee parent touch is allowed");
+  assert.equal(await commit(assignee, `appointments/${touch}`,
+      {notes: {stringValue: "extra"}}), 403,
+  "a parent touch carrying another key is refused");
+
+  const note = (user, authorId, name) => commit(user,
+      `appointments/${touch}/fieldNotes/${prefix}-${name}`, {
+        text: {stringValue: "On site"},
+        authorId: {stringValue: authorId},
+        authorName: {stringValue: "Tech"},
+      }, true);
+  assert.equal(await note(assignee, assignee.docId, "own"), 200,
+      "a field note under the caller's own id is allowed");
+  assert.equal(await note(assignee, outsider.docId, "foreign"), 403,
+      "a field note with a foreign authorId is refused");
+}
+
+module.exports = {verifyAppointmentEdits, verifyAssigneeRules};

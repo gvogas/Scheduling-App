@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,7 +44,11 @@ _ErrorCause _classifyError(Object error) {
         _ErrorCause.incompleteCheck,
       'resource-exhausted' ||
       'too-many-requests' => _ErrorCause.tooManyAttempts,
-      'failed-precondition' => _ErrorCause.failedPrecondition,
+      // Callables only: Firestore's means a missing index, feature-disabled a pause.
+      'failed-precondition'
+          when error is FirebaseFunctionsException &&
+              error.message != 'feature-disabled' =>
+        _ErrorCause.failedPrecondition,
       'invalid-argument' || 'already-exists' => _ErrorCause.invalidData,
       'aborted' when error.message == 'appointment-edit-conflict' =>
         _ErrorCause.editConflict,

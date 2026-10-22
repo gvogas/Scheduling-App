@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -53,15 +54,47 @@ void main() {
       );
     });
 
-    testWidgets('failed-precondition maps to its own cause', (tester) async {
+    testWidgets('a callable failed-precondition maps to its own cause', (
+      tester,
+    ) async {
       await pumpHost(tester);
       expect(
-        noticeFor(_fb('failed-precondition')),
+        noticeFor(
+          FirebaseFunctionsException(
+            code: 'failed-precondition',
+            message: 'client-has-history',
+          ),
+        ),
         expected(l10n.error_causeFailedPrecondition),
       );
       expect(
         l10n.error_causeFailedPrecondition,
         isNot(l10n.error_causeUnknown),
+      );
+    });
+
+    testWidgets('a Firestore failed-precondition (missing index) is unknown', (
+      tester,
+    ) async {
+      await pumpHost(tester);
+      expect(
+        noticeFor(_fb('failed-precondition')),
+        expected(l10n.error_causeUnknown),
+      );
+    });
+
+    testWidgets('a paused callable (feature-disabled) is unknown', (
+      tester,
+    ) async {
+      await pumpHost(tester);
+      expect(
+        noticeFor(
+          FirebaseFunctionsException(
+            code: 'failed-precondition',
+            message: 'feature-disabled',
+          ),
+        ),
+        expected(l10n.error_causeUnknown),
       );
     });
 

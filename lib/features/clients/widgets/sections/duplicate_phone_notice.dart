@@ -42,21 +42,28 @@ class DuplicatePhoneNotice extends StatelessWidget {
               color: status.warningContainer,
               borderRadius: BorderRadius.circular(AppRadius.r12),
             ),
-            child: Row(
+            child: Wrap(
+              alignment: WrapAlignment.end,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                Icon(
-                  Icons.person_search_outlined,
-                  size: 16,
-                  color: status.onWarningContainer,
-                ),
-                const SizedBox(width: AppSpacing.sp8),
-                Expanded(
-                  child: Text(
-                    l10n.clients_alreadyOnFile(match.displayName),
-                    style: theme.textTheme.bodySmall?.copyWith(
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.person_search_outlined,
+                      size: 16,
                       color: status.onWarningContainer,
                     ),
-                  ),
+                    const SizedBox(width: AppSpacing.sp8),
+                    Flexible(
+                      child: Text(
+                        l10n.clients_alreadyOnFile(match.displayName),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: status.onWarningContainer,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 TextButton(
                   onPressed: () => onOpen(match),
