@@ -12,6 +12,13 @@ test("Storage checks the pinned CLI default-bucket discovery", () => {
       "cloudfunctions."))).toBe(false);
 });
 
+test("the index read sends no pageSize, which Firestore refuses", () => {
+  const {requests} = plan("schedulingapp-88727", "firestore:indexes");
+  const read = requests.find((r) => r.name === "indexes-list");
+  expect(read.url).toMatch(/\/collectionGroups\/-\/indexes$/);
+  expect(read.url).not.toContain("pageSize");
+});
+
 test("permission failures report no bearer token", async () => {
   const request = jest.fn(async (_url, options) => options.method === "POST" ?
     {ok: true, status: 200, json: async () => ({permissions: []})} :
