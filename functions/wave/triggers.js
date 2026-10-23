@@ -158,29 +158,32 @@ const waveUpsertCustomer = onDocumentWritten(
         return;
       }
 
-      // Mark-pending + enqueue land in ONE WriteBatch so a crash between the
+      // Mark-pending + enqueue land in ONE transaction so a crash between the
       // two can't leave the doc stuck at 'pending' with no queued job (or a
-      // queued job with no visible pending state).
-      const batch = db.batch();
-      // `wave.problems` rides the batch that was already updating this doc, so
-      // recording it costs no extra write. It is NOT a mapped field, so the
+      // queued job with no visible pending state). A transaction, not a batch:
+      // the enqueue must read the job to leave an in-flight claim alone.
+      //
+      // `wave.problems` rides the write that was already updating this doc,
+      // so recording it costs no extra write. It is NOT a mapped field, so the
       // hash is unchanged and `shouldEnqueueClientWrite` returns false when
       // the trigger re-fires on this write — the same protection the
       // mark-pending update above already relies on, and the reason this
       // cannot loop.
-      batch.update(db.doc("clients/" + clientId), {
-        "wave.syncState": "pending",
-        "wave.syncError": null,
-        ...verdict,
-      });
+      //
       // payloadHash is diagnostic only — the worker re-reads the live doc
       // and recomputes the hash before writing, since the doc is the real
       // source of truth.
-      await enqueueCustomerUpsert(clientId, {batch, payloadHash: hash});
+      const markPending = (tx) => enqueueCustomerUpsert(clientId,
+          {tx, payloadHash: hash}).then(() =>
+        tx.update(db.doc("clients/" + clientId), {
+          "wave.syncState": "pending",
+          "wave.syncError": null,
+          ...verdict,
+        }));
       try {
-        await batch.commit();
+        await db.runTransaction(markPending);
       } catch (e) {
-        // The batch fails atomically when the doc was deleted before
+        // The transaction fails atomically when the doc was deleted before
         // commit, so we fall back to enqueue-only. The worker treats a
         // missing doc as a clean skip, and any other failure just retries
         // via retry:true's idempotent re-run.
@@ -188,7 +191,7 @@ const waveUpsertCustomer = onDocumentWritten(
             "enqueueing without it", {clientId, err: e.message});
         await enqueueCustomerUpsert(clientId, {payloadHash: hash});
         // Best-effort: the doc changed, so the record of what is wrong with it
-        // has to change too. The batch above failed atomically, which takes
+        // has to change too. The write above failed atomically, which takes
         // the verdict with it.
         try {
           await db.doc("clients/" + clientId).update(verdict);

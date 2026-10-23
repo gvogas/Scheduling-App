@@ -68,7 +68,7 @@ Scoped files load only under their `paths:`; this says where a subject lives. (A
 
 ## Conventions
 
-- Feature-first: `lib/features/{auth,calendar,clients,employees,settings,splash}/`; promote to `shared/` or `core/` only when reused across features.
+- Feature-first: `lib/features/<feature>/` (e.g. `auth`, `calendar`, `clients`, `employees`, `settings`, `wave`); promote to `shared/` or `core/` only when reused across features.
 - Services are plain classes, no DI container; inject optional deps for tests, as `AuthService` does.
 - Normalize emails through `normalizeEmail()` (`core/validators/email_format.dart`) before any Firestore read/write, never a hand-spelled `.trim().toLowerCase()`.
 - `initState` must be thin — extract heavy init to `_initStreams()`.

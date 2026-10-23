@@ -1581,7 +1581,7 @@ clients/{docId}
                        and the client never becomes a queued job. Always
                        written, null when clean, so a repaired client does not
                        keep stale problems. It rides the existing mark-pending
-                       batch and is not a mapped field, so the hash is unchanged
+                       transaction and is not a mapped field, so the hash is unchanged
                        and it cannot re-fire the trigger. `statePatch`'s keys
                        are DOTTED for `update()` callers; the IMPORT writes
                        through `set(..., {merge:true})`, which does NOT parse a

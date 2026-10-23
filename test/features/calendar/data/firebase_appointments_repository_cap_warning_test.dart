@@ -418,6 +418,24 @@ void main() {
       expect(logger.warnings, isEmpty);
     });
 
+    test('the query is bounded at next midnight; the cut is in Dart', () async {
+      // A stable bound lets every re-issue that day resume the same target.
+      final later = past(0)
+        ..['startTime'] = Timestamp.fromDate(now.add(const Duration(hours: 1)))
+        ..['endTime'] = Timestamp.fromDate(now.add(const Duration(hours: 2)));
+      withWindow([_FakeDoc('later', later), _FakeDoc('job', past(24))]);
+
+      final jobs = await repo().watchOverdueOpen(now).first;
+
+      verify(
+        () => query.where(
+          'endTime',
+          isLessThan: Timestamp.fromDate(DateTime(2026, 8, 16)),
+        ),
+      ).called(1);
+      expect(jobs.map((j) => j.id), ['job']);
+    });
+
     test('the query itself excludes personal blocks', () async {
       withWindow([_FakeDoc('job', past(24))]);
 

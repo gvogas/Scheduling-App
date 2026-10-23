@@ -110,20 +110,6 @@ class AppointmentImageLoader {
 
   Reference _refFor(AppointmentImage image) => _storage.ref(image.storagePath);
 
-  /// Loads photos in list order so viewer indexes stay stable.
-  Future<List<Uint8List>> loadAll(List<AppointmentImage> images) async {
-    final loaded = <Uint8List>[];
-    for (var i = 0; i < images.length; i += _maxConcurrentLoads) {
-      final end = i + _maxConcurrentLoads;
-      final batch = images.sublist(
-        i,
-        end < images.length ? end : images.length,
-      );
-      loaded.addAll(await Future.wait(batch.map(load)));
-    }
-    return loaded;
-  }
-
   /// Forgets every cached photo, in memory and on disk.
   Future<void> clear() async {
     _fetchPool = _ImageFetchPool();

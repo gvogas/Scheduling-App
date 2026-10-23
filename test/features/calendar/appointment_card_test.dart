@@ -10,6 +10,7 @@ import 'package:scheduling/core/animations/tap_scale.dart';
 import 'package:scheduling/core/theme/design_tokens.dart';
 import 'package:scheduling/core/theme/themes.dart';
 import 'package:scheduling/core/utils/date_utils_helper.dart';
+import 'package:scheduling/core/utils/presentation_time_provider.dart';
 import 'package:scheduling/features/calendar/domain/appointment_crew.dart';
 import 'package:scheduling/features/calendar/domain/appointment_day_slice.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
@@ -375,6 +376,36 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+  });
+
+  testWidgets('the minute tick that passes the end turns the card overdue', (
+    tester,
+  ) async {
+    final start = DateTime(2030, 3, 4, 9, 0, 30);
+    var now = start;
+    final appointment = AppointmentRecord(
+      id: 'a4',
+      title: 'Water heater swap',
+      startTime: start.subtract(const Duration(hours: 1)),
+      endTime: start.add(const Duration(seconds: 10)),
+      clientName: 'Marchetti Residence',
+      employeeIds: const ['e1'],
+      employeeNames: const ['Theo Bell'],
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [presentationClockProvider.overrideWithValue(() => now)],
+        child: _wrap(AppointmentCard(appointment: appointment, crew: _theo)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+
+    now = start.add(const Duration(minutes: 1));
+    await tester.pump(const Duration(seconds: 31));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
   });
 
   testWidgets('shows a photo glyph only when the job carries pictures', (

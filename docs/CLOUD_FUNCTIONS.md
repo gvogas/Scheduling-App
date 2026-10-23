@@ -317,7 +317,7 @@ earlier `TODO(pre-ship)` carve-outs were retired in 1.25.1
 the customer contract's verdict on whether Wave would accept it
 (`wave/customer_contract.js`, added 2026-08-30). Structured
 `[{field, code, severity, detail}]`, naming the CLIENT DOC field an admin
-edits. It rides the existing mark-pending batch, so it costs no extra write,
+edits. It rides the existing mark-pending transaction, so it costs no extra write,
 and it is not a mapped field — the hash is unchanged, so
 `shouldEnqueueClientWrite` stops the re-fire and this cannot loop.
 

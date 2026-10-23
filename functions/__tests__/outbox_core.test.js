@@ -50,6 +50,17 @@ describe("commitOutcome", () => {
     expect(updates).toEqual([]);
   });
 
+  test("re-queues instead when an edit landed during the claim", async () => {
+    const {db, ref, updates} = fakeDb(
+        {status: "inflight", claimedAt: CLAIM, requeue: true, attempts: 2});
+    expect(await commitOutcome(db, ref, CLAIM, {status: "done"}))
+        .toBe(false);
+    expect(updates).toEqual([{target: ref, patch: {
+      status: "queued", attempts: 0, lastError: null,
+      nextAttemptAt: CLAIM, requeue: false,
+    }}]);
+  });
+
   test("skips the write when the job is gone", async () => {
     const {db, ref, updates} = fakeDb(null);
     expect(await commitOutcome(db, ref, CLAIM, {status: "done"}))
@@ -84,7 +95,8 @@ describe("claimJob", () => {
     const {db, ref, updates} = fakeDb({status: "queued", nextAttemptAt: due});
     const claimed = await claimJob({db, logger}, {id: "j", ref}, CLAIM);
     expect(claimed.status).toBe("queued");
-    expect(updates[0].patch).toEqual({status: "inflight", claimedAt: CLAIM});
+    expect(updates[0].patch).toEqual(
+        {status: "inflight", claimedAt: CLAIM, requeue: false});
   });
 
   test.each([

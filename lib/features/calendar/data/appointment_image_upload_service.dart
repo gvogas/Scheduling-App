@@ -260,7 +260,7 @@ class AppointmentImageUploadService {
     }
   }
 
-  /// The read path chunks at 4; nothing about a write wants a smaller bound.
+  /// The read path pools at 4; nothing about a write wants a smaller bound.
   static const int _maxConcurrentUploads = 4;
 
   /// One file's upload, classified. Never throws — the classification IS the

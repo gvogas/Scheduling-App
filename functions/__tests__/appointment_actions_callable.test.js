@@ -52,6 +52,7 @@ const {getFirestore, FieldValue} = require("firebase-admin/firestore");
 const security = require("../security");
 const {
   mayRestore,
+  withinRestoreWindow,
   restoreAppointmentStatus,
 } = require("../appointment_actions");
 
@@ -155,6 +156,32 @@ describe("mayRestore", () => {
   });
 });
 
+describe("withinRestoreWindow", () => {
+  const tech = {role: "employee", docId: "e1"};
+  const NOW = Date.parse("2026-10-23T12:00:00Z");
+  const ago = (min) => new Date(NOW - min * 60000);
+
+  test("a technician may undo within ten minutes of completedAt", () => {
+    expect(withinRestoreWindow(tech, {completedAt: ago(10)}, NOW)).toBe(true);
+    expect(withinRestoreWindow(tech, {completedAt: ago(11)}, NOW)).toBe(false);
+  });
+
+  test("before the stamp lands, the mark-done updatedAt anchors it", () => {
+    expect(withinRestoreWindow(tech, {updatedAt: ago(0)}, NOW)).toBe(true);
+  });
+
+  test("a later updatedAt cannot reopen an old completion", () => {
+    // The photo touch lets an assignee bump updatedAt; completedAt wins.
+    expect(withinRestoreWindow(tech,
+        {completedAt: ago(60), updatedAt: ago(0)}, NOW)).toBe(false);
+  });
+
+  test("no anchor at all is refused for a technician, not an admin", () => {
+    expect(withinRestoreWindow(tech, {}, NOW)).toBe(false);
+    expect(withinRestoreWindow({role: "admin"}, {}, NOW)).toBe(true);
+  });
+});
+
 describe("restoreAppointmentStatus guard chain", () => {
   test("an unauthenticated caller is refused before any read", async () => {
     getFirestore.mockReturnValue(dbWith({status: "done"}));
@@ -229,7 +256,28 @@ describe("restoreAppointmentStatus guard chain", () => {
 
   test("an assigned technician may restore", async () => {
     security.profile = {role: "employee", docId: "e1"};
-    const db = dbWith({status: "done", employeeIds: ["e1"]});
+    const db = dbWith(
+        {status: "done", employeeIds: ["e1"], completedAt: new Date()});
+    getFirestore.mockReturnValue(db);
+    await restoreAppointmentStatus.run(req());
+    expect(db.updates).toHaveLength(1);
+  });
+
+  test("a technician cannot reopen a job completed long ago", async () => {
+    // Reopening, then re-closing, would rewrite the server-owned finish time.
+    security.profile = {role: "employee", docId: "e1"};
+    const db = dbWith({status: "done", employeeIds: ["e1"],
+      completedAt: new Date(Date.now() - 3 * 24 * 3600 * 1000)});
+    getFirestore.mockReturnValue(db);
+    const e = await expectRejection(req());
+    expect(e.code).toBe("failed-precondition");
+    expect(e.message).toBe("undo-window-expired");
+    expect(db.updates).toHaveLength(0);
+  });
+
+  test("an admin may restore a completion of any age", async () => {
+    const db = dbWith({status: "done",
+      completedAt: new Date(Date.now() - 3 * 24 * 3600 * 1000)});
     getFirestore.mockReturnValue(db);
     await restoreAppointmentStatus.run(req());
     expect(db.updates).toHaveLength(1);

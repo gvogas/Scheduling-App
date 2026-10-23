@@ -727,7 +727,15 @@ class FirebaseAppointmentsRepository implements AppointmentsRepository {
           .where('status', whereIn: openStatusQueryValues)
           // A doc with no `isPersonal` field is dropped here: backfilled, see appointments.md.
           .where('isPersonal', isEqualTo: false)
-          .where('endTime', isLessThan: Timestamp.fromDate(now))
+          // Bounded at next midnight, not [now]: the query stays identical
+          // all day, so a quarter-hour re-issue resumes instead of re-billing
+          // the whole backlog. `overdueJobsAt(now)` below makes the cut.
+          .where(
+            'endTime',
+            isLessThan: Timestamp.fromDate(
+              DateTime(now.year, now.month, now.day + 1),
+            ),
+          )
           .orderBy('endTime', descending: true)
           // One past the cap tells a full window from an exactly-full one.
           .limit(_overdueScanLimit + 1)

@@ -45,9 +45,13 @@ const TRAVEL_WINDOW_MS = MAX_LEAD_MINUTES * MINUTE_MS;
 // Candidate read cap; startTime ASC keeps the most imminent (ADR-0104).
 const TRAVEL_SWEEP_MAX = 500;
 
-// A cached estimate may only DEFER a Routes call, never trigger a send.
-const ESTIMATE_TTL_MS = 10 * MINUTE_MS;
+// A cached estimate may only DEFER a Routes call, never trigger a send. An
+// estimate up to FRESH_ESTIMATE_MS old defers to within FRESH_SKIP_MARGIN_MS of
+// the leave instant; an older one only to SKIP_MARGIN_MS (ADR-0104).
+const ESTIMATE_TTL_MS = 30 * MINUTE_MS;
 const SKIP_MARGIN_MS = 15 * MINUTE_MS;
+const FRESH_ESTIMATE_MS = 5 * MINUTE_MS;
+const FRESH_SKIP_MARGIN_MS = 5 * MINUTE_MS;
 
 // On-site flips per chunk, sized like PRUNE_CHUNK in live_activity_registry.js.
 const ON_SITE_FLIP_CHUNK = 25;
@@ -85,15 +89,22 @@ function readEstimate(cache, key, nowMs) {
 }
 
 /**
- * True when a cached estimate conservatively (by SKIP_MARGIN_MS) proves the
- * pair cannot be due yet, so the Routes call can be skipped this sweep.
- * @param {{seconds: ?number, startTimeMillis: number, nowMillis: number}} args
+ * True when a cached estimate conservatively proves the pair cannot be due
+ * yet, so the Routes call can be skipped this sweep. The margin is
+ * FRESH_SKIP_MARGIN_MS for an estimate at most FRESH_ESTIMATE_MS old (when
+ * `estimatedAtMillis` is given), else SKIP_MARGIN_MS.
+ * @param {{seconds: ?number, startTimeMillis: number, nowMillis: number,
+ *   estimatedAtMillis: (?number|undefined)}} args
  * @return {boolean}
  */
-function canDeferRoutes({seconds, startTimeMillis, nowMillis}) {
+function canDeferRoutes({seconds, startTimeMillis, nowMillis,
+  estimatedAtMillis}) {
   if (seconds == null) return false;
   const leadMs = computeLeadMinutes(seconds) * MINUTE_MS;
-  return nowMillis < startTimeMillis - leadMs - SKIP_MARGIN_MS;
+  const fresh = estimatedAtMillis != null &&
+    nowMillis - estimatedAtMillis <= FRESH_ESTIMATE_MS;
+  const margin = fresh ? FRESH_SKIP_MARGIN_MS : SKIP_MARGIN_MS;
+  return nowMillis < startTimeMillis - leadMs - margin;
 }
 
 // Statuses expecting the visit; `confirmed` is the retired legacy alias.
@@ -263,6 +274,7 @@ function parseRoutesDurationSeconds(json) {
 
 module.exports = {
   MINUTE_MS,
+  ESTIMATE_TTL_MS,
   MAX_BOOKING_MS,
   TRAVEL_WINDOW_MS,
   TRAVEL_SWEEP_MAX,

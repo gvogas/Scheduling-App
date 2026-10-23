@@ -8,6 +8,7 @@ const {getFirestore} = require("firebase-admin/firestore");
 const {getAuth} = require("firebase-admin/auth");
 const {syncUsersByUid} = require("../../bridge");
 const {verifySafety} = require("./safety_checks");
+const {verifyRoleIsolation} = require("./role_isolation_checks");
 
 /**
  * Runs delayed trigger events against real emulator transactions and Auth.
@@ -163,6 +164,8 @@ async function main() {
   console.log("Storage rules: 12 emulator checks passed.");
   await verifyBridge(project);
   await verifySafety(project, firestore, auth, admin, employee, outsider);
+  await verifyRoleIsolation(project, firestore, admin, employee, outsider,
+      disabled);
 }
 
 main().catch((error) => {

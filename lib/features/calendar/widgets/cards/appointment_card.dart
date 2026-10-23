@@ -103,7 +103,12 @@ class AppointmentCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final now = ref.watch(presentationTimeProvider);
+    // Only a status flip rebuilds the card, not every minute tick.
+    final status = AppointmentStatus.fromRaw(
+      ref.watch(
+        presentationTimeProvider.select(appointment.displayStatusAt),
+      ),
+    );
 
     // Time off renders as a strip instead of a job card.
     if (appointment.isTimeOff) {
@@ -111,11 +116,11 @@ class AppointmentCard extends ConsumerWidget {
         appointment: appointment,
         crew: crew,
         onTap: onTap,
-        now: now,
+        displayStatus: status,
       );
     }
 
-    final model = _CardModel.from(context, this, now);
+    final model = _CardModel.from(context, this, status);
 
     final card = TapScale(
       child: DecoratedBox(
@@ -303,21 +308,18 @@ class _DayOffStrip extends StatelessWidget {
     required this.appointment,
     required this.crew,
     required this.onTap,
-    required this.now,
+    required this.displayStatus,
   });
 
   final AppointmentRecord appointment;
   final List<AppointmentCrew> crew;
   final VoidCallback? onTap;
-  final DateTime now;
+  final AppointmentStatus displayStatus;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final l10n = context.l10n;
-    final displayStatus = AppointmentStatus.fromRaw(
-      appointment.displayStatusAt(now),
-    );
     final isOver = displayStatus.isTerminal;
     // Name the crew the day off belongs to.
     final crewLabel = _crewLabel(context);
@@ -524,10 +526,9 @@ class _CardModel {
   factory _CardModel.from(
     BuildContext context,
     AppointmentCard card,
-    DateTime now,
+    AppointmentStatus status,
   ) {
     final appointment = card.appointment;
-    final status = AppointmentStatus.fromRaw(appointment.displayStatusAt(now));
     final timeLabel = card._timeLabel(context);
     // Denormalized photo count is indicator-only.
     final hasPhotos = appointment.hasPictures;

@@ -19,12 +19,15 @@ const {
 const {
   isCompletedStatus,
   isTerminalStatus,
+  toMillis,
 } = require("./time_utils");
 
 const DOC_ID_MAX = 128;
 const RESTORABLE_STATUSES = new Set(["pending", "in_progress"]);
 const RESTORE_RATE_MAX = 30;
 const RESTORE_RATE_WINDOW_MS = 60 * 60 * 1000;
+// How long after completion a non-admin may still Undo it.
+const RESTORE_WINDOW_MS = 10 * 60 * 1000;
 
 /**
  * True when caller may operate on this appointment.
@@ -40,6 +43,22 @@ function mayRestore(caller, appointment) {
   return caller.role === "employee" &&
       callerDocId !== "" &&
       ids.includes(callerDocId);
+}
+
+/**
+ * True while a non-admin may still undo this completion. Anchors on the
+ * server-owned `completedAt`, else (before the stamp lands) on `updatedAt`,
+ * which the mark-done rule pins to the write time.
+ * @param {!Object} caller usersByUid profile.
+ * @param {!Object} appointment Appointment fields.
+ * @param {number} nowMs Current epoch ms.
+ * @return {boolean}
+ */
+function withinRestoreWindow(caller, appointment, nowMs) {
+  if (caller.role === "admin") return true;
+  const anchor = toMillis(appointment.completedAt) ??
+    toMillis(appointment.updatedAt);
+  return anchor != null && nowMs - anchor <= RESTORE_WINDOW_MS;
 }
 
 /**
@@ -75,6 +94,9 @@ const restoreAppointmentStatus = onCall(APP_CHECK, async (req) => {
     if (!isCompletedStatus(data.status)) {
       throw new HttpsError("failed-precondition", "not-completed");
     }
+    if (!withinRestoreWindow(caller, data, Date.now())) {
+      throw new HttpsError("failed-precondition", "undo-window-expired");
+    }
     if (isTerminalStatus(previousStatus)) {
       throw new HttpsError("invalid-argument", "invalid-previousStatus");
     }
@@ -94,5 +116,6 @@ const restoreAppointmentStatus = onCall(APP_CHECK, async (req) => {
 
 module.exports = {
   mayRestore,
+  withinRestoreWindow,
   restoreAppointmentStatus,
 };

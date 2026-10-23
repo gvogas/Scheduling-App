@@ -428,6 +428,38 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('a forced exit during the photo choice keeps its login as the '
+        'only login push', (tester) async {
+      final loginShown = StreamController<void>.broadcast();
+      addTearDown(loginShown.close);
+      await pumpWithExit(
+        tester,
+        pendingPhotos: 2,
+        overrides: [forcedExitLoginShownProvider.overrideWithValue(loginShown)],
+      );
+      await tester.tap(find.text('Log out'));
+      await tester.pumpAndSettle();
+      expect(find.text('Photos waiting to save'), findsOneWidget);
+
+      when(() => auth.currentUser).thenReturn(null);
+      // The forced exit's own sign-out and login push.
+      tester
+          .state<NavigatorState>(find.byType(Navigator).first)
+          .pushNamedAndRemoveUntil(AppRoutes.login, (_) => false);
+      await tester.pumpAndSettle();
+      loginShown.add(null);
+      await tester.pumpAndSettle();
+
+      expect(
+        (
+          isLocked(tester),
+          pushedRoutes.where((r) => r == AppRoutes.login).length,
+        ),
+        (false, 1),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('a failed sign-out restores the device and keeps the session '
         'locked, saying why inline', (tester) async {
       when(auth.signOut).thenAnswer((_) async => throw Exception('boom'));

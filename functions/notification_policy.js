@@ -24,6 +24,7 @@ const {
   normalizedStatus,
 } = require("./time_utils");
 const {isAlreadyExists} = require("./firestore_errors");
+const {sliceForDay} = require("./day_slice_utils");
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -280,19 +281,13 @@ function selectMonthEndOverdue(records, now) {
  * @return {!Object<string, !Array<!Object>>}
  */
 function groupTomorrowsJobsByEmployee(records, now) {
-  const {start, end} = tomorrowWindowToronto(now);
-  const startMs = start.getTime();
-  const endMs = end.getTime();
+  const startMs = tomorrowWindowToronto(now).start.getTime();
   const grouped = {};
   for (const r of records || []) {
     if (isCancelledStatus(r.status)) continue;
-    const ms = toMillis(r.startTime);
-    if (ms == null) continue;
-    // Overlap, not "starts tomorrow": a multi-day run booked days ago is still
-    // on site tomorrow, and testing startTime alone told that crew "no jobs
-    // tomorrow" while they were mid-run.
-    const runEndsMs = toMillis(r.endTime) ?? ms;
-    if (ms >= endMs || runEndsMs < startMs) continue;
+    // A WORK day of tomorrow, as the widget payload scopes it: a run booked
+    // days ago still counts, tonight's overnight shift does not.
+    if (sliceForDay(r, startMs) == null) continue;
     for (const id of toIdList(r.employeeIds)) {
       (grouped[id] = grouped[id] || []).push(r);
     }

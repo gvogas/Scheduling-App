@@ -203,25 +203,7 @@ void main() {
     });
   }
 
-  test('loadAll keeps list order', () async {
-    // The viewer opens at a tapped INDEX, so a reordered result would open
-    // the wrong photo.
-    for (final key in const ['p/1', 'p/2', 'p/3']) {
-      final r = _MockRef();
-      when(() => storage.ref(key)).thenReturn(r);
-      whenGetData(r, () async => _bytes(key));
-    }
-
-    final loaded = await loader.loadAll(const [
-      AppointmentImage(storagePath: 'p/1'),
-      AppointmentImage(storagePath: 'p/2'),
-      AppointmentImage(storagePath: 'p/3'),
-    ]);
-
-    expect(loaded, [_bytes('p/1'), _bytes('p/2'), _bytes('p/3')]);
-  });
-
-  test('loadAll never has more than 4 fetches in flight', () async {
+  test('never more than 4 fetches are in flight', () async {
     // The bound itself, not just the ordering it survives: opening a job with
     // a long strip must not fire the whole batch at Storage in one burst.
     // Nothing asserted this, so `_maxConcurrentLoads` could be raised or
@@ -245,8 +227,8 @@ void main() {
       });
     }
 
-    final pending = loader.loadAll([
-      for (final p in paths) AppointmentImage(storagePath: p),
+    final pending = Future.wait([
+      for (final p in paths) loader.load(AppointmentImage(storagePath: p)),
     ]);
 
     // Drain a batch at a time, re-checking the peak between each. Each batch
@@ -276,23 +258,6 @@ void main() {
 
     expect(await pending, [for (final p in paths) _bytes(p)]);
     expect(peak, 4);
-  });
-
-  test('loadAll keeps list order past the concurrency bound', () async {
-    // loadAll fetches in batches, so the order guarantee has to survive being
-    // reassembled across more than one batch.
-    final paths = [for (var i = 0; i < 9; i++) 'p/$i'];
-    for (final p in paths) {
-      final r = _MockRef();
-      when(() => storage.ref(p)).thenReturn(r);
-      whenGetData(r, () async => _bytes(p));
-    }
-
-    final loaded = await loader.loadAll([
-      for (final p in paths) AppointmentImage(storagePath: p),
-    ]);
-
-    expect(loaded, [for (final p in paths) _bytes(p)]);
   });
 
   group('the session cache', () {

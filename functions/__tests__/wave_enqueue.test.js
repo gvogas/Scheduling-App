@@ -18,6 +18,10 @@ const {TS, now, fakeRef} = require("./mocks/wave_outbox_fakes");
 function enqueueDb(jobId, existingData = null) {
   const ref = fakeRef(jobId, existingData);
   const db = {
+    runTransaction: async (body) => body({
+      get: async (r) => ({exists: r._data !== null, data: () => r._data}),
+      set: (r, data, opts) => r.set(data, opts),
+    }),
     collection: jest.fn((col) => {
       if (col !== "waveSyncQueue") throw new Error(`unexpected col: ${col}`);
       return {
@@ -111,35 +115,50 @@ describe("enqueueCustomerUpsert payloadHash", () => {
 });
 
 // ---------------------------------------------------------------------------
-// enqueueCustomerUpsert — batch staging (waveUpsertCustomer atomicity)
+// enqueueCustomerUpsert — inside the caller's transaction, and inflight jobs
 // ---------------------------------------------------------------------------
 
-describe("enqueueCustomerUpsert batch staging", () => {
-  test(
-      "stages set(merge) on the provided batch instead of writing",
-      async () => {
-        const {db, ref} = enqueueDb("customerUpsert__c1");
-        const batch = {set: jest.fn()};
-        const jobId = await enqueueCustomerUpsert("c1", {
-          db, now, batch, payloadHash: "h1",
-        });
+describe("enqueueCustomerUpsert transaction staging", () => {
+  test("reads and writes through the provided transaction", async () => {
+    const {db, ref} = enqueueDb("customerUpsert__c1");
+    const tx = {
+      get: jest.fn(async () => ({exists: false, data: () => null})),
+      set: jest.fn(),
+    };
+    db.runTransaction = jest.fn();
+    const jobId = await enqueueCustomerUpsert("c1", {
+      db, now, tx, payloadHash: "h1",
+    });
 
-        expect(jobId).toBe("customerUpsert__c1");
-        // The direct write path must NOT run — the caller owns the commit.
-        expect(ref.set).not.toHaveBeenCalled();
-        expect(batch.set).toHaveBeenCalledTimes(1);
-        const [batchRef, data, opts] = batch.set.mock.calls[0];
-        expect(batchRef).toBe(ref);
-        expect(opts).toEqual({merge: true});
-        expect(data).toEqual(expect.objectContaining({
-          type: "customerUpsert",
-          refPath: "clients/c1",
-          status: "queued",
-          attempts: 0,
-          lastError: null,
-          payloadHash: "h1",
-        }));
-      });
+    expect(jobId).toBe("customerUpsert__c1");
+    // The caller owns the commit: no transaction of its own, no direct write.
+    expect(db.runTransaction).not.toHaveBeenCalled();
+    expect(ref.set).not.toHaveBeenCalled();
+    const [txRef, data, opts] = tx.set.mock.calls[0];
+    expect(txRef).toBe(ref);
+    expect(opts).toEqual({merge: true});
+    expect(data).toEqual(expect.objectContaining({
+      status: "queued", attempts: 0, payloadHash: "h1", requeue: false,
+    }));
+  });
+
+  test("an inflight job is flagged for requeue, never reset", async () => {
+    // Resetting it let a second drain claim it with attempts 0 while the
+    // first was still creating the Wave customer: a duplicate customer.
+    const inflight = {
+      status: "inflight", attempts: 2, claimedAt: new Date(0),
+      refPath: "clients/c1",
+    };
+    const {db, ref} = enqueueDb("customerUpsert__c1", {...inflight});
+    await enqueueCustomerUpsert("c1", {db, now, payloadHash: "h2"});
+
+    expect(ref.sets).toEqual([
+      {data: {requeue: true, payloadHash: "h2"}, opts: {merge: true}},
+    ]);
+    expect(ref._data).toEqual(expect.objectContaining({
+      status: "inflight", attempts: 2, requeue: true,
+    }));
+  });
 });
 
 // ---------------------------------------------------------------------------

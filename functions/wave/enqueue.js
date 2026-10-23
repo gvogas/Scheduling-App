@@ -60,14 +60,19 @@ function isBlockedRevertToSynced(before, after) {
  * Uses a deterministic jobId (`customerUpsert__<clientId>`) written via
  * `set(..., {merge:true})`, so a burst of client edits collapses into one
  * updated-in-place job.
+ *
+ * Transactional: an `inflight` job is only flagged `requeue`, never reset to
+ * `queued` — a reset let a second drain claim it with `attempts: 0` while the
+ * first was still inside `customerCreate`, creating a duplicate Wave customer.
+ * `commitOutcome` turns the flag back into a queued job once the claim ends.
  * @param {string} clientId Firestore `clients` document id.
  * @param {Object=} deps Injectable dependencies. `db`/`now` default to
  * `getFirestore()`/`FieldValue.serverTimestamp` (never triggered in unit
  * tests). Optional `payloadHash` is written to the job doc when provided.
- * Optional `batch` (a Firestore WriteBatch) stages the enqueue on the
- * caller's batch instead of writing immediately, so it can be paired
- * atomically with other writes — e.g. the waveUpsertCustomer trigger's
- * mark-pending update.
+ * Optional `tx` (a Firestore Transaction) runs the read and write inside the
+ * caller's transaction, so it can be paired atomically with other writes —
+ * e.g. the waveUpsertCustomer trigger's mark-pending update. The caller must
+ * make no write on `tx` before this call (reads come first).
  * @return {!Promise<string>} The jobId that was enqueued (or staged).
  */
 async function enqueueCustomerUpsert(clientId, deps = {}) {
@@ -76,27 +81,34 @@ async function enqueueCustomerUpsert(clientId, deps = {}) {
 
   const jobId = customerUpsertJobId(clientId);
   const ref = db.collection(QUEUE_COLLECTION).doc(jobId);
+  const hash = deps.payloadHash !== undefined ?
+    {payloadHash: deps.payloadHash} : {};
 
-  const docData = {
-    type: "customerUpsert",
-    refPath: `clients/${clientId}`,
-    status: "queued",
-    nextAttemptAt: now(),
-    idempotencyKey: jobId,
-    attempts: 0,
-    lastError: null,
+  const stage = async (tx) => {
+    const snap = await tx.get(ref);
+    const status = snap && snap.exists ? (snap.data() || {}).status : null;
+    if (status === "inflight") {
+      tx.set(ref, {requeue: true, ...hash}, {merge: true});
+      return;
+    }
+    tx.set(ref, {
+      type: "customerUpsert",
+      refPath: `clients/${clientId}`,
+      status: "queued",
+      nextAttemptAt: now(),
+      idempotencyKey: jobId,
+      attempts: 0,
+      lastError: null,
+      requeue: false,
+      ...hash,
+    }, {merge: true});
   };
 
-  if (deps.payloadHash !== undefined) {
-    docData.payloadHash = deps.payloadHash;
-  }
-
-  if (deps.batch) {
-    deps.batch.set(ref, docData, {merge: true});
+  if (deps.tx) {
+    await stage(deps.tx);
   } else {
-    await ref.set(docData, {merge: true});
+    await db.runTransaction(stage);
   }
-
   return jobId;
 }
 
