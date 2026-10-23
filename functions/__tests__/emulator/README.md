@@ -16,6 +16,17 @@ It also runs six account-trigger assertions against real Firestore transactions
 and the Auth emulator, checking delayed activation after disable/deletion and
 delayed deactivation after reactivation.
 
+`role_isolation_checks.js` exercises read and write isolation against the real
+`firestore.rules`: unassigned, disabled and anonymous reads of a job; employee
+reads of client PII; unconstrained list queries; self-promotion and
+self-reactivation; a peer's emergency contact, location and FCM token; and
+client writes to the bridge and every server-owned ledger.
+
+In a sandbox whose JVM prints a `JAVA_TOOL_OPTIONS` banner or whose HTTP proxy
+captures loopback traffic, the Storage rules runtime denies everything; run
+with `env -u JAVA_TOOL_OPTIONS -u HTTPS_PROXY -u HTTP_PROXY` once the emulator
+jars are downloaded.
+
 Jest excludes this directory because these checks require running emulators.
 No additional npm dependencies or production credentials are required.
 
