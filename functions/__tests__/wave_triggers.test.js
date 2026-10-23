@@ -39,23 +39,24 @@ const makeEvent = (clientId, before, after) => ({
 });
 
 /**
- * Firestore double recording the batch this trigger builds.
+ * Firestore double recording the mark-pending transaction this trigger runs.
  * @param {!Object=} opts `connection` doc data, `connectionError` to throw on
  * the read, or `commitError` to throw on commit.
- * @return {!Object} `{db, batchUpdates, commits}`
+ * @return {!Object} `{db, batchUpdates, commits, docUpdates, txs}`
  */
 function makeDb(opts = {}) {
   const batchUpdates = [];
   const commits = [];
   const docUpdates = [];
+  const txs = [];
   const db = {
-    batch: () => ({
-      update: (ref, patch) => batchUpdates.push({ref, patch}),
-      commit: async () => {
-        commits.push(batchUpdates.length);
-        if (opts.commitError) throw opts.commitError;
-      },
-    }),
+    runTransaction: async (body) => {
+      const tx = {update: (ref, patch) => batchUpdates.push({ref, patch, tx})};
+      txs.push(tx);
+      await body(tx);
+      commits.push(batchUpdates.length);
+      if (opts.commitError) throw opts.commitError;
+    },
     doc: (p) => ({
       __path: p,
       update: async (patch) => {
@@ -72,7 +73,7 @@ function makeDb(opts = {}) {
       }),
     }),
   };
-  return {db, batchUpdates, commits, docUpdates};
+  return {db, batchUpdates, commits, docUpdates, txs};
 }
 
 const IDLE_DRAIN = {
@@ -105,7 +106,7 @@ beforeEach(() => {
   });
 });
 
-describe("waveUpsertCustomer mark-pending batch", () => {
+describe("waveUpsertCustomer mark-pending transaction", () => {
   // A business named only by its own phone number is the shape that produced
   // the 2026-08-30 dead letter, so it is the one worth carrying here.
   const CLIENT = {
@@ -134,17 +135,16 @@ describe("waveUpsertCustomer mark-pending batch", () => {
         }
       });
 
-  test("rides the SAME batch as the enqueue, so neither can land alone",
+  test("rides the SAME transaction as the enqueue, so neither lands alone",
       async () => {
-        const {db, commits} = makeDb();
+        const {db, commits, batchUpdates, txs} = makeDb();
         getFirestore.mockReturnValue(db);
 
         await waveUpsertCustomer.run(makeEvent("c1", null, CLIENT));
 
         expect(worker.enqueueCustomerUpsert).toHaveBeenCalledWith(
-            "c1",
-            expect.objectContaining({batch: expect.anything()}),
-        );
+            "c1", expect.objectContaining({tx: txs[0]}));
+        expect(batchUpdates[0].tx).toBe(txs[0]);
         expect(commits).toEqual([1]);
       });
 
@@ -218,7 +218,7 @@ describe("waveUpsertCustomer mark-pending batch", () => {
         expect(worker.enqueueCustomerUpsert).toHaveBeenCalled();
       });
 
-  test("the batch-commit fallback still records the contract verdict",
+  test("the commit fallback still records the contract verdict",
       async () => {
         // The fallback used to re-enqueue with NO problems patch, so the doc
         // changed and the record of what is wrong with it did not.
@@ -247,16 +247,16 @@ describe("waveUpsertCustomer mark-pending batch", () => {
     expect(worker.enqueueCustomerUpsert).not.toHaveBeenCalled();
   });
 
-  test("a failed batch commit still enqueues, without the patch", async () => {
+  test("a failed mark-pending still enqueues, without the patch", async () => {
     const {db} = makeDb({commitError: new Error("doc gone")});
     getFirestore.mockReturnValue(db);
 
     await waveUpsertCustomer.run(makeEvent("c1", null, CLIENT));
 
-    // Second call is the fallback: enqueue-only, no batch.
+    // Second call is the fallback: enqueue-only, outside the transaction.
     expect(worker.enqueueCustomerUpsert).toHaveBeenCalledTimes(2);
     const last = worker.enqueueCustomerUpsert.mock.calls[1][1];
-    expect(last.batch).toBeUndefined();
+    expect(last.tx).toBeUndefined();
   });
 });
 

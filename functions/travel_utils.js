@@ -187,7 +187,10 @@ async function resolveReminderForAssignee(deps, args) {
       const key = `${c.id}|${employeeDocId}`;
       const cached = readEstimate(estimates, key, nowMs);
       if (canDeferRoutes({
-        seconds: cached, startTimeMillis: startMs, nowMillis: nowMs,
+        seconds: cached,
+        estimatedAtMillis: cached == null ? null : estimates.get(key).atMs,
+        startTimeMillis: startMs,
+        nowMillis: nowMs,
       })) {
         return none;
       }

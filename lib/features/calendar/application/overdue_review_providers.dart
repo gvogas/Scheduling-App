@@ -14,8 +14,8 @@ final overdueReviewClockProvider = Provider<DateTime Function()>(
   (ref) => DateTime.now,
 );
 
-/// [now] floored to its quarter hour, so every open inside one quarter issues
-/// the SAME `endTime < boundary` query and resumes the SDK's cached target.
+/// [now] floored to its quarter hour: the overdue cut every open inside one
+/// quarter shares (the query itself is bounded at next midnight).
 /// Floored on the epoch, not rebuilt from wall-clock fields: in the repeated
 /// fall-back hour `DateTime(y, m, d, h, min)` resolves to the EARLIER 1 a.m.,
 /// an hour behind `now`, and the refresh timer re-fires at once all hour.

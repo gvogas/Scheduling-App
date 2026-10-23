@@ -12,6 +12,7 @@
  * attempts:       0,
  * nextAttemptAt:  <timestamp>,
  * claimedAt:      <timestamp>|undefined, // set on claim; used by reaper
+ * requeue:        boolean|undefined,     // an edit landed while inflight
  * status:         'queued'|'inflight'|'done'|'dead',
  * lastError:      string|null,
  * idempotencyKey: '<string>',
@@ -128,6 +129,8 @@ function sameClaim(a, b) {
 /**
  * Atomically writes a claimed job's terminal/retry outcome, but only while this
  * worker still owns the claim — same `inflight` status and same `claimedAt`.
+ * A `requeue` flag set by an enqueue during the claim re-queues the job instead
+ * and reports the outcome as superseded.
  * @param {!Object} db Firestore instance.
  * @param {!Object} ref The job document ref.
  * @param {*} claimStamp The `claimedAt` value written when the job was claimed.
@@ -143,6 +146,12 @@ async function commitOutcome(db, ref, claimStamp, update) {
     const freshData = fresh.data() || {};
     if (freshData.status !== "inflight") return;
     if (!sameClaim(freshData.claimedAt, claimStamp)) return;
+    if (freshData.requeue === true) {
+      // An edit landed mid-dispatch: it supersedes this outcome, due now.
+      tx.update(ref, {status: "queued", attempts: 0, lastError: null,
+        nextAttemptAt: claimStamp, requeue: false});
+      return;
+    }
     tx.update(ref, update);
     applied = true;
   });
@@ -282,7 +291,8 @@ async function claimJob(ctx, doc, claimStamp) {
       if (freshData.status !== "queued") return; // already claimed/done
       const dueAt = timestampToMs(freshData.nextAttemptAt);
       if (!Number.isFinite(dueAt) || dueAt > timestampToMs(claimStamp)) return;
-      tx.update(doc.ref, {status: "inflight", claimedAt: claimStamp});
+      tx.update(doc.ref,
+          {status: "inflight", claimedAt: claimStamp, requeue: false});
       claimed = freshData;
     });
   } catch (txErr) {

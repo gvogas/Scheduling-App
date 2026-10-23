@@ -230,12 +230,16 @@ Branch `claude/audit-2026-10-23`.
 
 ## Second-pass status
 
-- **Done in this pass:** S3, B3, B4, B5, B6. Each has a regression test that fails before its fix.
-- **Decide first:** S1, S2, I6, I7.
+- **Done:** S1, S2, S3, B3, B4, B5, B6, I6, I7.
+  - Each has a test that fails without its fix (B5 only under `TZ=America/Toronto`).
+  - S1, S2, I6 and I7 were approved by the owner with the Decide-first defaults and implemented the same day.
 - **Open:** I8–I11.
-- **Deploy:** B3, B4 and B6 are in `functions/`, so they only reach production with the next `Deploy backend` run. B5 ships with the next app build. Nothing needs a backfill.
+- **Deploy:**
+  - S1, S2, B3, B4, B6 and I6 are in `functions/`, so they only take effect with the next `Deploy backend` run. No callable payload or allowlist changed.
+  - B5 and I7 ship with the next app build. I7's query keeps the same fields and composite, so no index deploy is needed.
+  - Nothing needs a backfill.
 
-## Decide first
+## Decide first (resolved 2026-10-23: owner approved all four defaults)
 
 1. **S1 (Wave duplicate customer).** Choose one fix:
    - (a) Make the enqueue refuse to reset an `inflight` job: transactional, with a `requeue` flag and `attempts` kept.
@@ -260,7 +264,7 @@ Not measured: startup, frame times, memory, Firestore latency, real billing. The
 
 ## 🔴 Security findings
 
-### S1 — re-enqueue during an in-flight Wave job can create a duplicate customer · medium · confidence high
+### S1 — DONE: re-enqueue during an in-flight Wave job could create a duplicate customer · medium · confidence high
 
 - **Where:**
   - `functions/wave/enqueue.js:80-97`: a blind `set({status: "queued", attempts: 0}, {merge: true})`.
@@ -268,8 +272,14 @@ Not measured: startup, frame times, memory, Firestore latency, real billing. The
   - `functions/wave/triggers.js` (`maxInstances: 2`).
 - **Risk:** if an admin saves a new client twice within about 1 s with a mapped-field change, the second trigger re-queues the job while the first instance is still inside `customerCreate`. The second claim then sees no link and `attempts: 0`, so it creates a second Wave customer. One of the two ends up orphaned in the accounting system. Invoices are not affected: nothing creates them.
 - **Fix:** see Decide-first item 1. Needs a functions deploy.
+- **Done:**
+  - `enqueueCustomerUpsert` is now transactional: an `inflight` job only gets `requeue: true`, keeping its status, attempts and claim.
+  - The trigger's mark-pending rides the same transaction, which replaces the `WriteBatch`.
+  - `commitOutcome` turns the flag into a fresh queued job due at once and reports the outcome superseded; `claimJob` clears it.
+  - **Tests:** jest (`wave_enqueue`, `outbox_core`, `wave_triggers`), plus an emulator run of the real enqueue, claim and commit sequence: the second claim is refused and the job is re-queued afterwards.
+  - **Trade-off:** the requeued edit reaches Wave at the next drain (next edit, Sync, or the 18:00 sweep) instead of immediately.
 
-### S2 — an assignee can reopen any completed job of theirs, of any age · low · confidence high
+### S2 — DONE: an assignee could reopen any completed job of theirs, of any age · low · confidence high
 
 - **Where:** `functions/appointment_actions.js:35-44` (`mayRestore`), `:48-91`.
 - **Risk:**
@@ -277,6 +287,12 @@ Not measured: startup, frame times, memory, Firestore latency, real billing. The
   - Each re-close also pushes admins (30/hour cap).
   - ADR-0045 chose a callable precisely to avoid "reopen anything at any age". The app only offers Undo right after mark-complete, and App Check plus App Attest means this needs a tampered client.
 - **Fix:** refuse a non-admin when `completedAt` is older than the undo window. Needs a functions deploy.
+- **Done:**
+  - `withinRestoreWindow` allows 10 minutes for non-admins and refuses with `failed-precondition`/`undo-window-expired`.
+  - It anchors on `completedAt`, else on the rules-pinned mark-done `updatedAt`, which covers the moment before the stamp lands. A photo-touch `updatedAt` cannot reopen an old completion, because `completedAt` wins.
+  - Admins are unbounded.
+  - The app's generic error notice covers the refusal, and Undo is only offered for seconds.
+  - **Residual:** a legacy done job with no `completedAt` still anchors on the bumpable `updatedAt`.
 
 ### S3 — DONE: no executed test proved cross-role Firestore isolation · test gap
 
@@ -330,7 +346,7 @@ Not measured: startup, frame times, memory, Firestore latency, real billing. The
 
 ## 🔵 Areas to improve
 
-### I6 — Routes recomputed on every sweep in the last 15 min before departure · impact medium (cost) · confidence medium
+### I6 — DONE: Routes recomputed on every sweep in the last 15 min before departure · impact medium (cost) · confidence medium
 
 - **Where:** `functions/travel_policy.js:49-50, 92-97`, `functions/travel_utils.js:185-205`.
 - **Opportunity:**
@@ -338,12 +354,22 @@ Not measured: startup, frame times, memory, Firestore latency, real billing. The
   - Modelled at about 6.5k–8.8k calls/month for 40 jobs/day, which is the largest variable bill: roughly $15–40/month at list price, not checked against billing.
   - An instance recycle loses the in-memory cache and can push a pair to about 18 calls.
 - **Suggested improvement:** let a fresh (≤ 5 min) estimate defer until `start − lead − 5 min`. Optionally persist the estimate on the reminder ledger. This stays within "a cached estimate may only DEFER, never trigger a send".
+- **Done:**
+  - `FRESH_ESTIMATE_MS`/`FRESH_SKIP_MARGIN_MS` (5/5 min) were added, and `ESTIMATE_TTL_MS` went from 10 to 30 min; an older estimate keeps the 15-min margin.
+  - A sweep-timeline test pins 5 billed calls per 30-minute-lead pair. The same test gives 7 against the old constants, so this is about 29% fewer Routes calls.
+  - The estimate is not persisted, so an instance recycle still loses the cache.
 
-### I7 — drawer badge re-reads the whole overdue backlog each new quarter hour · impact medium at a large backlog · confidence medium
+### I7 — DONE: drawer badge re-read the whole overdue backlog each new quarter hour · impact medium at a large backlog · confidence medium
 
 - **Where:** `overdue_review_providers.dart`, `firebase_appointments_repository.dart` (`watchOverdueOpen`), `app_nav_drawer.dart:319`.
 - **Opportunity:** the `endTime < boundary` constraint changes every 15 min, so each drawer open in a new quarter re-bills the full backlog (up to 5001 docs) just to show one number. That is about 1.5k reads/day at a backlog of 100, and about 15k/day at 1000.
 - **Suggested improvement:** see Decide-first item 4.
+- **Done (without bending the one-provider rule):**
+  - `watchOverdueOpen` bounds the query at the next local midnight, and the Dart `overdueJobsAt(now)` makes the cut.
+  - The query is therefore identical all day, so each quarter-hour re-issue resumes the cached target and bills only changed documents.
+  - Same fields and composite.
+  - A repository test pins both the bound and that a job ending later today is not listed.
+  - The billing effect follows the SDK's resume-token behaviour and was not measured here.
 
 ### I8 — Wave import builds a full `clients` index on every delta sync · impact low now, high at scale · confidence high
 
@@ -410,4 +436,14 @@ Not measured: startup, frame times, memory, Firestore latency, real billing. The
 - functions: lint clean; jest 116 suites, 2399/2399. That is 5 new: 3 shared day-slice cases, the overnight digest and the double period.
 - `tool/check_rules.dart`: 0 violations.
 - Emulator suite (auth, firestore, storage): pass, including the 21 role-isolation checks.
+- No BOMs.
+
+## Verification (after S1, S2, I6, I7)
+
+- `flutter analyze`: No issues found!
+- `dart run tool/test.dart`: 4493 passed, 0 failed.
+- functions: lint clean; jest 116 suites, 2409/2409.
+- `tool/check_rules.dart`: 0 violations.
+- Emulator suite: every check passes, including the 21 role-isolation checks.
+- S1 also has an ad hoc emulator run of the real enqueue → claim → second enqueue → commit sequence.
 - No BOMs.
