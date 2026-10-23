@@ -60,7 +60,10 @@ function addDaysMs(msValue, n) {
 function businessWallInstantMs(dayMs, minutes) {
   const [y, m, d] = businessYmd(new Date(dayMs));
   const guess = Date.UTC(y, m - 1, d, 0, minutes);
-  return guess - businessOffsetMs(new Date(guess));
+  // Re-read the offset AT the first answer: the guess sits 4-5 h early, so
+  // between it and the target a DST switch picks the wrong offset.
+  const first = guess - businessOffsetMs(new Date(guess));
+  return guess - businessOffsetMs(new Date(first));
 }
 
 /**

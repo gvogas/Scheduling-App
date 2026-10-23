@@ -311,6 +311,26 @@ describe("groupTomorrowsJobsByEmployee", () => {
     expect(grouped.e1.map((j) => j.id)).toEqual(["run"]);
   });
 
+  test("tonight's overnight shift is not tomorrow's job", () => {
+    // 22:00 tonight -> 06:00 tomorrow works tonight; the widget leaves it off
+    // tomorrow too. A job ending at midnight is tonight's as well.
+    const grouped = groupTomorrowsJobsByEmployee(
+        [{
+          id: "tonight",
+          employeeIds: ["e1"],
+          startTime: new Date("2026-07-09T02:00:00Z"),
+          endTime: new Date("2026-07-09T10:00:00Z"),
+        }, {
+          id: "midnight",
+          employeeIds: ["e1"],
+          startTime: new Date("2026-07-09T02:00:00Z"),
+          endTime: new Date("2026-07-09T04:00:00Z"),
+        }],
+        NOW,
+    );
+    expect(grouped.e1).toBeUndefined();
+  });
+
   test("a run that ended before tomorrow is still excluded", () => {
     const grouped = groupTomorrowsJobsByEmployee(
         [{
@@ -536,6 +556,12 @@ describe("buildDigestMessage", () => {
   test("FR variant", () => {
     const fr = buildDigestMessage(jobs, "fr");
     expect(fr.body).toContain("2 visites demain");
+  });
+
+  test("EN timed first job ends in one period, not two", () => {
+    const body = buildDigestMessage([jobs[1]], "en").body;
+    expect(body).toMatch(/\.m\.$/);
+    expect(body).not.toContain("..");
   });
 
   test("singular noun for one job", () => {

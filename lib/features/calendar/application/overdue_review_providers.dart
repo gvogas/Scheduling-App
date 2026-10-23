@@ -16,15 +16,13 @@ final overdueReviewClockProvider = Provider<DateTime Function()>(
 
 /// [now] floored to its quarter hour, so every open inside one quarter issues
 /// the SAME `endTime < boundary` query and resumes the SDK's cached target.
+/// Floored on the epoch, not rebuilt from wall-clock fields: in the repeated
+/// fall-back hour `DateTime(y, m, d, h, min)` resolves to the EARLIER 1 a.m.,
+/// an hour behind `now`, and the refresh timer re-fires at once all hour.
 DateTime overdueReviewBoundary(DateTime now) {
-  final step = kOverdueReviewRefresh.inMinutes;
-  return DateTime(
-    now.year,
-    now.month,
-    now.day,
-    now.hour,
-    now.minute - now.minute % step,
-  );
+  final ms = now.millisecondsSinceEpoch;
+  final step = kOverdueReviewRefresh.inMilliseconds;
+  return DateTime.fromMillisecondsSinceEpoch(ms - ms % step);
 }
 
 /// Every open job whose end has passed, oldest first — shared by the review

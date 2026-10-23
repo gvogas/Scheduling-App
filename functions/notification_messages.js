@@ -255,7 +255,8 @@ function buildDigestMessage(jobs, locale) {
   return {
     title: "Tomorrow's schedule",
     body: first ?
-      `You have ${n} ${noun} tomorrow. First: ${lead}.` :
+      `You have ${n} ${noun} tomorrow. First: ${lead}` +
+        (lead.endsWith(".") ? "" : ".") :
       "You have jobs tomorrow.",
   };
 }

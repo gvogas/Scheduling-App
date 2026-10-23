@@ -215,3 +215,199 @@ has covered the app and re-checks `currentUser == null`, never persists the flag
 **Next:** `/audit-do` implements everything above except the two Decide-first
 defaults, which it applies as written. Pre-ship items and anything that needs a
 prod deploy or backfill are never auto-implemented; this report has none.
+
+---
+
+# Second pass — 2026-10-23 (full-stack brief)
+
+A narrower, deeper pass the same day, on top of `cb33d05`. It covered:
+- adversarial security: rules, callables and push payloads;
+- date/time and scheduling correctness, run under `TZ=America/Toronto`;
+- a Firestore and API cost model;
+- executed Firebase emulator checks.
+
+Branch `claude/audit-2026-10-23`.
+
+## Second-pass status
+
+- **Done in this pass:** S3, B3, B4, B5, B6. Each has a regression test that fails before its fix.
+- **Decide first:** S1, S2, I6, I7.
+- **Open:** I8–I11.
+- **Deploy:** B3, B4 and B6 are in `functions/`, so they only reach production with the next `Deploy backend` run. B5 ships with the next app build. Nothing needs a backfill.
+
+## Decide first
+
+1. **S1 (Wave duplicate customer).** Choose one fix:
+   - (a) Make the enqueue refuse to reset an `inflight` job: transactional, with a `requeue` flag and `attempts` kept.
+   - (b) Always run `findCustomerByIdentity` before a create. This costs one Wave list call per new client.
+   - Default: (a).
+2. **S2 (restore window).** Bound non-admin `restoreAppointmentStatus` to a window after `completedAt`. Default: 10 minutes, with admins unbounded.
+3. **I6 (Routes cost).** Widen the defer rule in `travel_policy.js` (ADR-0104 territory). It changes when a billed estimate is refreshed, never whether a push is sent.
+4. **I7 (drawer badge reads).** Feeding the badge from a stable daily bound or a `count()` bends the "screen and badge share one provider" rule in `appointments.md`, so it needs an owner call.
+
+## Measured baseline (this container, Linux, Flutter 3.47.7 / Dart 3.13.5)
+
+| Check | Before | After |
+|---|---|---|
+| `flutter analyze` | No issues found! (71.8 s) | No issues found! |
+| `dart run tool/test.dart` | 4488 passed, 0 failed (4 m 13 s wall) | 4492 passed, 0 failed |
+| jest | 116 suites, 2394/2394 | 116 suites, 2399/2399 |
+| functions lint | clean | clean |
+| `tool/check_rules.dart` | 0 violations | 0 violations |
+| emulator checks (auth, firestore, storage) | 12 storage + 6 trigger + safety suites, pass | the same, plus 21 role-isolation checks, pass |
+
+Not measured: startup, frame times, memory, Firestore latency, real billing. These need a device, DevTools or the production console, and none was available here. The cost figures under I6–I8 are a model, not measurements.
+
+## 🔴 Security findings
+
+### S1 — re-enqueue during an in-flight Wave job can create a duplicate customer · medium · confidence high
+
+- **Where:**
+  - `functions/wave/enqueue.js:80-97`: a blind `set({status: "queued", attempts: 0}, {merge: true})`.
+  - `functions/wave/customers.js:331-334`: the identity dedupe runs only when `priorAttempts > 0`.
+  - `functions/wave/triggers.js` (`maxInstances: 2`).
+- **Risk:** if an admin saves a new client twice within about 1 s with a mapped-field change, the second trigger re-queues the job while the first instance is still inside `customerCreate`. The second claim then sees no link and `attempts: 0`, so it creates a second Wave customer. One of the two ends up orphaned in the accounting system. Invoices are not affected: nothing creates them.
+- **Fix:** see Decide-first item 1. Needs a functions deploy.
+
+### S2 — an assignee can reopen any completed job of theirs, of any age · low · confidence high
+
+- **Where:** `functions/appointment_actions.js:35-44` (`mayRestore`), `:48-91`.
+- **Risk:**
+  - A technician can restore a weeks-old `done` job, then mark it done again. `lifecycleStamps` writes a fresh `completedAt`, so the finish time on the job record can be rewritten.
+  - Each re-close also pushes admins (30/hour cap).
+  - ADR-0045 chose a callable precisely to avoid "reopen anything at any age". The app only offers Undo right after mark-complete, and App Check plus App Attest means this needs a tampered client.
+- **Fix:** refuse a non-admin when `completedAt` is older than the undo window. Needs a functions deploy.
+
+### S3 — DONE: no executed test proved cross-role Firestore isolation · test gap
+
+- **Where:** `functions/__tests__/emulator/`.
+- **Before:** the Dart rules tests read `firestore.rules` as text. The emulator suite covered Storage, the assignee status transitions and crew notes, but not read isolation or self-escalation.
+- **Done:** added `role_isolation_checks.js`, wired into the existing CI emulator step. Its 21 checks against the real rules cover:
+  - outsider, disabled and anonymous reads of a job;
+  - employee reads of client PII;
+  - unconstrained `appointments`/`clients`/`users` list queries;
+  - self-promotion and self-reactivation;
+  - editing a peer;
+  - a peer's emergency contact, location and FCM token;
+  - writes to the bridge and the five server-owned ledgers.
+- **Proof that it catches a regression:** widening the appointment read rule to `isActiveUser()` fails it with `outsider reads unassigned job: got 200`.
+
+## 🟠 Bug findings
+
+### B3 — DONE: server day windows were an hour off on both DST mornings, so a double booking could pass · medium · confidence high
+
+- **Where:** `functions/day_slice_utils.js` (`businessWallInstantMs`).
+- **Problem:**
+  - The helper read the zone offset at a guess 4–5 h before the target. That made wall times 03:00–06:59 on spring-forward day and 02:00–05:59 on fall-back day resolve an hour off.
+  - `readConflictWindow` (used by both `findAppointmentConflicts` and the `saveAppointmentEdits` transaction) collapsed an existing Mar 8 06:30–07:30 job to an empty window. A 07:00–07:15 booking for the same employee was therefore accepted.
+  - The server widget payload showed those jobs an hour off.
+  - Reproduced on a UTC host, the same as Cloud Functions.
+- **Fix:** re-read the offset at the first answer. Three shared cases were added to `test/fixtures/shared/day_slice.json`: two DST windows and one DST clash. They fail without the fix and pass with it. The Dart twin was already correct, and its suite passes in UTC and in Toronto.
+
+### B4 — DONE: the 18:00 digest called tonight's overnight shift "tomorrow" · medium · confidence high
+
+- **Where:** `functions/notification_policy.js` (`groupTomorrowsJobsByEmployee`).
+- **Problem:**
+  - The test was a raw-instant overlap. A 22:00 → 06:00 shift tonight was listed as tomorrow's first job ("First: Alice at 10:00 p.m."), and so was a 22:00–00:00 job.
+  - The widget payload in the same push correctly left both out.
+  - A crew reading "tomorrow" could miss tonight.
+- **Fix:** filter on `sliceForDay(r, tomorrowStart)`, the same work-day rule the widget uses. Added a test for an overnight shift and a midnight end; it fails before the fix.
+
+### B5 — DONE: overdue-review provider rebuilt in a tight loop during the repeated 1 a.m. hour · low · confidence high
+
+- **Where:** `lib/features/calendar/application/overdue_review_providers.dart` (`overdueReviewBoundary`).
+- **Problem:**
+  - During the repeated hour on Nov 1, `DateTime(y, m, d, h, min)` resolves to the EDT occurrence, an hour behind `now`. The refresh `Timer` therefore gets a negative delay.
+  - It fires immediately, rebuilds, and repeats for the whole hour. Each rebuild tears down and re-creates the `watchOverdueOpen` listener.
+- **Fix:** floor on epoch milliseconds (Toronto's offset is a whole number of hours, so this matches the wall-clock quarter).
+- **Test:** the new invariant test fails before the fix under `TZ=America/Toronto`. The CI suite runs in UTC, where it passes either way, so it is not pinned there (see `testing.md`).
+
+### B6 — DONE: English digest ended in a double period · low · confidence high
+
+- **Where:** `functions/notification_messages.js` (`buildDigestMessage`).
+- **Problem:** the en-CA time already ends "a.m."/"p.m.", so the body read "…at 9:00 a.m..".
+- **Fix:** skip the closing period when the lead already ends in one. Test added.
+
+## 🔵 Areas to improve
+
+### I6 — Routes recomputed on every sweep in the last 15 min before departure · impact medium (cost) · confidence medium
+
+- **Where:** `functions/travel_policy.js:49-50, 92-97`, `functions/travel_utils.js:185-205`.
+- **Opportunity:**
+  - `SKIP_MARGIN_MS` (15 min) is longer than `ESTIMATE_TTL_MS` (10 min), so each (job, employee) pair costs about 7 traffic-aware Routes calls, 4 of them in the final 15 minutes.
+  - Modelled at about 6.5k–8.8k calls/month for 40 jobs/day, which is the largest variable bill: roughly $15–40/month at list price, not checked against billing.
+  - An instance recycle loses the in-memory cache and can push a pair to about 18 calls.
+- **Suggested improvement:** let a fresh (≤ 5 min) estimate defer until `start − lead − 5 min`. Optionally persist the estimate on the reminder ledger. This stays within "a cached estimate may only DEFER, never trigger a send".
+
+### I7 — drawer badge re-reads the whole overdue backlog each new quarter hour · impact medium at a large backlog · confidence medium
+
+- **Where:** `overdue_review_providers.dart`, `firebase_appointments_repository.dart` (`watchOverdueOpen`), `app_nav_drawer.dart:319`.
+- **Opportunity:** the `endTime < boundary` constraint changes every 15 min, so each drawer open in a new quarter re-bills the full backlog (up to 5001 docs) just to show one number. That is about 1.5k reads/day at a backlog of 100, and about 15k/day at 1000.
+- **Suggested improvement:** see Decide-first item 4.
+
+### I8 — Wave import builds a full `clients` index on every delta sync · impact low now, high at scale · confidence high
+
+- **Where:** `functions/wave/customers_import.js:354-366` (`buildWaveIdIndex`, unbounded).
+- **Opportunity:** about 600 reads per manual Sync today. At 100k clients that becomes 100k reads plus a 100k-entry map inside a callable.
+- **Suggested improvement:** for delta imports, look up only the page's `waveCustomerId`s (`in` chunks of 30). Keep a paged full index for the weekly resync.
+
+### I9 — overdue sweep loads recipients before the ledger dedupe · impact low · confidence medium
+
+- **Where:** `functions/notification_sweeps.js:51-90`, `notification_utils.js:439-466`.
+- **Opportunity:** about 1–2k reads/day plus about 700 failed `create()`s. The cursor doc is also rewritten on every 5-min run even when unchanged (288 writes/day).
+- **Suggested improvement:** `getAll` the pairs' ledger docs first, as the travel sweep does. Skip the cursor write when it is unchanged.
+
+### I10 — buildings catalog re-paged on every filter-sheet open · impact low now · confidence medium
+
+- **Where:** `firebase_clients_repository.dart:296-305`, `clients_filter_sheet.dart:46`.
+- **Suggested improvement:** keep it warm (`keepWarmWithGrace`, invalidated on `clientsRefreshProvider`).
+
+### I11 — emulator checks need proxy-free env in sandboxes · impact low · confidence high
+
+- **Problem:** locally the Storage rules runtime denied everything until `JAVA_TOOL_OPTIONS`/`HTTP(S)_PROXY` were unset. CI is unaffected.
+- **Status:** documented in `functions/__tests__/emulator/README.md`. A `.claude/skills/session-start-hook` setup could export these for cloud sessions.
+
+## Cost model (derived from code plus stated assumptions; not billed data)
+
+**Workload assumed:** 1 admin and 8 employees, about 600 clients, 40 jobs per workday, 10 cold opens/day per user.
+
+| Item | Estimate |
+|---|---|
+| Firestore reads | about 62k/day (about 1.4M/month); free tier 50k/day, so about $0.10–0.25/month |
+| Firestore writes | about 1k/day (free tier 20k/day) |
+| Largest read paths | admin calendar month listener (about 15k/day, overlaps the mirrors listener); employee calendars (about 23k/day); travel sweep (about 10.6k/day) |
+| Places | session-token pricing, about $0 |
+| Routes | about $15–40/month (I6) |
+| Always-on instances | `minInstances: 1` on three callables, about $12–15/month; deliberate (cold-start fix) |
+
+**At 100k clients:**
+- Client paging and search stay flat: 50 per page; search reads at most 200 + 5.
+- Token index storage is about 8–11 GB, about $1–2/month.
+- `countClients` is about 100 reads per call.
+- Only I8 and I10 scale badly.
+- The first real ceiling is appointment volume, not clients: the 3000-doc calendar range cap is reached at about 97 jobs per workday.
+
+## Security posture verified (no finding)
+
+- **Rules:** signed-out callers get nothing. Invited and disabled users can only read their own doc. Self-update is limited to an allowlist, and `role`/`status`/`uid`/`email`/consent fields are refused.
+- **Per-person subcollections:** emergency contact, tokens and presence are owner-only.
+- **Employees and appointments:** an employee reads only `employeeIds` jobs, through three narrow `hasOnly` disjuncts. Images and notes require the parent assignment.
+- **Admin-only and server-only data:** clients and buildings are admin-only, and every ledger, `wave` and `waveSyncQueue` deny all access.
+- **Storage:** assignee create only, at most 10 MB, jpeg/png only, with a magic-byte trigger.
+- **Callables:**
+  - All 20 enforce App Check.
+  - Admin callables use `assertAdminCall`.
+  - `findAppointmentConflicts` refuses a non-admin any `employeeIds` but their own.
+  - `changeEmployeeEmail`, `completeEmployeeSetup`, `completePasswordReset` and `deleteAccount` act only on the caller.
+- **Push:** recipients come only from `employeeIds`, through `_canReachRecipient`. Disable purges tokens and the Live Activity card.
+- **Wave:** the token lives only in Secret Manager.
+
+## Verification (after this pass)
+
+- `flutter analyze`: No issues found!
+- `dart run tool/test.dart`: 4492 passed, 0 failed. That is 4 new: 3 shared day-slice cases and the boundary invariant.
+- Under `TZ=America/Toronto`, the day-slice and overdue-review files pass.
+- functions: lint clean; jest 116 suites, 2399/2399. That is 5 new: 3 shared day-slice cases, the overnight digest and the double period.
+- `tool/check_rules.dart`: 0 violations.
+- Emulator suite (auth, firestore, storage): pass, including the 21 role-isolation checks.
+- No BOMs.

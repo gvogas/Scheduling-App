@@ -10,6 +10,8 @@
      "a": ["2026-08-01T09:00:00-04:00", "2026-08-03T12:00:00-04:00"], "b": ["2026-08-02T12:00:00-04:00", "2026-08-02T14:00:00-04:00"], "expect": false},
     {"name": "an overnight shift clashes with a job in its small hours",
      "a": ["2026-08-01T22:00:00-04:00", "2026-08-03T06:00:00-04:00"], "b": ["2026-08-02T02:00:00-04:00", "2026-08-02T03:00:00-04:00"], "expect": true},
+    {"name": "a spring-forward morning clash is still a clash",
+     "a": ["2026-03-08T06:30:00-04:00", "2026-03-08T07:30:00-04:00"], "b": ["2026-03-08T07:00:00-04:00", "2026-03-08T07:15:00-04:00"], "expect": true},
     {"name": "a corrupt window whose end precedes its start never clashes",
      "a": ["2026-08-10T09:00:00-04:00", "2026-08-01T17:00:00-04:00"], "b": ["2026-08-10T09:00:00-04:00", "2026-08-10T17:00:00-04:00"], "expect": false}
   ],
@@ -17,6 +19,10 @@
     {"name": "a one-day window yields one pair unchanged",
      "run": ["2026-08-03T09:00:00-04:00", "2026-08-03T17:00:00-04:00"],
      "expectWindows": [["2026-08-03T09:00:00-04:00", "2026-08-03T17:00:00-04:00"]]},
+    {"name": "a spring-forward morning window keeps its stored hours",
+     "run": ["2026-03-08T05:00:00-04:00", "2026-03-08T07:00:00-04:00"], "expectWindows": [["2026-03-08T05:00:00-04:00", "2026-03-08T07:00:00-04:00"]]},
+    {"name": "a fall-back early-morning window keeps its stored hours",
+     "run": ["2026-11-01T03:00:00-05:00", "2026-11-01T05:00:00-05:00"], "expectWindows": [["2026-11-01T03:00:00-05:00", "2026-11-01T05:00:00-05:00"]]},
     {"name": "a 5-day 9-to-5 window yields five one-day windows",
      "run": ["2026-08-03T09:00:00-04:00", "2026-08-07T17:00:00-04:00"],
      "expectWindows": [

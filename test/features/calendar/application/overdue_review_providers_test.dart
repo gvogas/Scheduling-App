@@ -26,6 +26,15 @@ void main() {
       );
     });
 
+    test('is never after now and at most one quarter behind it', () {
+      // Only bites under a DST zone (TZ=America/Toronto); the UTC suite
+      // passes it either way.
+      final now = DateTime.utc(2026, 11, 1, 6, 37).toLocal();
+      final boundary = overdueReviewBoundary(now);
+      expect(boundary.isAfter(now), isFalse);
+      expect(now.difference(boundary), lessThan(kOverdueReviewRefresh));
+    });
+
     test('a time on the boundary is its own boundary', () {
       expect(
         overdueReviewBoundary(DateTime(2026, 8, 15, 10, 45)),
