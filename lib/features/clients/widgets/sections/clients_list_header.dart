@@ -210,7 +210,7 @@ class _SortPill extends StatelessWidget {
             border: Border.all(color: theme.colorScheme.outlineVariant),
           ),
           padding: const EdgeInsets.symmetric(
-            horizontal: 12,
+            horizontal: AppSpacing.sp12,
             vertical: AppSpacing.sp8,
           ),
           child: Row(

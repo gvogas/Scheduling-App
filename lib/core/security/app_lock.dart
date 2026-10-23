@@ -239,7 +239,8 @@ class _AppLockState extends ConsumerState<AppLock> with WidgetsBindingObserver {
     }
     if (!mounted) return;
     setState(() => _exiting = false);
-    if (!signedOut && auth.currentUser != null) return;
+    // Not ours to navigate: a forced exit that won owns login and the release.
+    if (!signedOut) return;
     _release();
     try {
       navigatorKey.currentState?.pushNamedAndRemoveUntil(

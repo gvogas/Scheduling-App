@@ -84,7 +84,7 @@ A discarded future has no caller, so its `try` is all that stands between a rout
 
 - Put every `await` the guard covers INSIDE the `try` — `hasError` sees a settled error, not one arriving mid-await.
 - Keep a generic branch behind a typed `catch`, or other throws escape with no notice.
-- Guard locally; never rely on another file swallowing its errors (`loadAll`).
+- Guard locally; never rely on another file swallowing its errors.
 - Keep the whole body of `unawaited(...)`, `Future.microtask(...)` or a fire-and-forget `sync()` inside the guard.
 - An `async` handler on a `ValueChanged` is discarded: check `mounted` after the await (`context.mounted` from the wiring build in a `StatelessWidget`).
 - Check `mounted` before `setState` after an await, even on SUCCESS — release skips the lifecycle assert, and `use_build_context_synchronously` can't see it.

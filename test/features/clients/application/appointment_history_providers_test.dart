@@ -124,23 +124,48 @@ void main() {
       ).called(1);
     });
 
-    test('a write to an appointment re-reads the history', () async {
+    Future<void> writeThenReread(Map<String, DateTime?> written) async {
       stubHistory(1);
       container.listen(clientJobHistoryProvider('c1'), (_, _) {});
       await container.read(clientJobHistoryProvider('c1').future);
 
-      recordWrites.add({'a1': null});
+      recordWrites.add(written);
       await Future<void>.delayed(Duration.zero);
       await container.read(clientJobHistoryProvider('c1').future);
+    }
 
-      verify(
-        () => repo.fetchClientHistory(
-          clientId: 'c1',
-          limit: any(named: 'limit'),
-          cap: any(named: 'cap'),
-          pastOnly: any(named: 'pastOnly'),
-        ),
-      ).called(2);
+    VerificationResult verifyReads() => verify(
+      () => repo.fetchClientHistory(
+        clientId: 'c1',
+        limit: any(named: 'limit'),
+        cap: any(named: 'cap'),
+        pastOnly: any(named: 'pastOnly'),
+      ),
+    );
+
+    test('a write to a listed visit re-reads the history', () async {
+      await writeThenReread({'v0': DateTime(2100)});
+      verifyReads().called(2);
+    });
+
+    test('deleting a listed visit re-reads the history', () async {
+      await writeThenReread({'v0': null});
+      verifyReads().called(2);
+    });
+
+    test('a new past-dated visit re-reads the history', () async {
+      await writeThenReread({'a1': DateTime(2000)});
+      verifyReads().called(2);
+    });
+
+    test('an unrelated future write does NOT re-read the history', () async {
+      await writeThenReread({'a1': DateTime(2100)});
+      verifyReads().called(1);
+    });
+
+    test('an unrelated delete or status-only write does NOT re-read', () async {
+      await writeThenReread({'a1': null});
+      verifyReads().called(1);
     });
   });
 }

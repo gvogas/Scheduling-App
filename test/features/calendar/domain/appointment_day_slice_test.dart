@@ -371,7 +371,6 @@ void main() {
         final last = index[DateTime(2026, 8, 14)]!.single;
         expect(last.dayIndex, maxAppointmentSpanDays);
         expect(last.dayCount, maxAppointmentSpanDays);
-        expect(last.isLastDay, isTrue);
       },
     );
   });

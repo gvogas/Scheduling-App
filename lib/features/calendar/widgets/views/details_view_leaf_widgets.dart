@@ -226,7 +226,7 @@ class DetailsMaterialsRow extends StatelessWidget {
               (m) => Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 11,
-                  vertical: 4,
+                  vertical: AppSpacing.sp4,
                 ),
                 decoration: BoxDecoration(
                   color: scheme.surfaceContainerHighest,

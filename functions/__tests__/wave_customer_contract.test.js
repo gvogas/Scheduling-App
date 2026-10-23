@@ -1,7 +1,7 @@
 "use strict";
 
-const {buildCustomerPayload, statePatch, verdictPatch, waveStateFields,
-  isBlocked} = require("../wave/customer_contract");
+const {buildCustomerPayload, statePatch, verdictPatch, waveStateFields} =
+  require("../wave/customer_contract");
 const {IMPORT_FIELD_CAPS} = require("../wave/mappers");
 
 /**
@@ -334,11 +334,12 @@ describe("waveStateFields", () => {
   });
 });
 
-describe("isBlocked", () => {
-  test("is true only for a blocking problem", () => {
-    expect(isBlocked(client({name: ""}))).toBe(true);
-    expect(isBlocked(client({phone: "Contact Person"}))).toBe(false);
-    expect(isBlocked(client())).toBe(false);
+describe("buildCustomerPayload ok", () => {
+  test("is false only for a blocking problem", () => {
+    expect(buildCustomerPayload(client({name: ""})).ok).toBe(false);
+    expect(buildCustomerPayload(client({phone: "Contact Person"})).ok)
+        .toBe(true);
+    expect(buildCustomerPayload(client()).ok).toBe(true);
   });
 });
 

@@ -6,6 +6,7 @@ import 'package:scheduling/features/calendar/domain/appointment_status_values.da
 import 'package:scheduling/features/calendar/domain/appointments_repository.dart';
 import 'package:scheduling/features/calendar/domain/models/appointment_record.dart';
 import 'package:scheduling/features/clients/domain/history_grouping.dart';
+import 'package:scheduling/features/dashboard/domain/dashboard_aggregator.dart';
 
 /// A thin facade over calendar-owned appointment history, so this file only
 /// needs the calendar domain import for the record type.
@@ -90,9 +91,19 @@ final clientJobHistoryProvider = FutureProvider.autoDispose
       final repo = ref.watch(appointmentsRepositoryProvider);
       // Hoisted for the same reason as `historySearchProvider` above.
       final logger = ref.read(loggerProvider);
+      Set<String>? heldIds;
       // Not `onLocalWrite`: a photo or crew note changes nothing listed here.
+      // The payload has no clientId, so any past start may be this client's.
       final sub = repo.onRecordWrite.listen(
-        (_) => ref.invalidateSelf(),
+        (written) {
+          final past = AppointmentDateRange(
+            start: DateTime(1970),
+            end: DateTime.now(),
+          );
+          if (DashboardAggregator.writeTouchesHistory(written, past, heldIds)) {
+            ref.invalidateSelf();
+          }
+        },
         onError: (Object e, StackTrace st) =>
             logger.warn('HIST-LOAD invalidate error', e, st),
       );
@@ -103,5 +114,6 @@ final clientJobHistoryProvider = FutureProvider.autoDispose
         cap: kClientJobHistoryScan,
         pastOnly: true,
       );
+      heldIds = {for (final visit in visits) ?visit.id};
       return visits.take(kClientJobHistoryVisits).toList();
     });

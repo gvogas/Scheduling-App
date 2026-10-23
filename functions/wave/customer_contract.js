@@ -322,19 +322,9 @@ function waveStateFields(patch) {
   return fields;
 }
 
-/**
- * Whether the contract refuses this client outright.
- * @param {!Object} clientFields Firestore `clients` document fields.
- * @return {boolean} True when Wave would refuse it.
- */
-function isBlocked(clientFields) {
-  return buildCustomerPayload(clientFields).ok === false;
-}
-
 module.exports = {
   buildCustomerPayload,
   statePatch,
   verdictPatch,
   waveStateFields,
-  isBlocked,
 };

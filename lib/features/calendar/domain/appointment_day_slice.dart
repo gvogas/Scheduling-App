@@ -31,7 +31,6 @@ class AppointmentDaySlice {
   final DateTime windowEnd;
 
   bool get isMultiDay => dayCount > 1;
-  bool get isLastDay => dayIndex == dayCount;
 
   /// The window crosses midnight, so the run counts NIGHTS, not days.
   bool get isOvernight => windowEnd.dateOnly.isAfter(windowStart.dateOnly);
@@ -207,7 +206,7 @@ Map<DateTime, List<AppointmentDaySlice>> expandToDays(
     for (var i = 0; i < count; i++) {
       final day = addCalendarDays(startDate, i);
       if (day.isBefore(range.start) || !day.isBefore(range.end)) continue;
-      // Use the clamped count so `isLastDay` remains reachable.
+      // Use the clamped count so `dayIndex == dayCount` stays reachable.
       (slicesByDay[day] ??= <AppointmentDaySlice>[]).add(
         _sliceAt(
           appointment,
